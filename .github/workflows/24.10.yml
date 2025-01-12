@@ -22,7 +22,7 @@ on:
 env:
   REPO_URL: https://github.com/LiBwrt-op/openwrt-6.x.git
   # REPO_BRANCH: main
-  REPO_BRANCH: openwrt-24.10
+  REPO_BRANCH: 24.10-6.12
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: ./config/slate.config
   DIY_P1_SH: ./sh/axt-part1.sh
