@@ -24,7 +24,7 @@ env:
   REPO_BRANCH: main
   #REPO_BRANCH: openwrt-24.10
   FEEDS_CONF: feeds.conf.default
-  CONFIG_FILE: ./config/slate.config
+  CONFIG_FILE: ./config/R5S.config
   DIY_P1_SH: ./sh/axt-part1.sh
   DIY_P2_SH: ./sh/axt-part2.sh
   UPLOAD_BIN_DIR: true
