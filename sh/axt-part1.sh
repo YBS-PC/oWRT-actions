@@ -36,6 +36,6 @@
 # echo "src-git iwrt_packages https://github.com/immortalwrt/packages.git" >> feeds.conf.default
 # echo "src-git iwrt_luci https://github.com/immortalwrt/luci.git" >> feeds.conf.default
 ##echo "src-git kiddin9 https://github.com/kiddin9/openwrt-packages" >> feeds.conf.default
-echo "src-git youtubeUnblock https://github.com/Waujito/youtubeUnblock.git;openwrt" >> feeds.conf.default
+echo "src-git youtubeUnblock https://github.com/Waujito/youtubeUnblock.git;openwrt_2410_workflow" >> feeds.conf.default
 echo "src-git fancontrol https://github.com/JiaY-shi/fancontrol.git" >> feeds.conf.default
 ##echo "src-git fantastic https://github.com/fantastic-packages/packages.git" >> feeds.conf.default
