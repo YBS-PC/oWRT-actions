@@ -30,3 +30,4 @@ echo "src-git internetdetector https://github.com/gSpotx2f/luci-app-internet-det
 #echo "src-git logviewer https://github.com/fantastic-packages/packages/blob/master/feeds/luci/luci-app-log-viewer" >> feeds.conf.default
 #echo "src-git fantastic https://github.com/fantastic-packages/fantastic-packages-feeds.git" >> feeds.conf.default
 #echo "src-git logviewer https://github.com/fantastic-packages/packages.git;feeds/luci/luci-app-log-viewer" >> feeds.conf.default
+echo "src-git logviewer https://github.com/gSpotx2f/luci-app-log.git" >> feeds.conf.default
