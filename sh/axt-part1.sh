@@ -41,5 +41,5 @@ echo "src-git fancontrol https://github.com/JiaY-shi/fancontrol.git" >> feeds.co
 ##echo "src-git fantastic https://github.com/fantastic-packages/packages.git" >> feeds.conf.default
 echo "src-git internetdetector https://github.com/gSpotx2f/luci-app-internet-detector.git" >> feeds.conf.default
 #echo "src-git logviewer https://github.com/gSpotx2f/luci-app-log.git" >> feeds.conf.default
-echo "src-git logviewer https://github.com/fantastic-packages/packages/blob/master/feeds/luci/luci-app-log-viewer" >> feeds.conf.default
-#echo "src-git logviewer https://https://github.com/fantastic-packages/packages/tree/master/feeds/luci" >> feeds.conf.default
+#echo "src-git logviewer https://github.com/fantastic-packages/packages/blob/master/feeds/luci/luci-app-log-viewer" >> feeds.conf.default
+echo "src-git logviewer https://github.com/fantastic-packages/packages/tree/master/feeds/luci" >> feeds.conf.default
