@@ -7,8 +7,8 @@
 #
 # https://github.com/P3TERX/Actions-OpenWrt
 #
-mkdir ./package/homeproxy
-mkdir ./package/logviewer
-git clone -b master https://github.com/immortalwrt/homeproxy.git ./package/homeproxy/
-git clone -b master https://github.com/gSpotx2f/luci-app-log.git ./package/logviewer/
+mkdir ./package/luci-app-homeproxy
+mkdir ./package/luci-app-log-viewer
+git clone -b master https://github.com/immortalwrt/homeproxy.git ./package/luci-app-homeproxy/
+git clone -b master https://github.com/gSpotx2f/luci-app-log.git ./package/luci-app-log-viewer/
 ./scripts/feeds install -a
