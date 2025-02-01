@@ -4,3 +4,6 @@
 #mkdir ./package/custom
 #git clone https://github.com/sbwml/autocore-arm.git ./package/custom/
 #./scripts/feeds install -a
+mkdir ./package/luci-app-log-viewer
+git clone -b master https://github.com/gSpotx2f/luci-app-log.git ./package/luci-app-log-viewer/
+./scripts/feeds install -a
