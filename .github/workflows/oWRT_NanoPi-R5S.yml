@@ -8,7 +8,7 @@
 # Description: Build OpenWrt using GitHub Actions
 #
 
-name: oWRT-NanoPi-R5S
+name: oWRT_NanoPi-R5S
 
 on:
   repository_dispatch:
@@ -24,7 +24,7 @@ env:
   REPO_BRANCH: main
   #REPO_BRANCH: openwrt-24.10
   FEEDS_CONF: feeds.conf.default
-  CONFIG_FILE: ./config/oWRT-NanoPi-R5S.config
+  CONFIG_FILE: ./config/oWRT_NanoPi-R5S.config
   DIY_P1_SH: ./sh/part1-oWRT.sh
   DIY_P2_SH: ./sh/part2-oWRT.sh
   DIY_P3_SH: ./sh/part3-oWRT.sh
