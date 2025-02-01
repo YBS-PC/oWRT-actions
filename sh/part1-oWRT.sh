@@ -21,6 +21,7 @@
 echo "src-git youtubeUnblock https://github.com/Waujito/youtubeUnblock.git;openwrt" >> feeds.conf.default
 echo "src-git internetdetector https://github.com/gSpotx2f/luci-app-internet-detector.git" >> feeds.conf.default
 # echo "src-git logviewer https://github.com/gSpotx2f/luci-app-log.git" >> feeds.conf.default
-# echo "src-git chinadns https://github.com/zfl9/chinadns-ng.git" >> feeds.conf.default
-echo "src-git immortalwrt https://github.com/immortalwrt/luci.git" >> feeds.conf.default
-echo "src-git immortalwrt https://github.com/immortalwrt/packages.git" >> feeds.conf.default
+echo "src-git chinadns https://github.com/zfl9/chinadns-ng.git" >> feeds.conf.default
+# echo "src-git immortalwrt https://github.com/immortalwrt/luci.git" >> feeds.conf.default
+# echo "src-git immortalwrt https://github.com/immortalwrt/packages.git" >> feeds.conf.default
+echo "src-git homeproxy https://github.com/immortalwrt/homeproxy.git" >> feeds.conf.default
