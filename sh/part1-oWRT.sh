@@ -25,3 +25,5 @@ echo "src-git chinadns https://github.com/zfl9/chinadns-ng.git" >> feeds.conf.de
 # echo "src-git immortalwrt https://github.com/immortalwrt/luci.git" >> feeds.conf.default
 # echo "src-git immortalwrt https://github.com/immortalwrt/packages.git" >> feeds.conf.default
 echo "src-git homeproxy https://github.com/immortalwrt/homeproxy.git" >> feeds.conf.default
+# echo "src-git chinadns https://github.com/immortalwrt/packages/tree/master/net/chinadns-ng" >> feeds.conf.default
+# echo "src-git homeproxy https://github.com/immortalwrt/luci/tree/master/applications/luci-app-homeproxy" >> feeds.conf.default
