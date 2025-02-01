@@ -7,4 +7,6 @@
 #
 # https://github.com/P3TERX/Actions-OpenWrt
 #
-git clone -b master https://github.com/immortalwrt/homeproxy.git feeds/luci/applications/luci-app-homeproxy
+mkdir ./package/custom
+git clone -b master https://github.com/immortalwrt/homeproxy.git ./package/custom/
+./scripts/feeds install -a
