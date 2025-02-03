@@ -27,6 +27,7 @@ env:
   CONFIG_FILE: ./config/iWRT_NanoPi-R5S.config
   DIY_P1_SH: ./sh/WRT-part1.sh
   DIY_P2_SH: ./sh/WRT-part2.sh
+  DIY_P3_SH: ./sh/WRT-part3.sh
   UPLOAD_BIN_DIR: true
   UPLOAD_FIRMWARE: true
   UPLOAD_COWTRANSFER: false
@@ -104,8 +105,15 @@ jobs:
         $GITHUB_WORKSPACE/$DIY_P2_SH
         make defconfig
 
-    - name: grep CONFIG
-      run: grep CONFIG_KERNEL_ openwrt/.config
+    - name: Force applying kernel config
+      run: |
+        chmod +x $DIY_P3_SH
+        cd openwrt
+        $GITHUB_WORKSPACE/$DIY_P3_SH
+        make oldconfig
+
+    - name: Grep CONFIG
+      run: grep CONFIG_ openwrt/.config
 
     - name: SSH Connection to Actions
       uses: P3TERX/ssh2actions@v1.0.0
