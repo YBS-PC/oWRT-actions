@@ -68,5 +68,5 @@ CONFIG_OPENSSL_WITH_TLS13=y
 EOF
 
 # Применяем изменения
-cd openwrt
-make oldconfig
+#cd openwrt
+#make oldconfig
