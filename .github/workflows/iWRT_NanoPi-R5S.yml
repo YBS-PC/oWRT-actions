@@ -109,8 +109,7 @@ jobs:
       run: |
         chmod +x $DIY_P3_SH
         cd openwrt
-        $GITHUB_WORKSPACE/$DIY_P3_SH
-        make oldconfig
+        $DIY_P3_SH
 
     - name: Grep CONFIG
       run: grep CONFIG_ openwrt/.config
