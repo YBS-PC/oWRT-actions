@@ -24,7 +24,7 @@ env:
   REPO_BRANCH: master
   #REPO_BRANCH: openwrt-24.10
   FEEDS_CONF: feeds.conf.default
-  CONFIG_FILE: ./config/NanoPi-R5S.config
+  CONFIG_FILE: ./config/Legacy-iWRT_NanoPi-R5S.config
   DIY_P1_SH: ./sh/WRT-part1.sh
   DIY_P2_SH: ./sh/WRT-part2.sh
   UPLOAD_BIN_DIR: true
