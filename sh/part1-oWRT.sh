@@ -28,3 +28,4 @@ echo "src-git internetdetector https://github.com/gSpotx2f/luci-app-internet-det
 # echo "src-git chinadns https://github.com/immortalwrt/packages/tree/master/net/chinadns-ng" >> feeds.conf.default
 ## echo "src-git homeproxy https://github.com/immortalwrt/luci/tree/master/applications/luci-app-homeproxy" >> feeds.conf.default
 # git clone --depth=1 homeproxy https://github.com/immortalwrt/homeproxy.git package/luci-app-homeproxy
+echo "src-git mihomo https://github.com/morytyann/OpenWrt-mihomo.git;main" >> feeds.conf.default
