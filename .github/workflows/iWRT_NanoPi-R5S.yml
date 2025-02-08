@@ -125,12 +125,8 @@ jobs:
         cd openwrt
         ./scripts/diffconfig.sh > diffconfig.txt
         cat diffconfig.txt
-
-    - name: Upload diffconfig
-      uses: actions/upload-artifact@main
-      with:
-        name: diffconfig
-        path: openwrt/diffconfig.txt
+        cat openwrt/.config | sort
+        diff iWRT_NanoPi-R5S.config openwrt/.config
 
     - name: Compile Firmware
       id: compile
