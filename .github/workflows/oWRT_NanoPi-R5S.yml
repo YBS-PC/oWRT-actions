@@ -83,15 +83,6 @@ jobs:
 
     - name: update source
       run: cd openwrt && ./scripts/feeds update -a
-      #run: |
-      #  cd openwrt
-      #  sed -i 's|immortalwrt/luci.git|immortalwrt/luci.git^38f7d5cffeb28a49524cb5e0627eec5f0d5e053d|' feeds.conf.default
-      #  ./scripts/feeds update -a
-      #  for pkg in adguardhome autocore automount base-files chinadns-ng cpufreq curl firewall4 fstools \
-      #              luci-app-firewall luci-app-homeproxy luci-app-opkg luci-base luci-mod-network \
-      #              luci-mod-status luci-mod-system opkg ppp sing-box wifi-scripts wireless-regdb; do
-      #    ./scripts/feeds list -r kiddin9 | grep -E "$pkg" | xargs ./scripts/feeds uninstall
-      #  done
 
     - name: installation source
       run: cd openwrt && ./scripts/feeds install -a
