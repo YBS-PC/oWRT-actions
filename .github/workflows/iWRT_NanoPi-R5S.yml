@@ -122,10 +122,10 @@ jobs:
 
     - name: Validate Config
       run: |
+        cat openwrt/.config | sort
         cd openwrt
         ./scripts/diffconfig.sh > diffconfig.txt
         cat diffconfig.txt
-        cat openwrt/.config | sort
 
     - name: Compile Firmware
       id: compile
