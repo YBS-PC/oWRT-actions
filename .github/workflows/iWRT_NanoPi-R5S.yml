@@ -83,15 +83,6 @@ jobs:
 
     - name: update source
       run: cd openwrt && ./scripts/feeds update -a
-      #run: |
-      #  cd openwrt
-      #  sed -i 's|immortalwrt/luci.git|immortalwrt/luci.git^38f7d5cffeb28a49524cb5e0627eec5f0d5e053d|' feeds.conf.default
-      #  ./scripts/feeds update -a
-      #  for pkg in adguardhome autocore automount base-files chinadns-ng cpufreq curl firewall4 fstools \
-      #              luci-app-firewall luci-app-homeproxy luci-app-opkg luci-base luci-mod-network \
-      #              luci-mod-status luci-mod-system opkg ppp sing-box wifi-scripts wireless-regdb; do
-      #    ./scripts/feeds list -r kiddin9 | grep -E "$pkg" | xargs ./scripts/feeds uninstall
-      #  done
 
     - name: installation source
       run: cd openwrt && ./scripts/feeds install -a
@@ -119,62 +110,6 @@ jobs:
         make download -j8
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
-
-    - name: Validate Config
-      run: |
-        cat openwrt/.config
-        echo "CONFIG_KERNEL_CRYPTO_DEV_ROCKCHIP_DCP=y" >> openwrt/.config
-        echo "CONFIG_KERNEL_CRYPTO_DEV_ROCKCHIP_RSA=y" >> openwrt/.config
-        echo "CONFIG_KERNEL_CRYPTO_DEV_ROCKCHIP=y" >> openwrt/.config
-        echo "CONFIG_KERNEL_CRYPTO_DRBG_MENU=y" >> openwrt/.config
-        echo "CONFIG_KERNEL_CRYPTO_JITTERENTROPY=y" >> openwrt/.config
-        echo "CONFIG_KERNEL_DEBUG_INFO=n" >> openwrt/.config
-        echo "CONFIG_KERNEL_FS_SQUASHFS_ZSTD=y" >> openwrt/.config
-        echo "CONFIG_KERNEL_FS_SQUASHFS=y" >> openwrt/.config
-        echo "CONFIG_KERNEL_GPIOLIB=y" >> openwrt/.config
-        echo "CONFIG_KERNEL_HZ=500" >> openwrt/.config
-        echo "CONFIG_KERNEL_LRNG=y" >> openwrt/.config
-        echo "CONFIG_KERNEL_NET_SCH_CAKE=y" >> openwrt/.config
-        echo "CONFIG_KERNEL_NET_SCH_FQ=y" >> openwrt/.config
-        echo "CONFIG_KERNEL_NETFILTER_XT_MATCH_SOCKET=y" >> openwrt/.config
-        echo "CONFIG_KERNEL_NETFILTER_XT_TARGET_TPROXY=y" >> openwrt/.config
-        echo "CONFIG_KERNEL_NF_CONNTRACK=y" >> openwrt/.config
-        echo "CONFIG_KERNEL_PCI=y" >> openwrt/.config
-        echo "CONFIG_KERNEL_PCIE_DPC=y" >> openwrt/.config
-        echo "CONFIG_KERNEL_PCIEASPM=n" >> openwrt/.config
-        echo "CONFIG_KERNEL_PCIEPORTBUS=y" >> openwrt/.config
-        echo "CONFIG_KERNEL_PINCTRL=y" >> openwrt/.config
-        echo "CONFIG_KERNEL_PREEMPT_VOLUNTARY=y" >> openwrt/.config
-        echo "CONFIG_KERNEL_RANDOM_TRUST_CPU=y" >> openwrt/.config
-        echo "CONFIG_KERNEL_SCHED_AUTOGROUP=y" >> openwrt/.config
-        echo "CONFIG_KERNEL_SKB_FIXED_SIZE_2K=y" >> openwrt/.config
-        echo "CONFIG_KERNEL_SKB_RECYCLE_MAX_PREALLOC_SKBS=8192" >> openwrt/.config
-        echo "CONFIG_KERNEL_SKB_RECYCLE_SIZE=1856" >> openwrt/.config
-        echo "CONFIG_KERNEL_SKB_RECYCLER_PREALLOC=y" >> openwrt/.config
-        echo "CONFIG_KERNEL_TCP_CONG_BBR=y" >> openwrt/.config
-        echo "CONFIG_KERNEL_TLS=y" >> openwrt/.config
-        echo "CONFIG_KERNEL_TTY=y" >> openwrt/.config
-        echo "CONFIG_KERNEL_ZSMALLOC=y" >> openwrt/.config
-        echo "CONFIG_LIBCURL_COOKIES=y" >> openwrt/.config
-        echo "CONFIG_LIBCURL_CRYPTO_AUTH=y" >> openwrt/.config
-        echo "CONFIG_LIBCURL_FILE=y" >> openwrt/.config
-        echo "CONFIG_LIBCURL_HTTP=y" >> openwrt/.config
-        echo "CONFIG_LIBCURL_NGHTTP2=y" >> openwrt/.config
-        echo "CONFIG_LIBCURL_OPENSSL=y" >> openwrt/.config
-        echo "CONFIG_LIBCURL_PROXY=y" >> openwrt/.config
-        echo "CONFIG_LIBCURL_THREADED_RESOLVER=y" >> openwrt/.config
-        echo "CONFIG_LIBCURL_TLS_SRP=n" >> openwrt/.config
-        echo "CONFIG_LIBCURL_UNIX_SOCKETS=y" >> openwrt/.config
-        echo "CONFIG_LUCI_LANG_ru=y" >> openwrt/.config
-        echo "CONFIG_OPENSSL_ENGINE=y" >> openwrt/.config
-        echo "CONFIG_OPENSSL_WITH_ASM=y" >> openwrt/.config
-        echo "CONFIG_OPENSSL_WITH_CHACHA_POLY1305=y" >> openwrt/.config
-        echo "CONFIG_OPENSSL_WITH_PSK=y" >> openwrt/.config
-        echo "CONFIG_OPENSSL_WITH_TLS13=y" >> openwrt/.config
-        echo "diffconfig"
-        cd openwrt
-        ./scripts/diffconfig.sh > diffconfig.txt
-        cat diffconfig.txt
 
     - name: Compile Firmware
       id: compile
