@@ -120,6 +120,18 @@ jobs:
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
 
+    - name: Validate Config
+      run: |
+        cd openwrt
+        ./scripts/diffconfig.sh > diffconfig.txt
+        cat diffconfig.txt
+
+    - name: Upload diffconfig
+      uses: actions/upload-artifact@main
+      with:
+        name: diffconfig
+        path: openwrt/diffconfig.txt
+
     - name: Compile Firmware
       id: compile
       run: |
