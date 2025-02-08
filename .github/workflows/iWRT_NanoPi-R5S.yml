@@ -122,7 +122,8 @@ jobs:
 
     - name: Validate Config
       run: |
-        cat openwrt/.config | sort
+        cat openwrt/.config
+        echo "diffconfig"
         cd openwrt
         ./scripts/diffconfig.sh > diffconfig.txt
         cat diffconfig.txt
