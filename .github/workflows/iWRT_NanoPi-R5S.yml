@@ -74,6 +74,11 @@ jobs:
         git clone --branch $REPO_BRANCH $REPO_URL openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
+    - name: Modify kernel-defaults.mk
+      run: |
+        cd openwrt
+        sed -i 's/\$(MKHASH) md5/echo "50f1dd91882b3c60556610bd99d8a4a6"/g' include/kernel-defaults.mk
+
     - name: Loading custom sources
       run: |
         [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
