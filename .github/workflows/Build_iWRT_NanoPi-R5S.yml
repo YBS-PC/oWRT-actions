@@ -76,8 +76,8 @@ jobs:
     - name: Get Latest Kernel Hash
       id: get_hash
       run: |
-        KERNEL_LIST=$(curl -s https://downloads.immortalwrt.org/snapshots/targets/rockchip/armv8/kmods/ | grep -oE '6\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+')
-        LATEST_HASH=$(echo "$KERNEL_LIST" | sort -t '.' -k1,1n -k2,2n -k3,3n -r | head -n1 | cut -d '-' -f3 | sed 's/\///')
+        KERNEL_LIST=$(curl -s https://downloads.immortalwrt.org/snapshots/targets/rockchip/armv8/kmods/ | grep -oE '6\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+' | tr -d '[:space:]')
+        LATEST_HASH=$(echo "$KERNEL_LIST" | sort -V -r | head -n1 | cut -d '-' -f3 | sed 's/\/$//')
         echo "LATEST_HASH=${LATEST_HASH}" >> $GITHUB_ENV
 
     - name: Modify kernel-defaults.mk
