@@ -6,9 +6,9 @@
 #
 # https://github.com/P3TERX/Actions-OpenWrt
 # Description: Build OpenWrt using GitHub Actions
-################################################### OLD # LEGACY ##################################################
+#
 
-name: Build_iWRT_NanoPi-R5S
+name: iWRT_NanoPi-R5S-24.10
 
 on:
   repository_dispatch:
@@ -21,12 +21,13 @@ on:
 
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt.git
-  REPO_BRANCH: master
-  #REPO_BRANCH: openwrt-24.10
+  #REPO_BRANCH: master
+  REPO_BRANCH: openwrt-24.10
   FEEDS_CONF: feeds.conf.default
-  CONFIG_FILE: ./config/Legacy-iWRT_NanoPi-R5S.config
+  CONFIG_FILE: ./config/iWRT_NanoPi-R5S-24.10.config
   DIY_P1_SH: ./sh/WRT-part1.sh
   DIY_P2_SH: ./sh/WRT-part2.sh
+  #DIY_P3_SH: ./sh/WRT-part3.sh
   UPLOAD_BIN_DIR: true
   UPLOAD_FIRMWARE: true
   UPLOAD_COWTRANSFER: false
@@ -76,7 +77,7 @@ jobs:
     - name: Get Latest Kernel Hash
       id: get_hash
       run: |
-        KERNEL_LIST=$(curl -s https://downloads.immortalwrt.org/snapshots/targets/rockchip/armv8/kmods/ | grep -oE '6\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+')
+        KERNEL_LIST=$(curl -s https://immortalwrt.kyarucloud.moe/releases/24.10.0/targets/rockchip/armv8/kmods/ | grep -oE '6\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+')
         echo "$KERNEL_LIST" | while read -r line; do
             version=$(echo "$line" | cut -d'-' -f1)
             major=$(echo "$version" | cut -d'.' -f1)
@@ -112,15 +113,6 @@ jobs:
 
     - name: update source
       run: cd openwrt && ./scripts/feeds update -a
-      #run: |
-      #  cd openwrt
-      #  sed -i 's|immortalwrt/luci.git|immortalwrt/luci.git^38f7d5cffeb28a49524cb5e0627eec5f0d5e053d|' feeds.conf.default
-      #  ./scripts/feeds update -a
-      #  for pkg in adguardhome autocore automount base-files chinadns-ng cpufreq curl firewall4 fstools \
-      #              luci-app-firewall luci-app-homeproxy luci-app-opkg luci-base luci-mod-network \
-      #              luci-mod-status luci-mod-system opkg ppp sing-box wifi-scripts wireless-regdb; do
-      #    ./scripts/feeds list -r kiddin9 | grep -E "$pkg" | xargs ./scripts/feeds uninstall
-      #  done
 
     - name: installation source
       run: cd openwrt && ./scripts/feeds install -a
@@ -174,7 +166,7 @@ jobs:
       uses: actions/upload-artifact@main
       if: steps.compile.outputs.compile == 'success' && env.UPLOAD_BIN_DIR == 'true'
       with:
-        name: OpenWrt_bin_${{ steps.compile.outputs.device-name }}_${{ steps.compile.outputs.file-date }}
+        name: iWrt_bin_${{ steps.compile.outputs.device-name }}_${{ steps.compile.outputs.file-date }}
         path: openwrt/bin
 
 
@@ -192,7 +184,7 @@ jobs:
       uses: actions/upload-artifact@main
       if: steps.organize.outputs.organize == 'success' && !cancelled()
       with:
-        name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+        name: iWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: ${{ env.FIRMWARE }}
 
     - name: Generate Publishing Tags
