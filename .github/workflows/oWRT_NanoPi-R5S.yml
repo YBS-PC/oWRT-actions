@@ -123,9 +123,9 @@ jobs:
         [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
         chmod +x $DIY_P2_SH
         cd openwrt
-        $GITHUB_WORKSPACE/$DIY_P2_SH
         # Заменяем CONFIG_PACKAGE_kmod-r8125=y на CONFIG_PACKAGE_kmod-r8125-rss=y для Openwrt
-        sed -i 's/^CONFIG_PACKAGE_kmod-r8125=y$/CONFIG_PACKAGE_kmod-r8125-rss=y/' .config
+        sed -i 's/CONFIG_PACKAGE_kmod-r8125=y/CONFIG_PACKAGE_kmod-r8125-rss=y/' .config
+        $GITHUB_WORKSPACE/$DIY_P2_SH
         make defconfig
 
     - name: SSH Connection to Actions
