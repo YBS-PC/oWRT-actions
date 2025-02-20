@@ -21,8 +21,8 @@ on:
 
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt.git
-  REPO_BRANCH: master
-  #REPO_BRANCH: openwrt-24.10
+  #REPO_BRANCH: master
+  REPO_BRANCH: abd424c3e19df49bf331a5b0d0adbd71ebf14929
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: ./config/iWRT_NanoPi-R5S.config
   DIY_P1_SH: ./sh/WRT-part1.sh
