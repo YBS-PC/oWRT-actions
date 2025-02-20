@@ -192,8 +192,8 @@ jobs:
       if: steps.compile.outputs.compile == 'success' && env.UPLOAD_RELEASE == 'true' && !cancelled()
       run: |
         echo "Generate Publishing Tags..."
-        echo "release_tag=Slate_GL-AXT1800" >> $GITHUB_ENV
-        echo "release_tag=Slate_GL-AXT1800" >> $GITHUB_OUTPUT
+        echo "release_tag=iWRT_NanoPi-R5S" >> $GITHUB_ENV
+        echo "release_tag=iWRT_NanoPi-R5S" >> $GITHUB_OUTPUT
 
         touch release.txt
         echo "tag=success" >> $GITHUB_ENV
