@@ -74,6 +74,13 @@ jobs:
         git clone --branch $REPO_BRANCH $REPO_URL openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
+    - name: Patch libffi Makefile
+      run: |
+        cd openwrt
+        sed -i '/^PKG_FIXUP:=autoreconf/d' feeds/packages/libs/libffi/Makefile
+        echo "Updated Makefile:"
+        grep "PKG_FIXUP" feeds/packages/libs/libffi/Makefile || echo "String removed successfully"
+  
     - name: Get Latest Kernel Hash
       id: get_hash
       run: |
