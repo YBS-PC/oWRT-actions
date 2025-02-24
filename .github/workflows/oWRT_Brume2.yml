@@ -122,13 +122,13 @@ jobs:
         [ -e files ] && mv ./files openwrt/files
         [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
         # Удаляем ненужные mt2500 строки
-        sed -i '/rockchip/d' openwrt/.config
-        sed -i '/ROOTFS_PARTSIZE/d' openwrt/.config
-        sed -i '/ARCH_PACKAGES/d' openwrt/.config
+        sed -i '/CONFIG_TARGET/d' openwrt/.config
         sed -i '/fdisk/d' openwrt/.config
         sed -i '/kmod-r8125/d' openwrt/.config
         sed -i '/kmod-r8169/d' openwrt/.config
         sed -i '/partx-utils/d' openwrt/.config
+        sed -i '/fitblk/d' openwrt/.config
+        sed -i '/kmod-crypto-hw-safexcel/d' openwrt/.config
         # Добавляем необходимые mt2500 строки
         echo 'CONFIG_TARGET_mediatek=y' >> openwrt/.config
         echo 'CONFIG_TARGET_mediatek_filogic=y' >> openwrt/.config
@@ -136,11 +136,8 @@ jobs:
         echo 'CONFIG_TARGET_ARCH_PACKAGES="aarch64_cortex-a53"' >> openwrt/.config
         echo 'CONFIG_TARGET_ROOTFS_PARTSIZE=512' >> openwrt/.config
         echo 'CONFIG_PACKAGE_bridger=y' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_f2fsck=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_fitblk=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_kmod-crypto-hw-safexcel=y' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_kmod-leds-gpio=y' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_kmod-phy-aquantia=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_kmod-usb3=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_eip197-mini-firmware=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_kmod-mt7981-firmware=y' >> openwrt/.config
