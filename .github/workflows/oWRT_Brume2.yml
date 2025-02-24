@@ -207,8 +207,8 @@ jobs:
       if: steps.compile.outputs.compile == 'success' && env.UPLOAD_RELEASE == 'true' && !cancelled()
       run: |
         echo "Generate Publishing Tags..."
-        echo "release_tag=oWRT_NanoPi-R5S" >> $GITHUB_ENV
-        echo "release_tag=oWRT_NanoPi-R5S" >> $GITHUB_OUTPUT
+        echo "release_tag=oWRT_Brume2" >> $GITHUB_ENV
+        echo "release_tag=oWRT_Brume2" >> $GITHUB_OUTPUT
 
         touch release.txt
         echo "tag=success" >> $GITHUB_ENV
