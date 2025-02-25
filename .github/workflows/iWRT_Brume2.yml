@@ -129,6 +129,7 @@ jobs:
         sed -i '/partx-utils/d' openwrt/.config
         sed -i '/fitblk/d' openwrt/.config
         sed -i '/kmod-crypto-hw-safexcel/d' openwrt/.config
+        sed -i '/mt76/d' openwrt/.config
         # Добавляем необходимые mt2500 строки
         echo 'CONFIG_TARGET_mediatek=y' >> openwrt/.config
         echo 'CONFIG_TARGET_mediatek_filogic=y' >> openwrt/.config
