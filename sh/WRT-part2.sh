@@ -7,3 +7,5 @@
 mkdir ./package/luci-app-log-viewer
 git clone -b master https://github.com/gSpotx2f/luci-app-log.git ./package/luci-app-log-viewer/
 ./scripts/feeds install -a
+# Удаление mt76 из Makefile для предотвращения его сборки
+sed -i 's/\$(SUBTARGET)\/mt76/# \$(SUBTARGET)\/mt76/' target/linux/mediatek/Makefile
