@@ -169,6 +169,8 @@ jobs:
         chmod +x $DIY_P2_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
+        # Удаление mt76 из Makefile для предотвращения его сборки
+        sed -i 's/\$(SUBTARGET)\/mt76/# \$(SUBTARGET)\/mt76/' target/linux/mediatek/Makefile
         make defconfig
 
     - name: SSH Connection to Actions
