@@ -27,7 +27,7 @@ env:
   CONFIG_FILE: ./config/iWRT_NanoPi-R5S.config
   DIY_P1_SH: ./sh/part1-oWRT.sh
   DIY_P2_SH: ./sh/part2-oWRT.sh
-  DIY_P3_SH: ./sh/Brume-1.sh
+  #DIY_P3_SH: ./sh/Brume-1.sh
   UPLOAD_BIN_DIR: true
   UPLOAD_FIRMWARE: true
   UPLOAD_COWTRANSFER: false
@@ -125,8 +125,29 @@ jobs:
       run: |
         [ -e files ] && mv ./files openwrt/files
         [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
-        chmod +x $DIY_P3_SH
-        $GITHUB_WORKSPACE/$DIY_P3_SH
+        # Удаляем ненужные mt2500 строки
+        sed -i '/CONFIG_TARGET/d' openwrt/.config
+        sed -i '/fdisk/d' openwrt/.config
+        sed -i '/kmod-r8125/d' openwrt/.config
+        sed -i '/kmod-r8169/d' openwrt/.config
+        sed -i '/partx-utils/d' openwrt/.config
+        sed -i '/fitblk/d' openwrt/.config
+        sed -i '/kmod-crypto-hw-safexcel/d' openwrt/.config
+        sed -i '/mt76/d' openwrt/.config
+        # Добавляем необходимые mt2500 строки
+        echo 'CONFIG_TARGET_mediatek=y' >> openwrt/.config
+        echo 'CONFIG_TARGET_mediatek_filogic=y' >> openwrt/.config
+        echo 'CONFIG_TARGET_mediatek_filogic_DEVICE_glinet_gl-mt2500=y' >> openwrt/.config
+        echo 'CONFIG_TARGET_ARCH_PACKAGES="aarch64_cortex-a53"' >> openwrt/.config
+        echo 'CONFIG_TARGET_ROOTFS_PARTSIZE=512' >> openwrt/.config
+        echo 'CONFIG_PACKAGE_bridger=y' >> openwrt/.config
+        echo 'CONFIG_PACKAGE_fitblk=y' >> openwrt/.config
+        echo 'CONFIG_PACKAGE_kmod-crypto-hw-safexcel=y' >> openwrt/.config
+        echo 'CONFIG_PACKAGE_kmod-usb3=y' >> openwrt/.config
+        echo 'CONFIG_PACKAGE_eip197-mini-firmware=y' >> openwrt/.config
+        echo 'CONFIG_PACKAGE_kmod-mt7981-firmware=y' >> openwrt/.config
+        echo 'CONFIG_PACKAGE_mt7981-wo-firmware=y' >> openwrt/.config
+        echo 'CONFIG_PACKAGE_kmod-mt76=m' >> openwrt/.config
         chmod +x $DIY_P2_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
