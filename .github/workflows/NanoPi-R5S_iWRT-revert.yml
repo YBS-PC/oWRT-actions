@@ -8,7 +8,7 @@
 # Description: Build OpenWrt using GitHub Actions
 #
 
-name: iWRT_NanoPi-R5S-revert
+name: NanoPi-R5S_iWRT-revert
 
 on:
   repository_dispatch:
