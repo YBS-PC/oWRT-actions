@@ -8,7 +8,7 @@
 # Description: Build OpenWrt using GitHub Actions
 #
 
-name: oWRT_NanoPi-R5S
+name: NanoPi-R5S_oWRT
 
 on:
   repository_dispatch:
