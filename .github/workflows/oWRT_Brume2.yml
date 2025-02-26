@@ -27,7 +27,7 @@ env:
   CONFIG_FILE: ./config/iWRT_NanoPi-R5S.config
   DIY_P1_SH: ./sh/part1-oWRT.sh
   DIY_P2_SH: ./sh/part2-oWRT.sh
-  DIY_P3_SH: ./sh/part3-oWRT.sh
+  DIY_P3_SH: ./sh/Brume-1.sh
   UPLOAD_BIN_DIR: true
   UPLOAD_FIRMWARE: true
   UPLOAD_COWTRANSFER: false
@@ -117,60 +117,20 @@ jobs:
     - name: installation source
       run: cd openwrt && ./scripts/feeds install -a
 
-    - name: Patch Makefile
-      run: |
-        cd openwrt
-        #sed -i '/^PKG_FIXUP:=autoreconf/d' feeds/packages/libs/libffi/Makefile
-        #echo "Updated Makefile"
-        #grep "PKG_FIXUP" feeds/packages/libs/libffi/Makefile || echo "String removed successfully"
-        if [ -f package/kernel/mt76/Makefile ]; then
-            echo "Modifying mt76 Makefile to skip build"
-            sed -i '1s/^/ifneq ($(CONFIG_PACKAGE_kmod-mt76),y)\nPKG_BUILD_DEPENDS:=\nendif\n/' package/kernel/mt76/Makefile
-        fi
+    #- name: Patch Makefile
+      #run: |
+        #cd openwrt
 
     - name: Loading Custom Configurations
       run: |
         [ -e files ] && mv ./files openwrt/files
         [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
-        # Удаляем ненужные mt2500 строки
-        sed -i '/CONFIG_TARGET/d' openwrt/.config
-        sed -i '/fdisk/d' openwrt/.config
-        sed -i '/kmod-r8125/d' openwrt/.config
-        sed -i '/kmod-r8169/d' openwrt/.config
-        sed -i '/partx-utils/d' openwrt/.config
-        sed -i '/fitblk/d' openwrt/.config
-        sed -i '/kmod-crypto-hw-safexcel/d' openwrt/.config
-        sed -i '/mt76/d' openwrt/.config
-        # Добавляем необходимые mt2500 строки
-        echo 'CONFIG_TARGET_mediatek=y' >> openwrt/.config
-        echo 'CONFIG_TARGET_mediatek_filogic=y' >> openwrt/.config
-        echo 'CONFIG_TARGET_mediatek_filogic_DEVICE_glinet_gl-mt2500=y' >> openwrt/.config
-        echo 'CONFIG_TARGET_ARCH_PACKAGES="aarch64_cortex-a53"' >> openwrt/.config
-        echo 'CONFIG_TARGET_ROOTFS_PARTSIZE=512' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_bridger=y' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_fitblk=y' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_kmod-crypto-hw-safexcel=y' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_kmod-usb3=y' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_eip197-mini-firmware=y' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_kmod-mt7981-firmware=y' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_mt7981-wo-firmware=y' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_kmod-mt76=m' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_kmod-mt76-core=n' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_kmod-mt76x2=n' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_hostapd=n' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_wpad=n' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_kmod-cfg80211=n' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_kmod-mac80211=n' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_kmod-mt76-connac=n' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_wireless-regdb=n' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_wpa-supplicant=n' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_iw=n' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_iwinfo=n' >> openwrt/.config
+        chmod +x $DIY_P3_SH
+        cd openwrt
+        $GITHUB_WORKSPACE/$DIY_P3_SH
         chmod +x $DIY_P2_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
-        # Удаление mt76 из Makefile для предотвращения его сборки
-        sed -i 's/\$(SUBTARGET)\/mt76/# \$(SUBTARGET)\/mt76/' target/linux/mediatek/Makefile
         make defconfig
 
     - name: SSH Connection to Actions
