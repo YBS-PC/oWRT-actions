@@ -155,17 +155,17 @@ jobs:
         echo 'CONFIG_PACKAGE_kmod-mt7981-firmware=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_mt7981-wo-firmware=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_kmod-mt76=m' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_kmod-mt76-core=n' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_kmod-mt76x2=n' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_hostapd=n' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_wpad=n' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_kmod-cfg80211=n' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_kmod-mac80211=n' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_kmod-mt76-connac=n' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_wireless-regdb=n' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_wpa-supplicant=n' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_iw=n' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_iwinfo=n' >> openwrt/.config
+        #echo 'CONFIG_PACKAGE_kmod-mt76-core=n' >> openwrt/.config
+        #echo 'CONFIG_PACKAGE_kmod-mt76x2=n' >> openwrt/.config
+        #echo 'CONFIG_PACKAGE_hostapd=n' >> openwrt/.config
+        #echo 'CONFIG_PACKAGE_wpad=n' >> openwrt/.config
+        #echo 'CONFIG_PACKAGE_kmod-cfg80211=n' >> openwrt/.config
+        #echo 'CONFIG_PACKAGE_kmod-mac80211=n' >> openwrt/.config
+        #echo 'CONFIG_PACKAGE_kmod-mt76-connac=n' >> openwrt/.config
+        #echo 'CONFIG_PACKAGE_wireless-regdb=n' >> openwrt/.config
+        #echo 'CONFIG_PACKAGE_wpa-supplicant=n' >> openwrt/.config
+        #echo 'CONFIG_PACKAGE_iw=n' >> openwrt/.config
+        #echo 'CONFIG_PACKAGE_iwinfo=n' >> openwrt/.config
         chmod +x $DIY_P2_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
