@@ -21,7 +21,8 @@ on:
 
 env:
   REPO_URL: https://github.com/LiBwrt-op/openwrt-6.x.git
-  REPO_BRANCH: main
+  REPO_BRANCH: kernel-6.12
+  #REPO_BRANCH: main
   #REPO_BRANCH: openwrt-24.10
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: ./config/GL-AXT1800.config
@@ -139,7 +140,7 @@ jobs:
       uses: actions/upload-artifact@main
       if: steps.compile.outputs.compile == 'success' && env.UPLOAD_BIN_DIR == 'true'
       with:
-        name: LiBwrt_bin_${{ steps.compile.outputs.device-name }}_${{ steps.compile.outputs.file-date }}
+        name: LiBwrt_axt1800-${{ steps.compile.outputs.device-name }}_${{ steps.compile.outputs.file-date }}
         path: openwrt/bin
 
 
@@ -157,7 +158,7 @@ jobs:
       uses: actions/upload-artifact@main
       if: steps.organize.outputs.organize == 'success' && !cancelled()
       with:
-        name: LiBwrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+        name: LiBwrt_axt1800-firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: ${{ env.FIRMWARE }}
 
     - name: Generate Publishing Tags
