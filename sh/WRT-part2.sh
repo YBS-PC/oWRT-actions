@@ -4,6 +4,7 @@
 #mkdir ./package/custom
 #git clone https://github.com/sbwml/autocore-arm.git ./package/custom/
 #./scripts/feeds install -a
+rm -rf ./feeds/luci/applications/luci-app-homeproxy
 git clone --force -b master https://github.com/immortalwrt/homeproxy.git ./feeds/luci/applications/luci-app-homeproxy/
 mkdir ./package/luci-app-log-viewer
 git clone -b master https://github.com/gSpotx2f/luci-app-log.git ./package/luci-app-log-viewer/
