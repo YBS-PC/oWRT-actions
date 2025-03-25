@@ -144,9 +144,9 @@ jobs:
         echo 'CONFIG_TARGET_PROFILE="DEVICE_glinet_gl-axt1800"' >> openwrt/.config
         echo 'CONFIG_TARGET_ARCH_PACKAGES="aarch64_cortex-a53"' >> openwrt/.config
         #echo 'CONFIG_TARGET_ROOTFS_PARTSIZE=512' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_bridger=y' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_fitblk=y' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_kmod-crypto-hw-safexcel=y' >> openwrt/.config
+        #echo 'CONFIG_PACKAGE_bridger=y' >> openwrt/.config
+        #echo 'CONFIG_PACKAGE_fitblk=y' >> openwrt/.config
+        #echo 'CONFIG_PACKAGE_kmod-crypto-hw-safexcel=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_kmod-usb3=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_eip197-mini-firmware=y' >> openwrt/.config
         echo 'ath11k-firmware-ipq6018' >> openwrt/.config
@@ -160,6 +160,8 @@ jobs:
         echo 'losetup' >> openwrt/.config
         echo 'CONFIG_PACKAGE_fancontrol=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_luci-app-fancontrol=y' >> openwrt/.config
+        cat openwrt/.config
+        sed -n '218p' openwrt/.config
         chmod +x $DIY_P2_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
