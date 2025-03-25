@@ -149,15 +149,15 @@ jobs:
         #echo 'CONFIG_PACKAGE_kmod-crypto-hw-safexcel=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_kmod-usb3=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_eip197-mini-firmware=y' >> openwrt/.config
-        echo 'ath11k-firmware-ipq6018' >> openwrt/.config
-        echo 'kmod-ath11k-ahb' >> openwrt/.config
-        echo 'kmod-qca-nss-dp' >> openwrt/.config
-        echo 'kmod-usb-dwc3' >> openwrt/.config
-        echo 'kmod-usb-dwc3-qcom' >> openwrt/.config
-        echo 'wpad-openssl' >> openwrt/.config
-        echo 'ipq-wifi-glinet_gl-axt1800' >> openwrt/.config
-        echo 'kmod-hwmon-pwmfan' >> openwrt/.config
-        echo 'losetup' >> openwrt/.config
+        echo 'CONFIG_PACKAGE_ath11k-firmware-ipq6018=y' >> openwrt/.config
+        echo 'CONFIG_PACKAGE_kmod-ath11k-ahb=y' >> openwrt/.config
+        echo 'CONFIG_PACKAGE_kmod-qca-nss-dp=y' >> openwrt/.config
+        echo 'CONFIG_PACKAGE_kmod-usb-dwc3=y' >> openwrt/.config
+        echo 'CONFIG_PACKAGE_kmod-usb-dwc3-qcom=y' >> openwrt/.config
+        echo 'CONFIG_PACKAGE_wpad-openssl=y' >> openwrt/.config
+        echo 'CONFIG_PACKAGE_ipq-wifi-glinet_gl-axt1800=y' >> openwrt/.config
+        echo 'CONFIG_PACKAGE_kmod-hwmon-pwmfan=y' >> openwrt/.config
+        echo 'CONFIG_PACKAGE_losetup=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_fancontrol=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_luci-app-fancontrol=y' >> openwrt/.config
         cat openwrt/.config
