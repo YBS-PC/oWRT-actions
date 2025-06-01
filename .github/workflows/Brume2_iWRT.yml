@@ -159,6 +159,7 @@ jobs:
         echo 'CONFIG_TARGET_mediatek_filogic=y' >> openwrt/.config
         echo 'CONFIG_TARGET_mediatek_filogic_DEVICE_glinet_gl-mt2500=y' >> openwrt/.config
         echo 'CONFIG_TARGET_ARCH_PACKAGES="aarch64_cortex-a53"' >> openwrt/.config
+        echo 'CONFIG_TESTING_KERNEL=y' >> openwrt/.config
         #echo 'CONFIG_TARGET_ROOTFS_PARTSIZE=512' >> openwrt/.config
         echo 'CONFIG_PACKAGE_bridger=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_fitblk=y' >> openwrt/.config
