@@ -8,7 +8,7 @@
 # Description: Build OpenWrt using GitHub Actions
 #
 
-name: AXT-1800_LiBwrt
+name: Slate_AX_(GL-AXT1800)_LiBwrt
 
 on:
   repository_dispatch:
