@@ -43,6 +43,22 @@ jobs:
       actions: write
 
     steps:
+    - name: Free up disk space!!!
+      run: |
+        echo ">>> Освобождение диска"
+        df -h
+        sudo rm -rf /usr/share/dotnet \
+                    /usr/local/lib/android \
+                    /opt/ghc \
+                    /opt/hostedtoolcache \
+                    /opt/az \
+                    /opt/microsoft \
+                    "$AGENT_TOOLSDIRECTORY"
+        sudo apt-get purge -y "azure*" "dotnet*" "ghc*" "llvm*" "mono*" "android*"
+        sudo apt-get autoremove -y
+        sudo apt-get clean
+        df -h
+    
     - name: Check disk space
       run: df -h
 
@@ -136,13 +152,18 @@ jobs:
       if: (!cancelled())
       run: df -hT
 
+    - name: Cleanup unnecessary build artifacts!!!
+      run: |
+        echo ">>> Очистка build_dir и staging_dir"
+        rm -rf openwrt/build_dir openwrt/staging_dir openwrt/tmp
+        df -h
+
     - name: Uploading the bin directory
       uses: actions/upload-artifact@main
       if: steps.compile.outputs.compile == 'success' && env.UPLOAD_BIN_DIR == 'true'
       with:
         name: LiBwrt_axt1800-${{ steps.compile.outputs.device-name }}_${{ steps.compile.outputs.file-date }}
         path: openwrt/bin
-
 
     - name: Organize documents
       id: organize
