@@ -185,13 +185,18 @@ jobs:
       if: (!cancelled())
       run: df -hT
 
+    - name: Cleanup unnecessary build artifacts!!!
+      run: |
+        echo ">>> Очистка build_dir и staging_dir"
+        rm -rf openwrt/build_dir openwrt/staging_dir openwrt/tmp
+        df -h
+
     - name: Uploading the bin directory
       uses: actions/upload-artifact@main
       if: steps.compile.outputs.compile == 'success' && env.UPLOAD_BIN_DIR == 'true'
       with:
         name: iWrt_bin_${{ steps.compile.outputs.device-name }}_${{ steps.compile.outputs.file-date }}
         path: openwrt/bin
-
 
     - name: Organize documents
       id: organize
