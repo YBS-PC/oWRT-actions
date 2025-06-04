@@ -212,7 +212,7 @@ jobs:
       uses: actions/upload-artifact@main
       if: steps.organize.outputs.organize == 'success' && !cancelled()
       with:
-        name: NanoPi-R5S_iWRT_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+        name: NanoPi-R5S_iWRT-firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: ${{ env.FIRMWARE }}
 
     - name: Generate Publishing Tags
