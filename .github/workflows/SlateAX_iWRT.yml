@@ -13,7 +13,7 @@
 # FLASH: NAND Flash 128MB
 # RAM: DDR3L 512MB
 
-name: Slate_AX_(GL-AXT1800)_iWRT
+name: SlateAX_iWRT
 
 on:
   repository_dispatch:
