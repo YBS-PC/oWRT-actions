@@ -195,7 +195,7 @@ jobs:
       uses: actions/upload-artifact@main
       if: steps.compile.outputs.compile == 'success' && env.UPLOAD_BIN_DIR == 'true'
       with:
-        name: iWrt_bin_${{ steps.compile.outputs.device-name }}_${{ steps.compile.outputs.file-date }}
+        name: NanoPi-R5S_iWRT-${{ steps.compile.outputs.device-name }}_${{ steps.compile.outputs.file-date }}
         path: openwrt/bin
 
     - name: Organize documents
@@ -212,7 +212,7 @@ jobs:
       uses: actions/upload-artifact@main
       if: steps.organize.outputs.organize == 'success' && !cancelled()
       with:
-        name: iWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+        name: NanoPi-R5S_iWRT_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: ${{ env.FIRMWARE }}
 
     - name: Generate Publishing Tags
