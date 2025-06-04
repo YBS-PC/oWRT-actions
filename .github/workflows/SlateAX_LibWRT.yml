@@ -162,7 +162,7 @@ jobs:
       uses: actions/upload-artifact@main
       if: steps.compile.outputs.compile == 'success' && env.UPLOAD_BIN_DIR == 'true'
       with:
-        name: LiBwrt_axt1800-${{ steps.compile.outputs.device-name }}_${{ steps.compile.outputs.file-date }}
+        name: SlateAX_LibWRT-${{ steps.compile.outputs.device-name }}_${{ steps.compile.outputs.file-date }}
         path: openwrt/bin
 
     - name: Organize documents
@@ -179,7 +179,7 @@ jobs:
       uses: actions/upload-artifact@main
       if: steps.organize.outputs.organize == 'success' && !cancelled()
       with:
-        name: LiBwrt_axt1800-firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+        name: SlateAX_LibWRT-firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: ${{ env.FIRMWARE }}
 
     - name: Generate Publishing Tags
