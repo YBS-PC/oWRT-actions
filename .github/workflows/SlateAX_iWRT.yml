@@ -185,7 +185,7 @@ jobs:
         ##echo 'CONFIG_KERNEL_XDP_SOCKETS=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_ath11k-firmware-ipq6018=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_ath11k-firmware-new-ipq6018=y' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_bridger=y' >> openwrt/.config
+        #echo 'CONFIG_PACKAGE_bridger=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_dosfstools=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_eip197-mini-firmware=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_fancontrol=y' >> openwrt/.config
