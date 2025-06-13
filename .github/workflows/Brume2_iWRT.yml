@@ -152,9 +152,6 @@ jobs:
         [ -e files ] && mv ./files openwrt/files
         [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
         # Удаляем ненужные mt2500 строки
-        #sed -i '/CONFIG_TARGET/d' openwrt/.config
-        #sed -i '/kmod-r8125/d' openwrt/.config
-        #sed -i '/kmod-r8169/d' openwrt/.config
         sed -i '/fdisk/d' openwrt/.config
         sed -i '/partx-utils/d' openwrt/.config
         sed -i '/fitblk/d' openwrt/.config
@@ -165,8 +162,15 @@ jobs:
         echo 'CONFIG_TARGET_mediatek_filogic=y' >> openwrt/.config
         echo 'CONFIG_TARGET_mediatek_filogic_DEVICE_glinet_gl-mt2500=y' >> openwrt/.config
         echo 'CONFIG_TARGET_ARCH_PACKAGES="aarch64_cortex-a53"' >> openwrt/.config
-        #echo 'CONFIG_TESTING_KERNEL=y' >> openwrt/.config
         #echo 'CONFIG_TARGET_ROOTFS_PARTSIZE=512' >> openwrt/.config
+        # Отключить ненужные компоненты
+        echo '# CONFIG_GDB is not set' >> openwrt/.config
+        echo '# CONFIG_AUDIO_SUPPORT is not set' >> openwrt/.config
+        echo '# CONFIG_NODEJS_20 is not set' >> openwrt/.config
+        echo '# CONFIG_ZABBIX_POSTGRESQL is not set' >> openwrt/.config
+        # Тестовое ядро
+        #echo 'CONFIG_TESTING_KERNEL=y' >> openwrt/.config
+        # Нужные пакеты
         echo 'CONFIG_PACKAGE_bridger=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_fitblk=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_kmod-crypto-hw-safexcel=y' >> openwrt/.config
@@ -186,6 +190,7 @@ jobs:
         #echo 'CONFIG_PACKAGE_wpa-supplicant=n' >> openwrt/.config
         #echo 'CONFIG_PACKAGE_iw=n' >> openwrt/.config
         #echo 'CONFIG_PACKAGE_iwinfo=n' >> openwrt/.config
+        #
         chmod +x $DIY_P2_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
