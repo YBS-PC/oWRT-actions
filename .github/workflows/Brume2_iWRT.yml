@@ -166,7 +166,7 @@ jobs:
         # Тестовое ядро
         #echo 'CONFIG_TESTING_KERNEL=y' >> openwrt/.config
         # Нужные пакеты
-        echo 'CONFIG_PACKAGE_bridger=y' >> openwrt/.config
+        #echo 'CONFIG_PACKAGE_bridger=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_fitblk=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_kmod-crypto-hw-safexcel=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_kmod-usb3=y' >> openwrt/.config
