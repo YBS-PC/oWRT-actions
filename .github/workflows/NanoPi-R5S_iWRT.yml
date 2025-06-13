@@ -140,21 +140,50 @@ jobs:
         #echo "Updated Makefile"
         #grep "PKG_FIXUP" feeds/packages/libs/libffi/Makefile || echo "String removed successfully"
 
+    - name: Show config before copy
+      run: |
+        echo "::group::Config file before copy"
+        cat openwrt/.config || echo "Config file not found"
+        echo "::endgroup::"
+
     - name: Loading Custom Configurations
       run: |
         [ -e files ] && mv ./files openwrt/files
         [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
+        # Удаляем ненужные R5S строки
+        #sed -i '/CONFIG_TARGET/d' openwrt/.config
+        # Добавляем необходимые R5S строки
+        echo 'CONFIG_TARGET_rockchip=y' >> openwrt/.config
+        echo 'CONFIG_TARGET_rockchip_armv8=y' >> openwrt/.config
+        echo 'CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r5s=y' >> openwrt/.config
+        echo 'CONFIG_TARGET_ARCH_PACKAGES="aarch64_generic"' >> openwrt/.config
+        echo 'CONFIG_TARGET_ROOTFS_PARTSIZE=512' >> openwrt/.config
+        echo 'CONFIG_TARGET_IMAGES_GZIP=y' >> openwrt/.config
+        echo 'CONFIG_TARGET_ROOTFS_SQUASHFS=y' >> openwrt/.config
+        echo '# CONFIG_TARGET_ROOTFS_EXT4FS is not set' >> openwrt/.config
+        echo '# CONFIG_TARGET_ROOTFS_JFFS2 is not set' >> openwrt/.config
+        echo '# CONFIG_TARGET_ROOTFS_UBIFS is not set' >> openwrt/.config
+        echo '# CONFIG_TARGET_ROOTFS_TARGZ is not set' >> openwrt/.config
+        #
+        #echo 'CONFIG_TESTING_KERNEL=y' >> openwrt/.config
+        #
         chmod +x $DIY_P2_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
         make defconfig
 
-    - name: SSH Connection to Actions
-      uses: P3TERX/ssh2actions@v1.0.0
-      if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh != 'false') || contains(github.event.action, 'ssh')
-      env:
-        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+    - name: Show config after copy
+      run: |
+        echo "::group::Config file after copy"
+        cat openwrt/.config || echo "Config file not found"
+        echo "::endgroup::"
+
+    #- name: SSH Connection to Actions
+      #uses: P3TERX/ssh2actions@v1.0.0
+      #if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh != 'false') || contains(github.event.action, 'ssh')
+      #env:
+        #TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        #TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
     - name: Download Software Packages
       id: package
