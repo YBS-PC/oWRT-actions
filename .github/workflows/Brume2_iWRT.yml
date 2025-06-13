@@ -163,11 +163,6 @@ jobs:
         echo 'CONFIG_TARGET_mediatek_filogic_DEVICE_glinet_gl-mt2500=y' >> openwrt/.config
         echo 'CONFIG_TARGET_ARCH_PACKAGES="aarch64_cortex-a53"' >> openwrt/.config
         #echo 'CONFIG_TARGET_ROOTFS_PARTSIZE=512' >> openwrt/.config
-        # Отключить ненужные компоненты
-        echo '# CONFIG_GDB is not set' >> openwrt/.config
-        echo '# CONFIG_AUDIO_SUPPORT is not set' >> openwrt/.config
-        echo '# CONFIG_NODEJS_20 is not set' >> openwrt/.config
-        echo '# CONFIG_ZABBIX_POSTGRESQL is not set' >> openwrt/.config
         # Тестовое ядро
         #echo 'CONFIG_TESTING_KERNEL=y' >> openwrt/.config
         # Нужные пакеты
