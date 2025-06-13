@@ -24,7 +24,7 @@ env:
   REPO_BRANCH: master
   #REPO_BRANCH: abd424c3e19df49bf331a5b0d0adbd71ebf14929
   FEEDS_CONF: feeds.conf.default
-  CONFIG_FILE: ./config/iWRT_NanoPi-R5S.config
+  CONFIG_FILE: ./config/WRT.config
   DIY_P1_SH: ./sh/WRT-part1.sh
   DIY_P2_SH: ./sh/WRT-part2.sh
   #DIY_P3_SH: ./sh/WRT-part3.sh
@@ -134,12 +134,18 @@ jobs:
       run: |
         cd openwrt
         #sed -i '/^PKG_FIXUP:=autoreconf/d' feeds/packages/libs/libffi/Makefile
-        echo "Updated Makefile"
+        #echo "Updated Makefile"
         #grep "PKG_FIXUP" feeds/packages/libs/libffi/Makefile || echo "String removed successfully"
         #if [ -f package/kernel/mt76/Makefile ]; then
             #echo "Modifying mt76 Makefile to skip build"
             #sed -i '1s/^/ifneq ($(CONFIG_PACKAGE_kmod-mt76),y)\nPKG_BUILD_DEPENDS:=\nendif\n/' package/kernel/mt76/Makefile
         #fi
+
+    - name: Show config before copy
+      run: |
+        echo "::group::Config file before copy"
+        cat openwrt/.config || echo "Config file not found"
+        echo "::endgroup::"
 
     - name: Loading Custom Configurations
       run: |
@@ -187,12 +193,18 @@ jobs:
         #sed -i 's/\$(SUBTARGET)\/mt76/# \$(SUBTARGET)\/mt76/' target/linux/mediatek/Makefile
         make defconfig
 
+    - name: Show config after copy
+      run: |
+        echo "::group::Config file after copy"
+        cat openwrt/.config || echo "Config file not found"
+        echo "::endgroup::"
+
     - name: SSH Connection to Actions
-      uses: P3TERX/ssh2actions@v1.0.0
-      if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh != 'false') || contains(github.event.action, 'ssh')
-      env:
-        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      #uses: P3TERX/ssh2actions@v1.0.0
+      #if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh != 'false') || contains(github.event.action, 'ssh')
+      #env:
+        #TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        #TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
     - name: Download Software Packages
       id: package
