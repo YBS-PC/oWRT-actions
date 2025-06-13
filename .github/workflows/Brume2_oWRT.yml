@@ -142,10 +142,10 @@ jobs:
         [ -e files ] && mv ./files openwrt/files
         [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
         # Удаляем ненужные mt2500 строки
-        sed -i '/CONFIG_TARGET/d' openwrt/.config
+        #sed -i '/CONFIG_TARGET/d' openwrt/.config
+        #sed -i '/kmod-r8125/d' openwrt/.config
+        #sed -i '/kmod-r8169/d' openwrt/.config
         sed -i '/fdisk/d' openwrt/.config
-        sed -i '/kmod-r8125/d' openwrt/.config
-        sed -i '/kmod-r8169/d' openwrt/.config
         sed -i '/partx-utils/d' openwrt/.config
         sed -i '/fitblk/d' openwrt/.config
         sed -i '/kmod-crypto-hw-safexcel/d' openwrt/.config
