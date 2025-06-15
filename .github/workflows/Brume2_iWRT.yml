@@ -5,8 +5,8 @@
 # See /LICENSE for more information.
 #
 # https://github.com/P3TERX/Actions-OpenWrt
-# Description: Build OpenWrt using GitHub Actions
-#
+# Description: Build OpenWrt using GitHub Actions for GL.iNet GL-MT2500 MaxLinear PHY
+# GL.iNet shipped a hardware change of the WAN PHY going from the MaxLinear GPY211C to the Airoha EN8811H.
 
 name: Brume2_iWRT
 
