@@ -133,9 +133,22 @@ jobs:
     - name: installation source
       run: cd openwrt && ./scripts/feeds install -a
 
-    #- name: Patch Makefile
-      #run: |
-        #cd openwrt
+    - name: Patch Makefile
+      run: |
+        cd openwrt
+        #sed -i '/^PKG_FIXUP:=autoreconf/d' feeds/packages/libs/libffi/Makefile
+        #echo "Updated Makefile"
+        #grep "PKG_FIXUP" feeds/packages/libs/libffi/Makefile || echo "String removed successfully"
+        #if [ -f package/kernel/mt76/Makefile ]; then
+            #echo "Modifying mt76 Makefile to skip build"
+            #sed -i '1s/^/ifneq ($(CONFIG_PACKAGE_kmod-mt76),y)\nPKG_BUILD_DEPENDS:=\nendif\n/' package/kernel/mt76/Makefile
+        #fi
+
+    - name: Show config before copy
+      run: |
+        echo "::group::Config file before copy"
+        cat openwrt/.config || echo "Config file not found"
+        echo "::endgroup::"
 
     - name: Loading Custom Configurations
       run: |
@@ -169,12 +182,18 @@ jobs:
         $GITHUB_WORKSPACE/$DIY_P2_SH
         make defconfig
 
-    - name: SSH Connection to Actions
-      uses: P3TERX/ssh2actions@v1.0.0
-      if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh != 'false') || contains(github.event.action, 'ssh')
-      env:
-        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+    - name: Show config after copy
+      run: |
+        echo "::group::Config file after copy"
+        cat openwrt/.config || echo "Config file not found"
+        echo "::endgroup::"
+
+    #- name: SSH Connection to Actions
+      #uses: P3TERX/ssh2actions@v1.0.0
+      #if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh != 'false') || contains(github.event.action, 'ssh')
+      #env:
+        #TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        #TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
     - name: Download Software Packages
       id: package
