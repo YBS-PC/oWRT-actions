@@ -177,6 +177,11 @@ jobs:
         echo 'CONFIG_PACKAGE_kmod-mt7981-firmware=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_mt7981-wo-firmware=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_kmod-mt76=m' >> openwrt/.config
+        # IPK
+        sed -i '/apk/d' openwrt/.config
+        echo 'CONFIG_PACKAGE_opkg=y' >> openwrt/.config
+        echo 'CONFIG_PACKAGE_luci-app-package-manager=y' >> openwrt/.config
+        #
         chmod +x $DIY_P2_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
