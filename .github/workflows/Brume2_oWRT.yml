@@ -32,7 +32,7 @@ env:
   UPLOAD_FIRMWARE: false
   UPLOAD_COWTRANSFER: false
   UPLOAD_WETRANSFER: false
-  UPLOAD_RELEASE: true
+  UPLOAD_RELEASE: false
   TZ: Europe/Moscow
 
 jobs:
@@ -238,7 +238,6 @@ jobs:
       with:
         name: Brume2_oWRT-${{ steps.compile.outputs.device-name }}_${{ steps.compile.outputs.file-date }}
         path: openwrt/bin
-
 
     - name: Organize documents
       id: organize
