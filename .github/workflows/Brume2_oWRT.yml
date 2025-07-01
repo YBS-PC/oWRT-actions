@@ -5,8 +5,8 @@
 # See /LICENSE for more information.
 #
 # https://github.com/P3TERX/Actions-OpenWrt
-# Description: Build OpenWrt using GitHub Actions
-#
+# Description: Build OpenWrt using GitHub Actions for GL.iNet GL-MT2500 MaxLinear PHY
+# GL.iNet shipped a hardware change of the WAN PHY going from the MaxLinear GPY211C to the Airoha EN8811H.
 
 name: Brume2_oWRT
 
@@ -162,13 +162,14 @@ jobs:
         sed -i '/partx-utils/d' openwrt/.config
         sed -i '/fitblk/d' openwrt/.config
         sed -i '/kmod-crypto-hw-safexcel/d' openwrt/.config
-        sed -i '/mt76/d' openwrt/.config
+        #sed -i '/mt76/d' openwrt/.config
         # Добавляем необходимые mt2500 строки
         echo 'CONFIG_TARGET_mediatek=y' >> openwrt/.config
         echo 'CONFIG_TARGET_mediatek_filogic=y' >> openwrt/.config
         echo 'CONFIG_TARGET_mediatek_filogic_DEVICE_glinet_gl-mt2500=y' >> openwrt/.config
         echo 'CONFIG_TARGET_ARCH_PACKAGES="aarch64_cortex-a53"' >> openwrt/.config
         #echo 'CONFIG_TARGET_ROOTFS_PARTSIZE=512' >> openwrt/.config
+        # Нужные пакеты
         #echo 'CONFIG_PACKAGE_bridger=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_fitblk=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_kmod-crypto-hw-safexcel=y' >> openwrt/.config
@@ -177,6 +178,7 @@ jobs:
         echo 'CONFIG_PACKAGE_kmod-mt7981-firmware=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_mt7981-wo-firmware=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_kmod-mt76=m' >> openwrt/.config
+        #
         chmod +x $DIY_P2_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
