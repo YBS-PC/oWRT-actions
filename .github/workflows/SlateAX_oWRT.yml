@@ -184,6 +184,12 @@ jobs:
         ##echo 'CONFIG_KERNEL_PERF_EVENTS=y' >> openwrt/.config
         ##echo 'CONFIG_KERNEL_XDP_SOCKETS=y' >> openwrt/.config
         #
+        echo 'CONFIG_PACKAGE_kmod-qcom-qmi-helpers=y' >> openwrt/.config
+        echo 'CONFIG_PACKAGE_kmod-cfg80211=y' >> openwrt/.config
+        echo 'CONFIG_PACKAGE_kmod-mac80211=y' >> openwrt/.config
+        echo 'CONFIG_PACKAGE_kmod-qca-ssdk=y' >> openwrt/.config
+        echo 'CONFIG_PACKAGE_kmod-usb-dwc3-qcom=y' >> openwrt/.config
+        echo 'CONFIG_PACKAGE_kmod-ath=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_ath11k-firmware-ipq6018=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_ath11k-firmware-new-ipq6018=y' >> openwrt/.config
         #echo 'CONFIG_PACKAGE_bridger=y' >> openwrt/.config
