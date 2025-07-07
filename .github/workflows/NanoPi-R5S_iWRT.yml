@@ -167,8 +167,8 @@ jobs:
         #
         #echo 'CONFIG_TESTING_KERNEL=y' >> openwrt/.config
         #
-        echo 'CONFIG_PACKAGE_kmod-r8125=n' >> openwrt/.config
-        echo 'CONFIG_PACKAGE_kmod-r8169=y' >> openwrt/.config
+        echo 'CONFIG_PACKAGE_kmod-r8125=y' >> openwrt/.config
+        echo 'CONFIG_PACKAGE_kmod-r8169=n' >> openwrt/.config
         #
         chmod +x $DIY_P2_SH
         cd openwrt
