@@ -173,6 +173,8 @@ jobs:
         echo 'CONFIG_PACKAGE_kmod-mt7915e=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_kmod-mt7986-firmware=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_mt7986-wo-firmware=y' >> openwrt/.config
+        echo 'CONFIG_PACKAGE_luci-app-wifischedule=y' >> openwrt/.config
+        echo 'CONFIG_PACKAGE_luci-i18n-wifischedule-ru=y' >> openwrt/.config
         #
         chmod +x $DIY_P2_SH
         cd openwrt
