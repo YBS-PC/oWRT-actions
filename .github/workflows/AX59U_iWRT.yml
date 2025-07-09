@@ -177,8 +177,6 @@ jobs:
         echo 'CONFIG_PACKAGE_luci-app-wifischedule=y' >> openwrt/.config
         echo 'CONFIG_PACKAGE_luci-i18n-wifischedule-ru=y' >> openwrt/.config
         #
-        mkdir ./package/facinstall
-        git clone -b main https://github.com/openwrt-xiaomi/facinstall.git ./package/facinstall/
         echo 'CONFIG_PACKAGE_facinstall=y' >> openwrt/.config
         #
         chmod +x $DIY_P2_SH
