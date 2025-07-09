@@ -8,6 +8,8 @@
 ###git clone -b master https://github.com/immortalwrt/homeproxy.git ./feeds/luci/applications/luci-app-homeproxy/
 mkdir ./package/luci-app-log-viewer
 mkdir ./package/zapret-openwrt
+mkdir ./package/facinstall
+git clone -b main https://github.com/openwrt-xiaomi/facinstall.git ./package/facinstall/
 git clone -b master https://github.com/gSpotx2f/luci-app-log.git ./package/luci-app-log-viewer/
 git clone -b master https://github.com/remittor/zapret-openwrt.git ./package/zapret-openwrt/
 ./scripts/feeds install -a
