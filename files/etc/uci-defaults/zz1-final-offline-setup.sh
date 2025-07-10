@@ -11,48 +11,6 @@ echo "Running zz1-final-offline-setup.sh" > /root/setup_log.txt
 SETUP_LOGFILE="/root/setup_log.txt"
 exec > >(tee -a "$SETUP_LOGFILE") 2>&1
 
-STATUS_OK=1
-
-# Безопасная перезагрузка в конце скрипта
-safe_reboot() {
-    if [ "$STATUS_OK" -eq 1 ]; then
-        color_output white "Все этапы выполнены успешно. Перезагрузка через 60 секунд."
-        sleep 60
-        reboot
-    else
-        color_output red "В ходе выполнения произошли ошибки. Перезагрузка отменена."
-    fi
-}
-
-# Функция для вывода текста с цветом
-color_output() {
-    local color=$1
-    local text=$2
-    case "$color" in
-        red) echo -e "\033[31m$text\033[0m" ;;
-        green) echo -e "\033[32m$text\033[0m" ;;
-        blue) echo -e "\033[34m$text\033[0m" ;;
-        yellow) echo -e "\033[33m$text\033[0m" ;;
-        magenta) echo -e "\033[35m${text}\033[0m" ;;
-        cyan) echo -e "\033[36m${text}\033[0m" ;;
-        white) echo -e "\033[37m$text\033[0m" ;;
-        *) echo "$text" ;;
-    esac
-}
-
-# Функция для обработки ошибок
-handle_error() {
-    local message=$1
-    local details=$2
-    echo -e "\e[31m$message: $details\e[0m"
-    STATUS_OK=0 # Ставим 0 при любой критической ошибке
-}
-
-# Функция для получения версии пакета
-get_version() {
-    [ -x "$1" ] && $1 --version 2>/dev/null | grep -oP 'v?\K[\d.]+' || echo ""
-}
-
 # -----------------------------
 #      ПЕРЕМЕННЫЕ СИСТЕМЫ
 # -----------------------------
@@ -81,77 +39,77 @@ HOSTNAME_PATTERN="${ROUTER_MODEL_NAME}-${ROUTER_NAME}"
 #      НАСТРОЙКА РОУТЕРА      ########################################################
 # --------------------------------------------------------------------------------------------------------------------
 
-color_output magenta "СКРИПТ ПЕРВОНАЧАЛЬНОЙ ОФЛАЙН-НАСТРОЙКИ РОУТЕРА"
+echo -e "\033[35mСКРИПТ ПЕРВОНАЧАЛЬНОЙ ОФЛАЙН-НАСТРОЙКИ РОУТЕРА\033[0m"
 
 #################### Удалить строку Enable FullCone NAT (если нужно) ####################
-color_output magenta "Удалить строку Enable FullCone NAT..."
+echo -e "\033[35mУдалить строку Enable FullCone NAT...\033[0m"
 sed -i "/option fullcone '1'/d" /etc/config/firewall
-color_output cyan "Перезагрузка Firewall..."
+echo -e "\033[36mПерезагрузка Firewall...\033[0m"
 service firewall restart
 
 #################### Стандартная настройка ДНС (перед установкой AGH) ####################
-color_output cyan "Останавливаем и отключаем службу AdGuardHome..."
+echo -e "\033[36mОстанавливаем и отключаем службу AdGuardHome...\033[0m"
 service adguardhome stop >/dev/null 2>&1 && service adguardhome disable >/dev/null 2>&1
 
 #################### Настройка системного времени (без NTP) ####################
-color_output magenta "Настройка часового пояса..."
+echo -e "\033[35mНастройка часового пояса...\033[0m"
 uci set system.@system[0].zonename='Europe/Moscow'
 uci commit system
 /etc/init.d/system reload
 date
 
 #################### Подготовка к установке пакетов ####################
-color_output magenta "Подготовка системы к установке пакетов..."
+echo -e "\033[35mПодготовка системы к установке пакетов...\033[0m"
 
 # Убедимся, что архитектура указана верно
 if ! grep -qF "${ARCH_VERSION}" /etc/apk/arch; then
-    color_output cyan "Добавляю строку ${ARCH_VERSION} в /etc/apk/arch"
+    echo -e "\033[36mДобавляю строку ${ARCH_VERSION} в /etc/apk/arch\033[0m"
     echo "${ARCH_VERSION}" > /etc/apk/arch
 else
-    color_output cyan "Архитектура в /etc/apk/arch уже настроена."
+    echo -e "\033[36mАрхитектура в /etc/apk/arch уже настроена.\033[0m"
 fi
 
 #################### Установка всех пакетов из /root/apps/ ####################
-color_output magenta "Установка пакетов из локальной директории /root/apps/..."
+echo -e "\033[35mУстановка пакетов из локальной директории /root/apps/...\033[0m"
 
-color_output magenta "Установка speedtest от Ookla..."
+echo -e "\033[35mУстановка speedtest от Ookla...\033[0m"
 if [ -f /root/apps/speedtest ]; then
     cp /root/apps/speedtest /usr/bin/speedtest
     chmod +x /usr/bin/speedtest
-    color_output green "Установлен speedtest от Ookla из /root/apps/"
+    echo -e "\033[32mУстановлен speedtest от Ookla из /root/apps/\033[0m"
 else
-    color_output yellow "Файл speedtest не найден в /root/apps/. Пропускаем установку."
+    echo -e "\033[33mФайл speedtest не найден в /root/apps/. Пропускаем установку.\033[0m"
 fi
 
-color_output magenta "Установка AdGuardHome..."
+echo -e "\033[35mУстановка AdGuardHome...\033[0m"
 if [ -f /root/apps/AdGuardHome ]; then
     cp /root/apps/AdGuardHome /usr/bin/AdGuardHome
     chmod +x /usr/bin/AdGuardHome
-    color_output green "Установлен AdGuardHome из /root/apps/"
+    echo -e "\033[32mУстановлен AdGuardHome из /root/apps/\033[0m"
 else
-    color_output yellow "Файл AdGuardHome не найден в /root/apps/. Пропускаем установку."
+    echo -e "\033[33mФайл AdGuardHome не найден в /root/apps/. Пропускаем установку.\033[0m"
 fi
 
-color_output magenta "Установка sing-box..."
+echo -e "\033[35mУстановка sing-box...\033[0m"
 if [ -f /root/apps/sing-box ]; then
     cp /root/apps/sing-box /usr/bin/sing-box
     chmod +x /usr/bin/sing-box
-    color_output green "Установлен sing-box из /root/apps/"
+    echo -e "\033[32mУстановлен sing-box из /root/apps/\033[0m"
 else
-    color_output yellow "Файл sing-box не найден в /root/apps/. Пропускаем установку."
+    echo -e "\033[33mФайл sing-box не найден в /root/apps/. Пропускаем установку.\033[0m"
 fi
 
 #################### Настройка homeproxy ####################
-color_output magenta "Настройка luci-app-homeproxy..."
+echo -e "\033[35mНастройка luci-app-homeproxy...\033[0m"
 mkdir -p /var/run/homeproxy
-color_output yellow "Отключаем dns_hijacked в luci-app-homeproxy"
+echo -e "\033[33mОтключаем dns_hijacked в luci-app-homeproxy\033[0m"
 sed -i "s/const dns_hijacked = uci\.get('dhcp', '@dnsmasq\[0\]', 'dns_redirect') || '0'/const dns_hijacked = '1'/" /etc/homeproxy/scripts/firewall_post.ut
-color_output white "luci-app-homeproxy настроен."
-SB_version_final=$(get_version "/usr/bin/sing-box")
-echo -e "\e[37mУстановленная версия sing-box: $SB_version_final\e[0m"
+echo -e "\033[37mluci-app-homeproxy настроен.\033[0m"
+SB_version=$(/usr/bin/sing-box version | grep -oP 'v?\K[\d.]+' | head -n 1)
+echo -e "\e[37mУстановленная версия sing-box: $SB_version\e[0m"
 
 #################### Настройка youtubeUnblock ####################
-color_output magenta "Настройка youtubeUnblock..."
+echo -e "\033[35mНастройка youtubeUnblock...\033[0m"
 service youtubeUnblock disable && service youtubeUnblock stop
 sed -i 's/meta l4proto { tcp, udp } flow offload @ft;/meta l4proto { tcp, udp } ct original packets ge 30 flow offload @ft;/' /usr/share/firewall4/templates/ruleset.uc
 
@@ -162,7 +120,7 @@ SEARCH_STRING="@dpi_ips"
 # Проверяем, существует ли файл И содержит ли он искомую строку.
 # Мы перезаписываем файл, только если он НЕ существует ИЛИ если он существует, но НЕ содержит нужную строку.
 if [ ! -f "$NFT_FILE" ] || ! grep -q "$SEARCH_STRING" "$NFT_FILE"; then
-    color_output cyan "Файл правил $NFT_FILE youtubeUnblock не найден или устарел. Создаем/перезаписываем его."
+    echo -e "\033[36mФайл правил $NFT_FILE youtubeUnblock не найден или устарел. Создаем/перезаписываем его.\033[0m"
 #cat <<EOF > "$NFT_FILE"
 cat <<EOF > /usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft
 #!/usr/sbin/nft -f
@@ -199,21 +157,21 @@ insert rule inet fw4 output mark and 0x8000 == 0x8000 counter accept
 #insert rule inet fw4 output mark and 0x8000 == 0x8000 counter accept
 EOF
 else
-    color_output green "Файл правил $NFT_FILE youtubeUnblock уже содержит '$SEARCH_STRING'. Обновление не требуется."
+    echo -e "\033[32mФайл правил $NFT_FILE youtubeUnblock уже содержит '$SEARCH_STRING'. Обновление не требуется.\033[0m"
 fi
 
 service youtubeUnblock enable
-color_output white "youtubeUnblock настроен и включен."
+echo -e "\033[37myoutubeUnblock настроен и включен.\033[0m"
 service firewall restart
 
 #################### Настройка internet-detector ####################
-color_output magenta "Настройка internet-detector..."
+echo -e "\033[35mНастройка internet-detector...\033[0m"
 service internet-detector stop && service internet-detector disable
 sed -i 's/START=[0-9][0-9]/START=99/' /etc/init.d/internet-detector
-color_output white "Служба internet-detector настроена (но отключена)."
+echo -e "\033[37mСлужба internet-detector настроена (но отключена).\033[0m"
 
 #################### Обновить баннер ####################
-color_output magenta "Обновить баннер..."
+echo -e "\033[35mОбновить баннер...\033[0m"
 cp /etc/banner /etc/banner.bak
 sed -i 's/W I R E L E S S/N E T W O R K/g' /etc/banner
 ADD_TEXT="Kernel $KERNEL_VERSION,"
@@ -222,30 +180,30 @@ if ! grep -q "Kernel $KERNEL_VERSION" /etc/banner; then
 fi
 
 #################### Обновить имя хоста ####################
-color_output magenta "Обновить имя хоста..."
+echo -e "\033[35mОбновить имя хоста...\033[0m"
 uci set system.@system[0].hostname="$HOSTNAME_PATTERN"
 uci commit system
 uci set uhttpd.defaults.commonname="$HOSTNAME_PATTERN"
 uci commit uhttpd
-color_output cyan "Имя хоста установлено: $HOSTNAME_PATTERN"
+echo -e "\033[36mИмя хоста установлено: $HOSTNAME_PATTERN\033[0m"
 
-sed -i "s/File Manager/Файловый менеджер/" /usr/share/luci/menu.d/luci-app-filemanager.json && color_output cyan "Обновлен Файловый менеджер"
+sed -i "s/File Manager/Файловый менеджер/" /usr/share/luci/menu.d/luci-app-filemanager.json && echo -e "\033[36mОбновлен Файловый менеджер\033[0m"
 
 #################### Настройка путей для owut (attendedsysupgrade) ####################
-color_output magenta "Настройка путей для owut..."
+echo -e "\033[35mНастройка путей для owut...\033[0m"
 if [ "$NAME_VALUE" == "OpenWrt" ]; then
     sed -i "s|option url 'https://asu-2.kyarucloud.moe'|option url 'https://sysupgrade.openwrt.org'|" /etc/config/attendedsysupgrade
-    color_output cyan "owut настроен на OpenWrt"
+    echo -e "\033[36mowut настроен на OpenWrt\033[0m"
 else
     sed -i "s|option url 'https://sysupgrade.openwrt.org'|option url 'https://asu-2.kyarucloud.moe'|" /etc/config/attendedsysupgrade
-    color_output cyan "owut настроен на ImmortalWrt"
+    echo -e "\033[36mowut настроен на ImmortalWrt\033[0m"
 fi
 
 #################### Настройка и запуск AdGuardHome ####################
-color_output magenta "Настройка и запуск AdGuardHome..."
+echo -e "\033[35mНастройка и запуск AdGuardHome...\033[0m"
 service adguardhome stop && service adguardhome disable
 
-color_output cyan "Настройки для AdGuardHome..."
+echo -e "\033[36mНастройки для AdGuardHome...\033[0m"
 echo "config adguardhome config" > /etc/config/adguardhome
 echo -e "\toption enabled '1'" >> /etc/config/adguardhome
 echo -e "\toption workdir /opt/AdGuardHome" >> /etc/config/adguardhome
@@ -264,8 +222,8 @@ sed -i '/procd_open_instance/a\  procd_set_param command "$PROG" -c "$CONF_FILE"
 sed -i '/chmod -R 0777/d' /etc/init.d/adguardhome
 sed -i '/mkdir -m 0755/a\  chmod -R 0777 $WORK_DIR' /etc/init.d/adguardhome
 
-AGH_bin_version=$(get_version "/usr/bin/AdGuardHome")
-color_output yellow "Установленная версия AGH: $AGH_bin_version"
+AGH_version=$(/usr/bin/AdGuardHome --version 2>/dev/null | grep -oP 'v?\K[\d.]+')
+echo -e "\033[33mУстановленная версия AGH: $AGH_version\033[0m"
 
 # Освобождение порта 53 для AdGuardHome
 uci set dhcp.@dnsmasq[0].port="54"
@@ -273,31 +231,31 @@ uci del_list dhcp.@dnsmasq[0].server="1.1.1.2"
 uci del_list dhcp.@dnsmasq[0].server="77.88.8.88"
 uci add_list dhcp.@dnsmasq[0].server="127.0.0.1#53"
 uci commit dhcp
-color_output cyan "Перезапуск DNSmasq на порту 54..."
+echo -e "\033[36mПерезапуск DNSmasq на порту 54...\033[0m"
 service dnsmasq restart
 
-if [ -n "$AGH_bin_version" ]; then
-    color_output cyan "Запуск AdGuardHome..."
+if [ -n "$AGH_version" ]; then
+    echo -e "\033[36mЗапуск AdGuardHome...\033[0m"
     service adguardhome enable
-    color_output white "Запущенная версия AdGuardHome: $AGH_bin_version"
+    echo -e "\033[37mЗапущенная версия AdGuardHome: $AGH_version\033[0m"
 else
-    handle_error "AdGuardHome не установлен или не найден."
+    echo -e "\033[31mAdGuardHome не установлен или не найден.\033[0m"
 fi
 
 #################### Финальные настройки ####################
-color_output magenta "Финальные настройки системы..."
+echo -e "\033[35mФинальные настройки системы...\033[0m"
 
 # Очистка временных файлов конфигурации
 find /etc/config/ -type f -name '*-opkg' -exec rm {} \;
 find /etc/config/ -type f -name '*apk-new' -exec rm {} \;
-color_output cyan "Удалены временные файлы конфигурации."
+echo -e "\033[36mУдалены временные файлы конфигурации.\033[0m"
 
 # Включение FullCone NAT для ImmortalWrt
 if [ "$NAME_VALUE" == "ImmortalWrt" ]; then
     uci set firewall.@defaults[0].fullcone='1' && uci commit firewall && service firewall restart
-    color_output white "FullCone NAT включен на ImmortalWrt"
+    echo -e "\033[37mFullCone NAT включен на ImmortalWrt\033[0m"
 else
-    color_output white "Прошивка не ImmortalWrt. FullCone NAT не настраивается."
+    echo -e "\033[37mПрошивка не ImmortalWrt. FullCone NAT не настраивается.\033[0m"
 fi
 
 # Расширение интерфейса bootstrap
@@ -355,7 +313,7 @@ service system restart
 
 service sqm enable
 
-/etc/init.d/phy-leds disable && color_output cyan "Отключен старый скрипт управления диодами phy-leds"
+/etc/init.d/phy-leds disable && echo -e "\033[36mОтключен старый скрипт управления диодами phy-leds\033[0m"
 
 for param in /proc/sys/net/ipv4/tcp_rmem \
              /proc/sys/net/ipv4/tcp_wmem \
@@ -371,19 +329,19 @@ for param in /proc/sys/net/ipv4/tcp_rmem \
 done
 
 #################### Проверка служб ####################
-color_output magenta "Проверка статуса служб..."
+echo -e "\033[35mПроверка статуса служб...\033[0m"
 date
 sleep 3
-color_output yellow "youtubeUnblock:"
+echo -e "\033[33myoutubeUnblock:\033[0m"
 service | grep youtubeUnblock | awk '{print $2, $3}'
-color_output yellow "adguardhome:"
+echo -e "\033[33madguardhome:\033[0m"
 service | grep adguardhome | awk '{print $2, $3}'
-color_output yellow "sqm:"
+echo -e "\033[33msqm:\033[0m"
 service | grep sqm | awk '{print $2, $3}'
 
 cat /tmp/sysinfo/model && . /etc/openwrt_release
 
-color_output green "Первоначальная настройка завершена успешно."
+echo -e "\033[32mПервоначальная настройка завершена успешно.\033[0m"
 
 # ВАЖНО: Завершаем скрипт с кодом 0 для его автоматического удаления
 exit 0
