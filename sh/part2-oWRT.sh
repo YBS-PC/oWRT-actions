@@ -16,7 +16,3 @@ git clone -b master https://github.com/immortalwrt/homeproxy.git ./package/luci-
 git clone -b master https://github.com/gSpotx2f/luci-app-log.git ./package/luci-app-log-viewer/
 git clone -b master https://github.com/remittor/zapret-openwrt.git ./package/zapret-openwrt/
 ./scripts/feeds install -a
-
-# Исправление прав для всех uci-defaults файлов
-find . -path "*/etc/uci-defaults/*" -type f -exec chmod +x {} \; 2>/dev/null || true
-echo ">>> uci-defaults permissions fixed"
