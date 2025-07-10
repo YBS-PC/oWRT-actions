@@ -13,7 +13,3 @@ git clone -b main https://github.com/openwrt-xiaomi/facinstall.git ./package/fac
 git clone -b master https://github.com/gSpotx2f/luci-app-log.git ./package/luci-app-log-viewer/
 git clone -b master https://github.com/remittor/zapret-openwrt.git ./package/zapret-openwrt/
 ./scripts/feeds install -a
-
-# Исправление прав для всех uci-defaults файлов
-find . -path "*/etc/uci-defaults/*" -type f -exec chmod +x {} \; 2>/dev/null || true
-echo ">>> uci-defaults permissions fixed"
