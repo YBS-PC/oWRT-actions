@@ -183,7 +183,7 @@ jobs:
         
         # Показываем все файлы в uci-defaults для контроля
         echo ">>> All uci-defaults files in build:"
-        find . -path "*/etc/uci-defaults/*" -type f -exec basename {} \; 2>/dev/null | sort | head -20 || echo "No uci-defaults files found"
+        find . -path "*/etc/uci-defaults/*" -type f -exec basename {} \; 2>/dev/null | sort | head -20000 || echo "No uci-defaults files found"
     
     #- name: SSH Connection to Actions
       #uses: P3TERX/ssh2actions@v1.0.0
