@@ -6,6 +6,9 @@
 # Имя файла: /etc/uci-defaults/zz1-final-offline-setup.sh
 # ===============================================
 
+# Включаем режим отладки. Каждая команда будет выведена в лог перед выполнением.
+set -x
+
 # Логирование теперь можно направить в системный лог или оставить в файле
 echo "Running zz1-final-offline-setup.sh" > /root/setup_log.txt
 SETUP_LOGFILE="/root/setup_log.txt"
@@ -45,11 +48,11 @@ echo -e "\033[35mСКРИПТ ПЕРВОНАЧАЛЬНОЙ ОФЛАЙН-НАСТ
 echo -e "\033[35mУдалить строку Enable FullCone NAT...\033[0m"
 sed -i "/option fullcone '1'/d" /etc/config/firewall
 echo -e "\033[36mПерезагрузка Firewall...\033[0m"
-service firewall restart
+/etc/init.d/firewall restart
 
 #################### Стандартная настройка ДНС (перед установкой AGH) ####################
 echo -e "\033[36mОстанавливаем и отключаем службу AdGuardHome...\033[0m"
-service adguardhome stop >/dev/null 2>&1 && service adguardhome disable >/dev/null 2>&1
+/etc/init.d/adguardhome stop >/dev/null 2>&1 && /etc/init.d/adguardhome disable >/dev/null 2>&1
 
 #################### Настройка системного времени (без NTP) ####################
 echo -e "\033[35mНастройка часового пояса...\033[0m"
@@ -110,7 +113,7 @@ echo -e "\e[37mУстановленная версия sing-box: $SB_version\e[0
 
 #################### Настройка youtubeUnblock ####################
 echo -e "\033[35mНастройка youtubeUnblock...\033[0m"
-service youtubeUnblock disable && service youtubeUnblock stop
+/etc/init.d/youtubeUnblock disable && /etc/init.d/youtubeUnblock stop
 sed -i 's/meta l4proto { tcp, udp } flow offload @ft;/meta l4proto { tcp, udp } ct original packets ge 30 flow offload @ft;/' /usr/share/firewall4/templates/ruleset.uc
 
 # Путь к файлу правил и строка для поиска
@@ -160,13 +163,13 @@ else
     echo -e "\033[32mФайл правил $NFT_FILE youtubeUnblock уже содержит '$SEARCH_STRING'. Обновление не требуется.\033[0m"
 fi
 
-service youtubeUnblock enable && service youtubeUnblock restart
+/etc/init.d/youtubeUnblock enable && /etc/init.d/youtubeUnblock restart
 echo -e "\033[37myoutubeUnblock настроен и включен.\033[0m"
-service firewall restart
+/etc/init.d/firewall restart
 
 #################### Настройка internet-detector ####################
 echo -e "\033[35mНастройка internet-detector...\033[0m"
-service internet-detector stop && service internet-detector disable
+/etc/init.d/internet-detector stop && /etc/init.d/internet-detector disable
 sed -i 's/START=[0-9][0-9]/START=99/' /etc/init.d/internet-detector
 echo -e "\033[37mСлужба internet-detector настроена (но отключена).\033[0m"
 
@@ -201,7 +204,7 @@ fi
 
 #################### Настройка и запуск AdGuardHome ####################
 echo -e "\033[35mНастройка и запуск AdGuardHome...\033[0m"
-service adguardhome stop && service adguardhome disable
+/etc/init.d/adguardhome stop && /etc/init.d/adguardhome disable
 
 echo -e "\033[36mНастройки для AdGuardHome...\033[0m"
 echo "config adguardhome config" > /etc/config/adguardhome
@@ -232,11 +235,11 @@ uci del_list dhcp.@dnsmasq[0].server="77.88.8.88"
 uci add_list dhcp.@dnsmasq[0].server="127.0.0.1#53"
 uci commit dhcp
 echo -e "\033[36mПерезапуск DNSmasq на порту 54...\033[0m"
-service dnsmasq restart
+/etc/init.d/dnsmasq restart
 
 if [ -n "$AGH_version" ]; then
     echo -e "\033[36mЗапуск AdGuardHome...\033[0m"
-    service adguardhome enable && service adguardhome restart
+    /etc/init.d/adguardhome enable && /etc/init.d/adguardhome restart
     echo -e "\033[37mЗапущенная версия AdGuardHome: $AGH_version\033[0m"
 else
     echo -e "\033[31mAdGuardHome не установлен или не найден.\033[0m"
@@ -252,7 +255,7 @@ echo -e "\033[36mУдалены временные файлы конфигура
 
 # Включение FullCone NAT для ImmortalWrt
 if [ "$NAME_VALUE" == "ImmortalWrt" ]; then
-    uci set firewall.@defaults[0].fullcone='1' && uci commit firewall && service firewall restart
+    uci set firewall.@defaults[0].fullcone='1' && uci commit firewall && /etc/init.d/firewall restart
     echo -e "\033[37mFullCone NAT включен на ImmortalWrt\033[0m"
 else
     echo -e "\033[37mПрошивка не ImmortalWrt. FullCone NAT не настраивается.\033[0m"
@@ -307,11 +310,11 @@ grep "^START=" /etc/init.d/uhttpd
 echo "Готово! uhttpd будет запускаться с приоритетом 60"
 
 # Перезапуск служб
-service rpcd restart
-service uhttpd restart
-service system restart
+/etc/init.d/rpcd restart
+/etc/init.d/uhttpd restart
+/etc/init.d/system restart
 
-service sqm enable && service sqm restart
+/etc/init.d/sqm enable && /etc/init.d/sqm restart
 
 /etc/init.d/phy-leds disable && echo -e "\033[36mОтключен старый скрипт управления диодами phy-leds\033[0m"
 
