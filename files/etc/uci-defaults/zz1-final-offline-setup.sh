@@ -160,7 +160,7 @@ else
     echo -e "\033[32mФайл правил $NFT_FILE youtubeUnblock уже содержит '$SEARCH_STRING'. Обновление не требуется.\033[0m"
 fi
 
-service youtubeUnblock enable
+service youtubeUnblock enable && service youtubeUnblock restart
 echo -e "\033[37myoutubeUnblock настроен и включен.\033[0m"
 service firewall restart
 
@@ -236,7 +236,7 @@ service dnsmasq restart
 
 if [ -n "$AGH_version" ]; then
     echo -e "\033[36mЗапуск AdGuardHome...\033[0m"
-    service adguardhome enable
+    service adguardhome enable && service adguardhome restart
     echo -e "\033[37mЗапущенная версия AdGuardHome: $AGH_version\033[0m"
 else
     echo -e "\033[31mAdGuardHome не установлен или не найден.\033[0m"
@@ -311,7 +311,7 @@ service rpcd restart
 service uhttpd restart
 service system restart
 
-service sqm enable
+service sqm enable && service sqm restart
 
 /etc/init.d/phy-leds disable && echo -e "\033[36mОтключен старый скрипт управления диодами phy-leds\033[0m"
 
