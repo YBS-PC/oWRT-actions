@@ -192,6 +192,33 @@ jobs:
         cat openwrt/.config || echo "Config file not found"
         echo "::endgroup::"
 
+    - name: Fix permissions for custom uci-defaults files
+      run: |
+        cd openwrt
+        echo ">>> Fixing permissions for custom uci-defaults files (zz* pattern)"
+        
+        # Исправляем права в files директории (пользовательские файлы)
+        if [ -d "files/etc/uci-defaults" ]; then
+          find files/etc/uci-defaults/ -name "zz*" -type f -exec chmod +x {} \;
+          echo "Fixed permissions for zz* files in files/etc/uci-defaults/"
+        fi
+        
+        # Исправляем права в package директории
+        # find package/ -path "*/files/etc/uci-defaults/zz*" -type f -exec chmod +x {} \; 2>/dev/null || true
+        
+        # Исправляем права в feeds пакетах
+        # find feeds/ -path "*/files/etc/uci-defaults/zz*" -type f -exec chmod +x {} \; 2>/dev/null || true
+        
+        echo ">>> Custom uci-defaults permissions fix completed"
+        
+        # Показываем результат для проверки
+        echo ">>> Found custom uci-defaults files (zz* pattern):"
+        find . -path "*/etc/uci-defaults/zz*" -type f -exec ls -la {} \; 2>/dev/null || echo "No custom zz* uci-defaults files found"
+        
+        # Показываем все файлы в uci-defaults для контроля
+        echo ">>> All uci-defaults files in build:"
+        find . -path "*/etc/uci-defaults/*" -type f -exec basename {} \; 2>/dev/null | sort | head -20 || echo "No uci-defaults files found"
+    
     #- name: SSH Connection to Actions
       #uses: P3TERX/ssh2actions@v1.0.0
       #if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh != 'false') || contains(github.event.action, 'ssh')
