@@ -1,4 +1,28 @@
 #!/bin/sh
-uci set fancontrol.settings.fan_file='/sys/devices/virtual/thermal/cooling_device1/cur_state'
-uci commit fancontrol
+
+# Функция для проверки установленных пакетов
+check_fancontrol_installed() {
+    # Проверяем, какой пакетный менеджер используется
+    if command -v apk >/dev/null 2>&1; then
+        # Используется APK (Alpine Package Keeper)
+        apk list --installed | grep -q "^fancontrol-"
+    elif command -v opkg >/dev/null 2>&1; then
+        # Используется OPKG (традиционный OpenWRT)
+        opkg list-installed | grep -q "^fancontrol"
+    else
+        # Если ни один пакетный менеджер не найден, возвращаем false
+        return 1
+    fi
+}
+
+# Проверяем, установлен ли пакет fancontrol
+if check_fancontrol_installed; then
+    uci set fancontrol.settings.fan_file='/sys/devices/virtual/thermal/cooling_device1/cur_state'
+    uci commit fancontrol
+    logger -t "99_fans" "Fancontrol configuration updated"
+else
+    logger -t "99_fans" "Fancontrol package not installed, skipping configuration"
+fi
+
+# Всегда завершаем успешно, чтобы скрипт удалился
 exit 0
