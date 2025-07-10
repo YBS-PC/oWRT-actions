@@ -3,11 +3,11 @@
 # ===============================================
 #      UCI-DEFAULTS ОФЛАЙН-СКРИПТ НАСТРОЙКИ
 # ===============================================
-# Имя файла: /etc/uci-defaults/zzz-final-offline-setup.sh
+# Имя файла: /etc/uci-defaults/zz1-final-offline-setup.sh
 # ===============================================
 
 # Логирование теперь можно направить в системный лог или оставить в файле
-echo "Running zzz-final-offline-setup.sh" > /root/setup_log.txt
+echo "Running zz1-final-offline-setup.sh" > /root/setup_log.txt
 SETUP_LOGFILE="/root/setup_log.txt"
 exec > >(tee -a "$SETUP_LOGFILE") 2>&1
 
