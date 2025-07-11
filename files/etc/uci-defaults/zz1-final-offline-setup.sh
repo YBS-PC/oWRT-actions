@@ -48,7 +48,7 @@ echo -e "\033[35mСКРИПТ ПЕРВОНАЧАЛЬНОЙ ОФЛАЙН-НАСТ
 echo -e "\033[35mУдалить строку Enable FullCone NAT...\033[0m"
 sed -i "/option fullcone '1'/d" /etc/config/firewall
 echo -e "\033[36mПерезагрузка Firewall...\033[0m"
-/etc/init.d/firewall restart
+#-#/etc/init.d/firewall restart
 
 #################### Стандартная настройка ДНС (перед установкой AGH) ####################
 echo -e "\033[36mОстанавливаем и отключаем службу AdGuardHome...\033[0m"
@@ -58,7 +58,7 @@ echo -e "\033[36mОстанавливаем и отключаем службу A
 echo -e "\033[35mНастройка часового пояса...\033[0m"
 uci set system.@system[0].zonename='Europe/Moscow'
 uci commit system
-/etc/init.d/system reload
+#-#/etc/init.d/system reload
 date
 
 #################### Подготовка к установке пакетов ####################
@@ -163,9 +163,10 @@ else
     echo -e "\033[32mФайл правил $NFT_FILE youtubeUnblock уже содержит '$SEARCH_STRING'. Обновление не требуется.\033[0m"
 fi
 
-/etc/init.d/youtubeUnblock enable && /etc/init.d/youtubeUnblock restart
+/etc/init.d/youtubeUnblock enable
+#-#/etc/init.d/youtubeUnblock restart
 echo -e "\033[37myoutubeUnblock настроен и включен.\033[0m"
-/etc/init.d/firewall restart
+#-#/etc/init.d/firewall restart
 
 #################### Настройка internet-detector ####################
 echo -e "\033[35mНастройка internet-detector...\033[0m"
@@ -235,11 +236,12 @@ uci del_list dhcp.@dnsmasq[0].server="77.88.8.88"
 uci add_list dhcp.@dnsmasq[0].server="127.0.0.1#53"
 uci commit dhcp
 echo -e "\033[36mПерезапуск DNSmasq на порту 54...\033[0m"
-/etc/init.d/dnsmasq restart
+#-#/etc/init.d/dnsmasq restart
 
 if [ -n "$AGH_version" ]; then
     echo -e "\033[36mЗапуск AdGuardHome...\033[0m"
-    /etc/init.d/adguardhome enable && /etc/init.d/adguardhome restart
+    /etc/init.d/adguardhome enable
+    #-#/etc/init.d/adguardhome restart
     echo -e "\033[37mЗапущенная версия AdGuardHome: $AGH_version\033[0m"
 else
     echo -e "\033[31mAdGuardHome не установлен или не найден.\033[0m"
@@ -255,7 +257,8 @@ echo -e "\033[36mУдалены временные файлы конфигура
 
 # Включение FullCone NAT для ImmortalWrt
 if [ "$NAME_VALUE" == "ImmortalWrt" ]; then
-    uci set firewall.@defaults[0].fullcone='1' && uci commit firewall && /etc/init.d/firewall restart
+    uci set firewall.@defaults[0].fullcone='1' && uci commit firewall
+    #-#/etc/init.d/firewall restart
     echo -e "\033[37mFullCone NAT включен на ImmortalWrt\033[0m"
 else
     echo -e "\033[37mПрошивка не ImmortalWrt. FullCone NAT не настраивается.\033[0m"
@@ -310,11 +313,12 @@ grep "^START=" /etc/init.d/uhttpd
 echo "Готово! uhttpd будет запускаться с приоритетом 60"
 
 # Перезапуск служб
-/etc/init.d/rpcd restart
-/etc/init.d/uhttpd restart
-# /etc/init.d/system restart
+#-#/etc/init.d/rpcd restart
+#-#/etc/init.d/uhttpd restart
+#-#/etc/init.d/system restart
 
-/etc/init.d/sqm enable && /etc/init.d/sqm restart
+/etc/init.d/sqm enable
+#-#/etc/init.d/sqm restart
 
 /etc/init.d/phy-leds disable && echo -e "\033[36mОтключен старый скрипт управления диодами phy-leds\033[0m"
 
