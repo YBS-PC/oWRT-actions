@@ -104,13 +104,22 @@ echo -e "\033[35mНастройка luci-app-homeproxy...\033[0m"
 echo -e "\033[33mОтключаем dns_hijacked в luci-app-homeproxy\033[0m"
 sed -i "s/const dns_hijacked = uci\.get('dhcp', '@dnsmasq\[0\]', 'dns_redirect') || '0'/const dns_hijacked = '1'/" /etc/homeproxy/scripts/firewall_post.ut
 
-# Проблема: uci-defaults для homeproxy создает в конфиге firewall ссылки
-# на файлы (_forward и _input), которые homeproxy в штатном режиме не создает
-uci -q batch <<-EOF
-    delete firewall.homeproxy_forward
-    delete firewall.homeproxy_input
-    commit firewall
+# Проблема: uci-defaults для homeproxy создает в конфиге firewall ссылки на файлы, которые homeproxy создает только в режимах TUN или Server.
+# Мы проверяем текущие настройки homeproxy. Если эти режимы отключены, мы безопасно удаляем ненужные include-секции из конфига firewall.
+PROXY_MODE=$(uci -q get homeproxy.config.proxy_mode || echo "redirect_tproxy")
+SERVER_ENABLED=$(uci -q get homeproxy.server.enabled || echo "0")
+# Проверяем условия, при которых файлы _forward и _input НЕ создаются
+if ! (echo "$PROXY_MODE" | grep -q "tun") && [ "$SERVER_ENABLED" = "0" ]; then
+    echo -e "\033[37mРежимы TUN и Server отключены. Удаляем ненужные секции firewall для homeproxy.\033[0m"
+    uci -q batch <<-EOF
+        delete firewall.homeproxy_forward
+        delete firewall.homeproxy_input
+        commit firewall
 EOF
+    echo -e "\033[32mСекции homeproxy_forward и homeproxy_input удалены.\033[0m"
+else
+    echo -e "\033[37mРежим TUN или Server включен. Секции firewall для homeproxy оставлены.\033[0m"
+fi
 
 echo -e "\033[37mluci-app-homeproxy настроен.\033[0m"
 
