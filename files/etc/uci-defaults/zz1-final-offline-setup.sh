@@ -178,6 +178,9 @@ else
     echo -e "\033[32mФайл правил $NFT_FILE youtubeUnblock уже содержит '$SEARCH_STRING'. Обновление не требуется.\033[0m"
 fi
 
+/etc/init.d/youtubeUnblock disable
+/etc/init.d/youtubeUnblock enable
+
 echo -e "\033[37myoutubeUnblock настроен и включен.\033[0m"
 
 #################### Настройка internet-detector ####################
