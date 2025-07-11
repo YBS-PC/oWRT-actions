@@ -103,6 +103,15 @@ fi
 echo -e "\033[35mНастройка luci-app-homeproxy...\033[0m"
 echo -e "\033[33mОтключаем dns_hijacked в luci-app-homeproxy\033[0m"
 sed -i "s/const dns_hijacked = uci\.get('dhcp', '@dnsmasq\[0\]', 'dns_redirect') || '0'/const dns_hijacked = '1'/" /etc/homeproxy/scripts/firewall_post.ut
+
+# Проблема: uci-defaults для homeproxy создает в конфиге firewall ссылки
+# на файлы (_forward и _input), которые homeproxy в штатном режиме не создает
+uci -q batch <<-EOF
+    delete firewall.homeproxy_forward
+    delete firewall.homeproxy_input
+    commit firewall
+EOF
+
 echo -e "\033[37mluci-app-homeproxy настроен.\033[0m"
 
 SB_version=$(/usr/bin/sing-box version | grep -oP 'v?\K[\d.]+' | head -n 1)
