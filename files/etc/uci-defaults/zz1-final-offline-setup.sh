@@ -312,7 +312,7 @@ echo "Готово! uhttpd будет запускаться с приорите
 # Перезапуск служб
 /etc/init.d/rpcd restart
 /etc/init.d/uhttpd restart
-/etc/init.d/system restart
+# /etc/init.d/system restart
 
 /etc/init.d/sqm enable && /etc/init.d/sqm restart
 
