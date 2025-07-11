@@ -298,19 +298,10 @@ else
     echo "CSS уже содержит обновленные стили"
 fi
 
-# Исправить uhttpd
-/etc/init.d/uhttpd disable
-# Показать текущее значение
-echo "Текущее значение uhttpd:"
-grep "^START=" /etc/init.d/uhttpd
-# Изменить START на 80
-sed -i 's/^START=[0-9]*/START=80/' /etc/init.d/uhttpd
-# Показать новое значение
-echo "Новое значение uhttpd:"
-grep "^START=" /etc/init.d/uhttpd
-# Включить uhttpd
-/etc/init.d/uhttpd enable
-echo "Готово! uhttpd будет запускаться с приоритетом 60"
+# Исправить порядок запуска uhttpd
+# /etc/init.d/uhttpd disable
+# sed -i 's/^START=[0-9]*/START=60/' /etc/init.d/uhttpd
+# /etc/init.d/uhttpd enable
 
 # Включить sqm
 /etc/init.d/sqm enable
