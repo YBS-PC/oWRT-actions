@@ -304,6 +304,7 @@ fi
 # /etc/init.d/uhttpd enable
 
 # Включить sqm
+/etc/init.d/sqm disable
 /etc/init.d/sqm enable
 echo "sqm включен"
 
