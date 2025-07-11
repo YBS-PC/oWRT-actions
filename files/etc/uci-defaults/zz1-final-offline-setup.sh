@@ -129,6 +129,8 @@ echo -e "\e[37mУстановленная версия sing-box: $SB_version\e[0
 #################### Настройка youtubeUnblock ####################
 echo -e "\033[35mНастройка youtubeUnblock...\033[0m"
 
+/etc/init.d/youtubeUnblock disable
+
 sed -i 's/meta l4proto { tcp, udp } flow offload @ft;/meta l4proto { tcp, udp } ct original packets ge 30 flow offload @ft;/' /usr/share/firewall4/templates/ruleset.uc
 
 # Путь к файлу правил и строка для поиска
@@ -178,7 +180,6 @@ else
     echo -e "\033[32mФайл правил $NFT_FILE youtubeUnblock уже содержит '$SEARCH_STRING'. Обновление не требуется.\033[0m"
 fi
 
-/etc/init.d/youtubeUnblock disable
 /etc/init.d/youtubeUnblock enable
 
 echo -e "\033[37myoutubeUnblock настроен и включен.\033[0m"
