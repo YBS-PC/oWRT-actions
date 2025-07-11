@@ -52,7 +52,8 @@ echo -e "\033[36mПерезагрузка Firewall...\033[0m"
 
 #################### Стандартная настройка ДНС (перед установкой AGH) ####################
 echo -e "\033[36mОстанавливаем и отключаем службу AdGuardHome...\033[0m"
-/etc/init.d/adguardhome stop >/dev/null 2>&1 && /etc/init.d/adguardhome disable >/dev/null 2>&1
+#-#/etc/init.d/adguardhome stop >/dev/null 2>&1
+/etc/init.d/adguardhome disable >/dev/null 2>&1
 
 #################### Настройка системного времени (без NTP) ####################
 echo -e "\033[35mНастройка часового пояса...\033[0m"
@@ -113,7 +114,8 @@ echo -e "\e[37mУстановленная версия sing-box: $SB_version\e[0
 
 #################### Настройка youtubeUnblock ####################
 echo -e "\033[35mНастройка youtubeUnblock...\033[0m"
-/etc/init.d/youtubeUnblock disable && /etc/init.d/youtubeUnblock stop
+/etc/init.d/youtubeUnblock disable
+#-#/etc/init.d/youtubeUnblock stop
 sed -i 's/meta l4proto { tcp, udp } flow offload @ft;/meta l4proto { tcp, udp } ct original packets ge 30 flow offload @ft;/' /usr/share/firewall4/templates/ruleset.uc
 
 # Путь к файлу правил и строка для поиска
@@ -170,7 +172,8 @@ echo -e "\033[37myoutubeUnblock настроен и включен.\033[0m"
 
 #################### Настройка internet-detector ####################
 echo -e "\033[35mНастройка internet-detector...\033[0m"
-/etc/init.d/internet-detector stop && /etc/init.d/internet-detector disable
+#-#/etc/init.d/internet-detector stop
+/etc/init.d/internet-detector disable
 sed -i 's/START=[0-9][0-9]/START=99/' /etc/init.d/internet-detector
 echo -e "\033[37mСлужба internet-detector настроена (но отключена).\033[0m"
 
@@ -205,7 +208,8 @@ fi
 
 #################### Настройка и запуск AdGuardHome ####################
 echo -e "\033[35mНастройка и запуск AdGuardHome...\033[0m"
-/etc/init.d/adguardhome stop && /etc/init.d/adguardhome disable
+#-#/etc/init.d/adguardhome stop
+/etc/init.d/adguardhome disable
 
 echo -e "\033[36mНастройки для AdGuardHome...\033[0m"
 echo "config adguardhome config" > /etc/config/adguardhome
