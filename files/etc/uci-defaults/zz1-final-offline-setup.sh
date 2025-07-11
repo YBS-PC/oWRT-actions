@@ -48,12 +48,6 @@ echo -e "\033[35mСКРИПТ ПЕРВОНАЧАЛЬНОЙ ОФЛАЙН-НАСТ
 echo -e "\033[35mУдалить строку Enable FullCone NAT...\033[0m"
 sed -i "/option fullcone '1'/d" /etc/config/firewall
 echo -e "\033[36mПерезагрузка Firewall...\033[0m"
-#-#/etc/init.d/firewall restart
-
-#################### Стандартная настройка ДНС (перед установкой AGH) ####################
-echo -e "\033[36mОстанавливаем и отключаем службу AdGuardHome...\033[0m"
-#-#/etc/init.d/adguardhome stop >/dev/null 2>&1
-/etc/init.d/adguardhome disable >/dev/null 2>&1
 
 #################### Настройка системного времени (без NTP) ####################
 echo -e "\033[35mНастройка часового пояса...\033[0m"
@@ -87,6 +81,7 @@ fi
 
 echo -e "\033[35mУстановка AdGuardHome...\033[0m"
 if [ -f /root/apps/AdGuardHome ]; then
+    /etc/init.d/adguardhome stop >/dev/null 2>&1
     cp /root/apps/AdGuardHome /usr/bin/AdGuardHome
     chmod +x /usr/bin/AdGuardHome
     echo -e "\033[32mУстановлен AdGuardHome из /root/apps/\033[0m"
@@ -96,6 +91,7 @@ fi
 
 echo -e "\033[35mУстановка sing-box...\033[0m"
 if [ -f /root/apps/sing-box ]; then
+    /etc/init.d/sing-box stop >/dev/null 2>&1
     cp /root/apps/sing-box /usr/bin/sing-box
     chmod +x /usr/bin/sing-box
     echo -e "\033[32mУстановлен sing-box из /root/apps/\033[0m"
@@ -105,7 +101,6 @@ fi
 
 #################### Настройка homeproxy ####################
 echo -e "\033[35mНастройка luci-app-homeproxy...\033[0m"
-mkdir -p /var/run/homeproxy
 echo -e "\033[33mОтключаем dns_hijacked в luci-app-homeproxy\033[0m"
 sed -i "s/const dns_hijacked = uci\.get('dhcp', '@dnsmasq\[0\]', 'dns_redirect') || '0'/const dns_hijacked = '1'/" /etc/homeproxy/scripts/firewall_post.ut
 echo -e "\033[37mluci-app-homeproxy настроен.\033[0m"
@@ -114,8 +109,7 @@ echo -e "\e[37mУстановленная версия sing-box: $SB_version\e[0
 
 #################### Настройка youtubeUnblock ####################
 echo -e "\033[35mНастройка youtubeUnblock...\033[0m"
-/etc/init.d/youtubeUnblock disable
-#-#/etc/init.d/youtubeUnblock stop
+
 sed -i 's/meta l4proto { tcp, udp } flow offload @ft;/meta l4proto { tcp, udp } ct original packets ge 30 flow offload @ft;/' /usr/share/firewall4/templates/ruleset.uc
 
 # Путь к файлу правил и строка для поиска
@@ -165,14 +159,10 @@ else
     echo -e "\033[32mФайл правил $NFT_FILE youtubeUnblock уже содержит '$SEARCH_STRING'. Обновление не требуется.\033[0m"
 fi
 
-/etc/init.d/youtubeUnblock enable
-#-#/etc/init.d/youtubeUnblock restart
 echo -e "\033[37myoutubeUnblock настроен и включен.\033[0m"
-#-#/etc/init.d/firewall restart
 
 #################### Настройка internet-detector ####################
 echo -e "\033[35mНастройка internet-detector...\033[0m"
-#-#/etc/init.d/internet-detector stop
 /etc/init.d/internet-detector disable
 sed -i 's/START=[0-9][0-9]/START=99/' /etc/init.d/internet-detector
 echo -e "\033[37mСлужба internet-detector настроена (но отключена).\033[0m"
@@ -208,7 +198,7 @@ fi
 
 #################### Настройка и запуск AdGuardHome ####################
 echo -e "\033[35mНастройка и запуск AdGuardHome...\033[0m"
-#-#/etc/init.d/adguardhome stop
+
 /etc/init.d/adguardhome disable
 
 echo -e "\033[36mНастройки для AdGuardHome...\033[0m"
@@ -235,17 +225,14 @@ echo -e "\033[33mУстановленная версия AGH: $AGH_version\033[0
 
 # Освобождение порта 53 для AdGuardHome
 uci set dhcp.@dnsmasq[0].port="54"
-uci del_list dhcp.@dnsmasq[0].server="1.1.1.2"
-uci del_list dhcp.@dnsmasq[0].server="77.88.8.88"
+uci delete dhcp.@dnsmasq[0].server
 uci add_list dhcp.@dnsmasq[0].server="127.0.0.1#53"
 uci commit dhcp
 echo -e "\033[36mПерезапуск DNSmasq на порту 54...\033[0m"
-#-#/etc/init.d/dnsmasq restart
 
 if [ -n "$AGH_version" ]; then
     echo -e "\033[36mЗапуск AdGuardHome...\033[0m"
     /etc/init.d/adguardhome enable
-    #-#/etc/init.d/adguardhome restart
     echo -e "\033[37mЗапущенная версия AdGuardHome: $AGH_version\033[0m"
 else
     echo -e "\033[31mAdGuardHome не установлен или не найден.\033[0m"
@@ -262,7 +249,6 @@ echo -e "\033[36mУдалены временные файлы конфигура
 # Включение FullCone NAT для ImmortalWrt
 if [ "$NAME_VALUE" == "ImmortalWrt" ]; then
     uci set firewall.@defaults[0].fullcone='1' && uci commit firewall
-    #-#/etc/init.d/firewall restart
     echo -e "\033[37mFullCone NAT включен на ImmortalWrt\033[0m"
 else
     echo -e "\033[37mПрошивка не ImmortalWrt. FullCone NAT не настраивается.\033[0m"
@@ -307,8 +293,8 @@ fi
 # Показать текущее значение
 echo "Текущее значение uhttpd:"
 grep "^START=" /etc/init.d/uhttpd
-# Изменить START на 60
-sed -i 's/^START=[0-9]*/START=60/' /etc/init.d/uhttpd
+# Изменить START на 80
+sed -i 's/^START=[0-9]*/START=80/' /etc/init.d/uhttpd
 # Показать новое значение
 echo "Новое значение uhttpd:"
 grep "^START=" /etc/init.d/uhttpd
@@ -316,13 +302,18 @@ grep "^START=" /etc/init.d/uhttpd
 /etc/init.d/uhttpd enable
 echo "Готово! uhttpd будет запускаться с приоритетом 60"
 
+# Включить sqm
+/etc/init.d/sqm enable
+echo "sqm включен"
+
 # Перезапуск служб
 #-#/etc/init.d/rpcd restart
 #-#/etc/init.d/uhttpd restart
 #-#/etc/init.d/system restart
-
-/etc/init.d/sqm enable
+#-#/etc/init.d/firewall restart
 #-#/etc/init.d/sqm restart
+#-#/etc/init.d/dnsmasq restart
+#-#/etc/init.d/adguardhome restart
 
 /etc/init.d/phy-leds disable && echo -e "\033[36mОтключен старый скрипт управления диодами phy-leds\033[0m"
 
@@ -342,7 +333,6 @@ done
 #################### Проверка служб ####################
 echo -e "\033[35mПроверка статуса служб...\033[0m"
 date
-sleep 3
 echo -e "\033[33myoutubeUnblock:\033[0m"
 service | grep youtubeUnblock | awk '{print $2, $3}'
 echo -e "\033[33madguardhome:\033[0m"
@@ -354,11 +344,8 @@ cat /tmp/sysinfo/model && . /etc/openwrt_release
 
 echo -e "\033[32mПервоначальная настройка завершена успешно.\033[0m"
 
-# Создаем файл-триггер для перезагрузки.
+# Отложенная перезагрузка в фоне (&) в дочерней оболочке ()...
 echo -e "\033[32mЗапрос на перезагрузку системы...\033[0m"
-# Система uci-defaults увидит его и выполнит перезагрузку после завершения всех скриптов.
-# touch /etc/uci-defaults/.uci_reboot Не работает
-# Дополнительно отложенная перезагрузка в фоне (&) в дочерней оболочке ()...
 (sleep 30; reboot) &
 
 # ВАЖНО: Завершаем скрипт с кодом 0 для его автоматического удаления
