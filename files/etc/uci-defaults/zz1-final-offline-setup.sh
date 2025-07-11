@@ -104,9 +104,9 @@ echo -e "\033[35mНастройка luci-app-homeproxy...\033[0m"
 echo -e "\033[33mОтключаем dns_hijacked в luci-app-homeproxy\033[0m"
 sed -i "s/const dns_hijacked = uci\.get('dhcp', '@dnsmasq\[0\]', 'dns_redirect') || '0'/const dns_hijacked = '1'/" /etc/homeproxy/scripts/firewall_post.ut
 mkdir -p /var/run/homeproxy
-touch /tmp/run/homeproxy/fw4_forward.nft
-touch /tmp/run/homeproxy/fw4_input.nft
-touch /tmp/run/homeproxy/fw4_post.nft
+touch /var/run/homeproxy/fw4_forward.nft
+touch /var/run/homeproxy/fw4_input.nft
+touch /var/run/homeproxy/fw4_post.nft
 echo -e "\033[37mluci-app-homeproxy настроен.\033[0m"
 
 SB_version=$(/usr/bin/sing-box version | grep -oP 'v?\K[\d.]+' | head -n 1)
