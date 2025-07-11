@@ -336,14 +336,14 @@ for param in /proc/sys/net/ipv4/tcp_rmem \
 done
 
 #################### Проверка служб ####################
-echo -e "\033[35mПроверка статуса служб...\033[0m"
-date
-echo -e "\033[33myoutubeUnblock:\033[0m"
-service | grep youtubeUnblock | awk '{print $2, $3}'
-echo -e "\033[33madguardhome:\033[0m"
-service | grep adguardhome | awk '{print $2, $3}'
-echo -e "\033[33msqm:\033[0m"
-service | grep sqm | awk '{print $2, $3}'
+#-#echo -e "\033[35mПроверка статуса служб...\033[0m"
+#-#date
+#-#echo -e "\033[33myoutubeUnblock:\033[0m"
+#-#service | grep youtubeUnblock | awk '{print $2, $3}'
+#-#echo -e "\033[33madguardhome:\033[0m"
+#-#service | grep adguardhome | awk '{print $2, $3}'
+#-#echo -e "\033[33msqm:\033[0m"
+#-#service | grep sqm | awk '{print $2, $3}'
 
 cat /tmp/sysinfo/model && . /etc/openwrt_release
 
