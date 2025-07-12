@@ -139,13 +139,14 @@ chmod +x "$HELPER_SCRIPT_PATH"
 echo -e "\033[37mСоздан скрипт-помощник для homeproxy: $HELPER_SCRIPT_PATH\033[0m"
 # 2. Модифицируем init-скрипт homeproxy, чтобы он вызывал наш помощник
 HOMEPROXY_INIT_SCRIPT="/etc/init.d/homeproxy"
-HELPER_CALL_COMMAND=". $HELPER_SCRIPT_PATH"
+TAB_CHAR=$'\t'
+HELPER_CALL_COMMAND="${TAB_CHAR}. ${HELPER_SCRIPT_PATH}"
 if [ -f "$HOMEPROXY_INIT_SCRIPT" ]; then
     # Проверяем, не была ли команда добавлена ранее
     if ! grep -q "$HELPER_SCRIPT_PATH" "$HOMEPROXY_INIT_SCRIPT"; then
         # Вставляем вызов нашего скрипта в начало start_service() и stop_service()
-        sed -i "/start_service() {/a \\    $HELPER_CALL_COMMAND" "$HOMEPROXY_INIT_SCRIPT"
-        sed -i "/stop_service() {/a \\    $HELPER_CALL_COMMAND" "$HOMEPROXY_INIT_SCRIPT"
+        sed -i "/start_service() {/a \\$HELPER_CALL_COMMAND" "$HOMEPROXY_INIT_SCRIPT"
+        sed -i "/stop_service() {/a \\$HELPER_CALL_COMMAND" "$HOMEPROXY_INIT_SCRIPT"
         echo -e "\033[37mInit-скрипт homeproxy модифицирован для вызова помощника.\033[0m"
     else
         echo -e "\033[32mInit-скрипт homeproxy уже был модифицирован.\033[0m"
@@ -154,7 +155,7 @@ else
     echo -e "\033[33mСкрипт $HOMEPROXY_INIT_SCRIPT не найден.\033[0m"
 fi
 # 3. Первоначальный запуск нашего помощника, чтобы исправить конфиг сразу
-$HELPER_CALL_COMMAND
+. "$HELPER_SCRIPT_PATH"
 
 /etc/init.d/homeproxy enable
 
