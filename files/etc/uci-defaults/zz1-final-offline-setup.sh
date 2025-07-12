@@ -104,6 +104,8 @@ echo -e "\033[35mНастройка luci-app-homeproxy...\033[0m"
 echo -e "\033[33mОтключаем dns_hijacked в luci-app-homeproxy\033[0m"
 sed -i "s/const dns_hijacked = uci\.get('dhcp', '@dnsmasq\[0\]', 'dns_redirect') || '0'/const dns_hijacked = '1'/" /etc/homeproxy/scripts/firewall_post.ut
 
+/etc/init.d/homeproxy disable
+
 # Проблема: uci-defaults для homeproxy создает в конфиге firewall ссылки на файлы, которые homeproxy создает только в режимах TUN или Server.
 # 1. Создаем наш скрипт-помощник
 HELPER_SCRIPT_PATH="/etc/homeproxy/scripts/update_firewall_rules.sh"
@@ -153,6 +155,9 @@ else
 fi
 # 3. Первоначальный запуск нашего помощника, чтобы исправить конфиг сразу
 $HELPER_CALL_COMMAND
+
+/etc/init.d/homeproxy enable
+
 echo -e "\033[37mluci-app-homeproxy настроен.\033[0m"
 
 SB_version=$(/usr/bin/sing-box version | grep -oP 'v?\K[\d.]+' | head -n 1)
