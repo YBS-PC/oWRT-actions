@@ -218,6 +218,36 @@ else
     echo -e "\033[32mФайл правил $NFT_FILE youtubeUnblock уже содержит '$SEARCH_STRING'. Обновление не требуется.\033[0m"
 fi
 
+# Настройка правила nftables для пометки трафика гостевой сети
+
+NFT_GUEST_MARK_FILE="/etc/nftables.d/guest_mark.nft"
+# Используем кавычки вокруг EOF, чтобы $ не интерпретировался
+NFT_GUEST_MARK_CONTENT=$(cat << "EOF"
+chain guest_mark {
+	type filter hook prerouting priority mangle; policy accept;
+	iifname "br-guest" meta mark set 0x00000042
+}
+EOF
+)
+
+# Проверяем, существует ли файл
+if [ ! -f "$NFT_GUEST_MARK_FILE" ]; then
+  # Файл не существует, создаем его
+  echo "Creating nftables guest mark rule at $NFT_GUEST_MARK_FILE"
+  # Используем переменную, а не Heredoc снова
+  echo "$NFT_GUEST_MARK_CONTENT" > "$NFT_GUEST_MARK_FILE"
+  chmod 0644 "$NFT_GUEST_MARK_FILE"
+else
+  # Файл существует, сравниваем содержимое
+  CURRENT_CONTENT=$(cat "$NFT_GUEST_MARK_FILE")
+  if [ "$CURRENT_CONTENT" != "$NFT_GUEST_MARK_CONTENT" ]; then
+    # Содержимое отличается, перезаписываем
+    echo "Correcting nftables guest mark rule at $NFT_GUEST_MARK_FILE"
+    echo "$NFT_GUEST_MARK_CONTENT" > "$NFT_GUEST_MARK_FILE"
+    chmod 0644 "$NFT_GUEST_MARK_FILE"
+  fi
+fi
+
 /etc/init.d/youtubeUnblock enable
 
 echo -e "\033[37myoutubeUnblock настроен и включен.\033[0m"
