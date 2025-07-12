@@ -105,22 +105,54 @@ echo -e "\033[33mОтключаем dns_hijacked в luci-app-homeproxy\033[0m"
 sed -i "s/const dns_hijacked = uci\.get('dhcp', '@dnsmasq\[0\]', 'dns_redirect') || '0'/const dns_hijacked = '1'/" /etc/homeproxy/scripts/firewall_post.ut
 
 # Проблема: uci-defaults для homeproxy создает в конфиге firewall ссылки на файлы, которые homeproxy создает только в режимах TUN или Server.
-# Мы проверяем текущие настройки homeproxy. Если эти режимы отключены, мы безопасно удаляем ненужные include-секции из конфига firewall.
+# 1. Создаем наш скрипт-помощник
+HELPER_SCRIPT_PATH="/etc/homeproxy/scripts/update_firewall_rules.sh"
+cat << 'EOF' > "$HELPER_SCRIPT_PATH"
+#!/bin/sh
 PROXY_MODE=$(uci -q get homeproxy.config.proxy_mode || echo "redirect_tproxy")
 SERVER_ENABLED=$(uci -q get homeproxy.server.enabled || echo "0")
-# Проверяем условия, при которых файлы _forward и _input НЕ создаются
-if ! (echo "$PROXY_MODE" | grep -q "tun") && [ "$SERVER_ENABLED" = "0" ]; then
-    echo -e "\033[37mРежимы TUN и Server отключены. Удаляем ненужные секции firewall для homeproxy.\033[0m"
-    uci -q batch <<-EOF
+if (echo "$PROXY_MODE" | grep -q "tun") || [ "$SERVER_ENABLED" = "1" ]; then
+    uci -q batch <<-E_O_F
+	set firewall.homeproxy_forward=include
+	set firewall.homeproxy_forward.type=nftables
+	set firewall.homeproxy_forward.path="/var/run/homeproxy/fw4_forward.nft"
+	set firewall.homeproxy_forward.position="chain-pre"
+	set firewall.homeproxy_forward.chain="forward"
+
+	set firewall.homeproxy_input=include
+	set firewall.homeproxy_input.type=nftables
+	set firewall.homeproxy_input.path="/var/run/homeproxy/fw4_input.nft"
+	set firewall.homeproxy_input.position="chain-pre"
+	set firewall.homeproxy_input.chain="input"
+E_O_F
+else
+    uci -q batch <<-E_O_F
         delete firewall.homeproxy_forward
         delete firewall.homeproxy_input
-        commit firewall
-EOF
-    echo -e "\033[32mСекции homeproxy_forward и homeproxy_input удалены.\033[0m"
-else
-    echo -e "\033[37mРежим TUN или Server включен. Секции firewall для homeproxy оставлены.\033[0m"
+E_O_F
 fi
-
+uci -q commit firewall
+EOF
+chmod +x "$HELPER_SCRIPT_PATH"
+echo -e "\033[37mСоздан скрипт-помощник для homeproxy: $HELPER_SCRIPT_PATH\033[0m"
+# 2. Модифицируем init-скрипт homeproxy, чтобы он вызывал наш помощник
+HOMEPROXY_INIT_SCRIPT="/etc/init.d/homeproxy"
+HELPER_CALL_COMMAND=". $HELPER_SCRIPT_PATH"
+if [ -f "$HOMEPROXY_INIT_SCRIPT" ]; then
+    # Проверяем, не была ли команда добавлена ранее
+    if ! grep -q "$HELPER_SCRIPT_PATH" "$HOMEPROXY_INIT_SCRIPT"; then
+        # Вставляем вызов нашего скрипта в начало start_service() и stop_service()
+        sed -i "/start_service() {/a \\    $HELPER_CALL_COMMAND" "$HOMEPROXY_INIT_SCRIPT"
+        sed -i "/stop_service() {/a \\    $HELPER_CALL_COMMAND" "$HOMEPROXY_INIT_SCRIPT"
+        echo -e "\033[37mInit-скрипт homeproxy модифицирован для вызова помощника.\033[0m"
+    else
+        echo -e "\033[32mInit-скрипт homeproxy уже был модифицирован.\033[0m"
+    fi
+else
+    echo -e "\033[33mСкрипт $HOMEPROXY_INIT_SCRIPT не найден.\033[0m"
+fi
+# 3. Первоначальный запуск нашего помощника, чтобы исправить конфиг сразу
+$HELPER_CALL_COMMAND
 echo -e "\033[37mluci-app-homeproxy настроен.\033[0m"
 
 SB_version=$(/usr/bin/sing-box version | grep -oP 'v?\K[\d.]+' | head -n 1)
