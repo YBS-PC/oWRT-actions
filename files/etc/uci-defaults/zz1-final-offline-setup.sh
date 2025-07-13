@@ -56,16 +56,50 @@ uci commit system
 #-#/etc/init.d/system reload
 date
 
-#################### Подготовка к установке пакетов ####################
+#################### Подготовка системы к установке пакетов ####################
 echo -e "\033[35mПодготовка системы к установке пакетов...\033[0m"
 
-# Убедимся, что архитектура указана верно
-if ! grep -qF "${ARCH_VERSION}" /etc/apk/arch; then
-    echo -e "\033[36mДобавляю строку ${ARCH_VERSION} в /etc/apk/arch\033[0m"
-    echo "${ARCH_VERSION}" > /etc/apk/arch
+# Проверяем, какой пакетный менеджер используется
+if command -v apk >/dev/null 2>&1; then
+    echo -e "\033[36mОбнаружен пакетный менеджер APK.\033[0m"
+    # 1. Убедимся, что архитектура указана верно
+    if ! grep -qF "${ARCH_VERSION}" /etc/apk/arch; then
+        echo -e "\033[36mДобавляю архитектуру ${ARCH_VERSION} в /etc/apk/arch...\033[0m"
+        echo "${ARCH_VERSION}" > /etc/apk/arch
+    else
+        echo -e "\033[36mАрхитектура в /etc/apk/arch уже настроена.\033[0m"
+    fi
+    # 2. Определяем список репозиториев
+    DISTFEEDS_FILE="/etc/apk/repositories.d/distfeeds.list"
+    CUSTOMFEEDS_FILE="/etc/apk/repositories.d/customfeeds.list"
+    # 3. Копируем ключи для подписи пакетов, если они есть
+    [ ! -f /etc/apk/keys/immortalwrt-snapshots.pem ] && cp /root/apps/immortalwrt-snapshots.pem /etc/apk/keys/
+    [ ! -f /etc/apk/keys/openwrt-snapshots.pem ] && cp /root/apps/openwrt-snapshots.pem /etc/apk/keys/
+    [ ! -f /etc/apk/keys/youtubeUnblock.pem ] && cp /root/apps/youtubeUnblock.pem /etc/apk/keys/
+    [ ! -f /etc/apk/keys/public-key.pem ] && cp /root/apps/public-key.pem /etc/apk/keys/
+elif command -v opkg >/dev/null 2>&1; then
+    DISTFEEDS_FILE="/etc/opkg/distfeeds.conf"
+    CUSTOMFEEDS_FILE="/etc/opkg/customfeeds.conf"
+    echo -e "\033[36mОбнаружен пакетный менеджер OPKG.\033[0m"
 else
-    echo -e "\033[36mАрхитектура в /etc/apk/arch уже настроена.\033[0m"
+    echo -e "\033[31mОшибка: Пакетный менеджер (apk или opkg) не найден.\033[0m"
 fi
+
+if [ -f "$DISTFEEDS_FILE" ]; then
+    echo -e "\033[37mОчистка файла репозиториев $DISTFEEDS_FILE...\033[0m"
+    # Создаем бэкап на всякий случай
+    cp "$DISTFEEDS_FILE" "${DISTFEEDS_FILE}.bak"
+    # Удаляем все строки, не содержащие 'openwrt' или 'immortalwrt'
+    sed -i '/openwrt\|immortalwrt/!d' "$DISTFEEDS_FILE"
+    echo -e "\033[32mФайл репозиториев успешно очищен.\033[0m"
+fi
+
+cat <<EOF > "$CUSTOMFEEDS_FILE"
+# add your custom package feeds here
+#
+# http://www.example.com/path/to/files/packages.adb
+
+EOF
 
 #################### Установка всех пакетов из /root/apps/ ####################
 echo -e "\033[35mУстановка пакетов из локальной директории /root/apps/...\033[0m"
