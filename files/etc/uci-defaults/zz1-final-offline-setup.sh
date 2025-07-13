@@ -203,7 +203,7 @@ fi
 
 echo -e "\033[37mluci-app-homeproxy настроен.\033[0m"
 
-SB_version=$(/usr/bin/sing-box version | grep -oP 'v?\K[\d.]+' | head -n 1)
+SB_version=$(/usr/bin/sing-box version 2>/dev/null | grep -oP 'v?\K[\d.]+' | head -n 1)
 echo -e "\e[37mУстановленная версия sing-box: $SB_version\e[0m"
 
 #################### Настройка youtubeUnblock ####################
