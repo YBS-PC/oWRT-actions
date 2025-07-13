@@ -167,15 +167,10 @@ echo -e "\e[37mУстановленная версия sing-box: $SB_version\e[0
 #################### Настройка youtubeUnblock ####################
 echo -e "\033[35mНастройка youtubeUnblock...\033[0m"
 
-/etc/init.d/youtubeUnblock disable
-
 sed -i 's/meta l4proto { tcp, udp } flow offload @ft;/meta l4proto { tcp, udp } ct original packets ge 30 flow offload @ft;/' /usr/share/firewall4/templates/ruleset.uc
 
-# Путь к файлу правил и строка для поиска
+# Путь к файлу правил и его код
 YTB_NFT_FILE="/usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft"
-YTB_CURRENT_NFT_FILE_CONTENT=$(cat "$YTB_NFT_FILE")
-YTB_SEARCH_STRING="@dpi_ips"
-
 YTB_NFT_FILE_CONTENT=$(cat <<"EOF"
 #!/usr/sbin/nft -f
 # This file will be applied automatically for nftables <table> <chain> position <number> <condition> <action>
@@ -212,21 +207,10 @@ insert rule inet fw4 output mark and 0x8000 == 0x8000 counter accept
 EOF
 )
 
-# Проверяем, существует ли файл И содержит ли он искомую строку.
-# Мы перезаписываем файл, только если он НЕ существует ИЛИ если он существует, но НЕ содержит нужную строку.
-if [ ! -f "$YTB_NFT_FILE" ] || [ "$YTB_CURRENT_NFT_FILE_CONTENT" != "$YTB_NFT_FILE_CONTENT" ]; then
-    echo -e "\033[36mФайл правил $YTB_NFT_FILE youtubeUnblock не найден или устарел. Создаем/перезаписываем его.\033[0m"
-    echo "$YTB_NFT_FILE_CONTENT" > "$YTB_NFT_FILE"
-    chmod 0644 "$YTB_NFT_FILE"
-else
-    echo -e "\033[32mФайл правил $YTB_NFT_FILE youtubeUnblock уже содержит необходимы код. Обновление не требуется.\033[0m"
-fi
-
 # Настройка правила nftables для пометки трафика гостевой сети
-
-NFT_GUEST_MARK_FILE="/etc/nftables.d/guest_mark.nft"
+YTB_NFT_GUEST_MARK_FILE="/etc/nftables.d/guest_mark.nft"
 # Используем кавычки вокруг EOF, чтобы $ не интерпретировался
-NFT_GUEST_MARK_CONTENT=$(cat << "EOF"
+YTB_NFT_GUEST_MARK_CONTENT=$(cat << "EOF"
 chain guest_mark {
 	type filter hook prerouting priority mangle; policy accept;
 	iifname "br-guest" meta mark set 0x00000042
@@ -234,27 +218,21 @@ chain guest_mark {
 EOF
 )
 
-# Проверяем, существует ли файл
-if [ ! -f "$NFT_GUEST_MARK_FILE" ]; then
-  # Файл не существует, создаем его
-  echo "Creating nftables guest mark rule at $NFT_GUEST_MARK_FILE"
-  # Используем переменную, а не Heredoc снова
-  echo "$NFT_GUEST_MARK_CONTENT" > "$NFT_GUEST_MARK_FILE"
-  chmod 0644 "$NFT_GUEST_MARK_FILE"
+# Проверяем, установлен ли youtubeUnblock. 
+# Мы ищем исполняемый файл - это самый надежный способ.
+if [ -x "/usr/bin/youtubeUnblock" ]; then
+    echo -e "\033[37mСлужба youtubeUnblock установлена. Применяем конфигурацию...\033[0m"
+    # Отключаем службу на время настройки
+    /etc/init.d/youtubeUnblock disable
+    echo "$YTB_NFT_FILE_CONTENT" > "$YTB_NFT_FILE"
+    chmod 0644 "$YTB_NFT_FILE"
+    echo "$YTB_NFT_GUEST_MARK_CONTENT" > "$YTB_NFT_GUEST_MARK_FILE"
+    chmod 0644 "$YTB_NFT_GUEST_MARK_FILE"
+    /etc/init.d/youtubeUnblock enable
+    echo -e "\033[37myoutubeUnblock настроен и включен.\033[0m"
 else
-  # Файл существует, сравниваем содержимое
-  CURRENT_NFT_GUEST_MARK_CONTENT=$(cat "$NFT_GUEST_MARK_FILE")
-  if [ "$CURRENT_NFT_GUEST_MARK_CONTENT" != "$NFT_GUEST_MARK_CONTENT" ]; then
-    # Содержимое отличается, перезаписываем
-    echo "Correcting nftables guest mark rule at $NFT_GUEST_MARK_FILE"
-    echo "$NFT_GUEST_MARK_CONTENT" > "$NFT_GUEST_MARK_FILE"
-    chmod 0644 "$NFT_GUEST_MARK_FILE"
-  fi
+    echo -e "\033[33mСлужба youtubeUnblock не установлена. Настройка пропущена.\033[0m"
 fi
-
-/etc/init.d/youtubeUnblock enable
-
-echo -e "\033[37myoutubeUnblock настроен и включен.\033[0m"
 
 #################### Настройка internet-detector ####################
 echo -e "\033[35mНастройка internet-detector...\033[0m"
