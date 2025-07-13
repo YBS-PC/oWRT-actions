@@ -89,9 +89,17 @@ if [ -f "$DISTFEEDS_FILE" ]; then
     echo -e "\033[37mОчистка файла репозиториев $DISTFEEDS_FILE...\033[0m"
     # Создаем бэкап на всякий случай
     cp "$DISTFEEDS_FILE" "${DISTFEEDS_FILE}.bak"
-    # Удаляем все строки, не содержащие 'openwrt' или 'immortalwrt'
-    sed -i '/openwrt\|immortalwrt/!d' "$DISTFEEDS_FILE"
-    echo -e "\033[32mФайл репозиториев успешно очищен.\033[0m"
+    # Фильтруем содержимое файла и сохраняем результат в переменную
+    FILTERED_CONTENT=$(grep -E "targets|packages/${ARCH_VERSION}/(base|luci|packages|routing|telephony|video)" "$DISTFEEDS_FILE")
+    # Проверяем, что переменная не пустая, прежде чем перезаписывать файл
+    if [ -n "$FILTERED_CONTENT" ]; then
+        echo "$FILTERED_CONTENT" > "$DISTFEEDS_FILE"
+        echo -e "\033[32mФайл репозиториев успешно очищен.\033[0m"
+    else
+        echo -e "\033[31mОшибка: Фильтрация не нашла ни одной нужной строки! Оригинальный файл не изменен.\033[0m"
+    fi
+else
+    echo "Файл $DISTFEEDS_FILE не найден."
 fi
 
 cat <<EOF > "$CUSTOMFEEDS_FILE"
