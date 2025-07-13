@@ -172,15 +172,11 @@ echo -e "\033[35mНастройка youtubeUnblock...\033[0m"
 sed -i 's/meta l4proto { tcp, udp } flow offload @ft;/meta l4proto { tcp, udp } ct original packets ge 30 flow offload @ft;/' /usr/share/firewall4/templates/ruleset.uc
 
 # Путь к файлу правил и строка для поиска
-NFT_FILE="/usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft"
-SEARCH_STRING="@dpi_ips"
+YTB_NFT_FILE="/usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft"
+YTB_CURRENT_NFT_FILE_CONTENT=$(cat "$YTB_NFT_FILE")
+YTB_SEARCH_STRING="@dpi_ips"
 
-# Проверяем, существует ли файл И содержит ли он искомую строку.
-# Мы перезаписываем файл, только если он НЕ существует ИЛИ если он существует, но НЕ содержит нужную строку.
-if [ ! -f "$NFT_FILE" ] || ! grep -q "$SEARCH_STRING" "$NFT_FILE"; then
-    echo -e "\033[36mФайл правил $NFT_FILE youtubeUnblock не найден или устарел. Создаем/перезаписываем его.\033[0m"
-#cat <<EOF > "$NFT_FILE"
-cat <<EOF > /usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft
+YTB_NFT_FILE_CONTENT=$(cat <<"EOF"
 #!/usr/sbin/nft -f
 # This file will be applied automatically for nftables <table> <chain> position <number> <condition> <action>
 
@@ -214,8 +210,16 @@ insert rule inet fw4 output mark and 0x8000 == 0x8000 counter accept
 #add rule inet fw4 youtubeUnblock meta l4proto udp ct original packets < 9 counter queue num 537 bypass
 #insert rule inet fw4 output mark and 0x8000 == 0x8000 counter accept
 EOF
+)
+
+# Проверяем, существует ли файл И содержит ли он искомую строку.
+# Мы перезаписываем файл, только если он НЕ существует ИЛИ если он существует, но НЕ содержит нужную строку.
+if [ ! -f "$YTB_NFT_FILE" ] || [ "$YTB_CURRENT_NFT_FILE_CONTENT" != "$YTB_NFT_FILE_CONTENT" ]; then
+    echo -e "\033[36mФайл правил $YTB_NFT_FILE youtubeUnblock не найден или устарел. Создаем/перезаписываем его.\033[0m"
+    echo "$YTB_NFT_FILE_CONTENT" > "$YTB_NFT_FILE"
+    chmod 0644 "$YTB_NFT_FILE"
 else
-    echo -e "\033[32mФайл правил $NFT_FILE youtubeUnblock уже содержит '$SEARCH_STRING'. Обновление не требуется.\033[0m"
+    echo -e "\033[32mФайл правил $YTB_NFT_FILE youtubeUnblock уже содержит необходимы код. Обновление не требуется.\033[0m"
 fi
 
 # Настройка правила nftables для пометки трафика гостевой сети
@@ -239,8 +243,8 @@ if [ ! -f "$NFT_GUEST_MARK_FILE" ]; then
   chmod 0644 "$NFT_GUEST_MARK_FILE"
 else
   # Файл существует, сравниваем содержимое
-  CURRENT_CONTENT=$(cat "$NFT_GUEST_MARK_FILE")
-  if [ "$CURRENT_CONTENT" != "$NFT_GUEST_MARK_CONTENT" ]; then
+  CURRENT_NFT_GUEST_MARK_CONTENT=$(cat "$NFT_GUEST_MARK_FILE")
+  if [ "$CURRENT_NFT_GUEST_MARK_CONTENT" != "$NFT_GUEST_MARK_CONTENT" ]; then
     # Содержимое отличается, перезаписываем
     echo "Correcting nftables guest mark rule at $NFT_GUEST_MARK_FILE"
     echo "$NFT_GUEST_MARK_CONTENT" > "$NFT_GUEST_MARK_FILE"
