@@ -70,7 +70,7 @@ jobs:
       id: device_vars
       run: |
         echo ">>> Loading configuration for ${{ matrix.target }}"
-        source ./config/${{ matrix.target }}.conf
+        source ./config/conf/${{ matrix.target }}
         
         # Export loaded variables to the GITHUB_ENV so they are available in subsequent steps
         echo "TARGET_NAME=$TARGET_NAME" >> $GITHUB_ENV
