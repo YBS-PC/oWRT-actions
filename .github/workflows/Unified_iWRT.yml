@@ -182,6 +182,13 @@ jobs:
         echo "::group::Final .config for ${{ matrix.name }}"
         cat openwrt/.config
         echo "::endgroup::"
+    - name: Fix permissions for custom uci-defaults files
+      run: |
+        cd openwrt
+        if [ -d "files/etc/uci-defaults" ]; then
+          echo ">>> Fixing permissions for custom uci-defaults zz* files"
+          find files/etc/uci-defaults/ -name "zz*" -type f -exec chmod +x {} \;
+        fi
     - name: Download Software Packages
       id: package
       run: |
