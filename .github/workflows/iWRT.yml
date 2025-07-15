@@ -1,4 +1,4 @@
-name: Unified iWRT Build
+name: iWRT
 
 on:
   workflow_dispatch:
