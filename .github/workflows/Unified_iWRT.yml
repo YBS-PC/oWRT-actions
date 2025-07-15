@@ -1,3 +1,7 @@
+#
+# Unified Build Workflow for iWRT
+#
+
 name: Unified iWRT
 
 on:
@@ -42,13 +46,13 @@ jobs:
       - id: set-matrix
         run: |
           # The full matrix definition as a multi-line shell variable.
+          # Note that device_config is now properly quoted to be a single string argument in shell.
           MATRIX_JSON='
           {
             "include": [
               {
                 "target": "slateax",
                 "name": "GL.iNet Slate AX (AXT1800)",
-                "arch": "aarch64_cortex-a53",
                 "kernel_path": "qualcommax/ipq60xx",
                 "release_tag": "Slate_GL-AXT1800",
                 "device_config": "sed -i \"/fdisk/d\" ./.config; sed -i \"/partx-utils/d\" ./.config; sed -i \"/fitblk/d\" ./.config; sed -i \"/kmod-crypto-hw-safexcel/d\" ./.config; echo \"CONFIG_TARGET_qualcommax=y\" >> ./.config; echo \"CONFIG_TARGET_qualcommax_ipq60xx=y\" >> ./.config; echo \"CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_glinet_gl-axt1800=y\" >> ./.config; echo \"CONFIG_TARGET_PROFILE=\\\"DEVICE_glinet_gl-axt1800\\\"\" >> ./.config; echo \"CONFIG_TARGET_ARCH_PACKAGES=\\\"aarch64_cortex-a53\\\"\" >> ./.config; echo \"CONFIG_PACKAGE_kmod-qcom-qmi-helpers=y\" >> ./.config; echo \"CONFIG_PACKAGE_kmod-cfg80211=y\" >> ./.config; echo \"CONFIG_PACKAGE_kmod-mac80211=y\" >> ./.config; echo \"CONFIG_PACKAGE_kmod-qca-ssdk=y\" >> ./.config; echo \"CONFIG_PACKAGE_kmod-usb-dwc3-qcom=y\" >> ./.config; echo \"CONFIG_PACKAGE_kmod-ath=y\" >> ./.config; echo \"CONFIG_PACKAGE_ath11k-firmware-ipq6018=y\" >> ./.config; echo \"CONFIG_PACKAGE_ath11k-firmware-new-ipq6018=y\" >> ./.config; echo \"CONFIG_PACKAGE_dosfstools=y\" >> ./.config; echo \"CONFIG_PACKAGE_eip197-mini-firmware=y\" >> ./.config; echo \"CONFIG_PACKAGE_fancontrol=y\" >> ./.config; echo \"CONFIG_PACKAGE_ipq-wifi-glinet_gl-axt1800=y\" >> ./.config; echo \"CONFIG_PACKAGE_kmod-ath11k-ahb=y\" >> ./.config; echo \"CONFIG_PACKAGE_kmod-ath11k=y\" >> ./.config; echo \"CONFIG_PACKAGE_kmod-hwmon-pwmfan=y\" >> ./.config; echo \"CONFIG_PACKAGE_kmod-nft-fullcone=y\" >> ./.config; echo \"CONFIG_PACKAGE_kmod-qca-nss-dp=y\" >> ./.config; echo \"CONFIG_PACKAGE_kmod-qrtr=y\" >> ./.config; echo \"CONFIG_PACKAGE_kmod-qrtr-mhi=y\" >> ./.config; echo \"CONFIG_PACKAGE_kmod-qrtr-smd=y\" >> ./.config; echo \"CONFIG_PACKAGE_kmod-qrtr-tun=y\" >> ./.config; echo \"CONFIG_PACKAGE_kmod-usb-dwc3-qcom=y\" >> ./.config; echo \"CONFIG_PACKAGE_kmod-usb-dwc3=y\" >> ./.config; echo \"CONFIG_PACKAGE_kmod-usb3=y\" >> ./.config; echo \"CONFIG_PACKAGE_libiwinfo=y\" >> ./.config; echo \"CONFIG_PACKAGE_losetup=y\" >> ./.config; echo \"CONFIG_PACKAGE_luci-app-fancontrol=y\" >> ./.config; echo \"CONFIG_PACKAGE_luci-i18n-fancontrol-ru=y\" >> ./.config; echo \"CONFIG_PACKAGE_luci-i18n-wifischedule-ru=y\" >> ./.config; echo \"CONFIG_PACKAGE_nss-eip-firmware=y\" >> ./.config; echo \"CONFIG_PACKAGE_nss-firmware-default=y\" >> ./.config; echo \"CONFIG_PACKAGE_nss-firmware-ipq6018=y\" >> ./.config; echo \"CONFIG_PACKAGE_wpad-basic-openssl=y\" >> ./.config; echo \"CONFIG_PACKAGE_wpad-openssl=y\" >> ./.config"
@@ -56,7 +60,6 @@ jobs:
               {
                 "target": "nanopi-r5s",
                 "name": "FriendlyARM NanoPi R5S",
-                "arch": "aarch64_generic",
                 "kernel_path": "rockchip/armv8",
                 "release_tag": "iWRT_NanoPi-R5S",
                 "device_config": "echo \"CONFIG_TARGET_rockchip=y\" >> ./.config; echo \"CONFIG_TARGET_rockchip_armv8=y\" >> ./.config; echo \"CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r5s=y\" >> ./.config; echo \"CONFIG_TARGET_ARCH_PACKAGES=\\\"aarch64_generic\\\"\" >> ./.config; echo \"CONFIG_TARGET_ROOTFS_PARTSIZE=512\" >> ./.config; echo \"CONFIG_TARGET_IMAGES_GZIP=y\" >> ./.config; echo \"CONFIG_TARGET_ROOTFS_SQUASHFS=y\" >> ./.config; echo \"# CONFIG_TARGET_ROOTFS_EXT4FS is not set\" >> ./.config; echo \"CONFIG_PACKAGE_kmod-r8125=y\" >> ./.config; echo \"CONFIG_PACKAGE_kmod-r8169=n\" >> ./.config; echo \"CONFIG_PACKAGE_resize2fs=y\" >> ./.config; echo \"CONFIG_PACKAGE_losetup=y\" >> ./.config"
@@ -64,7 +67,6 @@ jobs:
               {
                 "target": "ax59u",
                 "name": "ASUS RT-AX59U",
-                "arch": "aarch64_cortex-a53",
                 "kernel_path": "mediatek/filogic",
                 "release_tag": "iWRT_AX59U",
                 "device_config": "sed -i \"/fdisk/d\" ./.config; sed -i \"/partx-utils/d\" ./.config; sed -i \"/fitblk/d\" ./.config; sed -i \"/kmod-crypto-hw-safexcel/d\" ./.config; echo \"CONFIG_TARGET_mediatek=y\" >> ./.config; echo \"CONFIG_TARGET_mediatek_filogic=y\" >> ./.config; echo \"CONFIG_TARGET_mediatek_filogic_DEVICE_asus_rt-ax59u=y\" >> ./.config; echo \"CONFIG_TARGET_ARCH_PACKAGES=\\\"aarch64_cortex-a53\\\"\" >> ./.config; echo \"CONFIG_PACKAGE_fitblk=y\" >> ./.config; echo \"CONFIG_PACKAGE_kmod-crypto-hw-safexcel=y\" >> ./.config; echo \"CONFIG_PACKAGE_kmod-usb3=y\" >> ./.config; echo \"CONFIG_PACKAGE_kmod-mt7915e=y\" >> ./.config; echo \"CONFIG_PACKAGE_kmod-mt7986-firmware=y\" >> ./.config; echo \"CONFIG_PACKAGE_mt7986-wo-firmware=y\" >> ./.config; echo \"CONFIG_PACKAGE_wifischedule=y\" >> ./.config; echo \"CONFIG_PACKAGE_luci-app-wifischedule=y\" >> ./.config; echo \"CONFIG_PACKAGE_luci-i18n-wifischedule-ru=y\" >> ./.config; echo \"CONFIG_PACKAGE_facinstall=y\" >> ./.config"
@@ -72,7 +74,6 @@ jobs:
               {
                 "target": "brume2",
                 "name": "GL.iNet Brume 2 (MT2500)",
-                "arch": "aarch64_cortex-a53",
                 "kernel_path": "mediatek/filogic",
                 "release_tag": "iWRT_Brume2",
                 "device_config": "sed -i \"/fdisk/d\" ./.config; sed -i \"/partx-utils/d\" ./.config; sed -i \"/fitblk/d\" ./.config; sed -i \"/kmod-crypto-hw-safexcel/d\" ./.config; echo \"CONFIG_TARGET_mediatek=y\" >> ./.config; echo \"CONFIG_TARGET_mediatek_filogic=y\" >> ./.config; echo \"CONFIG_TARGET_mediatek_filogic_DEVICE_glinet_gl-mt2500=y\" >> ./.config; echo \"CONFIG_TARGET_ARCH_PACKAGES=\\\"aarch64_cortex-a53\\\"\" >> ./.config; echo \"CONFIG_PACKAGE_fitblk=y\" >> ./.config; echo \"CONFIG_PACKAGE_kmod-crypto-hw-safexcel=y\" >> ./.config; echo \"CONFIG_PACKAGE_kmod-usb3=y\" >> ./.config; echo \"CONFIG_PACKAGE_eip197-mini-firmware=y\" >> ./.config; echo \"CONFIG_PACKAGE_kmod-mt7981-firmware=y\" >> ./.config; echo \"CONFIG_PACKAGE_mt7981-wo-firmware=y\" >> ./.config; echo \"CONFIG_PACKAGE_kmod-mt76=m\" >> ./.config"
@@ -81,15 +82,18 @@ jobs:
           }
           '
           
+          # Filter the matrix based on the input
           if [ "${{ github.event.inputs.target }}" == "all" ]; then
+            # Output the full matrix, compacted to a single line
             echo "matrix=$(echo "$MATRIX_JSON" | jq -c .)" >> $GITHUB_OUTPUT
           else
+            # Use jq to filter for the selected target, then compact to a single line
             FILTERED_MATRIX=$(echo "$MATRIX_JSON" | jq -c --arg TARGET "${{ github.event.inputs.target }}" '{include: [.include[] | select(.target == $TARGET)]}')
             echo "matrix=$FILTERED_MATRIX" >> $GITHUB_OUTPUT
           fi
-
   build:
     needs: setup
+    # Continue only if the setup job produced a non-empty matrix
     if: ${{ needs.setup.outputs.matrix != '' && fromJson(needs.setup.outputs.matrix).include[0] != null }}
     runs-on: ubuntu-22.04
     permissions:
@@ -112,7 +116,6 @@ jobs:
         sudo apt-get autoremove -y
         sudo apt-get clean
         df -h
-
     - name: Checkout
       uses: actions/checkout@main
 
@@ -128,62 +131,63 @@ jobs:
         sudo timedatectl set-timezone "$TZ"
         sudo mkdir -p /workdir
         sudo chown $USER:$GROUPS /workdir
-
     - name: Cloning source code
       working-directory: /workdir
       run: |
         df -hT $PWD
         git clone --branch $REPO_BRANCH $REPO_URL openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
-
-    # ==================== CACHING START ====================
-    - name: Cache DL directory
-      uses: actions/cache@v4
-      id: cache-dl
-      with:
-        path: openwrt/dl
-        key: ${{ runner.os }}-dl-${{ env.REPO_BRANCH }}-${{ hashFiles('**/feeds.conf.default') }}
-        restore-keys: |
-          ${{ runner.os }}-dl-${{ env.REPO_BRANCH }}-
-    
-    # We need to run this step to get .config for the build cache key
-    - name: Prepare configuration
+    - name: Get Latest Kernel Hash
+      id: get_hash
+      run: |
+        KERNEL_LIST=$(curl -s https://immortalwrt.kyarucloud.moe/snapshots/targets/${{ matrix.kernel_path }}/kmods/ | grep -oE '6\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+')
+        LATEST_HASH=$(echo "$KERNEL_LIST" | while read -r line; do
+            version=$(echo "$line" | cut -d'-' -f1)
+            major=$(echo "$version" | cut -d'.' -f1)
+            minor=$(echo "$version" | cut -d'.' -f2)
+            patch=$(echo "$version" | cut -d'.' -f3)
+            printf "%03d%03d%03d %s\n" "$major" "$minor" "$patch" "$line"
+        done | sort -r | head -n1 | cut -d' ' -f2 | cut -d'-' -f3)
+        echo "LATEST_HASH=${LATEST_HASH}" >> $GITHUB_ENV
+        echo "Latest hash for ${{ matrix.target }} is: ${LATEST_HASH}"
+    - name: Modify kernel-defaults.mk
       run: |
         cd openwrt
-        [ -e $GITHUB_WORKSPACE/$FEEDS_CONF ] && mv $GITHUB_WORKSPACE/$FEEDS_CONF ./feeds.conf.default
-        chmod +x $GITHUB_WORKSPACE/$DIY_P1_SH
+        sed -i "s/\$(MKHASH) md5/echo \"${LATEST_HASH}\"/g" include/kernel-defaults.mk
+    - name: Loading custom sources (diy-part1.sh)
+      run: |
+        [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
+        chmod +x $DIY_P1_SH
+        cd openwrt
         $GITHUB_WORKSPACE/$DIY_P1_SH
+    - name: Update and install feeds
+      run: |
+        cd openwrt
         ./scripts/feeds update -a
         ./scripts/feeds install -a
-        [ -e $GITHUB_WORKSPACE/$CONFIG_FILE ] && mv $GITHUB_WORKSPACE/$CONFIG_FILE ./.config
-        [ -e $GITHUB_WORKSPACE/files ] && mv $GITHUB_WORKSPACE/files ./files
+    - name: Loading Custom Configurations
+      run: |
+        [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
+        [ -e files ] && mv ./files openwrt/files
+        cd openwrt
         echo "--- Injecting config for ${{ matrix.name }} ---"
+        # eval will execute the command string from device_config
         eval "${{ matrix.device_config }}"
         echo "---------------------------------------------"
         chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
         $GITHUB_WORKSPACE/$DIY_P2_SH
         make defconfig
-
-    - name: Cache Build tools and results
-      uses: actions/cache@v4
-      with:
-        path: |
-          openwrt/staging_dir
-          openwrt/build_dir
-        key: ${{ runner.os }}-${{ matrix.arch }}-build-${{ hashFiles('openwrt/.config') }}-${{ hashFiles('openwrt/feeds.conf.default') }}
-        restore-keys: |
-          ${{ runner.os }}-${{ matrix.arch }}-build-
-    # ===================== CACHING END =====================
-
+    - name: Show final config
+      run: |
+        echo "::group::Final .config for ${{ matrix.name }}"
+        cat openwrt/.config
+        echo "::endgroup::"
     - name: Download Software Packages
       id: package
-      # Run download only if the 'dl' cache was not restored
-      if: steps.cache-dl.outputs.cache-hit != 'true'
       run: |
         cd openwrt
         make download -j$(nproc)
         find dl -size -1024c -exec rm -f {} \;
-
     - name: Compile Firmware
       id: compile
       run: |
@@ -199,12 +203,16 @@ jobs:
           echo "device-name=$(cat DEVICE_NAME)" >> $GITHUB_OUTPUT
         fi
         echo "file-date=$(date +"%Y%m%d%H%M")" >> $GITHUB_OUTPUT
-        
-    # The rest of the workflow remains the same...
     - name: Inspection of space utilization
       if: (!cancelled())
       run: df -hT
 
+    - name: Cleanup build artifacts
+      if: success()
+      run: |
+        echo ">>> Очистка build_dir и staging_dir"
+        rm -rf openwrt/build_dir openwrt/staging_dir openwrt/tmp
+        df -h
     - name: Uploading the bin directory
       uses: actions/upload-artifact@main
       if: steps.compile.outputs.compile == 'success' && env.UPLOAD_BIN_DIR == 'true'
@@ -212,9 +220,54 @@ jobs:
         name: ${{ matrix.target }}_iWRT_bin${{ steps.compile.outputs.device-name }}_${{ steps.compile.outputs.file-date }}
         path: openwrt/bin
 
+    # ... Остальные шаги (upload firmware, release, etc.) без изменений ...
+    - name: Organize documents
+      id: organize
+      if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
+      run: |
+        cd openwrt/bin/targets/*/*
+        rm -rf packages
+        echo "FIRMWARE=$PWD" >> $GITHUB_ENV
+        echo "organize=success" >> $GITHUB_OUTPUT
+    - name: Uploading the firmware catalog
+      uses: actions/upload-artifact@main
+      if: steps.organize.outputs.organize == 'success' && !cancelled()
+      with:
+        name: ${{ matrix.target }}_iWRT_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+        path: ${{ env.FIRMWARE }}
+
+    - name: Generate Publishing Tags
+      id: tag
+      if: steps.compile.outputs.compile == 'success' && env.UPLOAD_RELEASE == 'true' && !cancelled()
+      run: |
+        echo "release_tag=${{ matrix.release_tag }}" >> $GITHUB_ENV
+        echo "release_tag=${{ matrix.release_tag }}" >> $GITHUB_OUTPUT
+        touch release.txt
+        echo "tag=success" >> $GITHUB_OUTPUT
+    - name: Upload Firmware to Release
+      uses: softprops/action-gh-release@v2
+      if: steps.tag.outputs.tag == 'success' && !cancelled()
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ env.release_tag }}
+        body_path: release.txt
+        files: ${{ env.FIRMWARE }}/*
+        prerelease: true
+        draft: false
+
     - name: Delete the workflow run
       uses: Mattraks/delete-workflow-runs@v2.0.6
       if: success() || failure()
       with:
         retain_days: 4
         keep_minimum_runs: 3
+
+    - name: Delete old version
+      uses: dev-drprasad/delete-older-releases@v0.3.4
+      if: steps.tag.outputs.tag == 'success' && !cancelled()
+      with:
+        keep_latest: 3
+        delete_tags: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
