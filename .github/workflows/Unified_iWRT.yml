@@ -1,10 +1,10 @@
 #
-# Unified Build Workflow for ImmortalWRT
+# Unified Build Workflow for ImmortalWRT (Corrected Version)
 #
 # This single file replaces multiple-duplicated workflow files by using a build matrix.
-# It allows building firmware for all supported devices in parallel or selecting a specific one for a manual run.
+# It dynamically filters the matrix based on user input to avoid running unnecessary jobs.
 #
-# Author: AI Assistant based on user's files
+# Author: AI Assistant (Corrected by user feedback)
 #
 
 name: Unified iWRT
@@ -42,135 +42,70 @@ env:
   TZ: Europe/Moscow
 
 jobs:
+  # This setup job determines which matrix configurations to run
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - id: set-matrix
+        run: |
+          # The full matrix definition in JSON format
+          JSON_MATRIX='{
+            "include": [
+              {
+                "target": "slateax",
+                "name": "GL.iNet Slate AX (AXT1800)",
+                "kernel_path": "qualcommax/ipq60xx",
+                "release_tag": "Slate_GL-AXT1800",
+                "device_config": "sed -i '\''/fdisk/d'\'' ./.config\nsed -i '\''/partx-utils/d'\'' ./.config\nsed -i '\''/fitblk/d'\'' ./.config\nsed -i '\''/kmod-crypto-hw-safexcel/d'\'' ./.config\necho '\''CONFIG_TARGET_qualcommax=y'\'' >> ./.config\necho '\''CONFIG_TARGET_qualcommax_ipq60xx=y'\'' >> ./.config\necho '\''CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_glinet_gl-axt1800=y'\'' >> ./.config\necho '\''CONFIG_TARGET_PROFILE=\"DEVICE_glinet_gl-axt1800\"'\'' >> ./.config\necho '\''CONFIG_TARGET_ARCH_PACKAGES=\"aarch64_cortex-a53\"'\'' >> ./.config\necho '\''CONFIG_PACKAGE_kmod-qcom-qmi-helpers=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_kmod-cfg80211=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_kmod-mac80211=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_kmod-qca-ssdk=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_kmod-usb-dwc3-qcom=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_kmod-ath=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_ath11k-firmware-ipq6018=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_ath11k-firmware-new-ipq6018=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_dosfstools=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_eip197-mini-firmware=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_fancontrol=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_ipq-wifi-glinet_gl-axt1800=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_kmod-ath11k-ahb=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_kmod-ath11k=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_kmod-hwmon-pwmfan=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_kmod-nft-fullcone=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_kmod-qca-nss-dp=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_kmod-qrtr=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_kmod-qrtr-mhi=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_kmod-qrtr-smd=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_kmod-qrtr-tun=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_kmod-usb-dwc3-qcom=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_kmod-usb-dwc3=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_kmod-usb3=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_libiwinfo=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_losetup=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_luci-app-fancontrol=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_luci-i18n-fancontrol-ru=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_luci-i18n-wifischedule-ru=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_nss-eip-firmware=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_nss-firmware-default=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_nss-firmware-ipq6018=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_wpad-basic-openssl=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_wpad-openssl=y'\'' >> ./.config"
+              },
+              {
+                "target": "nanopi-r5s",
+                "name": "FriendlyARM NanoPi R5S",
+                "kernel_path": "rockchip/armv8",
+                "release_tag": "iWRT_NanoPi-R5S",
+                "device_config": "echo '\''CONFIG_TARGET_rockchip=y'\'' >> ./.config\necho '\''CONFIG_TARGET_rockchip_armv8=y'\'' >> ./.config\necho '\''CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r5s=y'\'' >> ./.config\necho '\''CONFIG_TARGET_ARCH_PACKAGES=\"aarch64_generic\"'\'' >> ./.config\necho '\''CONFIG_TARGET_ROOTFS_PARTSIZE=512'\'' >> ./.config\necho '\''CONFIG_TARGET_IMAGES_GZIP=y'\'' >> ./.config\necho '\''CONFIG_TARGET_ROOTFS_SQUASHFS=y'\'' >> ./.config\necho '\''# CONFIG_TARGET_ROOTFS_EXT4FS is not set'\'' >> ./.config\necho '\''CONFIG_PACKAGE_kmod-r8125=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_kmod-r8169=n'\'' >> ./.config\necho '\''CONFIG_PACKAGE_resize2fs=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_losetup=y'\'' >> ./.config"
+              },
+              {
+                "target": "ax59u",
+                "name": "ASUS RT-AX59U",
+                "kernel_path": "mediatek/filogic",
+                "release_tag": "iWRT_AX59U",
+                "device_config": "sed -i '\''/fdisk/d'\'' ./.config\nsed -i '\''/partx-utils/d'\'' ./.config\nsed -i '\''/fitblk/d'\'' ./.config\nsed -i '\''/kmod-crypto-hw-safexcel/d'\'' ./.config\necho '\''CONFIG_TARGET_mediatek=y'\'' >> ./.config\necho '\''CONFIG_TARGET_mediatek_filogic=y'\'' >> ./.config\necho '\''CONFIG_TARGET_mediatek_filogic_DEVICE_asus_rt-ax59u=y'\'' >> ./.config\necho '\''CONFIG_TARGET_ARCH_PACKAGES=\"aarch64_cortex-a53\"'\'' >> ./.config\necho '\''CONFIG_PACKAGE_fitblk=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_kmod-crypto-hw-safexcel=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_kmod-usb3=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_kmod-mt7915e=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_kmod-mt7986-firmware=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_mt7986-wo-firmware=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_wifischedule=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_luci-app-wifischedule=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_luci-i18n-wifischedule-ru=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_facinstall=y'\'' >> ./.config"
+              },
+              {
+                "target": "brume2",
+                "name": "GL.iNet Brume 2 (MT2500)",
+                "kernel_path": "mediatek/filogic",
+                "release_tag": "iWRT_Brume2",
+                "device_config": "sed -i '\''/fdisk/d'\'' ./.config\nsed -i '\''/partx-utils/d'\'' ./.config\nsed -i '\''/fitblk/d'\'' ./.config\nsed -i '\''/kmod-crypto-hw-safexcel/d'\'' ./.config\necho '\''CONFIG_TARGET_mediatek=y'\'' >> ./.config\necho '\''CONFIG_TARGET_mediatek_filogic=y'\'' >> ./.config\necho '\''CONFIG_TARGET_mediatek_filogic_DEVICE_glinet_gl-mt2500=y'\'' >> ./.config\necho '\''CONFIG_TARGET_ARCH_PACKAGES=\"aarch64_cortex-a53\"'\'' >> ./.config\necho '\''CONFIG_PACKAGE_fitblk=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_kmod-crypto-hw-safexcel=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_kmod-usb3=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_eip197-mini-firmware=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_kmod-mt7981-firmware=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_mt7981-wo-firmware=y'\'' >> ./.config\necho '\''CONFIG_PACKAGE_kmod-mt76=m'\'' >> ./.config"
+              }
+            ]
+          }'
+          
+          # Filter the matrix based on the input
+          if [ "${{ github.event.inputs.target }}" == "all" ]; then
+            echo "matrix=$JSON_MATRIX" >> $GITHUB_OUTPUT
+          else
+            # Use jq to filter the JSON for the selected target
+            FILTERED_MATRIX=$(echo "$JSON_MATRIX" | jq --arg TARGET "${{ github.event.inputs.target }}" '{include: [.include[] | select(.target == $TARGET)]}')
+            echo "matrix=$FILTERED_MATRIX" >> $GITHUB_OUTPUT
+          fi
+
   build:
+    needs: setup
     runs-on: ubuntu-22.04
     permissions:
       contents: write
       actions: write
 
-    # The Matrix Strategy: Defines all device-specific parameters.
-    # To add a new device, just add a new block to the 'include' section.
+    # The strategy now uses the dynamically generated matrix from the 'setup' job
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - target: slateax
-            name: "GL.iNet Slate AX (AXT1800)"
-            kernel_path: "qualcommax/ipq60xx"
-            release_tag: "Slate_GL-AXT1800"
-            device_config: |
-              sed -i '/fdisk/d' ./.config
-              sed -i '/partx-utils/d' ./.config
-              sed -i '/fitblk/d' ./.config
-              sed -i '/kmod-crypto-hw-safexcel/d' ./.config
-              echo 'CONFIG_TARGET_qualcommax=y' >> ./.config
-              echo 'CONFIG_TARGET_qualcommax_ipq60xx=y' >> ./.config
-              echo 'CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_glinet_gl-axt1800=y' >> ./.config
-              echo 'CONFIG_TARGET_PROFILE="DEVICE_glinet_gl-axt1800"' >> ./.config
-              echo 'CONFIG_TARGET_ARCH_PACKAGES="aarch64_cortex-a53"' >> ./.config
-              echo 'CONFIG_PACKAGE_kmod-qcom-qmi-helpers=y' >> ./.config
-              echo 'CONFIG_PACKAGE_kmod-cfg80211=y' >> ./.config
-              echo 'CONFIG_PACKAGE_kmod-mac80211=y' >> ./.config
-              echo 'CONFIG_PACKAGE_kmod-qca-ssdk=y' >> ./.config
-              echo 'CONFIG_PACKAGE_kmod-usb-dwc3-qcom=y' >> ./.config
-              echo 'CONFIG_PACKAGE_kmod-ath=y' >> ./.config
-              echo 'CONFIG_PACKAGE_ath11k-firmware-ipq6018=y' >> ./.config
-              echo 'CONFIG_PACKAGE_ath11k-firmware-new-ipq6018=y' >> ./.config
-              echo 'CONFIG_PACKAGE_dosfstools=y' >> ./.config
-              echo 'CONFIG_PACKAGE_eip197-mini-firmware=y' >> ./.config
-              echo 'CONFIG_PACKAGE_fancontrol=y' >> ./.config
-              echo 'CONFIG_PACKAGE_ipq-wifi-glinet_gl-axt1800=y' >> ./.config
-              echo 'CONFIG_PACKAGE_kmod-ath11k-ahb=y' >> ./.config
-              echo 'CONFIG_PACKAGE_kmod-ath11k=y' >> ./.config
-              echo 'CONFIG_PACKAGE_kmod-hwmon-pwmfan=y' >> ./.config
-              echo 'CONFIG_PACKAGE_kmod-nft-fullcone=y' >> ./.config
-              echo 'CONFIG_PACKAGE_kmod-qca-nss-dp=y' >> ./.config
-              echo 'CONFIG_PACKAGE_kmod-qrtr=y' >> ./.config
-              echo 'CONFIG_PACKAGE_kmod-qrtr-mhi=y' >> ./.config
-              echo 'CONFIG_PACKAGE_kmod-qrtr-smd=y' >> ./.config
-              echo 'CONFIG_PACKAGE_kmod-qrtr-tun=y' >> ./.config
-              echo 'CONFIG_PACKAGE_kmod-usb-dwc3-qcom=y' >> ./.config
-              echo 'CONFIG_PACKAGE_kmod-usb-dwc3=y' >> ./.config
-              echo 'CONFIG_PACKAGE_kmod-usb3=y' >> ./.config
-              echo 'CONFIG_PACKAGE_libiwinfo=y' >> ./.config
-              echo 'CONFIG_PACKAGE_losetup=y' >> ./.config
-              echo 'CONFIG_PACKAGE_luci-app-fancontrol=y' >> ./.config
-              echo 'CONFIG_PACKAGE_luci-i18n-fancontrol-ru=y' >> ./.config
-              echo 'CONFIG_PACKAGE_luci-i18n-wifischedule-ru=y' >> ./.config
-              echo 'CONFIG_PACKAGE_nss-eip-firmware=y' >> ./.config
-              echo 'CONFIG_PACKAGE_nss-firmware-default=y' >> ./.config
-              echo 'CONFIG_PACKAGE_nss-firmware-ipq6018=y' >> ./.config
-              echo 'CONFIG_PACKAGE_wpad-basic-openssl=y' >> ./.config
-              echo 'CONFIG_PACKAGE_wpad-openssl=y' >> ./.config
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
 
-          - target: nanopi-r5s
-            name: "FriendlyARM NanoPi R5S"
-            kernel_path: "rockchip/armv8"
-            release_tag: "iWRT_NanoPi-R5S"
-            device_config: |
-              echo 'CONFIG_TARGET_rockchip=y' >> ./.config
-              echo 'CONFIG_TARGET_rockchip_armv8=y' >> ./.config
-              echo 'CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r5s=y' >> ./.config
-              echo 'CONFIG_TARGET_ARCH_PACKAGES="aarch64_generic"' >> ./.config
-              echo 'CONFIG_TARGET_ROOTFS_PARTSIZE=512' >> ./.config
-              echo 'CONFIG_TARGET_IMAGES_GZIP=y' >> ./.config
-              echo 'CONFIG_TARGET_ROOTFS_SQUASHFS=y' >> ./.config
-              echo '# CONFIG_TARGET_ROOTFS_EXT4FS is not set' >> ./.config
-              echo 'CONFIG_PACKAGE_kmod-r8125=y' >> ./.config
-              echo 'CONFIG_PACKAGE_kmod-r8169=n' >> ./.config
-              echo 'CONFIG_PACKAGE_resize2fs=y' >> ./.config
-              echo 'CONFIG_PACKAGE_losetup=y' >> ./.config
-
-          - target: ax59u
-            name: "ASUS RT-AX59U"
-            kernel_path: "mediatek/filogic"
-            release_tag: "iWRT_AX59U"
-            device_config: |
-              sed -i '/fdisk/d' ./.config
-              sed -i '/partx-utils/d' ./.config
-              sed -i '/fitblk/d' ./.config
-              sed -i '/kmod-crypto-hw-safexcel/d' ./.config
-              echo 'CONFIG_TARGET_mediatek=y' >> ./.config
-              echo 'CONFIG_TARGET_mediatek_filogic=y' >> ./.config
-              echo 'CONFIG_TARGET_mediatek_filogic_DEVICE_asus_rt-ax59u=y' >> ./.config
-              echo 'CONFIG_TARGET_ARCH_PACKAGES="aarch64_cortex-a53"' >> ./.config
-              echo 'CONFIG_PACKAGE_fitblk=y' >> ./.config
-              echo 'CONFIG_PACKAGE_kmod-crypto-hw-safexcel=y' >> ./.config
-              echo 'CONFIG_PACKAGE_kmod-usb3=y' >> ./.config
-              echo 'CONFIG_PACKAGE_kmod-mt7915e=y' >> ./.config
-              echo 'CONFIG_PACKAGE_kmod-mt7986-firmware=y' >> ./.config
-              echo 'CONFIG_PACKAGE_mt7986-wo-firmware=y' >> ./.config
-              echo 'CONFIG_PACKAGE_wifischedule=y' >> ./.config
-              echo 'CONFIG_PACKAGE_luci-app-wifischedule=y' >> ./.config
-              echo 'CONFIG_PACKAGE_luci-i18n-wifischedule-ru=y' >> ./.config
-              echo 'CONFIG_PACKAGE_facinstall=y' >> ./.config
-
-          - target: brume2
-            name: "GL.iNet Brume 2 (MT2500)"
-            kernel_path: "mediatek/filogic"
-            release_tag: "iWRT_Brume2"
-            device_config: |
-              sed -i '/fdisk/d' ./.config
-              sed -i '/partx-utils/d' ./.config
-              sed -i '/fitblk/d' ./.config
-              sed -i '/kmod-crypto-hw-safexcel/d' ./.config
-              echo 'CONFIG_TARGET_mediatek=y' >> ./.config
-              echo 'CONFIG_TARGET_mediatek_filogic=y' >> ./.config
-              echo 'CONFIG_TARGET_mediatek_filogic_DEVICE_glinet_gl-mt2500=y' >> ./.config
-              echo 'CONFIG_TARGET_ARCH_PACKAGES="aarch64_cortex-a53"' >> ./.config
-              echo 'CONFIG_PACKAGE_fitblk=y' >> ./.config
-              echo 'CONFIG_PACKAGE_kmod-crypto-hw-safexcel=y' >> ./.config
-              echo 'CONFIG_PACKAGE_kmod-usb3=y' >> ./.config
-              echo 'CONFIG_PACKAGE_eip197-mini-firmware=y' >> ./.config
-              echo 'CONFIG_PACKAGE_kmod-mt7981-firmware=y' >> ./.config
-              echo 'CONFIG_PACKAGE_mt7981-wo-firmware=y' >> ./.config
-              echo 'CONFIG_PACKAGE_kmod-mt76=m' >> ./.config
-
-    # This name will be displayed in the GitHub Actions UI for each job in the matrix.
     name: Build for ${{ matrix.name }}
-
-    # Conditionally run the job based on manual selection.
-    if: (github.event.inputs.target == 'all' || github.event.inputs.target == matrix.target)
 
     steps:
     - name: Free up disk space
@@ -209,7 +144,6 @@ jobs:
     - name: Get Latest Kernel Hash
       id: get_hash
       run: |
-        # Using matrix.kernel_path to build the dynamic URL
         KERNEL_LIST=$(curl -s https://immortalwrt.kyarucloud.moe/snapshots/targets/${{ matrix.kernel_path }}/kmods/ | grep -oE '6\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+')
         LATEST_HASH=$(echo "$KERNEL_LIST" | while read -r line; do
             version=$(echo "$line" | cut -d'-' -f1)
@@ -241,19 +175,15 @@ jobs:
 
     - name: Loading Custom Configurations
       run: |
-        # Copy shared config file first
         [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
-        # Copy custom files
         [ -e files ] && mv ./files openwrt/files
         cd openwrt
-        # Inject device-specific config from the matrix
         echo "--- Injecting config for ${{ matrix.name }} ---"
-        echo "${{ matrix.device_config }}" >> ./.config
+        # The device_config is now a single-line string with escaped newlines, so we use eval
+        eval "${{ matrix.device_config }}"
         echo "---------------------------------------------"
-        # Run diy-part2.sh
         chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
         $GITHUB_WORKSPACE/$DIY_P2_SH
-        # Finalize config
         make defconfig
 
     - name: Show final config
@@ -303,9 +233,6 @@ jobs:
         name: ${{ matrix.target }}_iWRT_bin${{ steps.compile.outputs.device-name }}_${{ steps.compile.outputs.file-date }}
         path: openwrt/bin
 
-    # The steps for 'Organize documents', 'Upload Firmware', and 'Release' are left here.
-    # They are disabled by default (UPLOAD_FIRMWARE/UPLOAD_RELEASE = false).
-    # If enabled, they will work correctly for each device in the matrix.
     - name: Organize documents
       id: organize
       if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
