@@ -11,10 +11,6 @@ echo 'CONFIG_TARGET_ARCH_PACKAGES="aarch64_generic"' >> ./.config
 echo 'CONFIG_TARGET_ROOTFS_PARTSIZE=512' >> ./.config
 echo 'CONFIG_TARGET_IMAGES_GZIP=y' >> ./.config
 echo 'CONFIG_TARGET_ROOTFS_SQUASHFS=y' >> ./.config
-echo '# CONFIG_TARGET_ROOTFS_EXT4FS is not set' >> ./.config
-echo '# CONFIG_TARGET_ROOTFS_JFFS2 is not set' >> ./.config
-echo '# CONFIG_TARGET_ROOTFS_UBIFS is not set' >> ./.config
-echo '# CONFIG_TARGET_ROOTFS_TARGZ is not set' >> ./.config
 echo 'CONFIG_PACKAGE_kmod-r8125=y' >> ./.config
 echo 'CONFIG_PACKAGE_kmod-r8169=n' >> ./.config
 echo 'CONFIG_PACKAGE_resize2fs=y' >> ./.config
