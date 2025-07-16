@@ -1,5 +1,6 @@
 #!/bin/bash
-
+#
+sed -i 's/^CONFIG_PACKAGE_kmod-r8125=y$/CONFIG_PACKAGE_kmod-r8125-rss=y/' openwrt/.config
 #
 mkdir ./package/luci-app-homeproxy
 mkdir ./package/luci-app-log-viewer
