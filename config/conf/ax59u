@@ -4,8 +4,6 @@ KERNEL_PATH="mediatek/filogic"
 RELEASE_TAG="iWRT_AX59U"
 
 DEVICE_CONFIG_COMMANDS=$(cat <<'EOF'
-sed -i "/fdisk/d" ./.config
-sed -i "/partx-utils/d" ./.config
 sed -i "/fitblk/d" ./.config
 sed -i "/kmod-crypto-hw-safexcel/d" ./.config
 echo "CONFIG_TARGET_mediatek=y" >> ./.config
