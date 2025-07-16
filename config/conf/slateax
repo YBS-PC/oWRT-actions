@@ -5,10 +5,6 @@ RELEASE_TAG="Slate_GL-AXT1800"
 
 # Многострочная переменная с командами для .config
 DEVICE_CONFIG_COMMANDS=$(cat <<'EOF'
-sed -i "/fdisk/d" ./.config
-sed -i "/partx-utils/d" ./.config
-sed -i "/fitblk/d" ./.config
-sed -i "/kmod-crypto-hw-safexcel/d" ./.config
 echo "CONFIG_TARGET_qualcommax=y" >> ./.config
 echo "CONFIG_TARGET_qualcommax_ipq60xx=y" >> ./.config
 echo 'CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_glinet_gl-axt1800=y' >> ./.config
