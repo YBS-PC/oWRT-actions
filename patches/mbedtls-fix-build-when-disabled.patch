@@ -1,0 +1,15 @@
+--- a/package/libs/mbedtls/Makefile
++++ b/package/libs/mbedtls/Makefile
+@@ -137,6 +137,7 @@ CMAKE_OPTIONS += \
+ 	-DENABLE_TESTING:Bool=OFF \
+ 	-DENABLE_PROGRAMS:Bool=ON
+ 
++ifeq ($(CONFIG_PACKAGE_libmbedtls),y)
+ define Build/Configure
+ 	$(call Build/Configure/Default,)
+ 	$(foreach opt,$(MBEDTLS_BUILD_OPTS),
+@@ -144,6 +145,7 @@ define Build/Configure
+ 		-f $(PKG_BUILD_DIR)/include/mbedtls/mbedtls_config.h \
+ 		$(if $($(opt)),set,unset) $(patsubst CONFIG_%,%,$(opt)))
+ endef
++endif
