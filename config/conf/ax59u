@@ -20,5 +20,6 @@ echo 'CONFIG_PACKAGE_wifischedule=y' >> ./.config
 echo 'CONFIG_PACKAGE_luci-app-wifischedule=y' >> ./.config
 echo 'CONFIG_PACKAGE_luci-i18n-wifischedule-ru=y' >> ./.config
 echo 'CONFIG_PACKAGE_facinstall=y' >> ./.config
+echo 'CONFIG_PACKAGE_wpad-openssl=y' >> ./.config
 EOF
 )
