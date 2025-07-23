@@ -122,6 +122,20 @@ jobs:
         git clone --branch $REPO_BRANCH $REPO_URL openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
+    - name: Apply custom patches
+      run: |
+        cd openwrt
+        # Проверяем, существуют ли вообще патчи, чтобы не вызывать ошибку
+        if [ -d "${{ github.workspace }}/patches" ] && [ -n "$(ls -A ${{ github.workspace }}/patches/*.patch 2>/dev/null)" ]; then
+          echo ">>> Applying custom patches..."
+          for p in ${{ github.workspace }}/patches/*.patch; do
+            echo "Applying patch: $(basename "$p")"
+            patch -p1 < "$p"
+          done
+        else
+          echo ">>> No custom patches found to apply."
+        fi
+    
     - name: Prepare build environment
       run: |
         cd openwrt
