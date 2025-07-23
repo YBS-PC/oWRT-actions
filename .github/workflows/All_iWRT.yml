@@ -125,7 +125,7 @@ jobs:
     - name: Apply build fix patch
       run: |
         cd openwrt
-        patch -p1 < ./patches/mbedtls-disabled.patch
+        patch -p1 < ${{ github.workspace }}/patches/mbedtls-disabled.patch
     
     - name: Prepare build environment
       run: |
