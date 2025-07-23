@@ -139,6 +139,8 @@ jobs:
         echo "--- Injecting config for ${{ env.TARGET_NAME }} ---"
         eval "$DEVICE_CONFIG_COMMANDS"
         echo "---------------------------------------------------------"
+        sed -i '/mbedTLS/Id' openwrt/.config
+        #
         chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
         $GITHUB_WORKSPACE/$DIY_P2_SH
         make defconfig
