@@ -18,8 +18,8 @@
 # rm -rf feeds.conf.default
 # touch feeds.conf.default
 #
-echo "src-git youtubeUnblock https://github.com/Waujito/youtubeUnblock.git;openwrt" >> feeds.conf.default
-echo "src-git internetdetector https://github.com/gSpotx2f/luci-app-internet-detector.git" >> feeds.conf.default
+echo -e "\nsrc-git youtubeUnblock https://github.com/Waujito/youtubeUnblock.git;openwrt" >> feeds.conf.default
+echo -e "\nsrc-git internetdetector https://github.com/gSpotx2f/luci-app-internet-detector.git" >> feeds.conf.default
 #echo "src-git mihomo https://github.com/morytyann/OpenWrt-mihomo.git;main" >> feeds.conf.default
 #echo "src-git luciappxray https://github.com/yichya/luci-app-xray.git" >> feeds.conf.default
 #echo "src-git argon https://github.com/jerrykuku/luci-theme-argon.git" >> feeds.conf.default
