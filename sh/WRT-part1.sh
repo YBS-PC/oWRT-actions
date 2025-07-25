@@ -23,9 +23,9 @@
 # echo 'src-git small https://github.com/kenzok8/small' >> feeds.conf.default
 # echo 'src-git smoothwan https://github.com/SmoothWAN/SmoothWAN-feeds' >> feeds.conf.default
 #
-echo "src-git youtubeUnblock https://github.com/Waujito/youtubeUnblock.git;openwrt" >> feeds.conf.default
-echo "src-git fancontrol https://github.com/JiaY-shi/fancontrol.git" >> feeds.conf.default
-echo "src-git internetdetector https://github.com/gSpotx2f/luci-app-internet-detector.git" >> feeds.conf.default
+echo -e "\nsrc-git youtubeUnblock https://github.com/Waujito/youtubeUnblock.git;openwrt" >> feeds.conf.default
+echo -e "\nsrc-git fancontrol https://github.com/JiaY-shi/fancontrol.git" >> feeds.conf.default
+echo -e "\nsrc-git internetdetector https://github.com/gSpotx2f/luci-app-internet-detector.git" >> feeds.conf.default
 #echo "src-git logviewer https://github.com/gSpotx2f/luci-app-log.git" >> feeds.conf.default
 #echo "src-git logviewer https://github.com/fantastic-packages/packages/blob/master/feeds/luci/luci-app-log-viewer" >> feeds.conf.default
 #echo "src-git fantastic https://github.com/fantastic-packages/fantastic-packages-feeds.git" >> feeds.conf.default
