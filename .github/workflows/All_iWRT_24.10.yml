@@ -10,7 +10,6 @@ on:
         type: choice
         options:
           - all
-          - slateax
           - nanopi-r5s
           - ax59u
           - brume2
@@ -38,7 +37,7 @@ jobs:
         run: |
           # The list of all possible targets.
           # This must match the filenames in the ./configs directory.
-          targets="slateax nanopi-r5s ax59u brume2"
+          targets="nanopi-r5s ax59u brume2"
           
           # If 'all' is selected, include all targets. Otherwise, use the selected one.
           if [ "${{ github.event.inputs.target }}" == "all" ]; then
