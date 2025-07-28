@@ -232,7 +232,7 @@ jobs:
       uses: actions/upload-artifact@main
       if: steps.compile.outputs.compile == 'success' && env.UPLOAD_BIN_DIR == 'true'
       with:
-        name: ${{ matrix.target }}_iWRT${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+        name: ${{ matrix.target }}_iWRT_24_10${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: openwrt/bin
     
     # ... Остальные шаги (upload, release, delete) ...
