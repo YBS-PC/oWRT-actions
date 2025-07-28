@@ -16,7 +16,6 @@ on:
 
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt.git
-  #REPO_BRANCH: master
   REPO_BRANCH: openwrt-24.10
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: ./config/WRT.config
@@ -152,6 +151,11 @@ jobs:
         [ -e $GITHUB_WORKSPACE/files ] && cp -r $GITHUB_WORKSPACE/files ./
         echo "--- Injecting config for ${{ env.TARGET_NAME }} ---"
         eval "$DEVICE_CONFIG_COMMANDS"
+        echo "-------------------------opkg----------------------------"
+        sed -i '/apk-openssl/d' ./.config
+        echo 'CONFIG_PACKAGE_luci-lib-ipkg=y' >> ./.config
+        echo 'CONFIG_PACKAGE_opkg=y' >> ./.config
+        echo 'CONFIG_PACKAGE_luci-app-package-manager=y' >> ./.config
         echo "---------------------------------------------------------"
         chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
         $GITHUB_WORKSPACE/$DIY_P2_SH
@@ -168,7 +172,6 @@ jobs:
       run: |
         cd openwrt
         echo ">>> Getting latest kernel hash for ${{ env.KERNEL_PATH }}"
-        #KERNEL_LIST=$(curl -s https://immortalwrt.kyarucloud.moe/snapshots/targets/${{ env.KERNEL_PATH }}/kmods/ | grep -oE '6\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+')
         KERNEL_LIST=$(curl -s https://immortalwrt.kyarucloud.moe/releases/24.10.2/targets/${{ env.KERNEL_PATH }}/kmods/ | grep -oE '6\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+')
         LATEST_HASH=$(echo "$KERNEL_LIST" | while read -r line; do
             version=$(echo "$line" | cut -d'-' -f1)
