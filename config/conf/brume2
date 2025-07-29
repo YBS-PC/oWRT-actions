@@ -4,8 +4,6 @@ KERNEL_PATH="mediatek/filogic"
 RELEASE_TAG="iWRT_Brume2"
 
 DEVICE_CONFIG_COMMANDS=$(cat <<'EOF'
-sed -i "/fitblk/d" ./.config
-sed -i "/kmod-crypto-hw-safexcel/d" ./.config
 echo "CONFIG_TARGET_mediatek=y" >> ./.config
 echo "CONFIG_TARGET_mediatek_filogic=y" >> ./.config
 echo "CONFIG_TARGET_mediatek_filogic_DEVICE_glinet_gl-mt2500=y" >> ./.config
@@ -16,6 +14,5 @@ echo 'CONFIG_PACKAGE_kmod-usb3=y' >> ./.config
 echo 'CONFIG_PACKAGE_eip197-mini-firmware=y' >> ./.config
 echo 'CONFIG_PACKAGE_kmod-mt7981-firmware=y' >> ./.config
 echo 'CONFIG_PACKAGE_mt7981-wo-firmware=y' >> ./.config
-echo 'CONFIG_PACKAGE_kmod-mt76=m' >> ./.config
 EOF
 )
