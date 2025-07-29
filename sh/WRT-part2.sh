@@ -1,7 +1,6 @@
 #!/bin/bash
 #
-sed -i '/CONFIG_PACKAGE.*bind/Id' ./.config
-sed -i '/CONFIG.*BIND/Id' ./.config
+sed -i '/CONFIG_BIND/Id' ./.config
 #
 mkdir ./package/luci-app-log-viewer
 mkdir ./package/zapret-openwrt
