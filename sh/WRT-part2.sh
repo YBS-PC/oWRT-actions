@@ -10,11 +10,11 @@ BLACKLIST=(
     zabbix
     mbedtls
     autocore
-    automount
     block-mount
     bridger
-    cpufreq
     default-settings-chn
+    cpufreq
+    automount
 )
 
 for pkg in "${BLACKLIST[@]}"; do
