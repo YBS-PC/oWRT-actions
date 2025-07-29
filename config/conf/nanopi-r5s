@@ -11,10 +11,10 @@ echo 'CONFIG_TARGET_ARCH_PACKAGES="aarch64_generic"' >> ./.config
 echo 'CONFIG_TARGET_ROOTFS_PARTSIZE=512' >> ./.config
 echo 'CONFIG_TARGET_IMAGES_GZIP=y' >> ./.config
 echo 'CONFIG_TARGET_ROOTFS_SQUASHFS=y' >> ./.config
+echo 'CONFIG_PACKAGE_losetup=y' >> ./.config
 echo 'CONFIG_PACKAGE_kmod-r8125=y' >> ./.config
 sed -i "/kmod-r8169/Id" ./.config
 echo 'CONFIG_PACKAGE_kmod-r8169=n' >> ./.config
 echo 'CONFIG_PACKAGE_resize2fs=y' >> ./.config
-echo 'CONFIG_PACKAGE_losetup=y' >> ./.config
 EOF
 )
