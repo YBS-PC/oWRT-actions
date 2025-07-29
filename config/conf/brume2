@@ -8,11 +8,11 @@ echo "CONFIG_TARGET_mediatek=y" >> ./.config
 echo "CONFIG_TARGET_mediatek_filogic=y" >> ./.config
 echo "CONFIG_TARGET_mediatek_filogic_DEVICE_glinet_gl-mt2500=y" >> ./.config
 echo 'CONFIG_TARGET_ARCH_PACKAGES="aarch64_cortex-a53"' >> ./.config
+echo 'CONFIG_PACKAGE_eip197-mini-firmware=y' >> ./.config
 echo 'CONFIG_PACKAGE_fitblk=y' >> ./.config
 echo 'CONFIG_PACKAGE_kmod-crypto-hw-safexcel=y' >> ./.config
-echo 'CONFIG_PACKAGE_kmod-usb3=y' >> ./.config
-echo 'CONFIG_PACKAGE_eip197-mini-firmware=y' >> ./.config
 echo 'CONFIG_PACKAGE_kmod-mt7981-firmware=y' >> ./.config
+echo 'CONFIG_PACKAGE_kmod-usb3=y' >> ./.config
 echo 'CONFIG_PACKAGE_mt7981-wo-firmware=y' >> ./.config
 EOF
 )
