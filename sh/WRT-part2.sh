@@ -1,4 +1,5 @@
 #!/bin/bash
+#
 sed -i '/CONFIG_PACKAGE.*bind/Id' ./.config
 sed -i '/CONFIG.*BIND/Id' ./.config
 #
