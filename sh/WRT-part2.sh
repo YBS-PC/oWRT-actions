@@ -2,7 +2,8 @@
 #
 echo ">>> Force-disabling unwanted packages..."
 # Список пакетов, которые нужно принудительно отключить.
-# Просто добавляйте новые имена пакетов в этот список.
+# apk-mbedtls libmbedtls libwolfssl libustream-mbedtls wpad-basic-mbedtls mbedtls-util
+# autocore automount block-mount bridger cpufreq luci-app-cpufreq default-settings-chn 
 BLACKLIST=(
     bind
     wolfssl
