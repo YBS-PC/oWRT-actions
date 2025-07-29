@@ -16,7 +16,7 @@
 ##    cpufreq
 ##    automount
 ##)
-
+##
 ##for pkg in "${BLACKLIST[@]}"; do
 ##    # Удаляем все существующие строки для этого пакета (с любым значением) sed -i -e "/CONFIG_PACKAGE_.*${pkg}/Id" -e "/CONFIG_.*${pkg}/Id" ./.config
 ##    sed -i "/CONFIG_PACKAGE_.*${pkg}/Id" ./.config
