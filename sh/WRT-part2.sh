@@ -1,6 +1,28 @@
 #!/bin/bash
 #
-sed -i '/CONFIG_BIND/Id' ./.config
+echo ">>> Force-disabling unwanted packages..."
+# Список пакетов, которые нужно принудительно отключить.
+# Просто добавляйте новые имена пакетов в этот список.
+BLACKLIST=(
+    bind
+    wolfssl
+    zabbix
+    mbedtls
+    autocore
+    automount
+    block-mount
+    bridger
+    cpufreq
+    default-settings-chn
+)
+
+for pkg in "${BLACKLIST[@]}"; do
+    # Удаляем все существующие строки для этого пакета (с любым значением)
+    sed -i "/CONFIG_PACKAGE_.*${pkg}/Id" ./.config
+    sed -i "/CONFIG_.*${pkg}/Id" ./.config
+    # Добавляем новую строку, которая явно отключает пакет
+    echo "# CONFIG_PACKAGE_${pkg} is not set" >> ./.config
+done
 #
 mkdir ./package/luci-app-log-viewer
 mkdir ./package/zapret-openwrt
