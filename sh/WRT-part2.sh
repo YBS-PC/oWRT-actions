@@ -1,25 +1,19 @@
 #!/bin/bash
 #
 ##echo ">>> Force-disabling unwanted packages..."
-# Список пакетов, которые нужно принудительно отключить.
+# Список пакетов, которые нужно принудительно отключить. Например:
 # apk-mbedtls libmbedtls libwolfssl libustream-mbedtls wpad-basic-mbedtls mbedtls-util
 # autocore automount block-mount bridger cpufreq luci-app-cpufreq default-settings-chn 
 ##BLACKLIST=(
 ##    bind
-##    wolfssl
-##    zabbix
-##    mbedtls
-##    autocore
-##    block-mount
-##    bridger
-##    default-settings-chn
-##    cpufreq
 ##    automount
+##    bridger
 ##)
 ##
 ##for pkg in "${BLACKLIST[@]}"; do
 ##    # Удаляем все существующие строки для этого пакета (с любым значением) sed -i -e "/CONFIG_PACKAGE_.*${pkg}/Id" -e "/CONFIG_.*${pkg}/Id" ./.config
-##    sed -i "/CONFIG_.*${pkg}/Id" ./.config
+##    sed -i "/CONFIG_${pkg}/Id" ./.config
+##    sed -i "/CONFIG_PACKAGE_${pkg}/Id" ./.config
 ##    # Добавляем новую строку, которая явно отключает пакет
 ##    echo "CONFIG_PACKAGE_${pkg}=n" >> ./.config
 ##done
