@@ -14,7 +14,8 @@ echo 'CONFIG_TARGET_ROOTFS_SQUASHFS=y' >> ./.config
 echo 'CONFIG_PACKAGE_losetup=y' >> ./.config
 echo 'CONFIG_PACKAGE_kmod-r8125=y' >> ./.config
 sed -i "/kmod-r8169/Id" ./.config
-echo 'CONFIG_PACKAGE_kmod-r8169=n' >> ./.config
+echo '# CONFIG_PACKAGE_r8169-firmware is not set' >> ./.config
+echo '# CONFIG_PACKAGE_kmod-r8169 is not set' >> ./.config
 echo 'CONFIG_PACKAGE_resize2fs=y' >> ./.config
 EOF
 )
