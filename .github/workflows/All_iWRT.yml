@@ -90,6 +90,20 @@ jobs:
     - name: Checkout
       uses: actions/checkout@main
 
+    - name: Ensure correct permissions for custom files
+      run: |
+        echo ">>> Setting permissions for custom files..."
+        if [ -d "./files/usr/bin" ]; then
+          chmod 755 ./files/usr/bin/*
+          echo "Permissions set for files in ./files/usr/bin/"
+          ls -l ./files/usr/bin
+        fi
+        if [ -d "./files/etc/uci-defaults" ]; then
+          find files/etc/uci-defaults/ -name "zz*" -type f -exec chmod 0755 {} \;
+          echo "Permissions set for files in ./files/etc/uci-defaults/"
+          ls -l ./files/etc/uci-defaults
+        fi
+
     - name: Load device configuration
       id: device_vars
       run: |
