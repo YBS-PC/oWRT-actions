@@ -199,14 +199,6 @@ jobs:
         echo ">>> Applying hash to kernel-defaults.mk"
         sed -i "s/\$(MKHASH) md5/echo \"${LATEST_HASH}\"/g" include/kernel-defaults.mk
 
-    - name: Fix permissions for custom uci-defaults files
-      run: |
-        cd openwrt
-        if [ -d "files/etc/uci-defaults" ]; then
-          echo ">>> Fixing permissions for custom uci-defaults zz* files"
-          find files/etc/uci-defaults/ -name "zz*" -type f -exec chmod 0755 {} \;
-        fi
-
     - name: Download toolchain and packages
       run: |
         cd openwrt
