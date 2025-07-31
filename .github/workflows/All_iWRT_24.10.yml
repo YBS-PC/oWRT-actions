@@ -89,6 +89,38 @@ jobs:
     - name: Checkout
       uses: actions/checkout@main
 
+    - name: Download and prepare latest AdGuardHome binary
+      run: |
+        echo ">>> Downloading latest AdGuardHome for arm64..."
+        
+        # 1. Скачиваем архив во временный файл
+        curl -L -o AdGuardHome_linux_arm64.tar.gz \
+          "https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_arm64.tar.gz"
+        
+        # 2. Распаковываем архив. Внутри будет директория AdGuardHome.
+        tar -xzf AdGuardHome_linux_arm64.tar.gz
+        
+        # 3. Создаем целевую директорию в нашей файловой системе для прошивки.
+        #    Ключ -p создает все родительские директории, если их нет.
+        mkdir -p ./files/usr/bin
+        
+        # 4. Копируем исполняемый файл AdGuardHome в нужное место.
+        #    Он находится внутри распакованной папки AdGuardHome.
+        echo ">>> Placing AdGuardHome binary into ./files/usr/bin/"
+        cp ./AdGuardHome/AdGuardHome ./files/usr/bin/
+        
+        # 5. Делаем файл исполняемым (КРИТИЧЕСКИ ВАЖНО!)
+        chmod +x ./files/usr/bin/AdGuardHome
+        
+        # 6. (Опционально) Проверяем, что все получилось
+        echo ">>> Verifying the file..."
+        ls -l ./files/usr/bin/AdGuardHome
+        
+        # 7. Очищаем временные файлы, чтобы не засорять рабочее пространство
+        rm -rf AdGuardHome_linux_arm64.tar.gz AdGuardHome
+        
+        echo ">>> Latest AdGuardHome binary is ready."
+
     - name: Load device configuration
       id: device_vars
       run: |
