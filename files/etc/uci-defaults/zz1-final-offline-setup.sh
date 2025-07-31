@@ -111,14 +111,14 @@ EOF
 #################### Установка всех пакетов из /root/apps/ ####################
 echo -e "\033[35mУстановка пакетов из локальной директории /root/apps/...\033[0m"
 
-echo -e "\033[35mУстановка speedtest от Ookla...\033[0m"
-if [ -f /root/apps/speedtest ]; then
-    cp /root/apps/speedtest /usr/bin/speedtest
-    chmod +x /usr/bin/speedtest
-    echo -e "\033[32mУстановлен speedtest от Ookla из /root/apps/\033[0m"
-else
-    echo -e "\033[33mФайл speedtest не найден в /root/apps/. Пропускаем установку.\033[0m"
-fi
+#echo -e "\033[35mУстановка speedtest от Ookla...\033[0m"
+#if [ -f /root/apps/speedtest ]; then
+#    cp /root/apps/speedtest /usr/bin/speedtest
+#    chmod +x /usr/bin/speedtest
+#    echo -e "\033[32mУстановлен speedtest от Ookla из /root/apps/\033[0m"
+#else
+#    echo -e "\033[33mФайл speedtest не найден в /root/apps/. Пропускаем установку.\033[0m"
+#fi
 
 echo -e "\033[35mУстановка AdGuardHome...\033[0m"
 if [ -f /root/apps/AdGuardHome ]; then
