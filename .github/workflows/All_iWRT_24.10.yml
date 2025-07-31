@@ -89,36 +89,30 @@ jobs:
     - name: Checkout
       uses: actions/checkout@main
 
+    - name: Ensure correct permissions for custom files
+      run: |
+        echo ">>> Setting permissions for custom files..."
+        if [ -d "./files/usr/bin" ]; then
+          chmod 755 ./files/usr/bin/*
+          echo "Permissions set for files in ./files/usr/bin/"
+          ls -l ./files/usr/bin
+        fi
+        if [ -d "./files/etc/uci-defaults" ]; then
+          find files/etc/uci-defaults/ -name "zz*" -type f -exec chmod 0755 {} \;
+          echo "Permissions set for files in ./files/etc/uci-defaults/"
+          ls -l ./files/etc/uci-defaults
+        fi
+
     - name: Download and prepare latest AdGuardHome binary
       run: |
         echo ">>> Downloading latest AdGuardHome for arm64..."
-        
-        # 1. Скачиваем архив во временный файл
         curl -L -o AdGuardHome_linux_arm64.tar.gz \
           "https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_arm64.tar.gz"
-        
-        # 2. Распаковываем архив. Внутри будет директория AdGuardHome.
         tar -xzf AdGuardHome_linux_arm64.tar.gz
-        
-        # 3. Создаем целевую директорию в нашей файловой системе для прошивки.
-        #    Ключ -p создает все родительские директории, если их нет.
         mkdir -p ./files/usr/bin
-        
-        # 4. Копируем исполняемый файл AdGuardHome в нужное место.
-        #    Он находится внутри распакованной папки AdGuardHome.
-        echo ">>> Placing AdGuardHome binary into ./files/usr/bin/"
         cp ./AdGuardHome/AdGuardHome ./files/usr/bin/
-        
-        # 5. Делаем файл исполняемым (КРИТИЧЕСКИ ВАЖНО!)
-        chmod +x ./files/usr/bin/AdGuardHome
-        
-        # 6. (Опционально) Проверяем, что все получилось
-        echo ">>> Verifying the file..."
-        ls -l ./files/usr/bin/AdGuardHome
-        
-        # 7. Очищаем временные файлы, чтобы не засорять рабочее пространство
+        chmod 755 ./files/usr/bin/AdGuardHome
         rm -rf AdGuardHome_linux_arm64.tar.gz AdGuardHome
-        
         echo ">>> Latest AdGuardHome binary is ready."
 
     - name: Load device configuration
@@ -220,14 +214,6 @@ jobs:
         echo "LATEST_HASH=${LATEST_HASH}" >> $GITHUB_ENV
         echo ">>> Applying hash to kernel-defaults.mk"
         sed -i "s/\$(MKHASH) md5/echo \"${LATEST_HASH}\"/g" include/kernel-defaults.mk
-
-    - name: Fix permissions for custom uci-defaults files
-      run: |
-        cd openwrt
-        if [ -d "files/etc/uci-defaults" ]; then
-          echo ">>> Fixing permissions for custom uci-defaults zz* files"
-          find files/etc/uci-defaults/ -name "zz*" -type f -exec chmod 0755 {} \;
-        fi
 
     - name: Download toolchain and packages
       run: |
