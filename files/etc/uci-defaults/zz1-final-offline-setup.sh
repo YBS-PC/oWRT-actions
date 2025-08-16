@@ -216,8 +216,8 @@ YTB_NFT_FILE_CONTENT=$(cat <<"EOF"
 #!/usr/sbin/nft -f
 # This file will be applied automatically for nftables <table> <chain> position <number> <condition> <action>
 
-# Drop (reject) UDP to dest port 443 to Google IPs
-add rule inet fw4 prerouting ip daddr @google_ips udp dport 443 reject with icmp port-unreachable
+# Drop (reject) UDP to dest port 443 to DPI IPs
+add rule inet fw4 prerouting ip daddr @dpi_ips udp dport 443 reject with icmp port-unreachable
 
 # DPI through youtubeUnblock
 add chain inet fw4 youtubeUnblock { type filter hook postrouting priority mangle - 1; policy accept; }
@@ -226,29 +226,11 @@ add chain inet fw4 youtubeUnblock { type filter hook postrouting priority mangle
 add rule inet fw4 youtubeUnblock meta mark 0x00000042 counter return
 
 # DPI through youtubeUnblock
-add rule inet fw4 youtubeUnblock ip daddr @aws_ips tcp dport 443 ct original packets < 20 counter queue num 537 bypass
-add rule inet fw4 youtubeUnblock ip daddr @google_ips tcp dport 443 ct original packets < 20 counter queue num 537 bypass
-add rule inet fw4 youtubeUnblock ip daddr @akamai_ips tcp dport 443 ct original packets < 20 counter queue num 537 bypass
-add rule inet fw4 youtubeUnblock ip daddr @cloudflare_ips tcp dport 443 ct original packets < 20 counter queue num 537 bypass
-#
 add rule inet fw4 youtubeUnblock ip daddr @dpi_ips tcp dport 443 ct original packets < 20 counter queue num 537 bypass
-#
-add rule inet fw4 youtubeUnblock ip daddr @cdn77_ips tcp dport 443 ct original packets < 20 counter queue num 537 bypass
-add rule inet fw4 youtubeUnblock ip daddr @fornex_ips tcp dport 443 ct original packets < 20 counter queue num 537 bypass
-add rule inet fw4 youtubeUnblock ip daddr @vultr_ips tcp dport 443 ct original packets < 20 counter queue num 537 bypass
-add rule inet fw4 youtubeUnblock ip daddr @facebook_ips tcp dport 443 ct original packets < 20 counter queue num 537 bypass
-#
-add rule inet fw4 youtubeUnblock ip daddr @facebook_ips meta l4proto udp ct original packets < 9 counter queue num 537 bypass
-#
+add rule inet fw4 youtubeUnblock ip daddr @dpi_ips meta l4proto udp ct original packets < 9 counter queue num 537 bypass
+
 # Skipping traffic with the label 0x8000
 insert rule inet fw4 output mark and 0x8000 == 0x8000 counter accept
-
-#--------------------------------------------------------------------------------------------------------------------------------------------
-# DEF #
-#add chain inet fw4 youtubeUnblock { type filter hook postrouting priority mangle - 1; policy accept; }
-#add rule inet fw4 youtubeUnblock tcp dport 443 ct original packets < 20 counter queue num 537 bypass
-#add rule inet fw4 youtubeUnblock meta l4proto udp ct original packets < 9 counter queue num 537 bypass
-#insert rule inet fw4 output mark and 0x8000 == 0x8000 counter accept
 EOF
 )
 
