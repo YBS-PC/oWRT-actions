@@ -237,7 +237,9 @@ add rule inet fw4 youtubeUnblock ip daddr @cdn77_ips tcp dport 443 ct original p
 add rule inet fw4 youtubeUnblock ip daddr @fornex_ips tcp dport 443 ct original packets < 20 counter queue num 537 bypass
 add rule inet fw4 youtubeUnblock ip daddr @vultr_ips tcp dport 443 ct original packets < 20 counter queue num 537 bypass
 add rule inet fw4 youtubeUnblock ip daddr @facebook_ips tcp dport 443 ct original packets < 20 counter queue num 537 bypass
-
+#
+add rule inet fw4 youtubeUnblock ip daddr @facebook_ips meta l4proto udp ct original packets < 9 counter queue num 537 bypass
+#
 # Skipping traffic with the label 0x8000
 insert rule inet fw4 output mark and 0x8000 == 0x8000 counter accept
 
