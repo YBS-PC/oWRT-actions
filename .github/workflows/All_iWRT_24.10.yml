@@ -181,7 +181,6 @@ jobs:
         sed -i '/apk-openssl/d' ./.config
         echo 'CONFIG_PACKAGE_luci-lib-ipkg=y' >> ./.config
         echo 'CONFIG_PACKAGE_opkg=y' >> ./.config
-        echo 'CONFIG_PACKAGE_luci-app-package-manager=y' >> ./.config
         echo "---------------------------------------------------------"
         chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
         $GITHUB_WORKSPACE/$DIY_P2_SH
