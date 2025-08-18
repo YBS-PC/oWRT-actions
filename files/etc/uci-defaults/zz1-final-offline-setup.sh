@@ -323,12 +323,12 @@ EOF
 
 # Настройка init.d/adguardhome
 sed -i \
--e 's|config_get config_file config config "/etc/adguardhome/adguardhome.yaml"|config_get config_file config configpath|' \
--e 's|config_get work_dir config workdir "/var/lib/adguardhome"|config_get work_dir config workdir|' \
--e 's|config_get pid_file config pidfile "/run/adguardhome.pid"|config_get log_file config logfile\
-	config_get pid_file config pidfile|' \
--e 's|config_get user config user adguardhome|config_get user config user|' \
--e 's|config_get group config group adguardhome|config_get group config group|' \
+-e 's|\tconfig_get config_file config config "/etc/adguardhome/adguardhome.yaml"|\tconfig_get config_file config configpath|' \
+-e 's|\tconfig_get work_dir config workdir "/var/lib/adguardhome"|\tconfig_get work_dir config workdir|' \
+-e 's|\tconfig_get pid_file config pidfile "/run/adguardhome.pid"|\tconfig_get log_file config logfile\
+\tconfig_get pid_file config pidfile|' \
+-e 's|\tconfig_get user config user adguardhome|\tconfig_get user config user|' \
+-e 's|\tconfig_get group config group adguardhome|\tconfig_get group config group|' \
 -e 's|mkdir -m 0700 -p|mkdir -m 0755 -p|g' \
 -e 's|--logfile syslog|--logfile "$log_file"|' \
 /etc/init.d/adguardhome
