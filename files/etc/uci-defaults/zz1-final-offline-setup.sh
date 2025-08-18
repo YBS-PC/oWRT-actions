@@ -301,24 +301,37 @@ echo -e "\033[35mНастройка и запуск AdGuardHome...\033[0m"
 
 /etc/init.d/adguardhome disable
 
+# Создание новой рабочей директории
+mkdir -p /opt/AdGuardHome
+
+# Установка прав доступа (поскольку теперь используется root)
+chown -R root:root /opt/AdGuardHome
+chmod 755 /opt/AdGuardHome
+
 echo -e "\033[36mНастройки для AdGuardHome...\033[0m"
-echo "config adguardhome config" > /etc/config/adguardhome
-echo -e "\toption enabled '1'" >> /etc/config/adguardhome
-echo -e "\toption workdir /opt/AdGuardHome" >> /etc/config/adguardhome
-echo -e "\toption configpath /etc/adguardhome.yaml" >> /etc/config/adguardhome
-echo -e "\toption logfile /var/AdGuardHome.log" >> /etc/config/adguardhome
+cat > /etc/config/adguardhome << 'EOF'
+config adguardhome 'config'
+	option enabled '1'
+	option workdir '/opt/AdGuardHome'
+	option configpath '/etc/adguardhome/adguardhome.yaml'
+	option logfile '/var/AdGuardHome.log'
+	option pidfile '/run/adguardhome.pid'
+	option user 'root'
+	option group 'root'
+	option verbose '0'
+EOF
 
 # Настройка init.d/adguardhome
-# sed -i 's/START=[0-9][0-9]/START=98/' /etc/init.d/adguardhome
-sed -i 's/config_get CONF.*/config_get CONF_FILE config configpath/' /etc/init.d/adguardhome
-sed -i '/config_get LOG/d' /etc/init.d/adguardhome
-sed -i '/config_get CONF/a\  config_get LOG_FILE config logfile' /etc/init.d/adguardhome
-sed -i '/config_get WORK_DIR/d' /etc/init.d/adguardhome
-sed -i '/config_get LOG/a\  config_get WORK_DIR config workdir' /etc/init.d/adguardhome
-sed -i '/procd_set_param command/d' /etc/init.d/adguardhome
-sed -i '/procd_open_instance/a\  procd_set_param command "$PROG" -c "$CONF_FILE" -w "$WORK_DIR" -l "$LOG_FILE" --no-check-update' /etc/init.d/adguardhome
-sed -i '/chmod -R 0777/d' /etc/init.d/adguardhome
-sed -i '/mkdir -m 0755/a\  chmod -R 0777 $WORK_DIR' /etc/init.d/adguardhome
+sed -i \
+-e 's|config_get config_file config config "/etc/adguardhome/adguardhome.yaml"|config_get config_file config configpath|' \
+-e 's|config_get work_dir config workdir "/var/lib/adguardhome"|config_get work_dir config workdir|' \
+-e 's|config_get pid_file config pidfile "/run/adguardhome.pid"|config_get log_file config logfile\
+	config_get pid_file config pidfile|' \
+-e 's|config_get user config user adguardhome|config_get user config user|' \
+-e 's|config_get group config group adguardhome|config_get group config group|' \
+-e 's|mkdir -m 0700 -p|mkdir -m 0755 -p|g' \
+-e 's|--logfile syslog|--logfile "$log_file"|' \
+/etc/init.d/adguardhome
 
 AGH_version=$(/usr/bin/AdGuardHome --version 2>/dev/null | grep -oP 'v?\K[\d.]+')
 echo -e "\033[33mУстановленная версия AGH: $AGH_version\033[0m"
