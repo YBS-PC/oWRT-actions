@@ -326,8 +326,13 @@ config adguardhome 'config'
 EOF
 
 # Настройка init.d/adguardhome
-sed -i '/config_get pid_file config pidfile/a \\tconfig_get log_file config logfile syslog' /etc/init.d/adguardhome
-sed -i 's/--logfile syslog/--logfile "$log_file"/' /etc/init.d/adguardhome
+if ! grep -q 'config_get log_file' /etc/init.d/adguardhome; then
+    echo "Строка 'config_get log_file' не найдена. Добавляю..."
+    sed -i '/config_get pid_file config pidfile/a \\tconfig_get log_file config logfile syslog' /etc/init.d/adguardhome
+	sed -i 's/--logfile syslog/--logfile "$log_file"/' /etc/init.d/adguardhome
+else
+    echo "Строка 'config_get log_file' уже существует. Пропускаю добавление."
+fi
 
 #sed -i \
 #-e 's|\tconfig_get config_file config config "/etc/adguardhome/adguardhome.yaml"|\tconfig_get config_file config configpath|' \
