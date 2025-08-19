@@ -112,19 +112,19 @@ EOF
 echo -e "\033[35mУстановка пакетов из локальной директории...\033[0m"
 
 echo -e "\033[35mУстановка sing-box...\033[0m"
-if [ -f /tmp/sing-box.tar.gz ]; then
+if [ -f /root/apps/sing-box.tar.gz ]; then
     /etc/init.d/sing-box stop >/dev/null 2>&1
-    tar -xzf /tmp/sing-box.tar.gz -C /tmp/
+    tar -xzf /root/apps/sing-box.tar.gz -C /tmp/
     cp /tmp/sing-box /usr/bin/sing-box
     chmod +x /usr/bin/sing-box
     echo -e "\033[32mУстановлен sing-box из /root/apps/\033[0m"
 else
-    echo -e "\033[33mФайл sing-box не найден в /tmp/. Пропускаем установку.\033[0m"
+    echo -e "\033[33mФайл sing-box не найден в /root/apps/. Пропускаем установку.\033[0m"
 fi
 
 echo -e "\033[35mУстановка speedtest...\033[0m"
-if [ -f /tmp/speedtest.tar.gz ]; then
-    tar -xzf /tmp/speedtest.tar.gz -C /tmp/
+if [ -f /root/apps/speedtest.tar.gz ]; then
+    tar -xzf /root/apps/speedtest.tar.gz -C /tmp/
     cp /tmp/speedtest /usr/bin/speedtest
     chmod +x /usr/bin/speedtest
     echo -e "\033[32mУстановлен speedtest из /root/apps/\033[0m"
