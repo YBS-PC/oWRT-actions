@@ -111,38 +111,39 @@ EOF
 #################### Установка всех пакетов из /root/apps/ ####################
 echo -e "\033[35mУстановка пакетов из локальной директории /root/apps/...\033[0m"
 # Заархивировал эти файлы так как при прошивке с сохранением настроек большие файлы в этих папках портятся
+# Все равно файлы портятся
 
-echo -e "\033[35mУстановка speedtest от Ookla...\033[0m"
-if [ -f /root/apps/speedtest.tar.gz ]; then
-    tar -xzf /root/apps/speedtest.tar.gz -C /tmp/
-    cp /tmp/speedtest /usr/bin/speedtest
-    chmod +x /usr/bin/speedtest
-    echo -e "\033[32mУстановлен speedtest от Ookla из /root/apps/\033[0m"
-else
-    echo -e "\033[33mФайл speedtest не найден в /root/apps/. Пропускаем установку.\033[0m"
-fi
+#echo -e "\033[35mУстановка speedtest от Ookla...\033[0m"
+#if [ -f /root/apps/speedtest.tar.gz ]; then
+#    tar -xzf /root/apps/speedtest.tar.gz -C /tmp/
+#    cp /tmp/speedtest /usr/bin/speedtest
+#    chmod +x /usr/bin/speedtest
+#    echo -e "\033[32mУстановлен speedtest от Ookla из /root/apps/\033[0m"
+#else
+#    echo -e "\033[33mФайл speedtest не найден в /root/apps/. Пропускаем установку.\033[0m"
+#fi
 
-echo -e "\033[35mУстановка AdGuardHome...\033[0m"
-if [ -f /root/apps/AdGuardHome.tar.gz ]; then
-    /etc/init.d/adguardhome stop >/dev/null 2>&1
-	tar -xzf /root/apps/AdGuardHome.tar.gz -C /tmp/
-    cp /tmp/AdGuardHome /usr/bin/AdGuardHome
-    chmod +x /usr/bin/AdGuardHome
-    echo -e "\033[32mУстановлен AdGuardHome из /root/apps/\033[0m"
-else
-    echo -e "\033[33mФайл AdGuardHome не найден в /root/apps/. Пропускаем установку.\033[0m"
-fi
+#echo -e "\033[35mУстановка AdGuardHome...\033[0m"
+#if [ -f /root/apps/AdGuardHome.tar.gz ]; then
+#    /etc/init.d/adguardhome stop >/dev/null 2>&1
+#	tar -xzf /root/apps/AdGuardHome.tar.gz -C /tmp/
+#    cp /tmp/AdGuardHome /usr/bin/AdGuardHome
+#    chmod +x /usr/bin/AdGuardHome
+#    echo -e "\033[32mУстановлен AdGuardHome из /root/apps/\033[0m"
+#else
+#    echo -e "\033[33mФайл AdGuardHome не найден в /root/apps/. Пропускаем установку.\033[0m"
+#fi
 
-echo -e "\033[35mУстановка sing-box...\033[0m"
-if [ -f /root/apps/sing-box.tar.gz ]; then
-    /etc/init.d/sing-box stop >/dev/null 2>&1
-	tar -xzf /root/apps/sing-box.tar.gz -C /tmp/
-    cp /tmp/sing-box /usr/bin/sing-box
-    chmod +x /usr/bin/sing-box
-    echo -e "\033[32mУстановлен sing-box из /root/apps/\033[0m"
-else
-    echo -e "\033[33mФайл sing-box не найден в /root/apps/. Пропускаем установку.\033[0m"
-fi
+#echo -e "\033[35mУстановка sing-box...\033[0m"
+#if [ -f /root/apps/sing-box.tar.gz ]; then
+#    /etc/init.d/sing-box stop >/dev/null 2>&1
+#	tar -xzf /root/apps/sing-box.tar.gz -C /tmp/
+#    cp /tmp/sing-box /usr/bin/sing-box
+#    chmod +x /usr/bin/sing-box
+#    echo -e "\033[32mУстановлен sing-box из /root/apps/\033[0m"
+#else
+#    echo -e "\033[33mФайл sing-box не найден в /root/apps/. Пропускаем установку.\033[0m"
+#fi
 
 #################### Настройка homeproxy ####################
 echo -e "\033[35mНастройка luci-app-homeproxy...\033[0m"
