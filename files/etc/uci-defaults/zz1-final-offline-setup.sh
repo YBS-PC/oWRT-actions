@@ -108,42 +108,29 @@ cat <<EOF > "$CUSTOMFEEDS_FILE"
 
 EOF
 
-#################### Установка всех пакетов из /root/apps/ ####################
-echo -e "\033[35mУстановка пакетов из локальной директории /root/apps/...\033[0m"
-# Заархивировал эти файлы так как при прошивке с сохранением настроек большие файлы в этих папках портятся
-# Все равно файлы портятся
+#################### Установка всех пакетов из /tmp/ ####################
+echo -e "\033[35mУстановка пакетов из локальной директории...\033[0m"
 
-#echo -e "\033[35mУстановка speedtest от Ookla...\033[0m"
-#if [ -f /root/apps/speedtest.tar.gz ]; then
-#    tar -xzf /root/apps/speedtest.tar.gz -C /tmp/
-#    cp /tmp/speedtest /usr/bin/speedtest
-#    chmod +x /usr/bin/speedtest
-#    echo -e "\033[32mУстановлен speedtest от Ookla из /root/apps/\033[0m"
-#else
-#    echo -e "\033[33mФайл speedtest не найден в /root/apps/. Пропускаем установку.\033[0m"
-#fi
+echo -e "\033[35mУстановка sing-box...\033[0m"
+if [ -f /tmp/sing-box.tar.gz ]; then
+    /etc/init.d/sing-box stop >/dev/null 2>&1
+    tar -xzf /tmp/sing-box.tar.gz -C /tmp/
+    cp /tmp/sing-box /usr/bin/sing-box
+    chmod +x /usr/bin/sing-box
+    echo -e "\033[32mУстановлен sing-box из /root/apps/\033[0m"
+else
+    echo -e "\033[33mФайл sing-box не найден в /root/apps/. Пропускаем установку.\033[0m"
+fi
 
-#echo -e "\033[35mУстановка AdGuardHome...\033[0m"
-#if [ -f /root/apps/AdGuardHome.tar.gz ]; then
-#    /etc/init.d/adguardhome stop >/dev/null 2>&1
-#	tar -xzf /root/apps/AdGuardHome.tar.gz -C /tmp/
-#    cp /tmp/AdGuardHome /usr/bin/AdGuardHome
-#    chmod +x /usr/bin/AdGuardHome
-#    echo -e "\033[32mУстановлен AdGuardHome из /root/apps/\033[0m"
-#else
-#    echo -e "\033[33mФайл AdGuardHome не найден в /root/apps/. Пропускаем установку.\033[0m"
-#fi
-
-#echo -e "\033[35mУстановка sing-box...\033[0m"
-#if [ -f /root/apps/sing-box.tar.gz ]; then
-#    /etc/init.d/sing-box stop >/dev/null 2>&1
-#	tar -xzf /root/apps/sing-box.tar.gz -C /tmp/
-#    cp /tmp/sing-box /usr/bin/sing-box
-#    chmod +x /usr/bin/sing-box
-#    echo -e "\033[32mУстановлен sing-box из /root/apps/\033[0m"
-#else
-#    echo -e "\033[33mФайл sing-box не найден в /root/apps/. Пропускаем установку.\033[0m"
-#fi
+echo -e "\033[35mУстановка speedtest...\033[0m"
+if [ -f /tmp/speedtest.tar.gz ]; then
+    tar -xzf /tmp/speedtest.tar.gz -C /tmp/
+    cp /tmp/speedtest /usr/bin/speedtest
+    chmod +x /usr/bin/speedtest
+    echo -e "\033[32mУстановлен speedtest из /root/apps/\033[0m"
+else
+    echo -e "\033[33mФайл speedtest не найден в /root/apps/. Пропускаем установку.\033[0m"
+fi
 
 #################### Настройка homeproxy ####################
 echo -e "\033[35mНастройка luci-app-homeproxy...\033[0m"
@@ -152,8 +139,8 @@ sed -i "s/const dns_hijacked = uci\.get('dhcp', '@dnsmasq\[0\]', 'dns_redirect')
 
 /etc/init.d/homeproxy disable
 
-# Проблема: uci-defaults для homeproxy создает в конфиге firewall ссылки на файлы, которые homeproxy создает только в режимах TUN или Server.
-# 1. Создаем наш скрипт-помощник
+# Проблема: uci-defaults для homeproxy создает  по умолчанию в конфиге firewall ссылки на файлы, которые homeproxy создает только в режимах TUN или Server.
+# 1. Создаем скрипт-помощник
 HELPER_SCRIPT_PATH="/etc/homeproxy/scripts/update_firewall_rules.sh"
 cat << 'EOF' > "$HELPER_SCRIPT_PATH"
 #!/bin/sh
@@ -183,7 +170,7 @@ uci -q commit firewall
 EOF
 chmod +x "$HELPER_SCRIPT_PATH"
 echo -e "\033[37mСоздан скрипт-помощник для homeproxy: $HELPER_SCRIPT_PATH\033[0m"
-# 2. Модифицируем init-скрипт homeproxy, чтобы он вызывал наш помощник
+# 2. Модифицируем init-скрипт homeproxy, чтобы он вызывал скрипт помощник
 HOMEPROXY_INIT_SCRIPT="/etc/init.d/homeproxy"
 TAB_CHAR=$'\t'
 HELPER_CALL_COMMAND="${TAB_CHAR}. ${HELPER_SCRIPT_PATH}"
@@ -200,7 +187,7 @@ if [ -f "$HOMEPROXY_INIT_SCRIPT" ]; then
 else
     echo -e "\033[33mСкрипт $HOMEPROXY_INIT_SCRIPT не найден.\033[0m"
 fi
-# 3. Первоначальный запуск нашего помощника, чтобы исправить конфиг сразу
+# 3. Первоначальный запуск помощника, чтобы исправить конфиг сразу
 . "$HELPER_SCRIPT_PATH"
 
 /etc/init.d/homeproxy enable
@@ -251,7 +238,6 @@ EOF
 )
 
 # Проверяем, установлен ли youtubeUnblock. 
-# Мы ищем исполняемый файл - это самый надежный способ.
 if [ -x "/usr/bin/youtubeUnblock" ]; then
     echo -e "\033[37mСлужба youtubeUnblock установлена. Применяем конфигурацию...\033[0m"
     # Отключаем службу на время настройки
@@ -346,17 +332,6 @@ else
     echo "Строка 'config_get log_file' уже существует. Пропускаю добавление."
 fi
 
-#sed -i \
-#-e 's|\tconfig_get config_file config config "/etc/adguardhome/adguardhome.yaml"|\tconfig_get config_file config configpath|' \
-#-e 's|\tconfig_get work_dir config workdir "/var/lib/adguardhome"|\tconfig_get work_dir config workdir|' \
-#-e 's|\tconfig_get pid_file config pidfile "/run/adguardhome.pid"|\tconfig_get log_file config logfile\
-#\tconfig_get pid_file config pidfile|' \
-#-e 's|\tconfig_get user config user adguardhome|\tconfig_get user config user|' \
-#-e 's|\tconfig_get group config group adguardhome|\tconfig_get group config group|' \
-#-e 's|mkdir -m 0700 -p|mkdir -m 0755 -p|g' \
-#-e 's|--logfile syslog|--logfile "$log_file"|' \
-#/etc/init.d/adguardhome
-
 AGH_version=$(/usr/bin/AdGuardHome --version 2>/dev/null | grep -oP 'v?\K[\d.]+')
 echo -e "\033[33mУстановленная версия AGH: $AGH_version\033[0m"
 
@@ -373,6 +348,22 @@ if [ -n "$AGH_version" ]; then
 else
     echo -e "\033[31mAdGuardHome не установлен или не найден.\033[0m"
 fi
+
+# Меню для перехода к AdGuardHome
+cat <<EOF > /usr/lib/lua/luci/controller/adguardhome_net.lua
+module("luci.controller.adguardhome_net", package.seeall)
+
+function index()
+    entry({"admin", "network", "adguardhome"}, call("redirectToAdGuardHome"), _("AdGuardHome"), 40)
+end
+
+function redirectToAdGuardHome()
+    local router_ip = luci.http.getenv("SERVER_ADDR") -- Получаем IP-адрес роутера
+    local redirect_url = "http://" .. router_ip .. ":8080" -- Собираем URL
+    luci.http.redirect(redirect_url) -- Перенаправляем на адрес роутера с портом 8080
+end
+EOF
+
 
 #################### Финальные настройки ####################
 echo -e "\033[35mФинальные настройки системы...\033[0m"
@@ -424,49 +415,13 @@ else
     echo "CSS уже содержит обновленные стили"
 fi
 
-# Исправить порядок запуска uhttpd
-# /etc/init.d/uhttpd disable
-# sed -i 's/^START=[0-9]*/START=60/' /etc/init.d/uhttpd
-# /etc/init.d/uhttpd enable
-
 # Включить sqm
 /etc/init.d/sqm disable
 /etc/init.d/sqm enable
 echo "sqm включен"
 
-# Перезапуск служб
-#-#/etc/init.d/rpcd restart
-#-#/etc/init.d/uhttpd restart
-#-#/etc/init.d/system restart
-#-#/etc/init.d/firewall restart
-#-#/etc/init.d/sqm restart
-#-#/etc/init.d/dnsmasq restart
-#-#/etc/init.d/adguardhome restart
-
-/etc/init.d/phy-leds disable && echo -e "\033[36mОтключен старый скрипт управления диодами phy-leds\033[0m"
-
-for param in /proc/sys/net/ipv4/tcp_rmem \
-             /proc/sys/net/ipv4/tcp_wmem \
-             /proc/sys/net/ipv4/tcp_fastopen \
-             /proc/sys/net/core/rmem_max \
-             /proc/sys/net/core/wmem_max \
-             /proc/sys/net/ipv4/tcp_window_scaling \
-             /proc/sys/net/ipv4/ip_local_port_range \
-             /proc/sys/net/core/default_qdisc \
-             /proc/sys/net/ipv4/tcp_congestion_control; do
-  name=$(basename $param)
-  echo -e "$name: \033[33m$(cat $param)\033[0m"
-done
-
-#################### Проверка служб ####################
-#-#echo -e "\033[35mПроверка статуса служб...\033[0m"
-#-#date
-#-#echo -e "\033[33myoutubeUnblock:\033[0m"
-#-#service | grep youtubeUnblock | awk '{print $2, $3}'
-#-#echo -e "\033[33madguardhome:\033[0m"
-#-#service | grep adguardhome | awk '{print $2, $3}'
-#-#echo -e "\033[33msqm:\033[0m"
-#-#service | grep sqm | awk '{print $2, $3}'
+#Отключаем старый скрипт управления диодами phy-leds
+/etc/init.d/phy-leds disable
 
 cat /tmp/sysinfo/model && . /etc/openwrt_release
 
@@ -474,7 +429,7 @@ echo -e "\033[32mПервоначальная настройка заверше�
 
 # Отложенная перезагрузка в фоне (&) в дочерней оболочке ()...
 echo -e "\033[32mЗапрос на перезагрузку системы...\033[0m"
-(sleep 60; reboot) &
+(sleep 90; reboot) &
 
 # ВАЖНО: Завершаем скрипт с кодом 0 для его автоматического удаления
 exit 0
