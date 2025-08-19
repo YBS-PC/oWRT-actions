@@ -331,8 +331,8 @@ config adguardhome 'config'
 	option config '/etc/adguardhome/adguardhome.yaml'
 #	option logfile '/var/AdGuardHome.log'
 	option pidfile '/run/adguardhome.pid'
-	option user 'root'
-	option group 'root'
+	option user 'adguardhome'
+	option group 'adguardhome'
 	option verbose '0'
 EOF
 
