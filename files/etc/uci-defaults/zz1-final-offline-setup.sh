@@ -115,6 +115,7 @@ echo -e "\033[35mУстановка sing-box...\033[0m"
 if [ -f /root/apps/sing-box.tar.gz ]; then
 	/etc/init.d/sing-box stop >/dev/null 2>&1
 	tar -xzf /root/apps/sing-box.tar.gz -C /tmp/
+	rm /root/apps/sing-box.tar.gz
 	cp /tmp/sing-box /usr/bin/sing-box
 	chmod +x /usr/bin/sing-box
 	echo -e "\033[32mУстановлен sing-box из /root/apps/\033[0m"
@@ -125,6 +126,7 @@ fi
 echo -e "\033[35mУстановка speedtest...\033[0m"
 if [ -f /root/apps/speedtest.tar.gz ]; then
 	tar -xzf /root/apps/speedtest.tar.gz -C /tmp/
+	rm /root/apps/speedtest.tar.gz
 	cp /tmp/speedtest /usr/bin/speedtest
 	chmod +x /usr/bin/speedtest
 	echo -e "\033[32mУстановлен speedtest из /root/apps/\033[0m"
