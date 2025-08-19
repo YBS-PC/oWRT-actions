@@ -119,7 +119,7 @@ if [ -f /tmp/sing-box.tar.gz ]; then
     chmod +x /usr/bin/sing-box
     echo -e "\033[32mУстановлен sing-box из /root/apps/\033[0m"
 else
-    echo -e "\033[33mФайл sing-box не найден в /root/apps/. Пропускаем установку.\033[0m"
+    echo -e "\033[33mФайл sing-box не найден в /tmp/. Пропускаем установку.\033[0m"
 fi
 
 echo -e "\033[35mУстановка speedtest...\033[0m"
@@ -129,7 +129,7 @@ if [ -f /tmp/speedtest.tar.gz ]; then
     chmod +x /usr/bin/speedtest
     echo -e "\033[32mУстановлен speedtest из /root/apps/\033[0m"
 else
-    echo -e "\033[33mФайл speedtest не найден в /root/apps/. Пропускаем установку.\033[0m"
+    echo -e "\033[33mФайл speedtest не найден в /tmp/. Пропускаем установку.\033[0m"
 fi
 
 #################### Настройка homeproxy ####################
