@@ -317,8 +317,8 @@ cat > /etc/config/adguardhome << 'EOF'
 config adguardhome 'config'
 	option enabled '1'
 	option workdir '/opt/AdGuardHome'
-	option configpath '/etc/adguardhome/adguardhome.yaml'
-	option logfile '/var/AdGuardHome.log'
+	option config '/etc/adguardhome/adguardhome.yaml'
+#	option logfile '/var/AdGuardHome.log'
 	option pidfile '/run/adguardhome.pid'
 	option user 'root'
 	option group 'root'
@@ -326,16 +326,16 @@ config adguardhome 'config'
 EOF
 
 # Настройка init.d/adguardhome
-sed -i \
--e 's|\tconfig_get config_file config config "/etc/adguardhome/adguardhome.yaml"|\tconfig_get config_file config configpath|' \
--e 's|\tconfig_get work_dir config workdir "/var/lib/adguardhome"|\tconfig_get work_dir config workdir|' \
--e 's|\tconfig_get pid_file config pidfile "/run/adguardhome.pid"|\tconfig_get log_file config logfile\
-\tconfig_get pid_file config pidfile|' \
--e 's|\tconfig_get user config user adguardhome|\tconfig_get user config user|' \
--e 's|\tconfig_get group config group adguardhome|\tconfig_get group config group|' \
--e 's|mkdir -m 0700 -p|mkdir -m 0755 -p|g' \
--e 's|--logfile syslog|--logfile "$log_file"|' \
-/etc/init.d/adguardhome
+#sed -i \
+#-e 's|\tconfig_get config_file config config "/etc/adguardhome/adguardhome.yaml"|\tconfig_get config_file config configpath|' \
+#-e 's|\tconfig_get work_dir config workdir "/var/lib/adguardhome"|\tconfig_get work_dir config workdir|' \
+#-e 's|\tconfig_get pid_file config pidfile "/run/adguardhome.pid"|\tconfig_get log_file config logfile\
+#\tconfig_get pid_file config pidfile|' \
+#-e 's|\tconfig_get user config user adguardhome|\tconfig_get user config user|' \
+#-e 's|\tconfig_get group config group adguardhome|\tconfig_get group config group|' \
+#-e 's|mkdir -m 0700 -p|mkdir -m 0755 -p|g' \
+#-e 's|--logfile syslog|--logfile "$log_file"|' \
+#/etc/init.d/adguardhome
 
 AGH_version=$(/usr/bin/AdGuardHome --version 2>/dev/null | grep -oP 'v?\K[\d.]+')
 echo -e "\033[33mУстановленная версия AGH: $AGH_version\033[0m"
