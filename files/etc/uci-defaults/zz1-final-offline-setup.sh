@@ -312,6 +312,21 @@ mkdir -p /opt/AdGuardHome
 chown -R root:root /opt/AdGuardHome
 chmod 755 /opt/AdGuardHome
 
+# Проверить, существует ли группа 'adguardhome'
+#if ! grep -q '^adguardhome:' /etc/group; then
+#    # Если нет - создать ее как системную группу
+#    addgroup -S adguardhome
+#fi
+# Проверить, существует ли пользователь 'adguardhome'
+#if ! grep -q '^adguardhome:' /etc/passwd; then
+#    # Если нет - создать его как системного пользователя:
+#    # -S: системный
+#    # -H: не создавать домашнюю директорию
+#    # -s /bin/false: запретить вход в систему через shell
+#    # -G adguardhome: добавить в группу 'adguardhome'
+#    adduser -S -H -s /bin/false -G adguardhome adguardhome
+#fi
+
 echo -e "\033[36mНастройки для AdGuardHome...\033[0m"
 cat > /etc/config/adguardhome << 'EOF'
 config adguardhome 'config'
