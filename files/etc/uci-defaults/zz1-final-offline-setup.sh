@@ -426,6 +426,14 @@ echo "sqm включен"
 
 cat /tmp/sysinfo/model && . /etc/openwrt_release
 
+# Скачиваем ip списки для ipset и ruleset
+if [ -x "/opt/ip-lists-downloader.sh" ]; then
+    /opt/ip-lists-downloader.sh >/dev/null 2>&1
+fi
+if [ -x "/opt/ruleset-downloader.sh" ]; then
+    /opt/ruleset-downloader.sh >/dev/null 2>&1
+fi
+
 echo -e "\033[32mПервоначальная настройка завершена успешно.\033[0m"
 
 # Отложенная перезагрузка в фоне (&) в дочерней оболочке ()...
