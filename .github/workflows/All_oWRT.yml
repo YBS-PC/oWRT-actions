@@ -103,6 +103,11 @@ jobs:
           echo "Permissions set for files in ./files/etc/uci-defaults/"
           ls -l ./files/etc/uci-defaults
         fi
+        if [ -d "./files/opt" ]; then
+          find files/opt/ -name "*.sh" -type f -exec chmod 0755 {} \;
+          echo "Permissions set for files in ./files/opt/"
+          ls -l ./files/opt
+        fi
 
     - name: Load device configuration
       id: device_vars
