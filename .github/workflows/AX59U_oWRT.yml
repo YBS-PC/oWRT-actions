@@ -193,7 +193,7 @@ jobs:
         cat openwrt/.config || echo "Config file not found"
         echo "::endgroup::"
 
-    - name: Fix permissions for custom uci-defaults files
+    - name: Fix permissions for custom files
       run: |
         cd openwrt
         echo ">>> Fixing permissions for custom uci-defaults files (zz* pattern)"
@@ -219,7 +219,14 @@ jobs:
         # Показываем все файлы в uci-defaults для контроля
         echo ">>> All uci-defaults files in build:"
         find . -path "*/etc/uci-defaults/*" -type f -exec basename {} \; 2>/dev/null | sort | head -20000 || echo "No uci-defaults files found"
-    
+
+        # Permissions set for files in ./files/opt/
+        if [ -d "./files/opt" ]; then
+          find files/opt/ -name "*.sh" -type f -exec chmod 0755 {} \;
+          echo "Permissions set for files in ./files/opt/"
+          ls -l ./files/opt
+        fi
+
     #- name: SSH Connection to Actions
       #uses: P3TERX/ssh2actions@v1.0.0
       #if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh != 'false') || contains(github.event.action, 'ssh')
