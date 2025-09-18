@@ -192,7 +192,7 @@ jobs:
         cat openwrt/.config || echo "Config file not found"
         echo "::endgroup::"
 
-    - name: Fix permissions for custom uci-defaults files
+    - name: Fix permissions for custom files
       run: |
         cd openwrt
         echo ">>> Fixing permissions for custom uci-defaults files (zz* pattern)"
