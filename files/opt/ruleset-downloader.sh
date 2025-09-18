@@ -15,9 +15,13 @@ https://fastly.jsdelivr.net/gh/Loyalsoldier/geoip@release/srs
 
 # Файлы для скачивания (через пробел)
 FILES="
-twitter.srs
-telegram.srs
+cloudflare.srs
+cloudfront.srs
 facebook.srs
+google.srs
+telegram.srs
+twitter.srs
+fastly.srs
 "
 
 # Системные файлы
