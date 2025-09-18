@@ -8,10 +8,18 @@
 DOWNLOAD_DIR="/opt/Rulesets"
 
 # Зеркала для скачивания (указаны в строке через пробел)
-MIRRORS="https://raw.githubusercontent.com/Loyalsoldier/geoip/refs/heads/release/srs https://cdn.jsdelivr.net/gh/Loyalsoldier/geoip@release/srs https://fastly.jsdelivr.net/gh/Loyalsoldier/geoip@release/srs"
+MIRRORS="
+https://raw.githubusercontent.com/Loyalsoldier/geoip/refs/heads/release/srs
+https://cdn.jsdelivr.net/gh/Loyalsoldier/geoip@release/srs
+https://fastly.jsdelivr.net/gh/Loyalsoldier/geoip@release/srs
+"
 
 # Файлы для скачивания (через пробел)
-FILES="twitter.srs telegram.srs facebook.srs"
+FILES="
+twitter.srs
+telegram.srs
+facebook.srs
+"
 
 # Системные файлы
 LOG_FILE="/var/log/srs_downloader.log"
