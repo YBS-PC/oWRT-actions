@@ -17,6 +17,7 @@ on:
 env:
   REPO_URL: https://git.openwrt.org/openwrt/openwrt.git
   REPO_BRANCH: openwrt-24.10
+  TARGET_COMMIT: dbd975a3b674c917d2f3b6663864084421944909
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: ./config/WRT.config
   DIY_P1_SH: ./sh/part1-oWRT.sh
@@ -198,7 +199,8 @@ jobs:
       run: |
         cd openwrt
         echo ">>> Getting latest kernel hash for ${{ env.KERNEL_PATH }}"
-        KERNEL_LIST=$(curl -s https://downloads.openwrt.org/releases/24.10-SNAPSHOT/targets/${{ env.KERNEL_PATH }}/kmods/ | grep -oE '6\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+')
+        # KERNEL_LIST=$(curl -s https://downloads.openwrt.org/releases/24.10-SNAPSHOT/targets/${{ env.KERNEL_PATH }}/kmods/ | grep -oE '6\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+')
+        KERNEL_LIST=$(curl -s https://downloads.openwrt.org/releases/24.10.3/targets/${{ env.KERNEL_PATH }}/kmods/ | grep -oE '6\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+')
         LATEST_HASH=$(echo "$KERNEL_LIST" | while read -r line; do
             version=$(echo "$line" | cut -d'-' -f1)
             major=$(echo "$version" | cut -d'.' -f1)
