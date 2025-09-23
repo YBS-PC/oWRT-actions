@@ -145,15 +145,10 @@ jobs:
       working-directory: /workdir
       run: |
         df -hT $PWD
-        ## git clone --branch $REPO_BRANCH $REPO_URL openwrt
-        # Клонируем репозиторий БЕЗ файлов, только .git директорию
-        git clone --no-checkout $REPO_URL openwrt
+        git clone --branch $REPO_BRANCH $REPO_URL openwrt
         cd openwrt
-        ## git checkout $TARGET_COMMIT || { echo "Failed to checkout commit $TARGET_COMMIT"; exit 1; }
-        # Переключаемся на нужный коммит. Git сам скачает только необходимые объекты
         git checkout $TARGET_COMMIT || { echo "Failed to checkout commit $TARGET_COMMIT"; exit 1; }
-        echo "Checked out commit $TARGET_COMMIT successfully"
-        ## echo "Reverted to commit $TARGET_COMMIT successfully"
+        echo "Reverted to commit $TARGET_COMMIT successfully"
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
     - name: Apply custom patches
