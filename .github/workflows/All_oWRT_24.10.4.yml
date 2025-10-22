@@ -1,4 +1,4 @@
-name: All oWRT 24.10.3
+name: All oWRT 24.10.4
 
 on:
   workflow_dispatch:
@@ -17,7 +17,7 @@ on:
 env:
   REPO_URL: https://git.openwrt.org/openwrt/openwrt.git
   REPO_BRANCH: openwrt-24.10
-  TARGET_COMMIT: dbd975a3b674c917d2f3b6663864084421944909
+  TARGET_COMMIT: 78b23a26c4c98938d549e7ff5876508544e33d4d
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: ./config/WRT.config
   DIY_P1_SH: ./sh/part1-oWRT.sh
@@ -202,8 +202,7 @@ jobs:
       run: |
         cd openwrt
         echo ">>> Getting latest kernel hash for ${{ env.KERNEL_PATH }}"
-        # KERNEL_LIST=$(curl -s https://downloads.openwrt.org/releases/24.10-SNAPSHOT/targets/${{ env.KERNEL_PATH }}/kmods/ | grep -oE '6\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+')
-        KERNEL_LIST=$(curl -s https://downloads.openwrt.org/releases/24.10.3/targets/${{ env.KERNEL_PATH }}/kmods/ | grep -oE '6\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+')
+        KERNEL_LIST=$(curl -s https://downloads.openwrt.org/releases/24.10.4/targets/${{ env.KERNEL_PATH }}/kmods/ | grep -oE '6\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+')
         LATEST_HASH=$(echo "$KERNEL_LIST" | while read -r line; do
             version=$(echo "$line" | cut -d'-' -f1)
             major=$(echo "$version" | cut -d'.' -f1)
@@ -257,7 +256,7 @@ jobs:
       uses: actions/upload-artifact@main
       if: steps.compile.outputs.compile == 'success' && env.UPLOAD_BIN_DIR == 'true'
       with:
-        name: ${{ matrix.target }}_oWRT_24_10_3${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+        name: ${{ matrix.target }}_oWRT_24_10_4${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: openwrt/bin
     
     # ... Остальные шаги (upload, release, delete) ...
