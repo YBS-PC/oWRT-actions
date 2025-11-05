@@ -316,19 +316,24 @@ echo -e "\033[36mНастройки для AdGuardHome...\033[0m"
 cat > /etc/config/adguardhome << 'EOF'
 config adguardhome 'config'
 	option enabled '1'
-	option workdir '/opt/AdGuardHome'
-	option config '/etc/adguardhome/adguardhome.yaml'
-	option logfile '/var/AdGuardHome.log'
+	# All paths must be readable by the configured user
+	option config_file '/etc/adguardhome/adguardhome.yaml'
+	# Where to store persistent data by AdGuard Home
+	option work_dir '/opt/AdGuardHome'
+	option log_file '/var/AdGuardHome.log'
 	option pidfile '/run/adguardhome.pid'
 	option user 'root'
 	option group 'root'
 	option verbose '0'
+	# Files and directories that AdGuard Home has read-only access to
+	# list jail_mount '/etc/ssl/adguardhome.crt'
+	# list jail_mount '/etc/ssl/adguardhome.key'
 EOF
 
 # Настройка init.d/adguardhome
-if ! grep -q 'config_get log_file' /etc/init.d/adguardhome; then
-	echo "Строка 'config_get log_file' не найдена. Добавляю..."
-	sed -i '/config_get pid_file config pidfile/a \\tconfig_get log_file config logfile syslog' /etc/init.d/adguardhome
+if ! grep -q 'local log_file' /etc/init.d/adguardhome; then
+	echo "Строка 'local log_file (legacy config_get log_file)' не найдена. Добавляю..."
+	sed -i '/local verbose=0/a \\tlocal log_file='/var/AdGuardHome.log' /etc/init.d/adguardhome
 	sed -i 's/--logfile syslog/--logfile "$log_file"/' /etc/init.d/adguardhome
 else
 	echo "Строка 'config_get log_file' уже существует. Пропускаю добавление."
