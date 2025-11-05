@@ -293,6 +293,7 @@ fi
 echo -e "\033[35mНастройка и запуск AdGuardHome...\033[0m"
 
 /etc/init.d/adguardhome disable
+/etc/init.d/adguardhome stop
 
 # Создание новой рабочей директории
 mkdir -p /opt/AdGuardHome
@@ -350,6 +351,7 @@ echo -e "\033[36mОстановка ДНС сервера DNSmasq - порт 0..
 if [ -n "$AGH_version" ]; then
 	echo -e "\033[36mЗапуск AdGuardHome...\033[0m"
 	/etc/init.d/adguardhome enable
+	/etc/init.d/adguardhome start
 	echo -e "\033[37mЗапущенная версия AdGuardHome: $AGH_version\033[0m"
 else
 	echo -e "\033[31mAdGuardHome не установлен или не найден.\033[0m"
