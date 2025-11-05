@@ -333,10 +333,10 @@ EOF
 # Настройка init.d/adguardhome
 if ! grep -q 'local log_file' /etc/init.d/adguardhome; then
 	echo "Строка 'local log_file (legacy config_get log_file)' не найдена. Добавляю..."
-	sed -i '/local verbose=0/a \\tlocal log_file='/var/AdGuardHome.log' /etc/init.d/adguardhome
+	sed -i "/local verbose=0/a \\\tlocal log_file='/var/AdGuardHome.log'" /etc/init.d/adguardhome
 	sed -i 's/--logfile syslog/--logfile "$log_file"/' /etc/init.d/adguardhome
 else
-	echo "Строка 'config_get log_file' уже существует. Пропускаю добавление."
+	echo "Строка 'local log_file' уже существует. Пропускаю добавление."
 fi
 
 AGH_version=$(/usr/bin/AdGuardHome --version 2>/dev/null | grep -oP 'v?\K[\d.]+')
