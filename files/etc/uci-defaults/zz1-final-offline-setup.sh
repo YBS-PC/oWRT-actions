@@ -321,7 +321,6 @@ config adguardhome 'config'
 	# Where to store persistent data by AdGuard Home
 	option work_dir '/opt/AdGuardHome'
 	option log_file '/var/AdGuardHome.log'
-	option pidfile '/run/adguardhome.pid'
 	option user 'root'
 	option group 'root'
 	option verbose '0'
