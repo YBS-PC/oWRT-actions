@@ -22,11 +22,11 @@ KERNEL_VERSION=$(cat /proc/version | awk '{print $3}')
 ARCH_VERSION=$(grep ARCH /etc/os-release | cut -d'"' -f2)
 
 NAME_VALUE=$(grep '^NAME=' /etc/os-release | cut -d'=' -f2 | tr -d '"')
-ROUTER_NAME=$(case "$NAME_VALUE" in 
-	"OpenWrt") echo "oWRT" ;; 
-	"ImmortalWrt") echo "iWRT" ;; 
-	*) echo "WRT" ;; 
-esac)
+case "$NAME_VALUE" in
+	"OpenWrt") ROUTER_NAME="oWRT" ;;
+	"ImmortalWrt") ROUTER_NAME="iWRT" ;;
+	*) ROUTER_NAME="WRT" ;;
+esac
 
 MODEL_FULL=$(ubus call system board | grep '"model"' | cut -d '"' -f 4)
 ROUTER_MODEL=$(echo $MODEL_FULL | awk '{print $NF}')
@@ -436,7 +436,7 @@ echo -e "\033[32mПервоначальная настройка заверше�
 
 # Отложенная перезагрузка в фоне (&) в дочерней оболочке ()...
 echo -e "\033[32mЗапрос на перезагрузку системы...\033[0m"
-(sleep 120; reboot) &
+(sleep 120; sync; reboot) &
 
 # ВАЖНО: Завершаем скрипт с кодом 0 для его автоматического удаления
 exit 0
