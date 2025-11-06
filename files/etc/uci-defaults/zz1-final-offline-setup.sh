@@ -168,6 +168,7 @@ sed -i "s/const dns_hijacked = uci\.get('dhcp', '@dnsmasq\[0\]', 'dns_redirect')
 
 # Проблема: uci-defaults для homeproxy создает  по умолчанию в конфиге firewall ссылки на файлы, которые homeproxy создает только в режимах TUN или Server.
 # 1. Создаем скрипт-помощник
+# Используем кавычки вокруг EOF, чтобы $ не интерпретировался
 HELPER_SCRIPT_PATH="/etc/homeproxy/scripts/update_firewall_rules.sh"
 cat << 'EOF' > "$HELPER_SCRIPT_PATH"
 #!/bin/sh
@@ -255,7 +256,7 @@ EOF
 
 # Настройка правила nftables для пометки трафика гостевой сети
 YTB_NFT_GUEST_MARK_FILE="/etc/nftables.d/guest_mark.nft"
-# Используем кавычки вокруг EOF, чтобы $ не интерпретировался
+
 YTB_NFT_GUEST_MARK_CONTENT=$(cat << "EOF"
 chain guest_mark {
 	type filter hook prerouting priority mangle; policy accept;
