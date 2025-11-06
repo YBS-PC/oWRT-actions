@@ -16,7 +16,7 @@ exec > >(tee -a "$SETUP_LOGFILE") 2>&1
 
 # --- Управление цветами ---
 # Установите в "true" для цветного вывода, в "false" для чистого текста.
-USE_COLORS="true"
+USE_COLORS="false"
 
 if [ "$USE_COLORS" = "true" ]; then
     COLOR_RED='\033[31m'
