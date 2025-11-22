@@ -369,10 +369,10 @@ AGH_version=$(/usr/bin/AdGuardHome --version 2>/dev/null | grep -oP 'v?\K[\d.]+'
 echo -e "${COLOR_YELLOW}Установленная версия AGH: $AGH_version${COLOR_RESET}"
 
 # Освобождение порта 53 для AdGuardHome
-uci set dhcp.@dnsmasq[0].port="0"
+uci set dhcp.@dnsmasq[0].port="54"
 uci delete dhcp.@dnsmasq[0].server
 uci commit dhcp
-echo -e "${COLOR_CYAN}Остановка ДНС сервера DNSmasq - порт 0...${COLOR_RESET}"
+echo -e "${COLOR_CYAN}Остановка ДНС сервера DNSmasq - порт 54...${COLOR_RESET}"
 
 if [ -n "$AGH_version" ]; then
 	echo -e "${COLOR_CYAN}Запуск AdGuardHome...${COLOR_RESET}"
