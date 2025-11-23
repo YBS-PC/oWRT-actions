@@ -245,6 +245,9 @@ add chain inet fw4 youtubeUnblock { type filter hook postrouting priority mangle
 # Exclusion of the guest network by tag (traffic will bypass the queue)
 add rule inet fw4 youtubeUnblock meta mark 0x00000042 counter return
 
+# Exclusion of the vpn network by tag (traffic will bypass the queue)
+add rule inet fw4 youtubeUnblock meta mark 0x00000064 counter return
+
 # DPI through youtubeUnblock
 add rule inet fw4 youtubeUnblock ip daddr @dpi_ips tcp dport 443 ct original packets < 20 counter queue num 537 bypass
 add rule inet fw4 youtubeUnblock ip daddr @dpi_ips meta l4proto udp ct original packets < 9 counter queue num 537 bypass
