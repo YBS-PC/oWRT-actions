@@ -1,4 +1,4 @@
-name: All iWRT Commit
+name: All iWRT commit
 
 on:
   workflow_dispatch:
@@ -18,7 +18,7 @@ on:
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt.git
   REPO_BRANCH: master
-  TARGET_COMMIT: 78b23a26c4c98938d549e7ff5876508544e33d4d
+  TARGET_COMMIT: 71deb5b6d58cf100d0ee7cab23a464a1a5e2eae1
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: ./config/WRT.config
   DIY_P1_SH: ./sh/WRT-part1.sh
