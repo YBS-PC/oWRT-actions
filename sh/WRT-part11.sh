@@ -61,7 +61,7 @@ echo "  Стало: ${LATEST_COMMIT:0:12}..."
 
 # Обновляем PKG_REV
 sed -i "s|^PKG_REV:=.*|PKG_REV:=$LATEST_COMMIT|" "$MAKEFILE"
-sed -i "s|^PKG_SOURCE_VERSION:=.*|PKG_SOURCE_VERSION:=$LATEST_COMMIT|" "$MAKEFILE"
+#sed -i "s|^PKG_SOURCE_VERSION:=.*|PKG_SOURCE_VERSION:=$LATEST_COMMIT|" "$MAKEFILE"
 
 # Увеличиваем PKG_RELEASE
 CURRENT_RELEASE=$(grep "^PKG_RELEASE" "$MAKEFILE" | cut -d'=' -f2 | tr -d ' :')
