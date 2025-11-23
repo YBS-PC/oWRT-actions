@@ -79,7 +79,7 @@ sed -i '/^PKG_MIRROR_HASH:=/d' "$PKG_FILE"
 # Вставляем это после PKG_RELEASE или PKG_SOURCE_VERSION
 sed -i '/PKG_SOURCE_VERSION:=/a PKG_MIRROR_HASH:=skip' "$PKG_FILE"
 
-# grep -E "PKG_REV|PKG_SOURCE_VERSION|PKG_MIRROR_HASH" "$PKG_FILE"
+#grep -E "PKG_REV|PKG_SOURCE_VERSION|PKG_MIRROR_HASH" "$PKG_FILE"
 
 # Проверяем результат
 UPDATED_REV=$(grep "^PKG_REV" "$PKG_FILE" | cut -d'=' -f2 | tr -d ' :')
