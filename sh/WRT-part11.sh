@@ -97,11 +97,11 @@ fi
 
 
 # --------------------------------------------------------------------------
-# ЧАСТЬ 2: Фиксы Python (ТОЛЬКО ДЛЯ ВЕТКИ MASTER)
+# ЧАСТЬ 2: Фиксы Python (ТОЛЬКО ДЛЯ ВЕТКИ MASTER или MAIN)
 # --------------------------------------------------------------------------
 
-# Проверяем, равна ли переменная REPO_BRANCH значению "master"
-if [ "$REPO_BRANCH" == "master" ]; then
+# Проверяем, равна ли переменная REPO_BRANCH значению master или main
+if [[ "$REPO_BRANCH" == "master" || "$REPO_BRANCH" == "main" ]]; then
 
     echo ""
     echo "=========================================="
@@ -129,12 +129,12 @@ if [ "$REPO_BRANCH" == "master" ]; then
         sed -i 's/PYTHON_RUN_TESTS:=1/PYTHON_RUN_TESTS:=0/' "$PYTHON_MAKEFILE"
         sed -i 's/PYTHON_RUN_TESTS=1/PYTHON_RUN_TESTS=0/' "$PYTHON_MAKEFILE"
 
-        echo "✓ PGO, тесты и оптимизации отключены для ускорения сборки master."
+        echo "✓ PGO, тесты и оптимизации отключены для ускорения сборки master или main."
     fi
 
 else
     echo ""
     echo "=========================================="
-    echo "Ветка '$REPO_BRANCH' (не master). Фикс Python пропущен."
+    echo "Ветка '$REPO_BRANCH' (не master или main). Фикс Python пропущен."
     echo "=========================================="
 fi
