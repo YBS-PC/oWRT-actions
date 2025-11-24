@@ -5,7 +5,6 @@
 # Использование: запустить после feeds update, перед feeds install
 #=================================================
 
-
 # --------------------------------------------------------------------------
 # ЧАСТЬ 1: Обновление youtubeUnblock (Выполняется ВСЕГДА)
 # --------------------------------------------------------------------------
@@ -30,7 +29,7 @@ fi
 
 echo "✓ Последний коммит: $LATEST_COMMIT"
 
-# Находим Makefile (проверяем возможные расположения) PKG_FILE=$(find feeds -name "Makefile" | grep "/youtubeUnblock/Makefile" | head -n 1)
+# Находим Makefile
 PKG_FILE=""
 for path in \
     "feeds/youtubeUnblock/youtubeUnblock/Makefile" \
@@ -53,48 +52,40 @@ echo "✓ Найден Makefile: $PKG_FILE"
 # Получаем текущий PKG_REV
 CURRENT_REV=$(grep "^PKG_REV" "$PKG_FILE" | cut -d'=' -f2 | tr -d ' :' | head -1)
 
+# === ИСПРАВЛЕННАЯ ЛОГИКА ===
 if [ "$CURRENT_REV" = "$LATEST_COMMIT" ]; then
-    echo "✓ PKG_REV уже актуален, обновление не требуется"
-    exit 0
-fi
-
-echo "Обновление PKG_REV..."
-echo "  Было: ${CURRENT_REV:0:12}..."
-echo "  Стало: ${LATEST_COMMIT:0:12}..."
-
-# Обновляем PKG_REV
-sed -i "s|^PKG_REV:=.*|PKG_REV:=$LATEST_COMMIT|" "$PKG_FILE"
-#sed -i "s|^PKG_SOURCE_VERSION:=.*|PKG_SOURCE_VERSION:=$LATEST_COMMIT|" "$PKG_FILE"
-
-# Увеличиваем PKG_RELEASE
-CURRENT_RELEASE=$(grep "^PKG_RELEASE" "$PKG_FILE" | cut -d'=' -f2 | tr -d ' :')
-if [ ! -z "$CURRENT_RELEASE" ] && [ "$CURRENT_RELEASE" -eq "$CURRENT_RELEASE" ] 2>/dev/null; then
-    NEW_RELEASE=$((CURRENT_RELEASE + 1))
-    sed -i "s|^PKG_RELEASE:=.*|PKG_RELEASE:=$NEW_RELEASE|" "$PKG_FILE"
-    echo "✓ PKG_RELEASE: $CURRENT_RELEASE → $NEW_RELEASE"
-fi
-
-# Удаляем старые строки с хешами, если они есть
-sed -i '/^PKG_HASH:=/d' "$PKG_FILE"
-sed -i '/^PKG_MIRROR_HASH:=/d' "$PKG_FILE"
-
-# Добавляем инструкцию пропускать проверку хеша
-# Вставляем это после PKG_RELEASE или PKG_SOURCE_VERSION
-sed -i '/PKG_SOURCE_VERSION:=/a PKG_MIRROR_HASH:=skip' "$PKG_FILE"
-
-#grep -E "PKG_REV|PKG_SOURCE_VERSION|PKG_MIRROR_HASH" "$PKG_FILE"
-
-# Проверяем результат
-UPDATED_REV=$(grep "^PKG_REV" "$PKG_FILE" | cut -d'=' -f2 | tr -d ' :')
-if [ "$UPDATED_REV" = "$LATEST_COMMIT" ]; then
-    echo "=================================================="
-    echo "✓ Обновление youtubeUnblock успешно завершено!"
-    echo "=================================================="
+    echo "✓ PKG_REV уже актуален, обновление youtubeUnblock не требуется."
 else
-    echo "✗ Ошибка при обновлении"
-    exit 1
-fi
+    echo "Обновление PKG_REV..."
+    echo "  Было: ${CURRENT_REV:0:12}..."
+    echo "  Стало: ${LATEST_COMMIT:0:12}..."
 
+    # Обновляем PKG_REV
+    sed -i "s|^PKG_REV:=.*|PKG_REV:=$LATEST_COMMIT|" "$PKG_FILE"
+
+    # Увеличиваем PKG_RELEASE
+    CURRENT_RELEASE=$(grep "^PKG_RELEASE" "$PKG_FILE" | cut -d'=' -f2 | tr -d ' :')
+    if [ ! -z "$CURRENT_RELEASE" ]; then
+        NEW_RELEASE=$((CURRENT_RELEASE + 1))
+        sed -i "s|^PKG_RELEASE:=.*|PKG_RELEASE:=$NEW_RELEASE|" "$PKG_FILE"
+        echo "✓ PKG_RELEASE: $CURRENT_RELEASE → $NEW_RELEASE"
+    fi
+
+    # Удаляем старые хеши и добавляем skip
+    sed -i '/^PKG_HASH:=/d' "$PKG_FILE"
+    sed -i '/^PKG_MIRROR_HASH:=/d' "$PKG_FILE"
+    sed -i '/PKG_SOURCE_VERSION:=/a PKG_MIRROR_HASH:=skip' "$PKG_FILE"
+
+    # Проверяем результат
+    UPDATED_REV=$(grep "^PKG_REV" "$PKG_FILE" | cut -d'=' -f2 | tr -d ' :')
+    if [ "$UPDATED_REV" = "$LATEST_COMMIT" ]; then
+        echo "✓ Обновление youtubeUnblock успешно завершено!"
+    else
+        echo "✗ Ошибка при обновлении youtubeUnblock"
+        exit 1
+    fi
+fi
+# ===========================
 
 # --------------------------------------------------------------------------
 # ЧАСТЬ 2: Фиксы Python (ТОЛЬКО ДЛЯ ВЕТКИ MASTER или MAIN)
