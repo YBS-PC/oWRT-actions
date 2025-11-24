@@ -1,11 +1,14 @@
 #!/bin/bash
 #=================================================
-# Простой и надежный скрипт для обновления youtubeUnblock
-# до последнего коммита из ветки main
+# Скрипт обновления пакетов и применения фиксов
 #
 # Использование: запустить после feeds update, перед feeds install
 #=================================================
 
+
+# --------------------------------------------------------------------------
+# ЧАСТЬ 1: Обновление youtubeUnblock (Выполняется ВСЕГДА)
+# --------------------------------------------------------------------------
 echo "=================================================="
 echo "Обновление youtubeUnblock до latest main..."
 echo "=================================================="
@@ -93,46 +96,45 @@ else
 fi
 
 
-echo "=========================================="
-echo "Применение фикса для ускорения сборки Python 3"
-echo "=========================================="
+# --------------------------------------------------------------------------
+# ЧАСТЬ 2: Фиксы Python (ТОЛЬКО ДЛЯ ВЕТКИ main)
+# --------------------------------------------------------------------------
 
-# Путь может меняться в зависимости от версии OpenWrt/ImmortalWrt, проверяем оба
-PYTHON_MAKEFILE=""
-if [ -f "feeds/packages/lang/python/python3/Makefile" ]; then
-    PYTHON_MAKEFILE="feeds/packages/lang/python/python3/Makefile"
-elif [ -f "package/feeds/packages/lang/python/python3/Makefile" ]; then
-    PYTHON_MAKEFILE="package/feeds/packages/lang/python/python3/Makefile"
-fi
+# Проверяем, равна ли переменная REPO_BRANCH значению "main"
+if [ "$REPO_BRANCH" == "main" ]; then
 
-if [ -z "$PYTHON_MAKEFILE" ]; then
-    echo "⚠ Python 3 Makefile не найден. Возможно, пакет называется иначе или путь изменился."
-else
-    echo "Нашел Makefile: $PYTHON_MAKEFILE"
-    
-    # 1. Отключаем PGO (Profile-Guided Optimization)
-    # Это самое важное для стабильности и скорости
-    sed -i 's/PYTHON_PGO:=1/PYTHON_PGO:=0/' "$PYTHON_MAKEFILE"
-    sed -i 's/PYTHON_PGO=1/PYTHON_PGO=0/' "$PYTHON_MAKEFILE"
-    
-    # 2. Убираем флаг оптимизаций, который включает тесты
-    sed -i 's/--enable-optimizations/--disable-optimizations/' "$PYTHON_MAKEFILE"
-    
-    # 3. Принудительно отключаем тесты (если переменная есть)
-    sed -i 's/PYTHON_RUN_TESTS:=1/PYTHON_RUN_TESTS:=0/' "$PYTHON_MAKEFILE"
-    sed -i 's/PYTHON_RUN_TESTS=1/PYTHON_RUN_TESTS=0/' "$PYTHON_MAKEFILE"
+    echo ""
+    echo "=========================================="
+    echo "Ветка '$REPO_BRANCH': Применение фикса Python PGO..."
+    echo "=========================================="
 
-    echo "✓ PGO и тесты отключены."
-    
-    # Проверка (grep вернет 0, если найдет совпадение)
-    if grep -q "disable-optimizations" "$PYTHON_MAKEFILE"; then
-        echo "✓ Флаг --disable-optimizations успешно применен."
+    PYTHON_MAKEFILE=""
+    if [ -f "feeds/packages/lang/python/python3/Makefile" ]; then
+        PYTHON_MAKEFILE="feeds/packages/lang/python/python3/Makefile"
+    elif [ -f "package/feeds/packages/lang/python/python3/Makefile" ]; then
+        PYTHON_MAKEFILE="package/feeds/packages/lang/python/python3/Makefile"
     fi
-fi
 
-echo "=================================================="
-echo "✓ Фиксы Python применены"
-echo "=================================================="
-    echo "✗ Ошибка при обновлении"
-    exit 1
+    if [ -z "$PYTHON_MAKEFILE" ]; then
+        echo "⚠ Python 3 Makefile не найден."
+    else
+        echo "Нашел Makefile: $PYTHON_MAKEFILE"
+        
+        # Отключаем PGO и оптимизации
+        sed -i 's/PYTHON_PGO:=1/PYTHON_PGO:=0/' "$PYTHON_MAKEFILE"
+        sed -i 's/PYTHON_PGO=1/PYTHON_PGO=0/' "$PYTHON_MAKEFILE"
+        sed -i 's/--enable-optimizations/--disable-optimizations/' "$PYTHON_MAKEFILE"
+        
+        # Отключаем тесты
+        sed -i 's/PYTHON_RUN_TESTS:=1/PYTHON_RUN_TESTS:=0/' "$PYTHON_MAKEFILE"
+        sed -i 's/PYTHON_RUN_TESTS=1/PYTHON_RUN_TESTS=0/' "$PYTHON_MAKEFILE"
+
+        echo "✓ PGO, тесты и оптимизации отключены для ускорения сборки master."
+    fi
+
+else
+    echo ""
+    echo "=========================================="
+    echo "Ветка '$REPO_BRANCH' (не main). Фикс Python пропущен."
+    echo "=========================================="
 fi
