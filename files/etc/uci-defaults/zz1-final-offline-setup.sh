@@ -245,6 +245,9 @@ add chain inet fw4 youtubeUnblock { type filter hook postrouting priority mangle
 # Exclusion of the guest network by tag (traffic will bypass the queue)
 add rule inet fw4 youtubeUnblock meta mark 0x00000042 counter return
 
+# If the destination IP is in the no_dpi_ips list, we exit the chain.
+add rule inet fw4 youtubeUnblock ip daddr @no_dpi_ips counter return
+
 # Exclusion of the vpn network by tag (traffic will bypass the queue)
 add rule inet fw4 youtubeUnblock meta mark 0x00000064 counter return
 add rule inet fw4 youtubeUnblock meta mark 0x00000065 counter return
