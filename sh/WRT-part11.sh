@@ -93,25 +93,41 @@ else
 fi
 
 
-echo "=================================================="
-echo "Применение фиксов для стабильной сборки Python"
-echo "=================================================="
+echo "=========================================="
+echo "Применение фикса для ускорения сборки Python 3"
+echo "=========================================="
 
-# Вариант 1: Отключаем Profile-Guided Optimization для Python
-# Это ускоряет сборку и избегает проблем с тестами
+# Путь может меняться в зависимости от версии OpenWrt/ImmortalWrt, проверяем оба
+PYTHON_MAKEFILE=""
 if [ -f "feeds/packages/lang/python/python3/Makefile" ]; then
-    echo "Отключение PGO для Python3..."
-    
-    # Отключаем PGO (Profile-Guided Optimization)
-    sed -i 's/PYTHON_PGO:=1/PYTHON_PGO:=0/g' feeds/packages/lang/python/python3/Makefile
-    sed -i 's/PYTHON_PGO=1/PYTHON_PGO=0/g' feeds/packages/lang/python/python3/Makefile
-    
-    # Также можно отключить тесты полностью
-    sed -i 's/PYTHON_RUN_TESTS:=1/PYTHON_RUN_TESTS:=0/g' feeds/packages/lang/python/python3/Makefile
-    
-    echo "✓ PGO и тесты Python отключены"
+    PYTHON_MAKEFILE="feeds/packages/lang/python/python3/Makefile"
+elif [ -f "package/feeds/packages/lang/python/python3/Makefile" ]; then
+    PYTHON_MAKEFILE="package/feeds/packages/lang/python/python3/Makefile"
+fi
+
+if [ -z "$PYTHON_MAKEFILE" ]; then
+    echo "⚠ Python 3 Makefile не найден. Возможно, пакет называется иначе или путь изменился."
 else
-    echo "⚠ Makefile Python3 не найден"
+    echo "Нашел Makefile: $PYTHON_MAKEFILE"
+    
+    # 1. Отключаем PGO (Profile-Guided Optimization)
+    # Это самое важное для стабильности и скорости
+    sed -i 's/PYTHON_PGO:=1/PYTHON_PGO:=0/' "$PYTHON_MAKEFILE"
+    sed -i 's/PYTHON_PGO=1/PYTHON_PGO=0/' "$PYTHON_MAKEFILE"
+    
+    # 2. Убираем флаг оптимизаций, который включает тесты
+    sed -i 's/--enable-optimizations/--disable-optimizations/' "$PYTHON_MAKEFILE"
+    
+    # 3. Принудительно отключаем тесты (если переменная есть)
+    sed -i 's/PYTHON_RUN_TESTS:=1/PYTHON_RUN_TESTS:=0/' "$PYTHON_MAKEFILE"
+    sed -i 's/PYTHON_RUN_TESTS=1/PYTHON_RUN_TESTS=0/' "$PYTHON_MAKEFILE"
+
+    echo "✓ PGO и тесты отключены."
+    
+    # Проверка (grep вернет 0, если найдет совпадение)
+    if grep -q "disable-optimizations" "$PYTHON_MAKEFILE"; then
+        echo "✓ Флаг --disable-optimizations успешно применен."
+    fi
 fi
 
 echo "=================================================="
