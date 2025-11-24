@@ -30,15 +30,31 @@
 ##    echo "CONFIG_PACKAGE_${pkg}=n" >> ./.config
 ##done
 ####################################################################
-mkdir ./package/luci-app-log-viewer
-mkdir ./package/zapret-openwrt
-mkdir ./package/facinstall
+# Создаем общие папки (флаг -p чтобы не было ошибок если папка уже есть)
+mkdir -p ./package/luci-app-log-viewer
+mkdir -p ./package/zapret-openwrt
+mkdir -p ./package/facinstall
+
+# Клонируем общие пакеты
 git clone -b main https://github.com/openwrt-xiaomi/facinstall.git ./package/facinstall/
 git clone -b master https://github.com/gSpotx2f/luci-app-log.git ./package/luci-app-log-viewer/
 git clone -b master https://github.com/remittor/zapret-openwrt.git ./package/zapret-openwrt/
-./scripts/feeds install -a
 
-#
+# =========================================================
+# УСЛОВНЫЙ БЛОК: Только для официального OpenWrt
+# Проверяем, содержит ли REPO_URL строку "git.openwrt.org"
+# =========================================================
+if [[ "$REPO_URL" == *"git.openwrt.org"* ]]; then
+    echo ">>> Обнаружена сборка Official OpenWrt. Добавляем HomeProxy..."
+    mkdir -p ./package/luci-app-homeproxy
+    git clone -b master https://github.com/immortalwrt/homeproxy.git ./package/luci-app-homeproxy/
+else
+    echo ">>> Сборка ImmortalWrt (или другая). HomeProxy пропускаем (он обычно встроен)."
+fi
+# =========================================================
+
+# Установка фидов (важно делать это ПОСЛЕ клонирования пакетов)
+./scripts/feeds install -a
 sed -i "s/192.168.1.1/192.168.2.1/g" ./package/base-files/files/bin/config_generate
 sed -i "s#zonename='UTC'#zonename='Europe/Moscow'#g" ./package/base-files/files/bin/config_generate
 sed -i "s#timezone='GMT0'#timezone='MSK-3'#g" ./package/base-files/files/bin/config_generate
