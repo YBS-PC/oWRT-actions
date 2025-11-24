@@ -21,6 +21,7 @@ env:
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: ./config/WRT.config
   DIY_P1_SH: ./sh/WRT-part1.sh
+  DIY_P11_SH: ./sh/WRT-part11.sh
   DIY_P2_SH: ./sh/WRT-part2.sh
   UPLOAD_BIN_DIR: true
   UPLOAD_FIRMWARE: false
@@ -172,6 +173,8 @@ jobs:
         chmod +x $GITHUB_WORKSPACE/$DIY_P1_SH
         $GITHUB_WORKSPACE/$DIY_P1_SH
         ./scripts/feeds update -a
+        chmod +x $GITHUB_WORKSPACE/$DIY_P11_SH
+        $GITHUB_WORKSPACE/$DIY_P11_SH
         ./scripts/feeds install -a
         
     - name: Generate final configuration
