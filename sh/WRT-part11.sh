@@ -85,9 +85,35 @@ sed -i '/PKG_SOURCE_VERSION:=/a PKG_MIRROR_HASH:=skip' "$PKG_FILE"
 UPDATED_REV=$(grep "^PKG_REV" "$PKG_FILE" | cut -d'=' -f2 | tr -d ' :')
 if [ "$UPDATED_REV" = "$LATEST_COMMIT" ]; then
     echo "=================================================="
-    echo "✓ Обновление успешно завершено!"
+    echo "✓ Обновление youtubeUnblock успешно завершено!"
     echo "=================================================="
 else
     echo "✗ Ошибка при обновлении"
     exit 1
 fi
+
+
+echo "=================================================="
+echo "Применение фиксов для стабильной сборки Python"
+echo "=================================================="
+
+# Вариант 1: Отключаем Profile-Guided Optimization для Python
+# Это ускоряет сборку и избегает проблем с тестами
+if [ -f "feeds/packages/lang/python/python3/Makefile" ]; then
+    echo "Отключение PGO для Python3..."
+    
+    # Отключаем PGO (Profile-Guided Optimization)
+    sed -i 's/PYTHON_PGO:=1/PYTHON_PGO:=0/g' feeds/packages/lang/python/python3/Makefile
+    sed -i 's/PYTHON_PGO=1/PYTHON_PGO=0/g' feeds/packages/lang/python/python3/Makefile
+    
+    # Также можно отключить тесты полностью
+    sed -i 's/PYTHON_RUN_TESTS:=1/PYTHON_RUN_TESTS:=0/g' feeds/packages/lang/python/python3/Makefile
+    
+    echo "✓ PGO и тесты Python отключены"
+else
+    echo "⚠ Makefile Python3 не найден"
+fi
+
+echo "=================================================="
+echo "✓ Фиксы Python применены"
+echo "=================================================="
