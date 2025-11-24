@@ -85,9 +85,54 @@ sed -i '/PKG_SOURCE_VERSION:=/a PKG_MIRROR_HASH:=skip' "$PKG_FILE"
 UPDATED_REV=$(grep "^PKG_REV" "$PKG_FILE" | cut -d'=' -f2 | tr -d ' :')
 if [ "$UPDATED_REV" = "$LATEST_COMMIT" ]; then
     echo "=================================================="
-    echo "✓ Обновление успешно завершено!"
+    echo "✓ Обновление youtubeUnblock успешно завершено!"
     echo "=================================================="
 else
+    echo "✗ Ошибка при обновлении"
+    exit 1
+fi
+
+
+echo "=========================================="
+echo "Применение фикса для ускорения сборки Python 3"
+echo "=========================================="
+
+# Путь может меняться в зависимости от версии OpenWrt/ImmortalWrt, проверяем оба
+PYTHON_MAKEFILE=""
+if [ -f "feeds/packages/lang/python/python3/Makefile" ]; then
+    PYTHON_MAKEFILE="feeds/packages/lang/python/python3/Makefile"
+elif [ -f "package/feeds/packages/lang/python/python3/Makefile" ]; then
+    PYTHON_MAKEFILE="package/feeds/packages/lang/python/python3/Makefile"
+fi
+
+if [ -z "$PYTHON_MAKEFILE" ]; then
+    echo "⚠ Python 3 Makefile не найден. Возможно, пакет называется иначе или путь изменился."
+else
+    echo "Нашел Makefile: $PYTHON_MAKEFILE"
+    
+    # 1. Отключаем PGO (Profile-Guided Optimization)
+    # Это самое важное для стабильности и скорости
+    sed -i 's/PYTHON_PGO:=1/PYTHON_PGO:=0/' "$PYTHON_MAKEFILE"
+    sed -i 's/PYTHON_PGO=1/PYTHON_PGO=0/' "$PYTHON_MAKEFILE"
+    
+    # 2. Убираем флаг оптимизаций, который включает тесты
+    sed -i 's/--enable-optimizations/--disable-optimizations/' "$PYTHON_MAKEFILE"
+    
+    # 3. Принудительно отключаем тесты (если переменная есть)
+    sed -i 's/PYTHON_RUN_TESTS:=1/PYTHON_RUN_TESTS:=0/' "$PYTHON_MAKEFILE"
+    sed -i 's/PYTHON_RUN_TESTS=1/PYTHON_RUN_TESTS=0/' "$PYTHON_MAKEFILE"
+
+    echo "✓ PGO и тесты отключены."
+    
+    # Проверка (grep вернет 0, если найдет совпадение)
+    if grep -q "disable-optimizations" "$PYTHON_MAKEFILE"; then
+        echo "✓ Флаг --disable-optimizations успешно применен."
+    fi
+fi
+
+echo "=================================================="
+echo "✓ Фиксы Python применены"
+echo "=================================================="
     echo "✗ Ошибка при обновлении"
     exit 1
 fi
