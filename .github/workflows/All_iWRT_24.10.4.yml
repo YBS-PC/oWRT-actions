@@ -17,7 +17,7 @@ on:
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt.git
   REPO_BRANCH: openwrt-24.10
-  TARGET_COMMIT: 78b23a26c4c98938d549e7ff5876508544e33d4d
+  TARGET_COMMIT: 6eaea72a2c25ff33f044132d9edd6db3b8577f36
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: ./config/WRT.config
   DIY_P1_SH: ./sh/WRT-part1.sh
