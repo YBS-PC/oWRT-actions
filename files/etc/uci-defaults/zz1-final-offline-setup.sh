@@ -326,23 +326,23 @@ echo -e "${COLOR_MAGENTA}Настройка и запуск AdGuardHome...${COLO
 
 # Создание новой рабочей директории
 mkdir -p /opt/AdGuardHome
-
-# Установка прав доступа (поскольку теперь используется root)
 chown -R root:root /opt/AdGuardHome
 chmod 755 /opt/AdGuardHome
 
-# Проверить, существует ли группа 'adguardhome'
-if ! grep -q '^adguardhome:' /etc/group; then
-	# Если нет - создать ее как системную группу
-	echo "adguardhome:x:853:" >> /etc/group
-fi
-# Проверить, существует ли пользователь 'adguardhome'
-if ! grep -q '^adguardhome:' /etc/passwd; then
-	# Если нет - создать его как системного пользователя:
-	echo "adguardhome:x:853:853:AdGuard Home:/var/lib/adguardhome:/bin/false" >> /etc/passwd
-fi
+# Создаем пользователей/группы (на всякий случай)
+if ! grep -q '^adguardhome:' /etc/group; then echo "adguardhome:x:853:" >> /etc/group; fi
+if ! grep -q '^adguardhome:' /etc/passwd; then echo "adguardhome:x:853:853:AdGuard Home:/var/lib/adguardhome:/bin/false" >> /etc/passwd; fi
 
-echo -e "${COLOR_CYAN}Настройки для AdGuardHome...${COLOR_RESET}"
+echo -e "${COLOR_CYAN}Генерация конфигурации AdGuardHome...${COLOR_RESET}"
+
+# ОПРЕДЕЛЕНИЕ ТИПА КОНФИГУРАЦИИ
+# Проверяем init-скрипт на наличие признаков новой версии (jail/work_dir)
+if grep -q "procd_add_jail" /etc/init.d/adguardhome; then
+    # ==========================================
+    # ВАРИАНТ ДЛЯ MASTER (Новый формат - JAIL)
+    # ==========================================
+    echo "Обнаружен Init-скрипт нового типа (Master/Jail). Создаю конфиг v2."
+
 cat > /etc/config/adguardhome << 'EOF'
 config adguardhome 'config'
 	option enabled '1'
@@ -359,13 +359,48 @@ config adguardhome 'config'
 	# list jail_mount '/etc/ssl/adguardhome.key'
 EOF
 
-# Настройка init.d/adguardhome
-if ! grep -q 'local log_file' /etc/init.d/adguardhome; then
-	echo "Строка 'local log_file (legacy config_get log_file)' не найдена. Добавляю..."
-	sed -i "/local verbose=0/a \\\tlocal log_file='/var/AdGuardHome.log'" /etc/init.d/adguardhome
-	sed -i 's/--logfile syslog/--logfile "$log_file"/' /etc/init.d/adguardhome
+    # Настройка init.d/adguardhome (MASTER)
+    if ! grep -q 'local log_file' /etc/init.d/adguardhome; then
+        echo "Патч init-скрипта Master (добавление log_file)..."
+        sed -i "/local verbose=0/a \\\tlocal log_file='/var/AdGuardHome.log'" /etc/init.d/adguardhome
+    else
+        echo "Строка 'local log_file' уже существует."
+    fi
+
+    sed -i 's/--logfile syslog/--logfile "$log_file"/' /etc/init.d/adguardhome
+
 else
-	echo "Строка 'local log_file' уже существует. Пропускаю добавление."
+    # ==========================================
+    # ВАРИАНТ ДЛЯ 24.10 (Старый формат)
+    # ==========================================
+    echo "Обнаружен Init-скрипт старого типа (24.10). Создаю конфиг v1."
+
+cat > /etc/config/adguardhome << 'EOF'
+config adguardhome 'config'
+	option enabled '1'
+	option workdir '/opt/AdGuardHome'
+	option config '/etc/adguardhome/adguardhome.yaml'
+	option logfile '/var/AdGuardHome.log'
+	option pidfile '/run/adguardhome.pid'
+	option user 'root'
+	option group 'root'
+	option verbose '0'
+EOF
+
+    # Настройка init.d/adguardhome (24.10)
+    if ! grep -q 'config_get LOG_FILE' /etc/init.d/adguardhome; then
+        echo "Патч init-скрипта 24.10 (добавление log_file)..."
+        
+        # 1. Добавляем чтение переменной LOG_FILE (ищем PID_FILE заглавными)
+        sed -i "/config_get PID_FILE/a \\\tconfig_get LOG_FILE config logfile '/var/AdGuardHome.log'" /etc/init.d/adguardhome
+        
+        # 2. Добавляем аргумент --logfile в строку запуска (так как его там нет по умолчанию)
+        # Ищем --pidfile "$PID_FILE" и добавляем после него лог
+        sed -i 's/--pidfile "\$PID_FILE"/--pidfile "\$PID_FILE" --logfile "\$LOG_FILE"/' /etc/init.d/adguardhome
+    else
+        echo "Патч для 24.10 уже применен."
+    fi
+
 fi
 
 AGH_version=$(/usr/bin/AdGuardHome --version 2>/dev/null | grep -oP 'v?\K[\d.]+')
