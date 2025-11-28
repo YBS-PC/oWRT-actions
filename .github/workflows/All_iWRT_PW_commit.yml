@@ -175,6 +175,7 @@ jobs:
         eval "$DEVICE_CONFIG_COMMANDS"
         echo "-------------------------Passwall2------------------------"
         sed -i '/homeproxy/d' ./.config
+        sed -i '/[Ss][Hh][Aa][Dd][Oo][Ww][Ss][Oo][Cc][Kk][Ss]/d' ./.config
         echo 'CONFIG_PACKAGE_luci-app-passwall2=y' >> ./.config
         echo 'CONFIG_PACKAGE_xray-core=y' >> ./.config
         echo 'CONFIG_PACKAGE_geoview=y' >> ./.config
