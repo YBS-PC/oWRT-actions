@@ -207,7 +207,7 @@ jobs:
         echo 'CONFIG_PACKAGE_luci-app-passwall2_Nftables_Transparent_Proxy=y' >> ./.config
         echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_IPv6_Nat=y' >> ./.config
         echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_Xray=y' >> ./.config
-        echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_V2ray_Plugin=n' >> ./.config
+        echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_V2ray_Plugin=y' >> ./.config
         echo 'CONFIG_PACKAGE_luci-app-passwall2=y' >> ./.config
         echo 'CONFIG_PACKAGE_geoview=y' >> ./.config
         echo 'CONFIG_PACKAGE_v2ray-geoip=y' >> ./.config
