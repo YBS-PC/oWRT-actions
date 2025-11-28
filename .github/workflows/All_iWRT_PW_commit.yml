@@ -83,10 +83,23 @@ jobs:
       run: |
         echo ">>> Freeing up disk space"
         df -h
-        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache /opt/az /opt/microsoft "$AGENT_TOOLSDIRECTORY"
-        sudo apt-get purge -y "azure*" "dotnet*" "ghc*" "llvm*" "mono*" "android*" || true
-        sudo apt-get autoremove -y
+        echo ">>> Removing unnecessary software..."
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /opt/hostedtoolcache
+        sudo rm -rf /usr/local/share/boost
+        sudo rm -rf /usr/lib/jvm
+        sudo rm -rf /usr/share/swift
+        sudo rm -rf /usr/local/.ghcup
+        sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+        echo ">>> Removing Docker images..."
+        sudo docker image prune --all --force || true
+        echo ">>> Removing apt cache..."
+        sudo apt-get purge -y "azure*" "dotnet*" "ghc*" "llvm*" "mono*" "android*" "google*" "firefox*" "powershell*" "mysql*" || true
+        sudo apt-get autoremove -y --purge
         sudo apt-get clean
+        echo ">>> Disk space after cleanup:"
         df -h
         
     - name: Checkout
