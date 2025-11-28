@@ -169,6 +169,13 @@ jobs:
         [ -e $GITHUB_WORKSPACE/files ] && cp -r $GITHUB_WORKSPACE/files ./
         echo "--- Injecting config for ${{ env.TARGET_NAME }} ---"
         eval "$DEVICE_CONFIG_COMMANDS"
+        echo "-------------------------PW----------------------------"
+        sed -i '/homeproxy/d' ./.config
+        echo 'CONFIG_PACKAGE_luci-app-passwall2=y' >> ./.config
+        echo 'CONFIG_PACKAGE_xray-core=y' >> ./.config
+        echo 'CONFIG_PACKAGE_geoview=y' >> ./.config
+        echo 'CONFIG_PACKAGE_v2ray-geoip=y' >> ./.config
+        echo 'CONFIG_PACKAGE_v2ray-geosite=y' >> ./.config
         echo "---------------------------------------------------------"
         chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
         $GITHUB_WORKSPACE/$DIY_P2_SH
