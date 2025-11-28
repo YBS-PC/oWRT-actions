@@ -186,15 +186,33 @@ jobs:
         [ -e $GITHUB_WORKSPACE/files ] && cp -r $GITHUB_WORKSPACE/files ./
         echo "--- Injecting config for ${{ env.TARGET_NAME }} ---"
         eval "$DEVICE_CONFIG_COMMANDS"
-        echo "-------------------------Passwall2------------------------"
+        echo "----------------------Passwall2------------------------"
         sed -i '/homeproxy/d' ./.config
         sed -i '/[Ss][Hh][Aa][Dd][Oo][Ww][Ss][Oo][Cc][Kk][Ss]/d' ./.config
+        # N
+        echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_Haproxy=n' >> ./.config
+        echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_Hysteria=n' >> ./.config
+        echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_NaiveProxy=n' >> ./.config
+        echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_Shadowsocks_Libev_Client=n' >> ./.config
+        echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_Shadowsocks_Libev_Server=n' >> ./.config
+        echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_Shadowsocks_Rust_Client=n' >> ./.config
+        echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_Shadowsocks_Rust_Server=n' >> ./.config
+        echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_ShadowsocksR_Libev_Client=n' >> ./.config
+        echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_ShadowsocksR_Libev_Server=n' >> ./.config
+        echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_Simple_Obfs=n' >> ./.config
+        echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_SingBox=n' >> ./.config
+        echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_tuic_client=n' >> ./.config
+        echo 'CONFIG_PACKAGE_luci-app-passwall2_Iptables_Transparent_Proxy=n' >> ./.config
+        # Y
+        echo 'CONFIG_PACKAGE_luci-app-passwall2_Nftables_Transparent_Proxy=y' >> ./.config
+        echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_IPv6_Nat=y' >> ./.config
+        echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_Xray=y' >> ./.config
+        echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_V2ray_Plugin=n' >> ./.config
         echo 'CONFIG_PACKAGE_luci-app-passwall2=y' >> ./.config
-        echo 'CONFIG_PACKAGE_xray-core=y' >> ./.config
         echo 'CONFIG_PACKAGE_geoview=y' >> ./.config
         echo 'CONFIG_PACKAGE_v2ray-geoip=y' >> ./.config
         echo 'CONFIG_PACKAGE_v2ray-geosite=y' >> ./.config
-        echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_Xray=y' >> ./.config
+        echo 'CONFIG_PACKAGE_xray-core=y' >> ./.config
         echo "---------------------------------------------------------"
         chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
         $GITHUB_WORKSPACE/$DIY_P2_SH
