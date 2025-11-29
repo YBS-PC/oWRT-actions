@@ -231,6 +231,59 @@ echo -e "\e[37mУстановленная версия sing-box: $SB_version\e[0
 else
     echo -e "${COLOR_YELLOW}Пакет homeproxy не найден. Настройка пропущена.${COLOR_RESET}"
 fi
+
+#################### Настройка Passwall 2 (Интеграция с AGH) ####################
+# Проверяем, установлен ли passwall2
+PASSWALL_INIT="/etc/init.d/passwall2"
+
+if [ -f "$PASSWALL_INIT" ]; then
+    echo -e "${COLOR_MAGENTA}Настройка Passwall 2 для работы с AdGuardHome...${COLOR_RESET}"
+    
+    # Отключаем службу перед настройкой
+    "$PASSWALL_INIT" disable
+    "$PASSWALL_INIT" stop >/dev/null 2>&1
+
+    # --- КОНФИГУРАЦИЯ ЧЕРЕЗ UCI ---
+    # Мы настраиваем Passwall так, чтобы он НЕ перехватывал DNS (порт 53)
+    # и не пытался управлять dnsmasq.
+	# batch: Утилита запускается один раз, считывает файл в память, ждет от вас список команд на вход, применяет их все разом в памяти
+	# и (если есть команда commit) сохраняет результат на диск один раз
+	# -q тихий режим без ответов
+	# Если написать <<-EOF (с дефисом), то оболочка автоматически удаляет все символы табуляции (TAB) в начале каждой строки перед тем,
+	# как передать их команде uci. Просто красиво
+	
+    uci -q batch <<-EOF
+        # 1. Отключаем перехват DNS (Redirect/Tproxy на 53 порту)
+        # Это самое важное: firewall не будет заворачивать 53 порт в Passwall.
+        set passwall2.@global[0].dns_redirect='0'
+        
+        # 2. Отключаем Shunt (разделение DNS), так как AGH сам все решит
+        set passwall2.@global[0].dns_shunt='closed'
+        
+        # 3. Указываем Passwall использовать локальный AGH как DNS
+        # (на случай, если ему нужно что-то отрезолвить самому)
+        set passwall2.@global[0].remote_dns='127.0.0.1:53'
+        set passwall2.@global[0].china_dns='127.0.0.1:53'
+        
+        # 4. Отключаем любые попытки фильтрации UDP (если есть такая опция по умолчанию)
+        set passwall2.@global[0].adblock='0'
+        
+        # 5. Убеждаемся, что Passwall включен глобально
+        set passwall2.@global[0].enabled='1'
+        
+        commit passwall2
+EOF
+    
+    echo -e "${COLOR_WHITE}DNS перехват в Passwall 2 отключен. DNS полностью управляется AdGuardHome.${COLOR_RESET}"
+
+    # Включаем службу
+    "$PASSWALL_INIT" enable
+    echo -e "${COLOR_GREEN}Passwall 2 настроен и включен.${COLOR_RESET}"
+    
+else
+    echo -e "${COLOR_YELLOW}Passwall 2 не найден. Пропуск.${COLOR_RESET}"
+fi
+
 #################### Настройка youtubeUnblock ####################
 echo -e "${COLOR_MAGENTA}Настройка youtubeUnblock...${COLOR_RESET}"
 
