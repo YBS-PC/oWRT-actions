@@ -160,6 +160,9 @@ else
 fi
 
 #################### Настройка homeproxy ####################
+# Проверяем, установлен ли homeproxy, прежде чем пытаться его настраивать
+if [ -f "/etc/init.d/homeproxy" ]; then
+
 echo -e "${COLOR_MAGENTA}Настройка luci-app-homeproxy...${COLOR_RESET}"
 echo -e "${COLOR_YELLOW}Отключаем dns_hijacked в luci-app-homeproxy${COLOR_RESET}"
 sed -i "s/const dns_hijacked = uci\.get('dhcp', '@dnsmasq\[0\]', 'dns_redirect') || '0'/const dns_hijacked = '1'/" /etc/homeproxy/scripts/firewall_post.ut
@@ -225,6 +228,9 @@ echo -e "${COLOR_WHITE}luci-app-homeproxy настроен.${COLOR_RESET}"
 SB_version=$(/usr/bin/sing-box version 2>/dev/null | grep -oP -m 1 'v?\K[\d.]+')
 echo -e "\e[37mУстановленная версия sing-box: $SB_version\e[0m"
 
+else
+    echo -e "${COLOR_YELLOW}Пакет homeproxy не найден. Настройка пропущена.${COLOR_RESET}"
+fi
 #################### Настройка youtubeUnblock ####################
 echo -e "${COLOR_MAGENTA}Настройка youtubeUnblock...${COLOR_RESET}"
 
