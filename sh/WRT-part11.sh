@@ -141,7 +141,7 @@ echo "Блок для исправления ошибки интерактивн
 echo "=================================================="
 
 # Проверяем, что цель — nanopi-r5s И что мы собираем из нестабильной ветки (master/main).
-if [ "${{ matrix.target }}" == "nanopi-r5s" ]; then
+if [ "$CURRENT_MATRIX_TARGET" == "nanopi-r5s" ]; then
     if [[ "$REPO_BRANCH" == "master" || "$REPO_BRANCH" == "main" ]]; then
         
         echo ">>> Target is nanopi-r5s on branch $REPO_BRANCH. Applying kernel config patch."
