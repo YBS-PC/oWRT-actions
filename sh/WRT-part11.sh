@@ -126,7 +126,9 @@ if [[ "$REPO_BRANCH" == "master" || "$REPO_BRANCH" == "main" ]]; then
         sed -i 's/PYTHON_RUN_TESTS:=1/PYTHON_RUN_TESTS:=0/' "$PYTHON_MAKEFILE"
         sed -i 's/PYTHON_RUN_TESTS=1/PYTHON_RUN_TESTS=0/' "$PYTHON_MAKEFILE"
 
+        echo "=========================================="
         echo "✓ PGO, тесты и оптимизации отключены для ускорения сборки master или main."
+        echo "=========================================="
     fi
 
 else
@@ -162,7 +164,9 @@ if [ "$CURRENT_MATRIX_TARGET" == "nanopi-r5s" ]; then
             # 3. Проверяем, отсутствует ли опция (устранение интерактивного запроса)
             if ! grep -q "CONFIG_ARM64_CONTPTE" "$TARGET_CONFIG_FILE"; then
                 echo "CONFIG_ARM64_CONTPTE=y" >> "$TARGET_CONFIG_FILE"
+                echo "=========================================="
                 echo "Patch applied successfully to prevent interactive prompt."
+                echo "=========================================="
             else
                 echo "CONFIG_ARM64_CONTPTE=y already exists. Skipping patch."
             fi
@@ -170,8 +174,12 @@ if [ "$CURRENT_MATRIX_TARGET" == "nanopi-r5s" ]; then
             echo "Could not find kernel config file in $TARGET_CONFIG_PATH. Skipping patch."
         fi
     else
+        echo "=========================================="
         echo "Target is nanopi-r5s, but branch is stable ($REPO_BRANCH). Skipping kernel patch."
+        echo "=========================================="
     fi
 else
+    echo "=========================================="
     echo "Target is not nanopi-r5s. Skipping kernel patch."
+    echo "=========================================="
 fi
