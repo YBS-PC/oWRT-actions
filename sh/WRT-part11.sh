@@ -10,7 +10,7 @@
 # --------------------------------------------------------------------------
 
 echo "=================================================="
-echo "Обновление youtubeUnblock до latest main..."
+echo "Блок обновления youtubeUnblock до latest main..."
 echo "=================================================="
 
 # Получаем последний коммит из main
@@ -93,6 +93,10 @@ fi
 # Фиксы Python (ТОЛЬКО ДЛЯ ВЕТКИ MASTER или MAIN)
 # --------------------------------------------------------------------------
 
+echo "=================================================="
+echo "Блок фикса Python"
+echo "=================================================="
+
 # Проверяем, равна ли переменная REPO_BRANCH значению master или main
 if [[ "$REPO_BRANCH" == "master" || "$REPO_BRANCH" == "main" ]]; then
 
@@ -163,9 +167,11 @@ if [ "$CURRENT_MATRIX_TARGET" == "nanopi-r5s" ]; then
                 echo "CONFIG_ARM64_CONTPTE=y already exists. Skipping patch."
             fi
         else
-            echo "ERROR: Could not find kernel config file in $TARGET_CONFIG_PATH. Skipping patch."
+            echo "Could not find kernel config file in $TARGET_CONFIG_PATH. Skipping patch."
         fi
     else
         echo "Target is nanopi-r5s, but branch is stable ($REPO_BRANCH). Skipping kernel patch."
     fi
+else
+    echo "Target is not nanopi-r5s. Skipping kernel patch."
 fi
