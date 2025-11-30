@@ -8,6 +8,7 @@
 # --------------------------------------------------------------------------
 # Обновление youtubeUnblock (Выполняется ВСЕГДА)
 # --------------------------------------------------------------------------
+
 echo "=================================================="
 echo "Обновление youtubeUnblock до latest main..."
 echo "=================================================="
@@ -129,4 +130,42 @@ else
     echo "=========================================="
     echo "Ветка '$REPO_BRANCH' (не master или main). Фикс Python пропущен."
     echo "=========================================="
+fi
+
+# --------------------------------------------------------------------------
+# Фикс Contiguous PTE mappings for user memory (ARM64_CONTPTE) (ТОЛЬКО ДЛЯ nanopi-r5s ВЕТКИ MASTER или MAIN)
+# --------------------------------------------------------------------------
+
+echo "=================================================="
+echo "Блок для исправления ошибки интерактивности ядра ARM64_CONTPTE"
+echo "=================================================="
+
+# Проверяем, что цель — nanopi-r5s И что мы собираем из нестабильной ветки (master/main).
+if [ "${{ matrix.target }}" == "nanopi-r5s" ]; then
+    if [[ "$REPO_BRANCH" == "master" || "$REPO_BRANCH" == "main" ]]; then
+        
+        echo ">>> Target is nanopi-r5s on branch $REPO_BRANCH. Applying kernel config patch."
+        
+        # 1. Определяем путь, где лежат конфиги Rockchip/ARMv8
+        TARGET_CONFIG_PATH="target/linux/rockchip/armv8"
+        
+        # 2. Ищем актуальный файл конфигурации ядра (например, config-6.12 или config-6.13)
+        TARGET_CONFIG_FILE=$(find openwrt/$TARGET_CONFIG_PATH -name "config-*" -type f | head -n 1)
+
+        if [ -n "$TARGET_CONFIG_FILE" ]; then
+            echo "Found kernel config file: $TARGET_CONFIG_FILE"
+            
+            # 3. Проверяем, отсутствует ли опция (устранение интерактивного запроса)
+            if ! grep -q "CONFIG_ARM64_CONTPTE" "$TARGET_CONFIG_FILE"; then
+                echo "CONFIG_ARM64_CONTPTE=y" >> "$TARGET_CONFIG_FILE"
+                echo "Patch applied successfully to prevent interactive prompt."
+            else
+                echo "CONFIG_ARM64_CONTPTE=y already exists. Skipping patch."
+            fi
+        else
+            echo "ERROR: Could not find kernel config file in $TARGET_CONFIG_PATH. Skipping patch."
+        fi
+    else
+        echo "Target is nanopi-r5s, but branch is stable ($REPO_BRANCH). Skipping kernel patch."
+    fi
 fi
