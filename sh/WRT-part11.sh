@@ -150,7 +150,7 @@ if [ "$CURRENT_MATRIX_TARGET" == "nanopi-r5s" ]; then
         TARGET_CONFIG_PATH="target/linux/rockchip/armv8"
         
         # 2. Ищем актуальный файл конфигурации ядра (например, config-6.12 или config-6.13)
-        TARGET_CONFIG_FILE=$(find openwrt/$TARGET_CONFIG_PATH -name "config-*" -type f | head -n 1)
+        TARGET_CONFIG_FILE=$(find $TARGET_CONFIG_PATH -name "config-*" -type f | head -n 1)
 
         if [ -n "$TARGET_CONFIG_FILE" ]; then
             echo "Found kernel config file: $TARGET_CONFIG_FILE"
