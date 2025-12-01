@@ -64,20 +64,31 @@ fi
 # ЗАМЕНА XRAY-CORE НА ВЕРСИЮ ИЗ PASSWALL
 # Выполняется ПОСЛЕ install -a, чтобы перезаписать стандартный пакет
 # =========================================================
-if ./scripts/feeds list -s | grep -q "passwall_packages"; then
-    echo "======================================================="
-    echo ">>> Фид passwall_packages найден. Заменяем xray-core..."
+# Пути к пакетам
+STD_XRAY_PATH="./package/feeds/packages/xray-core"
+PW_XRAY_SRC="./feeds/passwall_packages/xray-core"
+
+# Проверяем условия:
+# 1. Существует ли стандартный пакет (значит система хочет его собрать)
+# 2. Существует ли исходник в фиде Passwall (значит у нас есть на что менять)
+if [ -d "$STD_XRAY_PATH" ] && [ -d "$PW_XRAY_SRC" ]; then
+    echo ">>> Условия выполнены: Обнаружен стандартный Xray И доступен Passwall Xray."
+    echo ">>> Производим замену на версию от Xiaorouji..."
     
-    # 1. Удаляем стандартные пакеты (чтобы разорвать симлинки)
-    rm -rf ./package/feeds/packages/xray-core
+    # 1. Удаляем стандартный пакет (разрываем симлинк)
+    rm -rf "$STD_XRAY_PATH"
     
-    # 2. Принудительно (-f) устанавливаем версию из Passwall (Xiaorouji)
+    # 2. Устанавливаем версию из Passwall
     ./scripts/feeds install -p passwall_packages -f xray-core
     
-    echo ">>> xray-core успешно заменен на версию от Xiaorouji."
-    echo "======================================================="
+    echo ">>> xray-core успешно заменен."
+
+elif [ -d "$STD_XRAY_PATH" ] && [ ! -d "$PW_XRAY_SRC" ]; then
+    echo ">>> ВНИМАНИЕ: Стандартный Xray есть, но фид Passwall недоступен."
+    echo ">>> Замена отменена. Оставлен стандартный пакет (чтобы не ломать сборку)."
+
 else
-    echo ">>> Фид passwall_packages НЕ найден. Оставлен стандартный xray-core."
+    echo ">>> Стандартный xray-core не установлен. Замена не требуется."
 fi
 
 # =========================================================
