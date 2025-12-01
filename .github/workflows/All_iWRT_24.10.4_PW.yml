@@ -187,6 +187,10 @@ jobs:
         [ -e $GITHUB_WORKSPACE/$FEEDS_CONF ] && mv $GITHUB_WORKSPACE/$FEEDS_CONF ./feeds.conf.default
         chmod +x $GITHUB_WORKSPACE/$DIY_P1_SH
         $GITHUB_WORKSPACE/$DIY_P1_SH
+        echo "--------------------Passwall2 feeds----------------------"
+        echo -e "\nsrc-git passwall2 https://github.com/xiaorouji/openwrt-passwall2.git" >> feeds.conf.default
+        echo -e "\nsrc-git passwall_packages https://github.com/xiaorouji/openwrt-passwall-packages.git;main" >> feeds.conf.default
+        echo "---------------------------------------------------------"
         ./scripts/feeds update -a
         chmod +x $GITHUB_WORKSPACE/$DIY_P11_SH
         $GITHUB_WORKSPACE/$DIY_P11_SH
