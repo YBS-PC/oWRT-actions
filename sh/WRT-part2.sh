@@ -70,11 +70,9 @@ if ./scripts/feeds list -s | grep -q "passwall_packages"; then
     
     # 1. Удаляем стандартные пакеты (чтобы разорвать симлинки)
     rm -rf ./package/feeds/packages/xray-core
-    rm -rf ./package/feeds/packages/xray-plugin
     
     # 2. Принудительно (-f) устанавливаем версию из Passwall (Xiaorouji)
     ./scripts/feeds install -p passwall_packages -f xray-core
-    ./scripts/feeds install -p passwall_packages -f xray-plugin
     
     echo ">>> xray-core успешно заменен на версию от Xiaorouji."
     echo "======================================================="
