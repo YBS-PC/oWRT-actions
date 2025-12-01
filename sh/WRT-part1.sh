@@ -36,5 +36,5 @@ echo -e "\nsrc-git internetdetector https://github.com/gSpotx2f/luci-app-interne
 #echo "src-git luciappxray https://github.com/yichya/luci-app-xray.git" >> feeds.conf.default
 #echo "src-git argon https://github.com/jerrykuku/luci-theme-argon.git" >> feeds.conf.default
 #echo "src-git nikki https://github.com/nikkinikki-org/OpenWrt-nikki.git;main" >> feeds.conf.default
-echo -e "\nsrc-git passwall2 https://github.com/xiaorouji/openwrt-passwall2.git" >> feeds.conf.default
-echo -e "\nsrc-git passwall_packages https://github.com/xiaorouji/openwrt-passwall-packages.git;main" >> feeds.conf.default
+#echo -e "\nsrc-git passwall2 https://github.com/xiaorouji/openwrt-passwall2.git" >> feeds.conf.default
+#echo -e "\nsrc-git passwall_packages https://github.com/xiaorouji/openwrt-passwall-packages.git;main" >> feeds.conf.default
