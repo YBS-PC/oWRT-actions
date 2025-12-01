@@ -167,6 +167,8 @@ jobs:
         fi
     
     - name: Prepare build environment
+      env:
+        CURRENT_MATRIX_TARGET: ${{ matrix.target }}
       run: |
         cd openwrt
         [ -e $GITHUB_WORKSPACE/$FEEDS_CONF ] && mv $GITHUB_WORKSPACE/$FEEDS_CONF ./feeds.conf.default
