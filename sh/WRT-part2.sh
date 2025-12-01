@@ -61,34 +61,42 @@ fi
 ./scripts/feeds install -a
 
 # =========================================================
-# ЗАМЕНА XRAY-CORE НА ВЕРСИЮ ИЗ PASSWALL
-# Выполняется ПОСЛЕ install -a, чтобы перезаписать стандартный пакет
+# ЗАМЕНА ПАКЕТОВ НА ВЕРСИИ ИЗ PASSWALL
 # =========================================================
-# Пути к пакетам
-STD_XRAY_PATH="./package/feeds/packages/xray-core"
-PW_XRAY_SRC="./feeds/passwall_packages/xray-core"
+# Список пакетов для замены (порядок не важен)
+PW_PACKAGES="xray-core xray-plugin v2ray-geodata v2ray-plugin sing-box chinadns-ng geoview tcping"
 
-# Проверяем условия:
-# 1. Существует ли стандартный пакет (значит система хочет его собрать)
-# 2. Существует ли исходник в фиде Passwall (значит у нас есть на что менять)
-if [ -d "$STD_XRAY_PATH" ] && [ -d "$PW_XRAY_SRC" ]; then
-    echo ">>> Условия выполнены: Обнаружен стандартный Xray И доступен Passwall Xray."
-    echo ">>> Производим замену на версию от Xiaorouji..."
-    
-    # 1. Удаляем стандартный пакет (разрываем симлинк)
-    rm -rf "$STD_XRAY_PATH"
-    
-    # 2. Устанавливаем версию из Passwall
-    ./scripts/feeds install -p passwall_packages -f xray-core
-    
-    echo ">>> xray-core успешно заменен."
+# Путь к исходникам Passwall (откуда берем)
+PW_FEED_DIR="./feeds/passwall_packages"
 
-elif [ -d "$STD_XRAY_PATH" ] && [ ! -d "$PW_XRAY_SRC" ]; then
-    echo ">>> ВНИМАНИЕ: Стандартный Xray есть, но фид Passwall недоступен."
-    echo ">>> Замена отменена. Оставлен стандартный пакет (чтобы не ломать сборку)."
+if [ -d "$PW_FEED_DIR" ]; then
+    echo "======================================================="
+    echo ">>> Фид Passwall найден. Начинаем замену пакетов..."
 
+    for PKG in $PW_PACKAGES; do
+        # Путь, куда установился стандартный пакет (ссылка)
+        STD_PKG_PATH="./package/feeds/packages/$PKG"
+        
+        # Проверяем:
+        # 1. Установлен ли стандартный пакет (есть ли папка в package/...)
+        # 2. Существует ли такой пакет в фиде Passwall (есть ли исходник)
+        if [ -d "$STD_PKG_PATH" ] && [ -d "$PW_FEED_DIR/$PKG" ]; then
+            echo "   > Замена [$PKG]..."
+            
+            # 1. Удаляем стандартную ссылку
+            rm -rf "$STD_PKG_PATH"
+            
+            # 2. Устанавливаем версию из Passwall
+            ./scripts/feeds install -p passwall_packages -f "$PKG"
+        else
+            echo "   . Пропуск [$PKG] (не установлен в системе или нет в Passwall)"
+        fi
+    done
+    
+    echo ">>> Все пакеты обработаны."
+    echo "======================================================="
 else
-    echo ">>> Стандартный xray-core не установлен. Замена не требуется."
+    echo ">>> ВНИМАНИЕ: Фид passwall_packages не найден. Замена отменена."
 fi
 
 # =========================================================
