@@ -64,11 +64,11 @@ fi
 # ЗАМЕНА ПАКЕТОВ НА ВЕРСИИ ИЗ PASSWALL
 # =========================================================
 # 1. Формируем базовый список пакетов для замены
-PW_PACKAGES="v2ray-geodata v2ray-plugin sing-box chinadns-ng tcping"
+PW_PACKAGES="v2ray-geodata chinadns-ng"
 
 # 2. Добавляем проблемные пакеты ТОЛЬКО для ветки Master/Main (например geoview)
 if [[ "$REPO_BRANCH" == "master" || "$REPO_BRANCH" == "main" ]]; then
-    PW_PACKAGES="$PW_PACKAGES xray-core xray-plugin geoview"
+    PW_PACKAGES="$PW_PACKAGES xray-core xray-plugin v2ray-plugin sing-box geoview tcping"
     echo ">>> Ветка $REPO_BRANCH: geoview добавлен в список замены."
 else
     echo ">>> Ветка $REPO_BRANCH: geoview ИСКЛЮЧЕН из замены (требует Go 1.24+)."
