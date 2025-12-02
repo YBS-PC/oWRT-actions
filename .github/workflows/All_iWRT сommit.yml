@@ -1,4 +1,4 @@
-name: All iWRT Сommit
+name: All iWRT сommit
 
 on:
   workflow_dispatch:
