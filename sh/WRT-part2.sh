@@ -63,15 +63,24 @@ fi
 # =========================================================
 # ЗАМЕНА ПАКЕТОВ НА ВЕРСИИ ИЗ PASSWALL
 # =========================================================
-# Список пакетов для замены (порядок не важен)
-PW_PACKAGES="xray-core xray-plugin v2ray-geodata v2ray-plugin sing-box chinadns-ng geoview tcping"
+# 1. Формируем базовый список пакетов для замены
+PW_PACKAGES="xray-core xray-plugin v2ray-geodata v2ray-plugin sing-box chinadns-ng tcping"
 
-# Путь к исходникам Passwall (откуда берем)
+# 2. Добавляем проблемные пакеты ТОЛЬКО для ветки Master/Main (например geoview)
+if [[ "$REPO_BRANCH" == "master" || "$REPO_BRANCH" == "main" ]]; then
+    PW_PACKAGES="$PW_PACKAGES geoview"
+    echo ">>> Ветка $REPO_BRANCH: geoview добавлен в список замены."
+else
+    echo ">>> Ветка $REPO_BRANCH: geoview ИСКЛЮЧЕН из замены (требует Go 1.24+)."
+fi
+
+# Путь к исходникам Passwall
 PW_FEED_DIR="./feeds/passwall_packages"
 
 if [ -d "$PW_FEED_DIR" ]; then
     echo "======================================================="
     echo ">>> Фид Passwall найден. Начинаем замену пакетов..."
+    echo ">>> Список для обработки: $PW_PACKAGES"
 
     for PKG in $PW_PACKAGES; do
         # Путь, куда установился стандартный пакет (ссылка)
