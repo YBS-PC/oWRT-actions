@@ -118,6 +118,18 @@ jobs:
           ls -l ./files/etc/uci-defaults
         fi
 
+    - name: Download and prepare latest AdGuardHome binary
+      run: |
+        echo ">>> Downloading latest AdGuardHome for arm64..."
+        curl -L -o AdGuardHome_linux_arm64.tar.gz \
+          "https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_arm64.tar.gz"
+        tar -xzf AdGuardHome_linux_arm64.tar.gz
+        mkdir -p ./files/usr/bin
+        cp ./AdGuardHome/AdGuardHome ./files/usr/bin/
+        chmod 755 ./files/usr/bin/AdGuardHome
+        rm -rf AdGuardHome_linux_arm64.tar.gz AdGuardHome
+        echo ">>> Latest AdGuardHome binary is ready."
+
     - name: Load device configuration
       id: device_vars
       run: |
