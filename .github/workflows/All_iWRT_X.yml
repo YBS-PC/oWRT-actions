@@ -186,7 +186,6 @@ jobs:
         $GITHUB_WORKSPACE/$DIY_P1_SH
         echo "--------------------Xray feeds----------------------"
         echo -e "\nsrc-git luciappxray https://github.com/yichya/luci-app-xray.git" >> feeds.conf.default
-        #echo -e "\nsrc-git passwall_packages https://github.com/xiaorouji/openwrt-passwall-packages.git;main" >> feeds.conf.default
         echo "---------------------------------------------------------"
         ./scripts/feeds update -a
         chmod +x $GITHUB_WORKSPACE/$DIY_P11_SH
