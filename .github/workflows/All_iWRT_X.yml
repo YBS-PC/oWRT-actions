@@ -205,6 +205,7 @@ jobs:
         sed -i '/[Ss][Hh][Aa][Dd][Oo][Ww][Ss][Oo][Cc][Kk][Ss]/d' ./.config
         # N
         # Y
+        echo 'CONFIG_PACKAGE_luci-app-xray=y' >> ./.config
         echo 'CONFIG_PACKAGE_geoview=y' >> ./.config
         echo 'CONFIG_PACKAGE_v2ray-geoip=y' >> ./.config
         echo 'CONFIG_PACKAGE_v2ray-geosite=y' >> ./.config
