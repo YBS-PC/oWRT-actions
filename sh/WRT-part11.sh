@@ -142,44 +142,44 @@ fi
 # Фикс Contiguous PTE mappings for user memory (ARM64_CONTPTE) (ТОЛЬКО ДЛЯ nanopi-r5s ВЕТКИ MASTER или MAIN)
 # --------------------------------------------------------------------------
 
-echo "=================================================="
-echo "Блок для исправления ошибки интерактивности ядра ARM64_CONTPTE"
-echo "=================================================="
+#--#echo "=================================================="
+#--#echo "Блок для исправления ошибки интерактивности ядра ARM64_CONTPTE"
+#--#echo "=================================================="
 
 # Проверяем, что цель — nanopi-r5s И что мы собираем из нестабильной ветки (master/main).
-if [ "$CURRENT_MATRIX_TARGET" == "nanopi-r5s" ]; then
-    if [[ "$REPO_BRANCH" == "master" || "$REPO_BRANCH" == "main" ]]; then
+#--#if [ "$CURRENT_MATRIX_TARGET" == "nanopi-r5s" ]; then
+#--#    if [[ "$REPO_BRANCH" == "master" || "$REPO_BRANCH" == "main" ]]; then
         
-        echo ">>> Target is nanopi-r5s on branch $REPO_BRANCH. Applying kernel config patch."
+#--#        echo ">>> Target is nanopi-r5s on branch $REPO_BRANCH. Applying kernel config patch."
         
         # 1. Определяем путь, где лежат конфиги Rockchip/ARMv8
-        TARGET_CONFIG_PATH="target/linux/rockchip/armv8"
+#--#        TARGET_CONFIG_PATH="target/linux/rockchip/armv8"
         
         # 2. Ищем актуальный файл конфигурации ядра (например, config-6.12 или config-6.13)
-        TARGET_CONFIG_FILE=$(find $TARGET_CONFIG_PATH -name "config-*" -type f | head -n 1)
+#--#        TARGET_CONFIG_FILE=$(find $TARGET_CONFIG_PATH -name "config-*" -type f | head -n 1)
 
-        if [ -n "$TARGET_CONFIG_FILE" ]; then
-            echo "Found kernel config file: $TARGET_CONFIG_FILE"
+#--#        if [ -n "$TARGET_CONFIG_FILE" ]; then
+#--#            echo "Found kernel config file: $TARGET_CONFIG_FILE"
             
             # 3. Проверяем, отсутствует ли опция (устранение интерактивного запроса)
-            if ! grep -q "CONFIG_ARM64_CONTPTE" "$TARGET_CONFIG_FILE"; then
-                echo "CONFIG_ARM64_CONTPTE=y" >> "$TARGET_CONFIG_FILE"
-                echo "=========================================="
-                echo "Patch applied successfully to prevent interactive prompt."
-                echo "=========================================="
-            else
-                echo "CONFIG_ARM64_CONTPTE=y already exists. Skipping patch."
-            fi
-        else
-            echo "Could not find kernel config file in $TARGET_CONFIG_PATH. Skipping patch."
-        fi
-    else
-        echo "=========================================="
-        echo "Target is nanopi-r5s, but branch is stable ($REPO_BRANCH). Skipping kernel patch."
-        echo "=========================================="
-    fi
-else
-    echo "=========================================="
-    echo "Target is not nanopi-r5s. Skipping kernel patch."
-    echo "=========================================="
-fi
+#--#            if ! grep -q "CONFIG_ARM64_CONTPTE" "$TARGET_CONFIG_FILE"; then
+#--#                echo "CONFIG_ARM64_CONTPTE=y" >> "$TARGET_CONFIG_FILE"
+#--#                echo "=========================================="
+#--#                echo "Patch applied successfully to prevent interactive prompt."
+#--#                echo "=========================================="
+#--#            else
+#--#                echo "CONFIG_ARM64_CONTPTE=y already exists. Skipping patch."
+#--#            fi
+#--#        else
+#--#            echo "Could not find kernel config file in $TARGET_CONFIG_PATH. Skipping patch."
+#--#        fi
+#--#    else
+#--#        echo "=========================================="
+#--#        echo "Target is nanopi-r5s, but branch is stable ($REPO_BRANCH). Skipping kernel patch."
+#--#        echo "=========================================="
+#--#    fi
+#--#else
+#--#    echo "=========================================="
+#--#    echo "Target is not nanopi-r5s. Skipping kernel patch."
+#--#    echo "=========================================="
+#--#fi
