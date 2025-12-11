@@ -93,50 +93,50 @@ fi
 # Фиксы Python (ТОЛЬКО ДЛЯ ВЕТКИ MASTER или MAIN)
 # --------------------------------------------------------------------------
 
-echo "=================================================="
-echo "Блок фикса Python"
-echo "=================================================="
+#---#echo "=================================================="
+#---#echo "Блок фикса Python"
+#---#echo "=================================================="
 
 # Проверяем, равна ли переменная REPO_BRANCH значению master или main
-if [[ "$REPO_BRANCH" == "master" || "$REPO_BRANCH" == "main" ]]; then
+#---#if [[ "$REPO_BRANCH" == "master" || "$REPO_BRANCH" == "main" ]]; then
 
-    echo ""
-    echo "=========================================="
-    echo "Ветка '$REPO_BRANCH': Применение фикса Python PGO..."
-    echo "=========================================="
+#---#    echo ""
+#---#    echo "=========================================="
+#---#    echo "Ветка '$REPO_BRANCH': Применение фикса Python PGO..."
+#---#    echo "=========================================="
 
-    PYTHON_MAKEFILE=""
-    if [ -f "feeds/packages/lang/python/python3/Makefile" ]; then
-        PYTHON_MAKEFILE="feeds/packages/lang/python/python3/Makefile"
-    elif [ -f "package/feeds/packages/lang/python/python3/Makefile" ]; then
-        PYTHON_MAKEFILE="package/feeds/packages/lang/python/python3/Makefile"
-    fi
+#---#    PYTHON_MAKEFILE=""
+#---#    if [ -f "feeds/packages/lang/python/python3/Makefile" ]; then
+#---#        PYTHON_MAKEFILE="feeds/packages/lang/python/python3/Makefile"
+#---#    elif [ -f "package/feeds/packages/lang/python/python3/Makefile" ]; then
+#---#        PYTHON_MAKEFILE="package/feeds/packages/lang/python/python3/Makefile"
+#---#    fi
 
-    if [ -z "$PYTHON_MAKEFILE" ]; then
-        echo "⚠ Python 3 Makefile не найден."
-    else
-        echo "Нашел Makefile: $PYTHON_MAKEFILE"
+#---#    if [ -z "$PYTHON_MAKEFILE" ]; then
+#---#        echo "⚠ Python 3 Makefile не найден."
+#---#    else
+#---#        echo "Нашел Makefile: $PYTHON_MAKEFILE"
         
         # Отключаем PGO и оптимизации
-        sed -i 's/PYTHON_PGO:=1/PYTHON_PGO:=0/' "$PYTHON_MAKEFILE"
-        sed -i 's/PYTHON_PGO=1/PYTHON_PGO=0/' "$PYTHON_MAKEFILE"
-        sed -i 's/--enable-optimizations/--disable-optimizations/' "$PYTHON_MAKEFILE"
+#---#        sed -i 's/PYTHON_PGO:=1/PYTHON_PGO:=0/' "$PYTHON_MAKEFILE"
+#---#        sed -i 's/PYTHON_PGO=1/PYTHON_PGO=0/' "$PYTHON_MAKEFILE"
+#---#        sed -i 's/--enable-optimizations/--disable-optimizations/' "$PYTHON_MAKEFILE"
         
         # Отключаем тесты
-        sed -i 's/PYTHON_RUN_TESTS:=1/PYTHON_RUN_TESTS:=0/' "$PYTHON_MAKEFILE"
-        sed -i 's/PYTHON_RUN_TESTS=1/PYTHON_RUN_TESTS=0/' "$PYTHON_MAKEFILE"
+#---#        sed -i 's/PYTHON_RUN_TESTS:=1/PYTHON_RUN_TESTS:=0/' "$PYTHON_MAKEFILE"
+#---#        sed -i 's/PYTHON_RUN_TESTS=1/PYTHON_RUN_TESTS=0/' "$PYTHON_MAKEFILE"
 
-        echo "=========================================="
-        echo "✓ PGO, тесты и оптимизации отключены для ускорения сборки master или main."
-        echo "=========================================="
-    fi
+#---#        echo "=========================================="
+#---#        echo "✓ PGO, тесты и оптимизации отключены для ускорения сборки master или main."
+#---#        echo "=========================================="
+#---#    fi
 
-else
-    echo ""
-    echo "=========================================="
-    echo "Ветка '$REPO_BRANCH' (не master или main). Фикс Python пропущен."
-    echo "=========================================="
-fi
+#---#else
+#---#    echo ""
+#---#    echo "=========================================="
+#---#    echo "Ветка '$REPO_BRANCH' (не master или main). Фикс Python пропущен."
+#---#    echo "=========================================="
+#---#fi
 
 # --------------------------------------------------------------------------
 # Фикс Contiguous PTE mappings for user memory (ARM64_CONTPTE) (ТОЛЬКО ДЛЯ nanopi-r5s ВЕТКИ MASTER или MAIN)
