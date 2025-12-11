@@ -37,12 +37,17 @@
 # Создаем общие папки (флаг -p чтобы не было ошибок если папка уже есть)
 mkdir -p ./package/luci-app-log-viewer
 mkdir -p ./package/zapret-openwrt
-mkdir -p ./package/facinstall
 
 # Клонируем общие пакеты
-git clone -b main https://github.com/openwrt-xiaomi/facinstall.git ./package/facinstall/
 git clone -b master https://github.com/gSpotx2f/luci-app-log.git ./package/luci-app-log-viewer/
 git clone -b master https://github.com/remittor/zapret-openwrt.git ./package/zapret-openwrt/
+
+if [ "$CURRENT_MATRIX_TARGET" == "ax59u" ]; then
+    mkdir -p ./package/facinstall
+    git clone -b main https://github.com/openwrt-xiaomi/facinstall.git ./package/facinstall/
+else
+    echo "=========================================="
+fi
 
 # =========================================================
 # УСЛОВНЫЙ БЛОК: Только для официального OpenWrt
