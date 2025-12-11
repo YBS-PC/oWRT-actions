@@ -108,8 +108,10 @@ jobs:
     - name: Download and prepare latest AdGuardHome binary
       run: |
         echo ">>> Downloading latest AdGuardHome for arm64..."
-        curl -L -o AdGuardHome_linux_arm64.tar.gz \
-          "https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_arm64.tar.gz"
+        AGH_URL=$(curl -s https://api.github.com/repos/AdguardTeam/AdGuardHome/releases/latest \
+          | grep "browser_download_url.*linux_arm64.*tar.gz" \
+          | cut -d '"' -f 4)
+        curl -L -o AdGuardHome_linux_arm64.tar.gz "$AGH_URL"
         tar -xzf AdGuardHome_linux_arm64.tar.gz
         mkdir -p ./files/usr/bin
         cp ./AdGuardHome/AdGuardHome ./files/usr/bin/
