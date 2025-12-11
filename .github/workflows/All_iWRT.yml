@@ -177,6 +177,8 @@ jobs:
         ./scripts/feeds install -a
         
     - name: Generate final configuration
+      env:
+        CURRENT_MATRIX_TARGET: ${{ matrix.target }}
       run: |
         cd openwrt
         [ -e $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE ./.config
