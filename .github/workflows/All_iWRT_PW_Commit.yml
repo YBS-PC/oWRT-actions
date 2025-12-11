@@ -18,7 +18,7 @@ on:
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt.git
   REPO_BRANCH: master
-  TARGET_COMMIT: f4fa62ca4e1d0f754cc8b99f9267dfe4cf919245
+  TARGET_COMMIT: 0fc04bf0de045d5ca0f2ac326d7baa454d3ddfee
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: ./config/WRT.config
   DIY_P1_SH: ./sh/WRT-part1.sh
