@@ -1,4 +1,4 @@
-name: All oWRT 24.10.4
+name: All oWRT 24.10.5
 
 on:
   workflow_dispatch:
@@ -17,7 +17,7 @@ on:
 env:
   REPO_URL: https://git.openwrt.org/openwrt/openwrt.git
   REPO_BRANCH: openwrt-24.10
-  TARGET_COMMIT: 78b23a26c4c98938d549e7ff5876508544e33d4d
+  TARGET_COMMIT: 4f7e6e554be2aef6a55be36f9f954d56705eb2ee
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: ./config/WRT.config
   DIY_P1_SH: ./sh/WRT-part1.sh
