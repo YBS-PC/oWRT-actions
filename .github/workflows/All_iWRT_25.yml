@@ -18,6 +18,7 @@ on:
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt.git
   REPO_BRANCH: openwrt-25.12
+  TARGET_COMMIT: b1a74b1cde0dd9b4c07bb5ba7020f94967912f2d
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: ./config/WRT.config
   DIY_P1_SH: ./sh/WRT-part1.sh
@@ -144,11 +145,14 @@ jobs:
         sudo mkdir -p /workdir
         sudo chown $USER:$GROUPS /workdir
         
-    - name: Cloning source code
+    - name: Cloning source code and checking out specific commit
       working-directory: /workdir
       run: |
         df -hT $PWD
         git clone --branch $REPO_BRANCH $REPO_URL openwrt
+        cd openwrt
+        git checkout $TARGET_COMMIT || { echo "Failed to checkout commit $TARGET_COMMIT"; exit 1; }
+        echo "Reverted to commit $TARGET_COMMIT successfully"
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
     - name: Apply custom patches
@@ -203,7 +207,7 @@ jobs:
       run: |
         cd openwrt
         echo ">>> Getting latest kernel hash for ${{ env.KERNEL_PATH }}"
-        KERNEL_LIST=$(curl -s https://downloads.immortalwrt.org/snapshots/targets/${{ env.KERNEL_PATH }}/kmods/ | grep -oE '6\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+')
+        KERNEL_LIST=$(curl -s https://downloads.immortalwrt.org/releases/25.12-SNAPSHOT/targets/${{ env.KERNEL_PATH }}/kmods/ | grep -oE '6\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+')
         LATEST_HASH=$(echo "$KERNEL_LIST" | while read -r line; do
             version=$(echo "$line" | cut -d'-' -f1)
             major=$(echo "$version" | cut -d'.' -f1)
