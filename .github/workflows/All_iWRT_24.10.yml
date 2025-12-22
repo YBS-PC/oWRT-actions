@@ -1,4 +1,4 @@
-name: All iWRT 24.10.4
+name: All iWRT 24.10
 
 on:
   workflow_dispatch:
@@ -17,7 +17,7 @@ on:
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt.git
   REPO_BRANCH: openwrt-24.10
-  TARGET_COMMIT: 6eaea72a2c25ff33f044132d9edd6db3b8577f36
+  TARGET_COMMIT: 4f7e6e554be2aef6a55be36f9f954d56705eb2ee
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: ./config/WRT.config
   DIY_P1_SH: ./sh/WRT-part1.sh
@@ -264,7 +264,7 @@ jobs:
       uses: actions/upload-artifact@main
       if: steps.compile.outputs.compile == 'success' && env.UPLOAD_BIN_DIR == 'true'
       with:
-        name: ${{ matrix.target }}_iWRT_24_10_4${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+        name: ${{ matrix.target }}_iWRT_24_10${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: openwrt/bin
     
     # ... Остальные шаги (upload, release, delete) ...
