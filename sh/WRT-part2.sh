@@ -50,15 +50,21 @@ else
 fi
 
 # =========================================================
-# УСЛОВНЫЙ БЛОК: Только для официального OpenWrt
-# Проверяем, содержит ли REPO_URL строку "git.openwrt.org"
+# УСЛОВНЫЙ БЛОК: Добавление HomeProxy
+# Логика: Если в фидах нет репозитория 'immortalwrt/luci',
+# значит HomeProxy там нет (это Official OpenWrt или старый коммит),
+# и его нужно скачать вручную.
 # =========================================================
-if [[ "$REPO_URL" == *"git.openwrt.org"* ]]; then
-    echo ">>> Обнаружена сборка Official OpenWrt. Добавляем HomeProxy..."
+
+# Проверяем файл feeds.conf.default на наличие строки "immortalwrt/luci"
+if ! grep -q "immortalwrt/luci" feeds.conf.default; then
+    echo ">>> В фидах НЕ найден ImmortalWrt LuCI. Считаем, что это Official OpenWrt."
+    echo ">>> Добавляем HomeProxy вручную..."
+    
     mkdir -p ./package/luci-app-homeproxy
     git clone -b master https://github.com/immortalwrt/homeproxy.git ./package/luci-app-homeproxy/
 else
-    echo ">>> Сборка ImmortalWrt (или другая). HomeProxy пропускаем (он обычно встроен)."
+    echo ">>> Обнаружен фид ImmortalWrt LuCI. HomeProxy должен быть встроен."
 fi
 
 # =========================================================
