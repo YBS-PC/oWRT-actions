@@ -17,7 +17,7 @@ on:
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt.git
   REPO_BRANCH: openwrt-24.10
-  TARGET_COMMIT: 4f7e6e554be2aef6a55be36f9f954d56705eb2ee
+  #TARGET_COMMIT: 4f7e6e554be2aef6a55be36f9f954d56705eb2ee
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: ./config/WRT.config
   DIY_P1_SH: ./sh/WRT-part1.sh
@@ -147,9 +147,9 @@ jobs:
       run: |
         df -hT $PWD
         git clone --branch $REPO_BRANCH $REPO_URL openwrt
-        cd openwrt
-        git checkout $TARGET_COMMIT || { echo "Failed to checkout commit $TARGET_COMMIT"; exit 1; }
-        echo "Reverted to commit $TARGET_COMMIT successfully"
+        #cd openwrt
+        #git checkout $TARGET_COMMIT || { echo "Failed to checkout commit $TARGET_COMMIT"; exit 1; }
+        #echo "Reverted to commit $TARGET_COMMIT successfully"
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
     - name: Apply custom patches
@@ -209,8 +209,8 @@ jobs:
       run: |
         cd openwrt
         echo ">>> Getting latest kernel hash for ${{ env.KERNEL_PATH }}"
-        KERNEL_LIST=$(curl -s https://downloads.immortalwrt.org/releases/24.10.4/targets/${{ env.KERNEL_PATH }}/kmods/ | grep -oE '6\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+')
-        # KERNEL_LIST=$(curl -s https://downloads.immortalwrt.org/releases/24.10-SNAPSHOT/targets/${{ env.KERNEL_PATH }}/kmods/ | grep -oE '6\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+')
+        #KERNEL_LIST=$(curl -s https://downloads.immortalwrt.org/releases/24.10.4/targets/${{ env.KERNEL_PATH }}/kmods/ | grep -oE '6\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+')
+        KERNEL_LIST=$(curl -s https://downloads.immortalwrt.org/releases/24.10-SNAPSHOT/targets/${{ env.KERNEL_PATH }}/kmods/ | grep -oE '6\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+')
         LATEST_HASH=$(echo "$KERNEL_LIST" | while read -r line; do
             version=$(echo "$line" | cut -d'-' -f1)
             major=$(echo "$version" | cut -d'.' -f1)
