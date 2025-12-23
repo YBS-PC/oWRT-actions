@@ -24,7 +24,7 @@
 # echo 'src-git smoothwan https://github.com/SmoothWAN/SmoothWAN-feeds' >> feeds.conf.default
 #
 echo -e "\nsrc-git youtubeUnblock https://github.com/Waujito/youtubeUnblock.git;openwrt" >> feeds.conf.default
-echo -e "\nsrc-git fancontrol https://github.com/JiaY-shi/fancontrol.git" >> feeds.conf.default
+#echo -e "\nsrc-git fancontrol https://github.com/JiaY-shi/fancontrol.git" >> feeds.conf.default
 echo -e "\nsrc-git internetdetector https://github.com/gSpotx2f/luci-app-internet-detector.git" >> feeds.conf.default
 #echo -e "\nsrc-git momo https://github.com/nikkinikki-org/OpenWrt-momo.git;main" >> feeds.conf.default
 #echo "src-git logviewer https://github.com/gSpotx2f/luci-app-log.git" >> feeds.conf.default
@@ -38,3 +38,16 @@ echo -e "\nsrc-git internetdetector https://github.com/gSpotx2f/luci-app-interne
 #echo "src-git nikki https://github.com/nikkinikki-org/OpenWrt-nikki.git;main" >> feeds.conf.default
 #echo -e "\nsrc-git passwall2 https://github.com/xiaorouji/openwrt-passwall2.git" >> feeds.conf.default
 #echo -e "\nsrc-git passwall_packages https://github.com/xiaorouji/openwrt-passwall-packages.git;main" >> feeds.conf.default
+####################################################################
+
+# =========================================================
+# УСЛОВНЫЙ БЛОК: Добавление репозиториев
+# =========================================================
+if [ "$CURRENT_MATRIX_TARGET" == "slateax" ]; then
+    echo -e "\nsrc-git fancontrol https://github.com/JiaY-shi/fancontrol.git" >> feeds.conf.default
+    echo "============= fancontrol added ============="
+else
+    echo "=============== not slateax ==============="
+fi
+
+# =========================================================
