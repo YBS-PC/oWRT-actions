@@ -204,6 +204,7 @@ jobs:
         echo "----------------------v2rayA------------------------"
         # N
         sed -i '/homeproxy/d' ./.config
+        sed -i '/sing-box/d' ./.config
         # Y
         echo 'CONFIG_PACKAGE_luci-app-v2raya=y' >> ./.config
         echo 'CONFIG_PACKAGE_v2rayA=y' >> ./.config
