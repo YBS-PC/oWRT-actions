@@ -184,9 +184,9 @@ jobs:
         [ -e $GITHUB_WORKSPACE/$FEEDS_CONF ] && mv $GITHUB_WORKSPACE/$FEEDS_CONF ./feeds.conf.default
         chmod +x $GITHUB_WORKSPACE/$DIY_P1_SH
         $GITHUB_WORKSPACE/$DIY_P1_SH
-        echo "--------------------Xray feeds----------------------"
-        echo -e "\nsrc-git luciappxray https://github.com/yichya/luci-app-xray.git" >> feeds.conf.default
-        echo "---------------------------------------------------------"
+        echo "--------------------feeds----------------------"
+        #echo -e "\nsrc-git luciappxray https://github.com/yichya/luci-app-xray.git" >> feeds.conf.default
+        echo "-----------------------------------------------"
         ./scripts/feeds update -a
         chmod +x $GITHUB_WORKSPACE/$DIY_P11_SH
         $GITHUB_WORKSPACE/$DIY_P11_SH
