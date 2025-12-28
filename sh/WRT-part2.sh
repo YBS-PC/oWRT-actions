@@ -83,31 +83,23 @@ fi
 # =========================================================
 # ЗАМЕНА ПАКЕТОВ НА ВЕРСИИ ИЗ PASSWALL
 # =========================================================
-# 1. Формируем базовый список пакетов для замены
-PW_PACKAGES="v2ray-geodata chinadns-ng"
-# 2. Добавляем проблемные пакеты ТОЛЬКО для ветки Master/Main (например geoview)
-if [[ "$REPO_BRANCH" == "master" || "$REPO_BRANCH" == "main" ]]; then
-    PW_PACKAGES="$PW_PACKAGES xray-core xray-plugin v2ray-plugin sing-box geoview tcping"
-    echo ">>> Ветка $REPO_BRANCH: geoview добавлен в список замены."
-else
-    echo ">>> Ветка $REPO_BRANCH: geoview ИСКЛЮЧЕН из замены (требует Go 1.24+)."
-fi
-# Путь к исходникам Passwall
 PW_FEED_DIR="./feeds/passwall_packages"
+PW_PACKAGES="v2ray-geodata chinadns-ng"
 if [ -d "$PW_FEED_DIR" ]; then
     echo "======================================================="
     echo ">>> Фид Passwall найден. Начинаем замену пакетов..."
+    if [[ "$REPO_BRANCH" == "master" || "$REPO_BRANCH" == "main" ]]; then
+        PW_PACKAGES="$PW_PACKAGES xray-core xray-plugin v2ray-plugin sing-box geoview tcping"
+        echo ">>> Ветка $REPO_BRANCH: xray-core xray-plugin v2ray-plugin sing-box geoview tcping добавлен в список замены."
+    else
+        echo ">>> Ветка $REPO_BRANCH: xray-core xray-plugin v2ray-plugin sing-box geoview tcping ИСКЛЮЧЕН из замены."
+    fi
     echo ">>> Список для обработки: $PW_PACKAGES"
     for PKG in $PW_PACKAGES; do
-        # Путь, куда установился стандартный пакет (ссылка)
         STD_PKG_PATH="./package/feeds/packages/$PKG"
-        # 1. Установлен ли стандартный пакет (есть ли папка в package/...)
-        # 2. Существует ли такой пакет в фиде Passwall (есть ли исходник)
         if [ -d "$STD_PKG_PATH" ] && [ -d "$PW_FEED_DIR/$PKG" ]; then
             echo "   > Замена [$PKG]..."
-            # 1. Удаляем стандартную ссылку
             rm -rf "$STD_PKG_PATH"
-            # 2. Устанавливаем версию из Passwall
             ./scripts/feeds install -p passwall_packages -f "$PKG"
         else
             echo "   . Пропуск [$PKG] (не установлен в системе или нет в Passwall)"
@@ -116,7 +108,7 @@ if [ -d "$PW_FEED_DIR" ]; then
     echo ">>> Все пакеты обработаны."
     echo "======================================================="
 else
-    echo ">>> ВНИМАНИЕ: Фид passwall_packages не найден. Замена отменена."
+    echo ">>> Фид passwall_packages не найден. Замена passwall_packages не требуется."
 fi
 
 # =========================================================
