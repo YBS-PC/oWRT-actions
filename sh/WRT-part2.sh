@@ -36,12 +36,14 @@
 # =========================================================
 # Создаем общие папки (флаг -p чтобы не было ошибок если папка уже есть)
 mkdir -p ./package/luci-app-log-viewer
-mkdir -p ./package/zapret-openwrt
 
 # Клонируем общие пакеты
 git clone -b master https://github.com/gSpotx2f/luci-app-log.git ./package/luci-app-log-viewer/
-git clone -b master https://github.com/remittor/zapret-openwrt.git ./package/zapret-openwrt/
 
+# =========================================================
+# УСЛОВНАЯ УСТАНОВКА facinstall
+# Выполняется только если ax59u
+# =========================================================
 if [ "$CURRENT_MATRIX_TARGET" == "ax59u" ]; then
     mkdir -p ./package/facinstall
     git clone -b main https://github.com/openwrt-xiaomi/facinstall.git ./package/facinstall/
@@ -50,17 +52,24 @@ else
 fi
 
 # =========================================================
-# УСЛОВНЫЙ БЛОК: Добавление HomeProxy
-# Логика: Если в фидах нет репозитория 'immortalwrt/luci',
-# значит HomeProxy там нет (это Official OpenWrt или старый коммит),
-# и его нужно скачать вручную.
+# УСЛОВНАЯ УСТАНОВКА ZAPRET
+# Выполняется только если в .config есть строка CONFIG_PACKAGE_zapret=y
 # =========================================================
+if [ -f ./.config ] && grep -q "^CONFIG_PACKAGE_zapret=y" ./.config; then
+    echo ">>> В конфиге включен 'zapret'. Скачиваем исходники..."
+    mkdir -p ./package/zapret-openwrt
+    git clone -b master https://github.com/remittor/zapret-openwrt.git ./package/zapret-openwrt/
+else
+    echo ">>> Пакет 'zapret' не выбран в конфиге (или закомментирован). Скачивание пропущено."
+fi
 
-# Проверяем файл feeds.conf.default на наличие строки "immortalwrt/luci"
+# =========================================================
+# УСЛОВНЫЙ БЛОК: Добавление HomeProxy
+# Если в фидах нет репозитория 'immortalwrt/luci'
+# =========================================================
 if ! grep -q "immortalwrt/luci" feeds.conf.default; then
     echo ">>> В фидах НЕ найден ImmortalWrt LuCI. Считаем, что это Official OpenWrt."
     echo ">>> Добавляем HomeProxy вручную..."
-    
     mkdir -p ./package/luci-app-homeproxy
     git clone -b master https://github.com/immortalwrt/homeproxy.git ./package/luci-app-homeproxy/
 else
@@ -76,7 +85,6 @@ fi
 # =========================================================
 # 1. Формируем базовый список пакетов для замены
 PW_PACKAGES="v2ray-geodata chinadns-ng"
-
 # 2. Добавляем проблемные пакеты ТОЛЬКО для ветки Master/Main (например geoview)
 if [[ "$REPO_BRANCH" == "master" || "$REPO_BRANCH" == "main" ]]; then
     PW_PACKAGES="$PW_PACKAGES xray-core xray-plugin v2ray-plugin sing-box geoview tcping"
@@ -84,35 +92,27 @@ if [[ "$REPO_BRANCH" == "master" || "$REPO_BRANCH" == "main" ]]; then
 else
     echo ">>> Ветка $REPO_BRANCH: geoview ИСКЛЮЧЕН из замены (требует Go 1.24+)."
 fi
-
 # Путь к исходникам Passwall
 PW_FEED_DIR="./feeds/passwall_packages"
-
 if [ -d "$PW_FEED_DIR" ]; then
     echo "======================================================="
     echo ">>> Фид Passwall найден. Начинаем замену пакетов..."
     echo ">>> Список для обработки: $PW_PACKAGES"
-
     for PKG in $PW_PACKAGES; do
         # Путь, куда установился стандартный пакет (ссылка)
         STD_PKG_PATH="./package/feeds/packages/$PKG"
-        
-        # Проверяем:
         # 1. Установлен ли стандартный пакет (есть ли папка в package/...)
         # 2. Существует ли такой пакет в фиде Passwall (есть ли исходник)
         if [ -d "$STD_PKG_PATH" ] && [ -d "$PW_FEED_DIR/$PKG" ]; then
             echo "   > Замена [$PKG]..."
-            
             # 1. Удаляем стандартную ссылку
             rm -rf "$STD_PKG_PATH"
-            
             # 2. Устанавливаем версию из Passwall
             ./scripts/feeds install -p passwall_packages -f "$PKG"
         else
             echo "   . Пропуск [$PKG] (не установлен в системе или нет в Passwall)"
         fi
     done
-    
     echo ">>> Все пакеты обработаны."
     echo "======================================================="
 else
@@ -124,7 +124,6 @@ fi
 sed -i "s/192.168.1.1/192.168.2.1/g" ./package/base-files/files/bin/config_generate
 sed -i "s#zonename='UTC'#zonename='Europe/Moscow'#g" ./package/base-files/files/bin/config_generate
 sed -i "s#timezone='GMT0'#timezone='MSK-3'#g" ./package/base-files/files/bin/config_generate
-
 # =========================================================
 
 #mkdir ./package/custom
