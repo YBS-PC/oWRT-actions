@@ -503,12 +503,12 @@ find /etc/config/ -type f -name '*-opkg' -exec rm {} \;
 find /etc/config/ -type f -name '*apk-new' -exec rm {} \;
 echo -e "${COLOR_CYAN}Удалены временные файлы конфигурации.${COLOR_RESET}"
 
-# Включение FullCone NAT для ImmortalWrt
-if [ "$NAME_VALUE" == "ImmortalWrt" ]; then
+# Включение FullCone NAT
+if [ -d "/sys/module/nft_fullcone" ]; then
 	uci set firewall.@defaults[0].fullcone='1' && uci commit firewall
-	echo -e "${COLOR_WHITE}FullCone NAT включен на ImmortalWrt${COLOR_RESET}"
+	echo -e "${COLOR_WHITE}FullCone NAT включен${COLOR_RESET}"
 else
-	echo -e "${COLOR_WHITE}Прошивка не ImmortalWrt. FullCone NAT не настраивается.${COLOR_RESET}"
+	echo -e "${COLOR_WHITE}FullCone не доступен${COLOR_RESET}"
 fi
 
 # Расширение интерфейса bootstrap
