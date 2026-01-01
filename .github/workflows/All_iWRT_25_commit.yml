@@ -1,4 +1,4 @@
-name: All iWRT commit
+name: All iWRT 25 commit
 
 on:
   workflow_dispatch:
@@ -262,7 +262,7 @@ jobs:
       uses: actions/upload-artifact@main
       if: steps.compile.outputs.compile == 'success' && env.UPLOAD_BIN_DIR == 'true'
       with:
-        name: ${{ matrix.target }}_iWRT_C${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+        name: ${{ matrix.target }}_iWRT_25_C${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: openwrt/bin
     
     # ... Остальные шаги (upload, release, delete) ...
