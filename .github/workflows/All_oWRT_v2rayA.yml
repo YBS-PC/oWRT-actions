@@ -209,8 +209,9 @@ jobs:
         echo 'CONFIG_PACKAGE_luci-app-v2raya=y' >> ./.config
         echo 'CONFIG_PACKAGE_v2rayA=y' >> ./.config
         echo 'CONFIG_PACKAGE_geoview=y' >> ./.config
-        echo 'CONFIG_PACKAGE_v2ray-geoip=y' >> ./.config
-        echo 'CONFIG_PACKAGE_v2ray-geosite=y' >> ./.config
+        echo 'CONFIG_PACKAGE_v2ray-geodata=y' >> ./.config
+        # echo 'CONFIG_PACKAGE_v2ray-geoip=y' >> ./.config
+        # echo 'CONFIG_PACKAGE_v2ray-geosite=y' >> ./.config
         echo 'CONFIG_PACKAGE_xray-core=y' >> ./.config
         echo "---------------------------------------------------------"
         chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
