@@ -18,7 +18,7 @@ on:
 env:
   REPO_URL: https://git.openwrt.org/openwrt/openwrt.git
   REPO_BRANCH: openwrt-25.12
-  TARGET_COMMIT: b1a74b1cde0dd9b4c07bb5ba7020f94967912f2d
+  TARGET_COMMIT: 4dd2e6ec5b81becd32dc25d85d977510d363a419
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: ./config/WRT.config
   DIY_P1_SH: ./sh/WRT-part1.sh
