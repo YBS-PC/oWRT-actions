@@ -261,7 +261,7 @@ jobs:
       uses: actions/upload-artifact@main
       if: steps.compile.outputs.compile == 'success' && env.UPLOAD_BIN_DIR == 'true'
       with:
-        name: ${{ matrix.target }}_oWRT_25${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+        name: ${{ matrix.target }}_oWRT_25_С${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: openwrt/bin
     
     # ... Остальные шаги (upload, release, delete) ...
