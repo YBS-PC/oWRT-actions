@@ -16,7 +16,8 @@ on:
           - brume2
 
 env:
-  REPO_URL: https://git.openwrt.org/openwrt/openwrt.git
+  # REPO_URL: https://git.openwrt.org/openwrt/openwrt.git
+  REPO_URL: https://github.com/openwrt/openwrt.git
   REPO_BRANCH: openwrt-25.12
   TARGET_RELEASE: releases/25.12.0-rc2
   TARGET_COMMIT: 4dd2e6ec5b81becd32dc25d85d977510d363a419
