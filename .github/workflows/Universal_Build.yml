@@ -152,9 +152,9 @@ jobs:
             elif [[ "$INPUT_BRANCH" == *"24.10"* ]]; then
                  if [ "${{ inputs.source }}" == "immortalwrt" ]; then
                     # ImmortalWrt использует суффикс SNAPSHOT для стабильных веток в URL
-                    echo "TARGET_RELEASE=releases/24.10-SNAPSHOT" >> $GITHUB_ENV
+                    echo "TARGET_RELEASE=releases/24.10.4" >> $GITHUB_ENV
                  else
-                    echo "TARGET_RELEASE=releases/24.10.0" >> $GITHUB_ENV
+                    echo "TARGET_RELEASE=releases/24.10.5" >> $GITHUB_ENV
                  fi
             fi
         fi
