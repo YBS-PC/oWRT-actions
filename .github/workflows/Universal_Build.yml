@@ -3,7 +3,6 @@ name: Universal WRT Build
 on:
   workflow_dispatch:
     inputs:
-      # 1. Выбор устройства
       target:
         description: 'Target Device'
         required: true
@@ -16,7 +15,6 @@ on:
           - ax59u
           - brume2
       
-      # 2. Выбор источника (Immortal или Official)
       source:
         description: 'Source Code'
         required: true
@@ -26,7 +24,6 @@ on:
           - immortalwrt
           - openwrt
       
-      # 3. Выбор ветки
       branch:
         description: 'Branch'
         required: true
@@ -37,21 +34,19 @@ on:
           - openwrt-24.10
           - openwrt-25.12
       
-      # 4. Выбор варианта сборки (Набор пакетов)
       variant:
         description: 'Build Variant'
         required: true
         default: 'passwall'
         type: choice
         options:
-          - minimal      # Чистая сборка
-          - passwall     # С Passwall 2
-          - v2raya       # С v2rayA
-          - xray         # С Xray (чистым)
+          - minimal
+          - passwall
+          - v2raya
+          - xray
       
-      # 5. Опционально: Хеш коммита (если пусто - берет последний)
       commit_hash:
-        description: 'Target Commit Hash (Optional, leave empty for latest)'
+        description: 'Target Commit Hash (Optional)'
         required: false
         default: ''
 
@@ -79,7 +74,6 @@ jobs:
           else
             selected="${{ github.event.inputs.target }}"
           fi
-          # Генерация JSON матрицы
           json="{\"include\":["
           first=true
           for t in $selected; do
@@ -109,13 +103,11 @@ jobs:
     - name: Checkout
       uses: actions/checkout@main
 
-    # --- Настройка прав (общая) ---
     - name: Set permissions
       run: |
         [ -d "./files/usr/bin" ] && chmod 755 ./files/usr/bin/*
         [ -d "./files/etc/uci-defaults" ] && chmod 755 ./files/etc/uci-defaults/* || true
 
-    # --- Загрузка бинарников (общая) ---
     - name: Download binaries
       run: |
         # AdGuardHome
@@ -132,42 +124,34 @@ jobs:
         cp sing-box-*/sing-box ./files/usr/bin/ && chmod 755 ./files/usr/bin/sing-box
         rm -rf sb.tar.gz sing-box-*
 
-    # --- Настройка переменных на основе Inputs ---
     - name: Configure Build Variables
       run: |
-        # 1. Настройка REPO_URL
+        # 1. URL Репозитория
         if [ "${{ inputs.source }}" == "immortalwrt" ]; then
           echo "REPO_URL=https://github.com/immortalwrt/immortalwrt.git" >> $GITHUB_ENV
         else
           echo "REPO_URL=https://git.openwrt.org/openwrt/openwrt.git" >> $GITHUB_ENV
         fi
         
-        # 2. Настройка REPO_BRANCH (Авто-подмена master -> main для OpenWrt)
+        # 2. Ветка и Release Path
         INPUT_BRANCH="${{ inputs.branch }}"
         
         if [ "$INPUT_BRANCH" == "master" ]; then
             if [ "${{ inputs.source }}" == "openwrt" ]; then
-                echo ">>> Detected OpenWrt + master. Switching branch to 'main'."
                 echo "REPO_BRANCH=main" >> $GITHUB_ENV
-                # Для загрузки ядра (Kernel Hash) путь на сервере называется snapshots
-                echo "TARGET_RELEASE=snapshots" >> $GITHUB_ENV
             else
-                echo ">>> Detected ImmortalWrt + master."
                 echo "REPO_BRANCH=master" >> $GITHUB_ENV
-                echo "TARGET_RELEASE=snapshots" >> $GITHUB_ENV
             fi
+            echo "TARGET_RELEASE=snapshots" >> $GITHUB_ENV
         else
-            # Если выбрана конкретная ветка (например, openwrt-24.10)
             echo "REPO_BRANCH=$INPUT_BRANCH" >> $GITHUB_ENV
             
-            # Логика для TARGET_RELEASE (для скачивания хеша ядра)
-            # Превращаем "openwrt-24.10" в "releases/24.10.0" (примерно)
-            # Тут можно упростить: если ветка стабильная, пробуем сформировать путь
+            # Логика путей для стабильных релизов
             if [[ "$INPUT_BRANCH" == *"25.12"* ]]; then
                  echo "TARGET_RELEASE=releases/25.12.0-rc2" >> $GITHUB_ENV
             elif [[ "$INPUT_BRANCH" == *"24.10"* ]]; then
-                 # Для ImmortalWrt снапшоты релизных веток лежат специфично
                  if [ "${{ inputs.source }}" == "immortalwrt" ]; then
+                    # ImmortalWrt использует суффикс SNAPSHOT для стабильных веток в URL
                     echo "TARGET_RELEASE=releases/24.10-SNAPSHOT" >> $GITHUB_ENV
                  else
                     echo "TARGET_RELEASE=releases/24.10.0" >> $GITHUB_ENV
@@ -175,7 +159,7 @@ jobs:
             fi
         fi
 
-        # 3. Настройка устройства
+        # 3. Устройство
         source ./config/conf/${{ matrix.target }}
         echo "TARGET_NAME=${TARGET_NAME}" >> $GITHUB_ENV
         echo "KERNEL_PATH=${KERNEL_PATH}" >> $GITHUB_ENV
@@ -196,7 +180,6 @@ jobs:
       run: |
         git clone --branch $REPO_BRANCH $REPO_URL openwrt
         cd openwrt
-        # Обработка конкретного коммита, если он задан
         if [ -n "${{ inputs.commit_hash }}" ]; then
            echo "Checking out commit: ${{ inputs.commit_hash }}"
            git checkout ${{ inputs.commit_hash }}
@@ -218,20 +201,15 @@ jobs:
         chmod +x $GITHUB_WORKSPACE/$DIY_P1_SH
         $GITHUB_WORKSPACE/$DIY_P1_SH
         
-        # --- ЛОГИКА ВАРИАНТОВ (Passwall/v2rayA/etc) ---
         VARIANT="${{ inputs.variant }}"
+        echo "Variant selected: $VARIANT"
         
         if [ "$VARIANT" == "passwall" ]; then
             echo -e "\nsrc-git passwall2 https://github.com/xiaorouji/openwrt-passwall2.git" >> feeds.conf.default
             echo -e "\nsrc-git passwall_packages https://github.com/xiaorouji/openwrt-passwall-packages.git;main" >> feeds.conf.default
-        elif [ "$VARIANT" == "v2raya" ]; then
-            # Пример добавления фида для v2raya, если нужно
-            # echo -e "\nsrc-git v2raya ..." >> feeds.conf.default
-            :
         elif [ "$VARIANT" == "xray" ]; then
             echo -e "\nsrc-git luciappxray https://github.com/yichya/luci-app-xray.git" >> feeds.conf.default
         fi
-        # ----------------------------------------------
 
         ./scripts/feeds update -a
         chmod +x $GITHUB_WORKSPACE/$DIY_P11_SH
@@ -241,75 +219,78 @@ jobs:
         [ -e $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE ./.config
         [ -e $GITHUB_WORKSPACE/files ] && cp -r $GITHUB_WORKSPACE/files ./
         
-        # Внедрение конфига устройства
         eval "$DEVICE_CONFIG_COMMANDS"
         
-        # --- ФИНАЛЬНАЯ НАСТРОЙКА .CONFIG В ЗАВИСИМОСТИ ОТ ВАРИАНТА ---
-        echo "Applying config for variant: $VARIANT"
-        
-        # Чистка конфликтов
+        # --- ФИНАЛЬНАЯ НАСТРОЙКА .CONFIG ---
         sed -i '/homeproxy/d' ./.config
         sed -i '/sing-box/d' ./.config
         
         if [ "$VARIANT" == "passwall" ]; then
+            sed -i '/[Ss][Hh][Aa][Dd][Oo][Ww][Ss][Oo][Cc][Kk][Ss]/d' ./.config
             echo 'CONFIG_PACKAGE_luci-app-passwall2=y' >> ./.config
             echo 'CONFIG_PACKAGE_luci-app-passwall2_Nftables_Transparent_Proxy=y' >> ./.config
             echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_Xray=y' >> ./.config
+            echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_IPv6_Nat=y' >> ./.config
+            echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_V2ray_Plugin=y' >> ./.config
             echo 'CONFIG_PACKAGE_xray-core=y' >> ./.config
             echo 'CONFIG_PACKAGE_geoview=y' >> ./.config
-            # ... добавьте остальные опции Passwall сюда ...
+            echo 'CONFIG_PACKAGE_v2ray-plugin=y' >> ./.config
+            echo 'CONFIG_PACKAGE_v2ray-geoip=y' >> ./.config
+            echo 'CONFIG_PACKAGE_v2ray-geosite=y' >> ./.config
             
         elif [ "$VARIANT" == "v2raya" ]; then
             echo 'CONFIG_PACKAGE_luci-app-v2raya=y' >> ./.config
             echo 'CONFIG_PACKAGE_v2rayA=y' >> ./.config
+            echo 'CONFIG_PACKAGE_v2ray-geodata=y' >> ./.config
             echo 'CONFIG_PACKAGE_xray-core=y' >> ./.config
             
         elif [ "$VARIANT" == "xray" ]; then
             echo 'CONFIG_PACKAGE_luci-app-xray=y' >> ./.config
             echo 'CONFIG_PACKAGE_xray-core=y' >> ./.config
+            echo 'CONFIG_PACKAGE_v2ray-geoip=y' >> ./.config
+            echo 'CONFIG_PACKAGE_v2ray-geosite=y' >> ./.config
         fi
         
-        # Запуск part2.sh
         chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
         $GITHUB_WORKSPACE/$DIY_P2_SH
         
         make defconfig
 
-    # --- Шаг с ядром (Ваш умный скрипт) ---
     - name: Kernel Hash
       run: |
         cd openwrt
-        # Определяем домен
         if [[ "${{ env.REPO_URL }}" == *"immortalwrt"* ]]; then
             DOMAIN="downloads.immortalwrt.org"
         else
             DOMAIN="downloads.openwrt.org"
         fi
         
-        # Определяем путь релиза
-        BRANCH="${{ inputs.branch }}"
-        if [ "$BRANCH" == "master" ]; then
-            PATH_SEGMENT="snapshots"
-        elif [ "$BRANCH" == "openwrt-25.12" ]; then
-            PATH_SEGMENT="releases/25.12.0-rc2" # Можно вынести в переменную
-        else
-            # Для 24.10 и прочих - пробуем releases или snapshots
-            PATH_SEGMENT="releases/${BRANCH#openwrt-}-SNAPSHOT" 
-            # Тут может потребоваться тонкая настройка URL, если имена релизов сложнее
-        fi
-        
-        # Если мы на snapshot - URL простой
-        if [ "$BRANCH" == "master" ]; then
-             FULL_URL="https://$DOMAIN/snapshots/targets/${{ env.KERNEL_PATH }}/kmods/"
-        else
-             # Попытка универсального пути, но лучше проверить структуру папок на сервере
-             # Для примера берем как для снапшотов релизных веток
-             FULL_URL="https://$DOMAIN/releases/${BRANCH#openwrt-}-SNAPSHOT/targets/${{ env.KERNEL_PATH }}/kmods/"
-        fi
+        FULL_URL="https://$DOMAIN/${{ env.TARGET_RELEASE }}/targets/${{ env.KERNEL_PATH }}/kmods/"
         
         echo "Checking Kernel at: $FULL_URL"
-        # ... (Ваш код curl/grep) ...
-        # Вставьте сюда ваш проверенный код поиска хеша
+        
+        KERNEL_LIST=$(curl -sf "$FULL_URL" | grep -oE '6\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+')
+        
+        if [ -z "$KERNEL_LIST" ]; then
+             echo ">>> Warning: Kernel 6.x not found. Trying generic pattern..."
+             KERNEL_LIST=$(curl -sf "$FULL_URL" | grep -oE '[0-9]\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+')
+        fi
+
+        LATEST_HASH=$(echo "$KERNEL_LIST" | while read -r line; do
+            version=$(echo "$line" | cut -d'-' -f1)
+            major=$(echo "$version" | cut -d'.' -f1)
+            minor=$(echo "$version" | cut -d'.' -f2)
+            patch=$(echo "$version" | cut -d'.' -f3)
+            printf "%03d%03d%03d %s\n" "$major" "$minor" "$patch" "$line"
+        done | sort -r | head -n1 | cut -d' ' -f2 | cut -d'-' -f3)
+        
+        if [ -z "$LATEST_HASH" ]; then
+          echo "::error::Failed to get kernel hash. Check URL: $FULL_URL"
+          exit 1
+        fi
+        
+        echo "Latest hash is: ${LATEST_HASH}"
+        sed -i "s/\$(MKHASH) md5/echo \"${LATEST_HASH}\"/g" include/kernel-defaults.mk
 
     - name: Compile
       run: |
