@@ -18,7 +18,7 @@ on:
       source:
         description: 'Source Code'
         required: true
-        default: 'immortalwrt'
+        default: 'openwrt'
         type: choice
         options:
           - immortalwrt
@@ -27,7 +27,7 @@ on:
       branch:
         description: 'Branch'
         required: true
-        default: 'master'
+        default: 'openwrt-25.12'
         type: choice
         options:
           - master
@@ -37,7 +37,7 @@ on:
       variant:
         description: 'Build Variant'
         required: true
-        default: 'passwall'
+        default: 'minimal'
         type: choice
         options:
           - minimal
