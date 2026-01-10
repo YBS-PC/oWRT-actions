@@ -186,12 +186,24 @@ jobs:
         fi
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
-    - name: Apply Patches
+    - name: Apply custom patches
       run: |
+        # Проверяем наличие директории
         if [ -d "patches" ]; then
-          for p in patches/*.patch; do
-            [ -f "$p" ] && patch -p1 -d openwrt < "$p"
-          done
+          # Включаем опцию nullglob, чтобы если файлов нет, цикл не запускался
+          shopt -s nullglob
+          files=(patches/*.patch)
+          
+          if [ ${#files[@]} -gt 0 ]; then
+            for p in "${files[@]}"; do
+              echo "Applying patch: $p"
+              patch -p1 -d openwrt < "$p" || { echo "Patch failed!"; exit 1; }
+            done
+          else
+            echo "No patches found in patches/ directory."
+          fi
+        else
+          echo "Patches directory not found. Skipping."
         fi
 
     - name: Update Feeds & Config
