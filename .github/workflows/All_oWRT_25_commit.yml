@@ -112,7 +112,7 @@ jobs:
         echo ">>> Downloading latest AdGuardHome for arm64..."
         AGH_URL=$(curl -s https://api.github.com/repos/AdguardTeam/AdGuardHome/releases/latest \
           | grep "browser_download_url.*linux_arm64.*tar.gz" \
-          | cut -d '"' -f 4)
+          | cut -d '"' -f 4 | head -n 1)
         curl -L -o AdGuardHome_linux_arm64.tar.gz "$AGH_URL"
         tar -xzf AdGuardHome_linux_arm64.tar.gz
         mkdir -p ./files/usr/bin
@@ -126,7 +126,7 @@ jobs:
         echo ">>> Downloading latest sing-box for arm64..."
         SB_URL=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest \
           | grep "browser_download_url.*linux-arm64.tar.gz" \
-          | cut -d '"' -f 4)
+          | cut -d '"' -f 4 | head -n 1)
         echo "Downloading from: $SB_URL"
         curl -L -o sing-box.tar.gz "$SB_URL"
         tar -xzf sing-box.tar.gz
