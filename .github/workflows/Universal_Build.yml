@@ -27,7 +27,7 @@ on:
       branch:
         description: 'Branch'
         required: true
-        default: 'openwrt-25.12'
+        default: 'master'
         type: choice
         options:
           - master
@@ -83,6 +83,13 @@ jobs:
           done
           json="$json]}"
           echo "matrix=$json" >> $GITHUB_OUTPUT
+          
+          echo "=========================================="
+          echo "       [SETUP SUMMARY]                    "
+          echo "=========================================="
+          echo "Selected Targets: $selected"
+          echo "Generated Matrix: $json"
+          echo "=========================================="
 
   build:
     needs: setup
@@ -107,6 +114,14 @@ jobs:
       run: |
         [ -d "./files/usr/bin" ] && chmod 755 ./files/usr/bin/*
         [ -d "./files/etc/uci-defaults" ] && chmod 755 ./files/etc/uci-defaults/* || true
+        
+        echo "=========================================="
+        echo "       [PERMISSIONS SUMMARY]              "
+        echo "=========================================="
+        echo "Permissions set for ./files/usr/bin and uci-defaults."
+        ls -l ./files/usr/bin | head -n 5
+        echo "..."
+        echo "=========================================="
 
     - name: Download binaries
       run: |
@@ -123,41 +138,52 @@ jobs:
         tar -xzf sb.tar.gz
         cp sing-box-*/sing-box ./files/usr/bin/ && chmod 755 ./files/usr/bin/sing-box
         rm -rf sb.tar.gz sing-box-*
+        
+        echo "=========================================="
+        echo "       [BINARIES SUMMARY]                 "
+        echo "=========================================="
+        echo "Sing-Box URL: $SB_URL"
+        echo "Files in destination:"
+        ls -lh ./files/usr/bin/
+        echo "=========================================="
 
     - name: Configure Build Variables
       run: |
         # 1. URL Репозитория
         if [ "${{ inputs.source }}" == "immortalwrt" ]; then
-          echo "REPO_URL=https://github.com/immortalwrt/immortalwrt.git" >> $GITHUB_ENV
+          VAR_REPO_URL="https://github.com/immortalwrt/immortalwrt.git"
         else
-          echo "REPO_URL=https://git.openwrt.org/openwrt/openwrt.git" >> $GITHUB_ENV
+          VAR_REPO_URL="https://git.openwrt.org/openwrt/openwrt.git"
         fi
+        echo "REPO_URL=$VAR_REPO_URL" >> $GITHUB_ENV
         
         # 2. Ветка и Release Path
         INPUT_BRANCH="${{ inputs.branch }}"
         
         if [ "$INPUT_BRANCH" == "master" ]; then
             if [ "${{ inputs.source }}" == "openwrt" ]; then
-                echo "REPO_BRANCH=main" >> $GITHUB_ENV
+                VAR_BRANCH="main"
             else
-                echo "REPO_BRANCH=master" >> $GITHUB_ENV
+                VAR_BRANCH="master"
             fi
-            echo "TARGET_RELEASE=snapshots" >> $GITHUB_ENV
+            VAR_TARGET_RELEASE="snapshots"
         else
-            echo "REPO_BRANCH=$INPUT_BRANCH" >> $GITHUB_ENV
+            VAR_BRANCH="$INPUT_BRANCH"
             
             # Логика путей для стабильных релизов
             if [[ "$INPUT_BRANCH" == *"25.12"* ]]; then
-                 echo "TARGET_RELEASE=releases/25.12.0-rc2" >> $GITHUB_ENV
+                 VAR_TARGET_RELEASE="releases/25.12.0-rc2"
             elif [[ "$INPUT_BRANCH" == *"24.10"* ]]; then
                  if [ "${{ inputs.source }}" == "immortalwrt" ]; then
                     # ImmortalWrt использует суффикс SNAPSHOT для стабильных веток в URL
-                    echo "TARGET_RELEASE=releases/24.10.4" >> $GITHUB_ENV
+                    VAR_TARGET_RELEASE="releases/24.10.4"
                  else
-                    echo "TARGET_RELEASE=releases/24.10.5" >> $GITHUB_ENV
+                    VAR_TARGET_RELEASE="releases/24.10.5"
                  fi
             fi
         fi
+        echo "REPO_BRANCH=$VAR_BRANCH" >> $GITHUB_ENV
+        echo "TARGET_RELEASE=$VAR_TARGET_RELEASE" >> $GITHUB_ENV
 
         # 3. Устройство
         source ./config/conf/${{ matrix.target }}
@@ -166,6 +192,18 @@ jobs:
         echo "DEVICE_CONFIG_COMMANDS<<EOF" >> $GITHUB_ENV
         echo "${DEVICE_CONFIG_COMMANDS}" >> $GITHUB_ENV
         echo "EOF" >> $GITHUB_ENV
+        
+        echo "=========================================="
+        echo "       [VARIABLES SUMMARY]                "
+        echo "=========================================="
+        echo "Source Input   : ${{ inputs.source }}"
+        echo "Calculated URL : $VAR_REPO_URL"
+        echo "Branch Input   : ${{ inputs.branch }}"
+        echo "Calculated Br. : $VAR_BRANCH"
+        echo "Target Release : $VAR_TARGET_RELEASE"
+        echo "Device Target  : ${TARGET_NAME}"
+        echo "Kernel Path    : ${KERNEL_PATH}"
+        echo "=========================================="
 
     - name: Init Env
       env: { DEBIAN_FRONTEND: noninteractive }
@@ -174,21 +212,42 @@ jobs:
         sudo -E apt-get -qq install $(curl -fsSL https://raw.githubusercontent.com/Gzxhwq/OpenWrt-Actions/main/depends-ubuntu-2204) build-essential clang flex bison g++ gawk gcc-multilib g++-multilib gettext git libncurses5-dev libssl-dev python3-setuptools rsync swig unzip zlib1g-dev file wget llvm python3-pyelftools libpython3-dev aria2 jq qemu-utils ccache rename libelf-dev device-tree-compiler libgmp3-dev libmpc-dev libfuse-dev
         sudo timedatectl set-timezone "$TZ"
         sudo mkdir -p /workdir && sudo chown $USER:$GROUPS /workdir
+        
+        echo "=========================================="
+        echo "       [ENV INIT SUMMARY]                 "
+        echo "=========================================="
+        echo "Dependencies installed."
+        echo "Workdir created at /workdir"
+        date
+        echo "=========================================="
 
     - name: Clone Source
       working-directory: /workdir
       run: |
         git clone --branch $REPO_BRANCH $REPO_URL openwrt
         cd openwrt
+        CHECKOUT_MSG="Latest from branch $REPO_BRANCH"
         if [ -n "${{ inputs.commit_hash }}" ]; then
            echo "Checking out commit: ${{ inputs.commit_hash }}"
            git checkout ${{ inputs.commit_hash }}
+           CHECKOUT_MSG="Specific commit ${{ inputs.commit_hash }}"
         fi
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+        
+        echo "=========================================="
+        echo "       [CLONE SUMMARY]                    "
+        echo "=========================================="
+        echo "Repo cloned: $REPO_URL"
+        echo "Branch: $REPO_BRANCH"
+        echo "Status: $CHECKOUT_MSG"
+        echo "Current Head:"
+        git log -1 --format="%H - %s"
+        echo "=========================================="
 
     - name: Apply custom patches
       run: |
         # Проверяем наличие директории
+        PATCH_STATUS="No patches dir"
         if [ -d "patches" ]; then
           # Включаем опцию nullglob, чтобы если файлов нет, цикл не запускался
           shopt -s nullglob
@@ -199,12 +258,20 @@ jobs:
               echo "Applying patch: $p"
               patch -p1 -d openwrt < "$p" || { echo "Patch failed!"; exit 1; }
             done
+            PATCH_STATUS="Applied ${#files[@]} patches"
           else
             echo "No patches found in patches/ directory."
+            PATCH_STATUS="Dir exists but empty"
           fi
         else
           echo "Patches directory not found. Skipping."
         fi
+        
+        echo "=========================================="
+        echo "       [PATCH SUMMARY]                    "
+        echo "=========================================="
+        echo "Result: $PATCH_STATUS"
+        echo "=========================================="
 
     - name: Update Feeds & Config
       run: |
@@ -214,7 +281,6 @@ jobs:
         $GITHUB_WORKSPACE/$DIY_P1_SH
         
         VARIANT="${{ inputs.variant }}"
-        echo "Variant selected: $VARIANT"
         
         if [ "$VARIANT" == "passwall" ]; then
             echo -e "\nsrc-git passwall2 https://github.com/xiaorouji/openwrt-passwall2.git" >> feeds.conf.default
@@ -267,6 +333,14 @@ jobs:
         $GITHUB_WORKSPACE/$DIY_P2_SH
         
         make defconfig
+        
+        echo "=========================================="
+        echo "       [CONFIG SUMMARY]                   "
+        echo "=========================================="
+        echo "Variant selected: $VARIANT"
+        echo "Checking key packages in .config:"
+        grep -E "CONFIG_PACKAGE_(luci-app-passwall2|luci-app-v2raya|xray-core|sing-box)=" .config || echo "None found"
+        echo "=========================================="
 
     - name: Kernel Hash
       run: |
@@ -303,12 +377,27 @@ jobs:
         
         echo "Latest hash is: ${LATEST_HASH}"
         sed -i "s/\$(MKHASH) md5/echo \"${LATEST_HASH}\"/g" include/kernel-defaults.mk
+        
+        echo "=========================================="
+        echo "       [KERNEL HASH SUMMARY]              "
+        echo "=========================================="
+        echo "Download Domain : $DOMAIN"
+        echo "Full URL        : $FULL_URL"
+        echo "Applied Hash    : $LATEST_HASH"
+        echo "=========================================="
 
     - name: Compile
       run: |
         cd openwrt
         make -j$(expr $(nproc) + 1) || make -j1 V=s
         echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
+        
+        echo "=========================================="
+        echo "       [COMPILE SUMMARY]                  "
+        echo "=========================================="
+        echo "Compilation finished successfully."
+        echo "Firmware Date: $(date +"%Y%m%d%H%M")"
+        echo "=========================================="
 
     - name: Upload
       uses: actions/upload-artifact@main
