@@ -503,14 +503,6 @@ find /etc/config/ -type f -name '*-opkg' -exec rm {} \;
 find /etc/config/ -type f -name '*apk-new' -exec rm {} \;
 echo -e "${COLOR_CYAN}Удалены временные файлы конфигурации.${COLOR_RESET}"
 
-# Включение FullCone NAT
-if [ -d "/sys/module/nft_fullcone" ]; then
-	uci set firewall.@defaults[0].fullcone='1' && uci commit firewall
-	echo -e "${COLOR_WHITE}FullCone NAT включен${COLOR_RESET}"
-else
-	echo -e "${COLOR_WHITE}FullCone не доступен${COLOR_RESET}"
-fi
-
 # Расширение интерфейса bootstrap
 if ! grep -q "/* LuCI Bootstrap: Custom Fullwidth CSS */" /www/luci-static/bootstrap/cascade.css; then
 	cat << 'EOF' >> /www/luci-static/bootstrap/cascade.css
@@ -545,9 +537,17 @@ else
 	echo "CSS уже содержит обновленные стили"
 fi
 
+# Включение FullCone NAT
+if [ -f "/lib/modules/$(uname -r)/nft_fullcone.ko" ] || lsmod | grep -q nft_fullcone || [ -d "/sys/module/nft_fullcone" ]; then
+	uci set firewall.@defaults[0].fullcone='1' && uci commit firewall
+	echo -e "${COLOR_WHITE}FullCone NAT включен${COLOR_RESET}"
+else
+	echo -e "${COLOR_WHITE}FullCone не доступен${COLOR_RESET}"
+fi
+
 # Включить TCP BBR
 if [ -f "/lib/modules/$(uname -r)/tcp_bbr.ko" ] || grep -q "bbr" /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null; then
-    sed -i '/net\.core\.default_qdisc.*fq/d; /net\.ipv4\.tcp_congestion_control.*bbr/d' /etc/sysctl.conf
+    sed -i '/# TCP BBR/d; /net\.core\.default_qdisc.*fq/d; /net\.ipv4\.tcp_congestion_control.*bbr/d' /etc/sysctl.conf
     echo -e "# TCP BBR\nnet.core.default_qdisc = fq\nnet.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.conf
 else
     sed -i '/net\.core\.default_qdisc.*fq/d; /net\.ipv4\.tcp_congestion_control.*bbr/d; /# TCP BBR/d' /etc/sysctl.conf
