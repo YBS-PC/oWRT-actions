@@ -94,6 +94,10 @@ jobs:
   build:
     needs: setup
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      actions: write
+    
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
