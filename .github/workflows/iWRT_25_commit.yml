@@ -1,4 +1,4 @@
-name: All iWRT 25 commit
+name: iWRT 25 commit
 
 on:
   workflow_dispatch:
