@@ -1,4 +1,4 @@
-name: All iWRT 24.10
+name: iWRT 24.10
 
 on:
   workflow_dispatch:
