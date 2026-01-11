@@ -1,4 +1,4 @@
-name: All oWRT v2rayA
+name: oWRT v2rayA
 
 on:
   workflow_dispatch:
