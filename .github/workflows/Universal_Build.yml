@@ -285,7 +285,9 @@ jobs:
         $GITHUB_WORKSPACE/$DIY_P1_SH
         
         VARIANT="${{ inputs.variant }}"
+        echo "Variant selected: $VARIANT"
         
+        # Добавление фидов в зависимости от варианта
         if [ "$VARIANT" == "passwall" ]; then
             echo -e "\nsrc-git passwall2 https://github.com/xiaorouji/openwrt-passwall2.git" >> feeds.conf.default
             echo -e "\nsrc-git passwall_packages https://github.com/xiaorouji/openwrt-passwall-packages.git;main" >> feeds.conf.default
@@ -304,8 +306,15 @@ jobs:
         eval "$DEVICE_CONFIG_COMMANDS"
         
         # --- ФИНАЛЬНАЯ НАСТРОЙКА .CONFIG ---
-        sed -i '/homeproxy/d' ./.config
-        sed -i '/sing-box/d' ./.config
+        
+        # ВАЖНОЕ ИСПРАВЛЕНИЕ:
+        # Удаляем HomeProxy и Sing-Box только если выбран "тяжелый" вариант (Passwall/Xray/V2rayA).
+        # Для 'minimal' мы их ОСТАВЛЯЕМ (если они есть в WRT.config).
+        if [ "$VARIANT" != "minimal" ]; then
+            echo ">>> Removing HomeProxy and Sing-box dependencies for $VARIANT compatibility..."
+            sed -i '/homeproxy/d' ./.config
+            sed -i '/sing-box/d' ./.config
+        fi
         
         if [ "$VARIANT" == "passwall" ]; then
             sed -i '/[Ss][Hh][Aa][Dd][Oo][Ww][Ss][Oo][Cc][Kk][Ss]/d' ./.config
@@ -343,7 +352,8 @@ jobs:
         echo "=========================================="
         echo "Variant selected: $VARIANT"
         echo "Checking key packages in .config:"
-        grep -E "CONFIG_PACKAGE_(luci-app-passwall2|luci-app-v2raya|xray-core|sing-box)=" .config || echo "None found"
+        # Проверяем наличие ключевых пакетов для уверенности
+        grep -E "CONFIG_PACKAGE_(luci-app-homeproxy|sing-box|luci-app-passwall2|xray-core)=" .config || echo "None found"
         echo "=========================================="
 
     - name: Kernel Hash
