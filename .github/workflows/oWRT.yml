@@ -1,4 +1,4 @@
-name: All oWRT
+name: oWRT
 
 on:
   workflow_dispatch:
