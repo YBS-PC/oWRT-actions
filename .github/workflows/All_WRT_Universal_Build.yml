@@ -180,7 +180,7 @@ jobs:
           VAR_REPO_URL="https://github.com/immortalwrt/immortalwrt.git"
           API_REPO="immortalwrt/immortalwrt"
         else
-          VAR_REPO_URL="https://git.openwrt.org/openwrt/openwrt.git"
+          VAR_REPO_URL="https://github.com/openwrt/openwrt.git"
           # OpenWrt теги смотрим на GitHub, даже если клонируем с их сайта
           API_REPO="openwrt/openwrt"
         fi
