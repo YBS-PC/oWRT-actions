@@ -373,6 +373,14 @@ jobs:
             echo -e "\nsrc-git luciappxray https://github.com/yichya/luci-app-xray.git" >> feeds.conf.default
         fi
 
+        # --- ЗАМЕНА ЗЕРКАЛ (FIX 503 ERROR) ---
+        # Меняем git.openwrt.org на github.com/openwrt для стабильности
+        sed -i 's|https://git.openwrt.org/feed/packages.git|https://github.com/openwrt/packages.git|g' feeds.conf.default
+        sed -i 's|https://git.openwrt.org/project/luci.git|https://github.com/openwrt/luci.git|g' feeds.conf.default
+        sed -i 's|https://git.openwrt.org/feed/routing.git|https://github.com/openwrt/routing.git|g' feeds.conf.default
+        sed -i 's|https://git.openwrt.org/feed/telephony.git|https://github.com/openwrt/telephony.git|g' feeds.conf.default
+        # -------------------------------------
+        
         ./scripts/feeds update -a
         chmod +x $GITHUB_WORKSPACE/$DIY_P11_SH
         $GITHUB_WORKSPACE/$DIY_P11_SH
