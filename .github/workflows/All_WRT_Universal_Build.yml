@@ -172,42 +172,98 @@ jobs:
         echo "=========================================="
 
     - name: Configure Build Variables
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # 1. URL Репозитория
+        # 1. Настройка URL репозитория и API для поиска тегов
         if [ "${{ inputs.source }}" == "immortalwrt" ]; then
           VAR_REPO_URL="https://github.com/immortalwrt/immortalwrt.git"
+          API_REPO="immortalwrt/immortalwrt"
         else
           VAR_REPO_URL="https://git.openwrt.org/openwrt/openwrt.git"
+          # OpenWrt теги смотрим на GitHub, даже если клонируем с их сайта
+          API_REPO="openwrt/openwrt"
         fi
         echo "REPO_URL=$VAR_REPO_URL" >> $GITHUB_ENV
         
-        # 2. Ветка и Release Path
+        # 2. Логика Ветки
         INPUT_BRANCH="${{ inputs.branch }}"
+        MANUAL_COMMIT="${{ inputs.commit_hash }}"
         
+        VAR_BRANCH="$INPUT_BRANCH"
+        VAR_TARGET_RELEASE=""
+        VAR_COMMIT_HASH="$MANUAL_COMMIT"
+
         if [ "$INPUT_BRANCH" == "master" ]; then
+            # --- ЛОГИКА ДЛЯ MASTER ---
             if [ "${{ inputs.source }}" == "openwrt" ]; then
                 VAR_BRANCH="main"
-            else
-                VAR_BRANCH="master"
             fi
             VAR_TARGET_RELEASE="snapshots"
-        else
-            VAR_BRANCH="$INPUT_BRANCH"
+            echo ">>> Master/Main branch selected. Using snapshots."
             
-            # Логика путей для стабильных релизов
-            if [[ "$INPUT_BRANCH" == *"25.12"* ]]; then
-                 VAR_TARGET_RELEASE="releases/25.12.0-rc2"
-            elif [[ "$INPUT_BRANCH" == *"24.10"* ]]; then
-                 if [ "${{ inputs.source }}" == "immortalwrt" ]; then
-                    # ImmortalWrt использует суффикс SNAPSHOT для стабильных веток в URL
-                    VAR_TARGET_RELEASE="releases/24.10.4"
-                 else
-                    VAR_TARGET_RELEASE="releases/24.10.5"
-                 fi
+        else
+            # --- ЛОГИКА ДЛЯ СТАБИЛЬНЫХ ВЕТОК (АВТО-ПОИСК) ---
+            echo ">>> Stable branch selected: $INPUT_BRANCH"
+            
+            # Если хеш не задан вручную, ищем через API
+            if [ -z "$MANUAL_COMMIT" ]; then
+                # Формируем префикс тега (например: "openwrt-25.12" -> "v25.12")
+                TAG_PREFIX="v${INPUT_BRANCH#openwrt-}"
+                
+                echo ">>> Searching for latest tag starting with '$TAG_PREFIX' in $API_REPO..."
+                
+                # Магия jq: фильтруем теги по префиксу и берем первый (самый свежий)
+                TAG_JSON=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+                    "https://api.github.com/repos/$API_REPO/tags" | \
+                    jq --arg prefix "$TAG_PREFIX" '[.[] | select(.name | startswith($prefix))] | first')
+                
+                if [ "$TAG_JSON" != "null" ] && [ -n "$TAG_JSON" ]; then
+                    TAG_NAME=$(echo "$TAG_JSON" | jq -r '.name')
+                    TAG_COMMIT=$(echo "$TAG_JSON" | jq -r '.commit.sha')
+                    
+                    echo ">>> FOUND TAG: $TAG_NAME"
+                    echo ">>> FOUND COMMIT: $TAG_COMMIT"
+                    
+                    VAR_COMMIT_HASH="$TAG_COMMIT"
+                    
+                    # Формируем путь релиза (удаляем 'v' из названия тега)
+                    # Пример: v25.12.0-rc2 -> releases/25.12.0-rc2
+                    CLEAN_VER="${TAG_NAME#v}"
+                    VAR_TARGET_RELEASE="releases/$CLEAN_VER"
+                    
+                    # Специфика ImmortalWrt: если папки релиза нет, используем SNAPSHOT
+                    if [ "${{ inputs.source }}" == "immortalwrt" ]; then
+                         HTTP_CODE=$(curl -o /dev/null -s -w "%{http_code}\n" "https://downloads.immortalwrt.org/$VAR_TARGET_RELEASE/targets/")
+                         if [ "$HTTP_CODE" != "200" ]; then
+                             echo ">>> Release folder not found on server. Using SNAPSHOT fallback."
+                             VAR_TARGET_RELEASE="releases/${INPUT_BRANCH#openwrt-}-SNAPSHOT"
+                         fi
+                    fi
+                else
+                    echo ">>> WARNING: No tag found for $TAG_PREFIX. Using default fallback logic."
+                fi
+            else
+                echo ">>> Manual commit provided ($MANUAL_COMMIT). Skipping auto-search."
+            fi
+            
+            # ФОЛБЭК (Если API не нашел тег или произошла ошибка)
+            if [ -z "$VAR_TARGET_RELEASE" ]; then
+                if [[ "$INPUT_BRANCH" == *"25.12"* ]]; then
+                     VAR_TARGET_RELEASE="releases/25.12.0-rc2"
+                elif [[ "$INPUT_BRANCH" == *"24.10"* ]]; then
+                     if [ "${{ inputs.source }}" == "immortalwrt" ]; then
+                        VAR_TARGET_RELEASE="releases/24.10-SNAPSHOT"
+                     else
+                        VAR_TARGET_RELEASE="releases/24.10.0"
+                     fi
+                fi
             fi
         fi
+        
         echo "REPO_BRANCH=$VAR_BRANCH" >> $GITHUB_ENV
         echo "TARGET_RELEASE=$VAR_TARGET_RELEASE" >> $GITHUB_ENV
+        echo "AUTO_COMMIT_HASH=$VAR_COMMIT_HASH" >> $GITHUB_ENV
 
         # 3. Устройство
         source ./config/conf/${{ matrix.target }}
@@ -220,13 +276,11 @@ jobs:
         echo "=========================================="
         echo "       [VARIABLES SUMMARY]                "
         echo "=========================================="
-        echo "Source Input   : ${{ inputs.source }}"
-        echo "Calculated URL : $VAR_REPO_URL"
-        echo "Branch Input   : ${{ inputs.branch }}"
-        echo "Calculated Br. : $VAR_BRANCH"
+        echo "Source         : ${{ inputs.source }}"
+        echo "Branch Input   : $INPUT_BRANCH"
+        echo "Real Branch    : $VAR_BRANCH"
         echo "Target Release : $VAR_TARGET_RELEASE"
-        echo "Device Target  : ${TARGET_NAME}"
-        echo "Kernel Path    : ${KERNEL_PATH}"
+        echo "Target Commit  : $VAR_COMMIT_HASH"
         echo "=========================================="
 
     - name: Init Env
@@ -250,12 +304,16 @@ jobs:
       run: |
         git clone --branch $REPO_BRANCH $REPO_URL openwrt
         cd openwrt
-        CHECKOUT_MSG="Latest from branch $REPO_BRANCH"
-        if [ -n "${{ inputs.commit_hash }}" ]; then
-           echo "Checking out commit: ${{ inputs.commit_hash }}"
-           git checkout ${{ inputs.commit_hash }}
-           CHECKOUT_MSG="Specific commit ${{ inputs.commit_hash }}"
+        
+        # Используем вычисленный хеш (автоматический или ручной)
+        if [ -n "$AUTO_COMMIT_HASH" ]; then
+           echo "Checking out specific commit: $AUTO_COMMIT_HASH"
+           git checkout "$AUTO_COMMIT_HASH"
+           CHECKOUT_MSG="Commit $AUTO_COMMIT_HASH"
+        else
+           CHECKOUT_MSG="Latest head of $REPO_BRANCH"
         fi
+        
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
         
         echo "=========================================="
