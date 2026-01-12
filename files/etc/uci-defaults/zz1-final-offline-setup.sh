@@ -15,8 +15,7 @@ SETUP_LOGFILE="/root/setup_log.txt"
 exec > >(tee -a "$SETUP_LOGFILE") 2>&1
 
 # --- Управление цветами ---
-# Установите в "true" для цветного вывода, в "false" для чистого текста.
-USE_COLORS="false"
+USE_COLORS="true"
 
 if [ "$USE_COLORS" = "true" ]; then
     COLOR_RED='\033[31m'
@@ -28,7 +27,6 @@ if [ "$USE_COLORS" = "true" ]; then
     COLOR_WHITE='\033[37m'
     COLOR_RESET='\033[0m'
 else
-    # Если цвета отключены, все переменные будут пустыми
     COLOR_RED=''
     COLOR_GREEN=''
     COLOR_YELLOW=''
@@ -122,6 +120,54 @@ if [ -f "$DISTFEEDS_FILE" ]; then
 	else
 		echo -e "${COLOR_RED}Ошибка: Фильтрация не нашла ни одной нужной строки! Оригинальный файл не изменен.${COLOR_RESET}"
 	fi
+
+    # --- АВТОМАТИЧЕСКОЕ ДОБАВЛЕНИЕ KMODS (ТОЛЬКО ДЛЯ APK) ---
+    if command -v apk >/dev/null 2>&1; then
+        echo -e "${COLOR_MAGENTA}Попытка автоматического добавления репозитория kmods...${COLOR_RESET}"
+        
+        # 1. Получаем полную версию пакета через apk list
+        # 2>/dev/null убирает WARNING о кеше, head -n1 берет первую строку, awk берет первое слово (имя-версия)
+        KERNEL_PKG=$(apk list -I kernel 2>/dev/null | head -n1 | awk '{print $1}')
+        
+        if [ -n "$KERNEL_PKG" ]; then
+            # Убираем префикс 'kernel-' (остается: 6.12.63~hash-r1)
+            K_VER_TEMP=${KERNEL_PKG#kernel-}
+            
+            # Убираем суффикс ревизии '-rX' (остается: 6.12.63~hash)
+            K_VER_TEMP=${K_VER_TEMP%-r*}
+            
+            # Заменяем тильду '~' на '-1-', чтобы получить формат пути сервера
+            # Результат: 6.12.63-1-hash
+            K_MODS_DIR=$(echo "$K_VER_TEMP" | sed 's/~/-1-/')
+            
+            echo -e "${COLOR_CYAN}Определена версия ядра: ${K_VER_TEMP} -> Папка: ${K_MODS_DIR}${COLOR_RESET}"
+            
+            # 2. Ищем базовый URL в существующем файле
+            BASE_REPO_URL=$(grep "/targets/.*/packages/packages.adb" "$DISTFEEDS_FILE" | head -n1)
+            
+            if [ -n "$BASE_REPO_URL" ]; then
+                # Отрезаем хвост '/packages/packages.adb'
+                TARGET_BASE=$(echo "$BASE_REPO_URL" | sed 's|/packages/packages\.adb||')
+                
+                # 3. Формируем URL
+                KMODS_URL="${TARGET_BASE}/kmods/${K_MODS_DIR}/packages.adb"
+                
+                # 4. Проверяем и записываем
+                if ! grep -q "$KMODS_URL" "$DISTFEEDS_FILE"; then
+                    echo -e "${COLOR_GREEN}Добавляю репозиторий kmods: ${KMODS_URL}${COLOR_RESET}"
+                    echo "$KMODS_URL" >> "$DISTFEEDS_FILE"
+                else
+                    echo -e "${COLOR_YELLOW}Репозиторий kmods уже присутствует.${COLOR_RESET}"
+                fi
+            else
+                echo -e "${COLOR_RED}Ошибка: Не удалось найти базовый URL в $DISTFEEDS_FILE${COLOR_RESET}"
+            fi
+        else
+            echo -e "${COLOR_RED}Ошибка: Не удалось определить версию ядра через apk list.${COLOR_RESET}"
+        fi
+    fi
+    # --------------------------------------------------------
+
 else
 	echo "Файл $DISTFEEDS_FILE не найден."
 fi
@@ -244,28 +290,18 @@ if [ -f "$PASSWALL_INIT" ]; then
     "$PASSWALL_INIT" stop >/dev/null 2>&1
 
     # --- КОНФИГУРАЦИЯ ЧЕРЕЗ UCI ---
-    # Мы настраиваем Passwall так, чтобы он НЕ перехватывал DNS (порт 53)
-    # и не пытался управлять dnsmasq.
-	# batch: Утилита запускается один раз, считывает файл в память, ждет от вас список команд на вход, применяет их все разом в памяти
-	# и (если есть команда commit) сохраняет результат на диск один раз
-	# -q тихий режим без ответов
-	# Если написать <<-EOF (с дефисом), то оболочка автоматически удаляет все символы табуляции (TAB) в начале каждой строки перед тем,
-	# как передать их команде uci. Просто красиво
-	
     uci -q batch <<-EOF
         # 1. Отключаем перехват DNS (Redirect/Tproxy на 53 порту)
-        # Это самое важное: firewall не будет заворачивать 53 порт в Passwall.
         set passwall2.@global[0].dns_redirect='0'
         
         # 2. Отключаем Shunt (разделение DNS), так как AGH сам все решит
         set passwall2.@global[0].dns_shunt='closed'
         
         # 3. Указываем Passwall использовать локальный AGH как DNS
-        # (на случай, если ему нужно что-то отрезолвить самому)
         set passwall2.@global[0].remote_dns='127.0.0.1:53'
         set passwall2.@global[0].china_dns='127.0.0.1:53'
         
-        # 4. Отключаем любые попытки фильтрации UDP (если есть такая опция по умолчанию)
+        # 4. Отключаем любые попытки фильтрации UDP
         set passwall2.@global[0].adblock='0'
         
         # 5. Убеждаемся, что Passwall включен глобально
@@ -546,12 +582,19 @@ else
 fi
 
 # Включить TCP BBR
+# Мы проверяем наличие модуля tcp_bbr.ko в папке с модулями текущего ядра ИЛИ наличие bbr в списке доступных алгоритмов в procfs
 if [ -f "/lib/modules/$(uname -r)/tcp_bbr.ko" ] || grep -q "bbr" /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null; then
+    # Если BBR доступен, удаляем старые/конфликтующие записи из sysctl.conf
     sed -i '/# TCP BBR/d; /net\.core\.default_qdisc.*fq/d; /net\.ipv4\.tcp_congestion_control.*bbr/d' /etc/sysctl.conf
+    # Удаляем пустые строки в конце файла
     sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' /etc/sysctl.conf
-    echo -e "\n# TCP BBR\nnet.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.conf
+    # Добавляем правильные настройки: fq_codel для совместимости с CAKE и bbr для TCP
+    echo -e "\n# TCP BBR\nnet.core.default_qdisc = fq_codel\nnet.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.conf
+    echo -e "${COLOR_GREEN}TCP BBR включен.${COLOR_RESET}"
 else
+    # Если BBR недоступен, убираем настройки, чтобы не было ошибок при загрузке
     sed -i '/net\.core\.default_qdisc.*fq/d; /net\.ipv4\.tcp_congestion_control.*bbr/d; /# TCP BBR/d' /etc/sysctl.conf
+    echo -e "${COLOR_YELLOW}TCP BBR недоступен.${COLOR_RESET}"
 fi
 
 # Включить sqm
