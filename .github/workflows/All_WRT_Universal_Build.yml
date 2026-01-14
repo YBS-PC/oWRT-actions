@@ -445,7 +445,8 @@ jobs:
       run: |
         cd openwrt
         if [[ "${{ env.REPO_URL }}" == *"immortalwrt"* ]]; then
-            DOMAIN="downloads.immortalwrt.org"
+            # DOMAIN="downloads.immortalwrt.org"
+            DOMAIN="immortalwrt.kyarucloud.moe"
         else
             DOMAIN="downloads.openwrt.org"
         fi
