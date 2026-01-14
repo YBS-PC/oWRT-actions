@@ -412,8 +412,7 @@ jobs:
             echo 'CONFIG_PACKAGE_xray-core=y' >> ./.config
             echo 'CONFIG_PACKAGE_geoview=y' >> ./.config
             echo 'CONFIG_PACKAGE_v2ray-plugin=y' >> ./.config
-            echo 'CONFIG_PACKAGE_v2ray-geoip=y' >> ./.config
-            echo 'CONFIG_PACKAGE_v2ray-geosite=y' >> ./.config
+            echo 'CONFIG_PACKAGE_v2ray-geodata=y' >> ./.config
             
         elif [ "$VARIANT" == "v2raya" ]; then
             echo 'CONFIG_PACKAGE_luci-app-v2raya=y' >> ./.config
@@ -424,8 +423,7 @@ jobs:
         elif [ "$VARIANT" == "xray" ]; then
             echo 'CONFIG_PACKAGE_luci-app-xray=y' >> ./.config
             echo 'CONFIG_PACKAGE_xray-core=y' >> ./.config
-            echo 'CONFIG_PACKAGE_v2ray-geoip=y' >> ./.config
-            echo 'CONFIG_PACKAGE_v2ray-geosite=y' >> ./.config
+            echo 'CONFIG_PACKAGE_v2ray-geodata=y' >> ./.config
             echo 'CONFIG_PACKAGE_geoview=y' >> ./.config
         fi
         
