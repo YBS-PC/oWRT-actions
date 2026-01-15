@@ -112,6 +112,39 @@ else
 fi
 
 # =========================================================
+# ОЧИСТКА ОТ ТЯЖЕЛЫХ GNU УТИЛИТ (Coreutils и др.)
+# Экономит место, ускоряет сборку, предотвращает ошибки
+# =========================================================
+echo ">>> Disabling unnecessary heavy packages (GNU utils)..."
+# Список пакетов для удаления (оставляем только BusyBox аналоги)
+REMOVE_LIST=(
+    # Основной пакет coreutils
+    "coreutils" 
+    # Отдельные утилиты
+    "coreutils-base64" "coreutils-cat" "coreutils-chmod" "coreutils-chown"
+    "coreutils-cp" "coreutils-cut" "coreutils-date" "coreutils-df"
+    "coreutils-du" "coreutils-expand" "coreutils-head" "coreutils-ls"
+    "coreutils-md5sum" "coreutils-mkdir" "coreutils-mv" "coreutils-nohup"
+    "coreutils-numfmt" "coreutils-paste" "coreutils-rm" "coreutils-sha256sum"
+    "coreutils-sleep" "coreutils-sort" "coreutils-stat" "coreutils-strings"
+    "coreutils-tail" "coreutils-timeout" "coreutils-touch" "coreutils-tr"
+    "coreutils-unexpand" "coreutils-uniq" "coreutils-wc"
+    # Другие тяжелые утилиты (уже есть в BusyBox)
+    "grep" "sed" "gawk" "tar" "gzip" "unzip" "bzip2"
+    "findutils" "findutils-find" "findutils-locate" "findutils-xargs"
+    "diffutils"
+    # Управление пользователями (не нужно для роутера)
+    "shadow-groupadd" "shadow-useradd"
+)
+for PKG in "${REMOVE_LIST[@]}"; do
+    # 1. Удаляем строку включения (если она есть)
+    sed -i "/CONFIG_PACKAGE_${PKG}=y/d" ./.config
+    # 2. Явно прописываем отключение
+    # echo "# CONFIG_PACKAGE_${PKG} is not set" >> ./.config
+done
+echo ">>> Cleanup complete."
+
+# =========================================================
 # Настройка сети и часового пояса
 sed -i "s/192.168.1.1/192.168.2.1/g" ./package/base-files/files/bin/config_generate
 sed -i "s#zonename='UTC'#zonename='Europe/Moscow'#g" ./package/base-files/files/bin/config_generate
