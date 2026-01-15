@@ -393,10 +393,10 @@ jobs:
 
         # === ОПТИМИЗАЦИЯ РАЗМЕРА СБОРКИ ===
         # Критично для OpenWrt + Passwall
-        echo ">>> Optimizing build config to save disk space..."
-        echo 'CONFIG_CCACHE=n' >> ./.config
-        echo 'CONFIG_KERNEL_DEBUG_INFO=n' >> ./.config
-        echo 'CONFIG_DEBUG_INFO=n' >> ./.config
+        # echo ">>> Optimizing build config to save disk space..."
+        # echo 'CONFIG_CCACHE=n' >> ./.config
+        # echo 'CONFIG_KERNEL_DEBUG_INFO=n' >> ./.config
+        # echo 'CONFIG_DEBUG_INFO=n' >> ./.config
         # =================================
         
         # --- ФИНАЛЬНАЯ НАСТРОЙКА .CONFIG ---
