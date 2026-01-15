@@ -115,7 +115,7 @@ fi
 # ОЧИСТКА ОТ ТЯЖЕЛЫХ GNU УТИЛИТ (Coreutils и др.)
 # Экономит место, ускоряет сборку, предотвращает ошибки
 # =========================================================
-if [[ "$CURRENT_MATRIX_TARGET" == "ax59u" ]] || [[ "$CURRENT_MATRIX_TARGET" == "ax59u" ]]; then
+if [[ "$CURRENT_MATRIX_TARGET" == "slateax" ]] || [[ "$CURRENT_MATRIX_TARGET" == "ax59u" ]]; then
 echo ">>> Disabling unnecessary heavy packages (GNU utils)..."
 # Список пакетов для удаления (оставляем только BusyBox аналоги)
 REMOVE_LIST=(
