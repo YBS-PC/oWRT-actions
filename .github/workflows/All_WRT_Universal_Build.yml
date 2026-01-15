@@ -494,10 +494,41 @@ jobs:
         echo "Applied Hash    : $LATEST_HASH"
         echo "=========================================="
 
+    - name: Fix Kernel Config
+      run: |
+        cd openwrt
+        # Принудительно обновляем конфиг ядра, соглашаясь на дефолты для новых опций
+        make defconfig
+        make oldconfig || true
+
     - name: Compile
       run: |
         cd openwrt
-        make -j$(expr $(nproc) + 1) || make -j1 V=s
+        echo ">>> Running multi-thread compilation..."
+        
+        # 1. Попытка многопоточной сборки (быстро)
+        if make -j$(expr $(nproc) + 1); then
+            echo ">>> Compilation successful!"
+        else
+            echo ">>> Multi-thread compilation failed."
+            echo ">>> Retrying with single-thread to catch the error (logging to file)..."
+            
+            # 2. Попытка однопоточной сборки с записью в файл build.log
+            # Мы НЕ выводим это на экран, чтобы не переполнить лог GitHub
+            make -j1 V=s > build.log 2>&1 || {
+                echo ">>> Single-thread compilation failed!"
+                echo ">>> Showing last 200 lines of build.log:"
+                echo "========================================="
+                tail -n 200 build.log
+                echo "========================================="
+                # Сохраняем лог как артефакт, чтобы можно было скачать, если 200 строк мало
+                # (Хак: перемещаем его в bin, чтобы он попал в Upload)
+                mkdir -p bin
+                cp build.log bin/build_failure.log
+                exit 1
+            }
+        fi
+        
         echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
         
         echo "=========================================="
