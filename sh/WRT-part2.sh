@@ -115,6 +115,7 @@ fi
 # ОЧИСТКА ОТ ТЯЖЕЛЫХ GNU УТИЛИТ (Coreutils и др.)
 # Экономит место, ускоряет сборку, предотвращает ошибки
 # =========================================================
+if [[ "$CURRENT_MATRIX_TARGET" == "ax59u" ]] || [[ "$CURRENT_MATRIX_TARGET" == "ax59u" ]]; then
 echo ">>> Disabling unnecessary heavy packages (GNU utils)..."
 # Список пакетов для удаления (оставляем только BusyBox аналоги)
 REMOVE_LIST=(
@@ -143,6 +144,7 @@ for PKG in "${REMOVE_LIST[@]}"; do
     # echo "# CONFIG_PACKAGE_${PKG} is not set" >> ./.config
 done
 echo ">>> Cleanup complete."
+fi
 
 # =========================================================
 # Настройка сети и часового пояса
