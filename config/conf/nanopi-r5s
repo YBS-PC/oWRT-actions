@@ -17,5 +17,9 @@ sed -i "/kmod-r8169/Id" ./.config
 echo 'CONFIG_PACKAGE_r8169=n' >> ./.config
 echo 'CONFIG_PACKAGE_r8169-firmware=n' >> ./.config
 echo 'CONFIG_PACKAGE_resize2fs=y' >> ./.config
+echo 'CONFIG_PACKAGE_arm-trusted-firmware-rockchip=y' >> ./.config
+echo 'CONFIG_PACKAGE_arm-trusted-firmware-rk3568=y' >> ./.config
+echo 'CONFIG_PACKAGE_u-boot-friendlyarm_nanopi-r5s=y' >> ./.config
+echo 'CONFIG_PACKAGE_u-boot-rockchip-armv8-friendlyarm_nanopi-r5s=y' >> ./.config
 EOF
 )
