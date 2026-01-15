@@ -411,7 +411,23 @@ jobs:
         fi
         
         if [ "$VARIANT" == "passwall" ]; then
+            # Очищаем любые упоминания shadowsocks перед настройкой, чтобы не было конфликтов
             sed -i '/[Ss][Hh][Aa][Dd][Oo][Ww][Ss][Oo][Cc][Kk][Ss]/d' ./.config
+            # N
+            echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_Haproxy=n' >> ./.config
+            # echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_Hysteria=n' >> ./.config
+            echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_NaiveProxy=n' >> ./.config
+            echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_Shadowsocks_Libev_Client=n' >> ./.config
+            echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_Shadowsocks_Libev_Server=n' >> ./.config
+            echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_Shadowsocks_Rust_Client=n' >> ./.config
+            echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_Shadowsocks_Rust_Server=n' >> ./.config
+            echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_ShadowsocksR_Libev_Client=n' >> ./.config
+            echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_ShadowsocksR_Libev_Server=n' >> ./.config
+            echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_Simple_Obfs=n' >> ./.config
+            echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_SingBox=n' >> ./.config
+            echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_tuic_client=n' >> ./.config
+            echo 'CONFIG_PACKAGE_luci-app-passwall2_Iptables_Transparent_Proxy=n' >> ./.config
+            # Y
             echo 'CONFIG_PACKAGE_luci-app-passwall2=y' >> ./.config
             echo 'CONFIG_PACKAGE_luci-app-passwall2_Nftables_Transparent_Proxy=y' >> ./.config
             echo 'CONFIG_PACKAGE_luci-app-passwall2_INCLUDE_Xray=y' >> ./.config
