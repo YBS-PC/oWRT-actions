@@ -554,25 +554,6 @@ jobs:
         echo "Firmware Date: $(date +"%Y%m%d%H%M")"
         echo "=========================================="
 
-    - name: Save Bootloader files (Universal)
-      run: |
-        cd openwrt
-        mkdir -p bin/u-boot-files
-        
-        echo ">>> Searching for bootloader artifacts (Universal)..."
-        
-        # 1. Поиск финальных файлов в папке bin/targets (приоритетный вариант)
-        # Ищем всё, что похоже на загрузчик: u-boot, idbloader, spl, fip, bl2
-        find bin/targets -type f \( -name "*u-boot*" -o -name "*uboot*" -o -name "*idbloader*" -o -name "*spl*" -o -name "*fip*" \) -exec cp -v {} bin/u-boot-files/ \;
-        
-        # 2. Поиск "сырых" файлов в папке сборки (build_dir)
-        # Полезно, если пакет не создался, но компиляция прошла.
-        # Ищем только внутри папок, начинающихся на u-boot, чтобы не копировать мусор
-        find build_dir/target-*/ -name "u-boot-*" -type d -exec find {} -maxdepth 3 -type f \( -name "*.bin" -o -name "*.img" -o -name "*.itb" -o -name "*.fip" \) \; -exec cp -nv {} bin/u-boot-files/ \;
-        
-        echo ">>> Saved bootloader files:"
-        ls -lh bin/u-boot-files/ || echo "No bootloader files found (this is normal for some devices)"
-    
     - name: Upload
       uses: actions/upload-artifact@main
       with:
