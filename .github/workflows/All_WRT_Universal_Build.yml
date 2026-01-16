@@ -268,6 +268,7 @@ jobs:
         # 3. Устройство
         source ./config/conf/${{ matrix.target }}
         echo "TARGET_NAME=${TARGET_NAME}" >> $GITHUB_ENV
+        echo "CURRENT_MATRIX_TARGET=${{ matrix.target }}" >> $GITHUB_ENV
         echo "KERNEL_PATH=${KERNEL_PATH}" >> $GITHUB_ENV
         echo "DEVICE_CONFIG_COMMANDS<<EOF" >> $GITHUB_ENV
         echo "${DEVICE_CONFIG_COMMANDS}" >> $GITHUB_ENV
@@ -554,6 +555,33 @@ jobs:
         echo "Firmware Date: $(date +"%Y%m%d%H%M")"
         echo "=========================================="
 
+    - name: Save Bootloader files (Deep Search)
+      run: |
+        cd openwrt
+        mkdir -p bin/u-boot-files
+        
+        echo ">>> Starting deep search for Bootloader binaries..."
+        
+        # 1. Прямой поиск специфичных файлов для Rockchip (R5S)
+        # Мы ищем прямо в папке, где они компилировались (build_dir)
+        find build_dir/target-* -name "idbloader.img" -type f -exec cp -vf {} bin/u-boot-files/ \;
+        find build_dir/target-* -name "u-boot.itb" -type f -exec cp -vf {} bin/u-boot-files/ \;
+        
+        # 2. Прямой поиск для MediaTek (Filogic/SlateAX/AX59U)
+        # Обычно это файлы с расширением .fip или .bin внутри папки u-boot
+        find build_dir/target-* -name "*.fip" -type f -exec cp -vf {} bin/u-boot-files/ \;
+        find build_dir/target-* -name "u-boot.bin" -type f -path "*/u-boot-*" -exec cp -vf {} bin/u-boot-files/ \;
+
+        # 3. Дополнительный поиск, если файлы уже переименованы системой
+        # Ищем в папке bin/targets, исключая пакеты (.apk/.ipk)
+        find bin/targets -type f -name "*idbloader.img" -exec cp -vf {} bin/u-boot-files/ \;
+        find bin/targets -type f -name "*u-boot.itb" -exec cp -vf {} bin/u-boot-files/ \;
+        
+        echo ">>> ------------------------------------------------"
+        echo ">>> SAVED BOOTLOADER FILES:"
+        ls -lh bin/u-boot-files/
+        echo ">>> ------------------------------------------------"
+    
     - name: Upload
       uses: actions/upload-artifact@main
       with:
