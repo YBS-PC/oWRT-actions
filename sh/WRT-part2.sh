@@ -116,7 +116,7 @@ fi
 # Экономит место, ускоряет сборку, предотвращает ошибки
 # =========================================================
 if [[ "$CURRENT_MATRIX_TARGET" == "slateax" ]] || [[ "$CURRENT_MATRIX_TARGET" == "ax59u" ]]; then
-echo ">>> Disabling unnecessary heavy packages (GNU utils)..."
+echo ">>> Отключаем ненужные тяжелые пакеты (GNU utils)..."
 # Список пакетов для удаления (оставляем только BusyBox аналоги)
 REMOVE_LIST=(
     # Основной пакет coreutils
@@ -143,7 +143,7 @@ for PKG in "${REMOVE_LIST[@]}"; do
     # 2. Явно прописываем отключение
     # echo "# CONFIG_PACKAGE_${PKG} is not set" >> ./.config
 done
-echo ">>> Cleanup complete."
+echo ">>> Тяжелые пакеты отключены."
 fi
 
 # =========================================================
