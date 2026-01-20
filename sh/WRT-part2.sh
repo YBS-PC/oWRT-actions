@@ -48,9 +48,9 @@ git clone -b master https://github.com/gSpotx2f/luci-app-log.git ./package/luci-
 if [ "$CURRENT_MATRIX_TARGET" == "ax59u" ]; then
     mkdir -p ./package/facinstall
     git clone -b main https://github.com/openwrt-xiaomi/facinstall.git ./package/facinstall/
-    echo ">>> [Git] Устройство ax59u - исходники facinstall добавлен"
+    echo ">>> [Git] Устройство ax59u - исходники facinstall добавлены"
 else
-    echo ">>> [Git] Устройство не ax59u - исходники facinstall не добавленs"
+    echo ">>> [Git] Устройство не ax59u - исходники facinstall не добавлены"
 fi
 
 # =========================================================
