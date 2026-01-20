@@ -454,6 +454,35 @@ jobs:
         
         chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
         $GITHUB_WORKSPACE/$DIY_P2_SH
+
+        # --- ТЮНИНГ ЯДРА (Только для Rockchip / R5S) ---
+        if [[ "$KERNEL_PATH" == *"rockchip"* ]]; then
+            
+            KERNEL_CFG_FILE=$(find target/linux/rockchip/armv8 -name "config-*" | head -n 1)
+            
+            if [ -n "$KERNEL_CFG_FILE" ]; then
+                echo ">>> [R5S Optimization] Applying Kernel Tweaks to $KERNEL_CFG_FILE"
+                
+                # 1. Latency & Timer
+                echo 'CONFIG_PREEMPT=y' >> "$KERNEL_CFG_FILE"
+                echo 'CONFIG_HZ_250=y' >> "$KERNEL_CFG_FILE"
+                echo 'CONFIG_HZ_1000=n' >> "$KERNEL_CFG_FILE"
+                
+                # 2. BBR & Network
+                echo 'CONFIG_TCP_CONG_BBR=y' >> "$KERNEL_CFG_FILE"
+                echo 'CONFIG_NET_SCH_FQ=y' >> "$KERNEL_CFG_FILE"
+                echo 'CONFIG_TCP_CONG_CUBIC=m' >> "$KERNEL_CFG_FILE"
+                echo 'CONFIG_DEFAULT_BBR=y' >> "$KERNEL_CFG_FILE"
+                echo 'CONFIG_DEFAULT_TCP_CONG="bbr"' >> "$KERNEL_CFG_FILE"
+                
+                # 3. CPU Governor
+                echo 'CONFIG_CPU_FREQ_GOV_SCHEDUTIL=y' >> "$KERNEL_CFG_FILE"
+            else
+                echo ">>> WARNING: Rockchip kernel config not found!"
+            fi
+        else
+            echo ">>> Skipping Kernel Tweaks (Current target is not Rockchip)"
+        fi
         
         make defconfig
         
@@ -510,13 +539,6 @@ jobs:
         echo "Full URL        : $FULL_URL"
         echo "Applied Hash    : $LATEST_HASH"
         echo "=========================================="
-
-    - name: Fix Kernel Config
-      run: |
-        cd openwrt
-        # Принудительно обновляем конфиг ядра, соглашаясь на дефолты для новых опций
-        make defconfig
-        make oldconfig || true
 
     - name: Compile
       run: |
