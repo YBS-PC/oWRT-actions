@@ -47,8 +47,9 @@ git clone -b master https://github.com/gSpotx2f/luci-app-log.git ./package/luci-
 if [ "$CURRENT_MATRIX_TARGET" == "ax59u" ]; then
     mkdir -p ./package/facinstall
     git clone -b main https://github.com/openwrt-xiaomi/facinstall.git ./package/facinstall/
+    echo ">>> [Git] Устройство ax59u - исходники facinstall добавлен"
 else
-    echo "=========================================="
+    echo ">>> [Git] Устройство не ax59u - исходники facinstall не добавленs"
 fi
 
 # =========================================================
@@ -56,11 +57,11 @@ fi
 # Выполняется только если в .config есть строка CONFIG_PACKAGE_zapret=y
 # =========================================================
 if [ -f ./.config ] && grep -q "^CONFIG_PACKAGE_zapret=y" ./.config; then
-    echo ">>> В конфиге включен 'zapret'. Скачиваем исходники..."
+    echo ">>> [Zapret] В конфиге включен 'zapret'. Скачиваем исходники..."
     mkdir -p ./package/zapret-openwrt
     git clone -b master https://github.com/remittor/zapret-openwrt.git ./package/zapret-openwrt/
 else
-    echo ">>> Пакет 'zapret' не выбран в конфиге (или закомментирован). Скачивание пропущено."
+    echo ">>> [Zapret] Пакет 'zapret' не выбран в конфиге (или закомментирован). Скачивание пропущено."
 fi
 
 # =========================================================
@@ -68,12 +69,12 @@ fi
 # Если в фидах нет репозитория 'immortalwrt/luci'
 # =========================================================
 if ! grep -q "immortalwrt/luci" feeds.conf.default; then
-    echo ">>> В фидах НЕ найден ImmortalWrt LuCI. Считаем, что это Official OpenWrt."
-    echo ">>> Добавляем HomeProxy вручную..."
+    echo ">>> [HomeProxy] В фидах НЕ найден ImmortalWrt LuCI. Считаем, что это Official OpenWrt."
+    echo ">>> [HomeProxy] Добавляем HomeProxy вручную..."
     mkdir -p ./package/luci-app-homeproxy
     git clone -b master https://github.com/immortalwrt/homeproxy.git ./package/luci-app-homeproxy/
 else
-    echo ">>> Обнаружен фид ImmortalWrt LuCI. HomeProxy должен быть встроен."
+    echo ">>> [HomeProxy] Обнаружен фид ImmortalWrt LuCI. HomeProxy должен быть встроен."
 fi
 
 # =========================================================
@@ -87,14 +88,14 @@ PW_FEED_DIR="./feeds/passwall_packages"
 PW_PACKAGES="v2ray-geodata chinadns-ng"
 if [ -d "$PW_FEED_DIR" ]; then
     echo "======================================================="
-    echo ">>> Фид Passwall найден. Начинаем замену пакетов..."
+    echo ">>> [Passwall] Фид Passwall найден. Начинаем замену пакетов..."
     if [[ "$REPO_BRANCH" == "master" || "$REPO_BRANCH" == "main" ]]; then
         PW_PACKAGES="$PW_PACKAGES xray-core xray-plugin v2ray-plugin sing-box geoview tcping"
-        echo ">>> Ветка $REPO_BRANCH: xray-core xray-plugin v2ray-plugin sing-box geoview tcping добавлен в список замены."
+        echo ">>> [Passwall] Ветка $REPO_BRANCH: xray-core xray-plugin v2ray-plugin sing-box geoview tcping добавлен в список замены."
     else
-        echo ">>> Ветка $REPO_BRANCH: xray-core xray-plugin v2ray-plugin sing-box geoview tcping ИСКЛЮЧЕН из замены."
+        echo ">>> [Passwall] Ветка $REPO_BRANCH: xray-core xray-plugin v2ray-plugin sing-box geoview tcping ИСКЛЮЧЕН из замены."
     fi
-    echo ">>> Список для обработки: $PW_PACKAGES"
+    echo ">>> [Passwall] Список для обработки: $PW_PACKAGES"
     for PKG in $PW_PACKAGES; do
         STD_PKG_PATH="./package/feeds/packages/$PKG"
         if [ -d "$STD_PKG_PATH" ] && [ -d "$PW_FEED_DIR/$PKG" ]; then
@@ -105,10 +106,10 @@ if [ -d "$PW_FEED_DIR" ]; then
             echo "   . Пропуск [$PKG] (не установлен в системе или нет в Passwall)"
         fi
     done
-    echo ">>> Все пакеты обработаны."
+    echo ">>> [Passwall] Все пакеты обработаны."
     echo "======================================================="
 else
-    echo ">>> Фид passwall_packages не найден. Замена passwall_packages не требуется."
+    echo ">>> [Passwall] Фид passwall_packages не найден. Замена passwall_packages не требуется."
 fi
 
 # =========================================================
@@ -116,7 +117,7 @@ fi
 # Экономит место, ускоряет сборку, предотвращает ошибки
 # =========================================================
 if [[ "$CURRENT_MATRIX_TARGET" == "slateax" ]] || [[ "$CURRENT_MATRIX_TARGET" == "ax59u" ]]; then
-echo ">>> Отключаем ненужные тяжелые пакеты (GNU utils)..."
+echo ">>> [Heavy packages] Отключаем ненужные тяжелые пакеты (GNU utils)..."
 # Список пакетов для удаления (оставляем только BusyBox аналоги)
 REMOVE_LIST=(
     # Основной пакет coreutils
@@ -143,7 +144,7 @@ for PKG in "${REMOVE_LIST[@]}"; do
     # 2. Явно прописываем отключение
     # echo "# CONFIG_PACKAGE_${PKG} is not set" >> ./.config
 done
-echo ">>> Тяжелые пакеты отключены."
+echo ">>> [Heavy packages] Тяжелые пакеты отключены."
 fi
 
 # =========================================================
