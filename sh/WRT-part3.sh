@@ -1,5 +1,6 @@
 #!/bin/bash
-echo ">>> WRT-part2 start"
+
+echo ">>>>>>>>> WRT-part3 start. Использование: до make defconfig"
 ####################################################################
 ##echo ">>> Force-disabling unwanted packages..."
 # Список пакетов, которые нужно принудительно отключить. Например:
@@ -167,4 +168,4 @@ sed -i "s#timezone='GMT0'#timezone='MSK-3'#g" ./package/base-files/files/bin/con
 #else
 #    echo ">>> Timezone not set at compile time."
 #fi
-echo ">>> WRT-part2 end"
+echo ">>>>>>>>> WRT-part3 end"
