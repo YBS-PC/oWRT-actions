@@ -133,6 +133,15 @@ for PKG in "${REMOVE_LIST[@]}"; do
     # 2. Явно прописываем отключение
     # echo "# CONFIG_PACKAGE_${PKG} is not set" >> ./.config
 done
+# Приоритет встроенных applets над внешними программами
+echo 'CONFIG_BUSYBOX_DEFAULT_FEATURE_PREFER_APPLETS=y' >> ./.config
+# Встроенные команды shell для максимальной производительности
+echo 'CONFIG_BUSYBOX_DEFAULT_ASH_BUILTIN_ECHO=y' >> ./.config
+echo 'CONFIG_BUSYBOX_DEFAULT_ASH_BUILTIN_PRINTF=y' >> ./.config
+echo 'CONFIG_BUSYBOX_DEFAULT_ASH_BUILTIN_TEST=y' >> ./.config
+# Дополнительные оптимизации
+echo 'CONFIG_BUSYBOX_DEFAULT_FEATURE_FAST_TOP=y' >> ./.config
+echo 'CONFIG_BUSYBOX_DEFAULT_FEATURE_USE_INITTAB=y' >> ./.config
 echo ">>> [Heavy packages] Тяжелые пакеты отключены."
 fi
 
