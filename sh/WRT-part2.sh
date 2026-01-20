@@ -1,4 +1,5 @@
 #!/bin/bash
+echo ">>> WRT-part2 start"
 ####################################################################
 ##echo ">>> Force-disabling unwanted packages..."
 # Список пакетов, которые нужно принудительно отключить. Например:
@@ -166,3 +167,4 @@ sed -i "s#timezone='GMT0'#timezone='MSK-3'#g" ./package/base-files/files/bin/con
 #else
 #    echo ">>> Timezone not set at compile time."
 #fi
+echo ">>> WRT-part2 end"
