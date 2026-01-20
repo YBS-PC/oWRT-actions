@@ -143,16 +143,4 @@ sed -i "s#zonename='UTC'#zonename='Europe/Moscow'#g" ./package/base-files/files/
 sed -i "s#timezone='GMT0'#timezone='MSK-3'#g" ./package/base-files/files/bin/config_generate
 # =========================================================
 
-#mkdir ./package/custom
-#git clone https://github.com/sbwml/autocore-arm.git ./package/custom/
-#./scripts/feeds install -a
-#
-#echo ">>> Setting default timezone to Europe/Moscow (MSK-3)"
-#CONFIG_GEN_SCRIPT="./package/base-files/files/bin/config_generate"
-#if [ -f "$CONFIG_GEN_SCRIPT" ]; then
-#    sed -i "s#zonename='UTC'#zonename='Europe/Moscow'#g" "$CONFIG_GEN_SCRIPT"
-#    sed -i "s#timezone='GMT0'#timezone='MSK-3'#g" "$CONFIG_GEN_SCRIPT"
-#else
-#    echo ">>> Timezone not set at compile time."
-#fi
 echo ">>>>>>>>> WRT-part3 end"
