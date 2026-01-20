@@ -54,9 +54,9 @@ env:
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: ./config/WRT.config
   DIY_P1_SH: ./sh/WRT-part1.sh
-  DIY_P11_SH: ./sh/WRT-part11.sh
   DIY_P2_SH: ./sh/WRT-part2.sh
   DIY_P3_SH: ./sh/WRT-part3.sh
+  DIY_P4_SH: ./sh/WRT-part4.sh
   UPLOAD_BIN_DIR: true
   UPLOAD_FIRMWARE: false
   TZ: Europe/Moscow
@@ -384,8 +384,8 @@ jobs:
         # -------------------------------------
         
         ./scripts/feeds update -a
-        chmod +x $GITHUB_WORKSPACE/$DIY_P11_SH
-        $GITHUB_WORKSPACE/$DIY_P11_SH
+        chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
+        $GITHUB_WORKSPACE/$DIY_P2_SH
         ./scripts/feeds install -a
         
         [ -e $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE ./.config
@@ -453,15 +453,15 @@ jobs:
             echo 'CONFIG_PACKAGE_geoview=y' >> ./.config
         fi
         
-        chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
-        $GITHUB_WORKSPACE/$DIY_P2_SH
+        chmod +x $GITHUB_WORKSPACE/$DIY_P3_SH
+        $GITHUB_WORKSPACE/$DIY_P3_SH
 
         # --- ТЮНИНГ (Запуск внешнего скрипта) ---
-        if [ -f "$GITHUB_WORKSPACE/$DIY_P3_SH" ]; then
-            chmod +x $GITHUB_WORKSPACE/$DIY_P3_SH
-            $GITHUB_WORKSPACE/$DIY_P3_SH
+        if [ -f "$GITHUB_WORKSPACE/$DIY_P4_SH" ]; then
+            chmod +x $GITHUB_WORKSPACE/$DIY_P4_SH
+            $GITHUB_WORKSPACE/$DIY_P4_SH
         else
-            echo ">>> P3 tweak script not found: $DIY_P3_SH"
+            echo ">>> P3 tweak script not found: $DIY_P4_SH"
         fi
              
         make defconfig
