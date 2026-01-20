@@ -461,7 +461,7 @@ jobs:
             chmod +x $GITHUB_WORKSPACE/$DIY_P4_SH
             $GITHUB_WORKSPACE/$DIY_P4_SH
         else
-            echo ">>> P3 tweak script not found: $DIY_P4_SH"
+            echo ">>> Tweak script not found: $DIY_P4_SH"
         fi
              
         make defconfig
