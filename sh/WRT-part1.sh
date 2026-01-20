@@ -1,4 +1,5 @@
 #!/bin/bash
+echo ">>> WRT-part1 start"
 #
 # Copyright (c) 2019-2020 P3TERX <https://p3terx.com>
 #
@@ -51,3 +52,4 @@ else
 fi
 
 # =========================================================
+echo ">>> WRT-part1 end"
