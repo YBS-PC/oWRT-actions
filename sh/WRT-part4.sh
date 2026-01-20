@@ -3,6 +3,6 @@
 # Скрипт тюнинга
 # Запускается перед make defconfig
 #=================================================
-echo ">>> WRT-part4 start. Использование: прямо перед make defconfig"
+echo ">>>>>>>>> WRT-part4 start. Использование: прямо перед make defconfig"
 # 
-echo ">>> WRT-part4 end"
+echo ">>>>>>>>> WRT-part4 end"
