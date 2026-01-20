@@ -7,7 +7,7 @@
 # Проверяем, что переменная KERNEL_PATH установлена (она передается из YML)
 # Если нет, выходим (защита от локального запуска без контекста)
 if [ -z "$KERNEL_PATH" ]; then
-    echo ">>> [Kernel Tweak] KERNEL_PATH not defined. Skipping."
+    echo ">>> [Kernel Tweak] KERNEL_PATH не обнаружен. Пропускаем."
     exit 0
 fi
 
@@ -20,8 +20,8 @@ if [[ "$KERNEL_PATH" == *"rockchip"* ]]; then
     KERNEL_CFG_FILE=$(find target/linux/rockchip/armv8 -name "config-*" | head -n 1)
 
     if [ -n "$KERNEL_CFG_FILE" ]; then
-        echo ">>> [Kernel Tweak] Found config: $KERNEL_CFG_FILE"
-        echo ">>> [Kernel Tweak] Applying performance settings..."
+        echo ">>> [Kernel Tweak] Найден config: $KERNEL_CFG_FILE"
+        echo ">>> [Kernel Tweak] Применяем твики ядра..."
 
         cat <<EOF >> "$KERNEL_CFG_FILE"
 
@@ -45,10 +45,10 @@ CONFIG_CPU_FREQ_GOV_SCHEDUTIL=y
 
 # ------------------------------------------------------------
 EOF
-        echo ">>> [Kernel Tweak] Done."
+        echo ">>> [Kernel Tweak] Сделано - твики применены."
     else
-        echo ">>> [Kernel Tweak] WARNING: Rockchip kernel config file not found!"
+        echo ">>> [Kernel Tweak] WARNING: Не найден Rockchip kernel config файл!"
     fi
 else
-    echo ">>> [Kernel Tweak] Target '$KERNEL_PATH' is not Rockchip. Skipping tweaks."
+    echo ">>> [Kernel Tweak] Устройство '$KERNEL_PATH' не Rockchip. Пропускаем твики."
 fi
