@@ -56,7 +56,7 @@ env:
   DIY_P1_SH: ./sh/WRT-part1.sh
   DIY_P11_SH: ./sh/WRT-part11.sh
   DIY_P2_SH: ./sh/WRT-part2.sh
-  DIY_KERNEL_SH: ./sh/WRT-kernel.sh
+  DIY_P3_SH: ./sh/WRT-part3.sh
   UPLOAD_BIN_DIR: true
   UPLOAD_FIRMWARE: false
   TZ: Europe/Moscow
@@ -456,12 +456,12 @@ jobs:
         chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
         $GITHUB_WORKSPACE/$DIY_P2_SH
 
-        # --- ТЮНИНГ ЯДРА (Запуск внешнего скрипта) ---
-        if [ -f "$GITHUB_WORKSPACE/$DIY_KERNEL_SH" ]; then
-            chmod +x $GITHUB_WORKSPACE/$DIY_KERNEL_SH
-            $GITHUB_WORKSPACE/$DIY_KERNEL_SH
+        # --- ТЮНИНГ (Запуск внешнего скрипта) ---
+        if [ -f "$GITHUB_WORKSPACE/$DIY_P3_SH" ]; then
+            chmod +x $GITHUB_WORKSPACE/$DIY_P3_SH
+            $GITHUB_WORKSPACE/$DIY_P3_SH
         else
-            echo ">>> Kernel tweak script not found: $DIY_KERNEL_SH"
+            echo ">>> P3 tweak script not found: $DIY_P3_SH"
         fi
              
         make defconfig
