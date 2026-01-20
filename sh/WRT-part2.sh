@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo ">>>>>>>>> WRT-part11 start. Использование: после feeds update, до feeds install"
+echo ">>>>>>>>> WRT-part2 start. Использование: после feeds update, но до feeds install"
 # =========================================================
 # Скрипт обновления пакетов и применения фиксов
 #
@@ -185,4 +185,4 @@ echo ">>>>>>>>> WRT-part11 start. Использование: после feeds u
 #--#    echo "Target is not nanopi-r5s. Skipping kernel patch."
 #--#    echo "=========================================="
 #--#fi
-echo ">>> WRT-part11 end"
+echo ">>>>>>>>> WRT-part2 end"
