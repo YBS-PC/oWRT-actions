@@ -45,9 +45,9 @@ echo -e "\nsrc-git internetdetector https://github.com/gSpotx2f/luci-app-interne
 # =========================================================
 if [ "$CURRENT_MATRIX_TARGET" == "slateax" ]; then
     echo -e "\nsrc-git fancontrol https://github.com/JiaY-shi/fancontrol.git" >> feeds.conf.default
-    echo "Устройство slateax - fancontrol git добавлен"
+    echo ">>> Устройство slateax - fancontrol git добавлен"
 else
-    echo "Устройство не slateax - fancontrol git отключен"
+    echo ">>> Устройство не slateax - fancontrol git отключен"
 fi
 
 # =========================================================
