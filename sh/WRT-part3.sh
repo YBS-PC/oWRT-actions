@@ -13,22 +13,9 @@ echo ">>>>>>>>> WRT-part3 start. Использование: до make defconfig
 ##)
 ##
 ##for pkg in "${DELLIST[@]}"; do
-##    # Удаляем все существующие строки для этого пакета (с любым значением) sed -i -e "/CONFIG_PACKAGE_.*${pkg}/Id" -e "/CONFIG_.*${pkg}/Id" ./.config
+##    # Удаляем все существующие строки для этого пакета (с любым значением) и добавляем с =n
 ##    sed -i "/CONFIG_${pkg}/Id" ./.config
 ##    sed -i "/CONFIG_PACKAGE_${pkg}/Id" ./.config
-##done
-####################################################################
-##echo ">>> Adding packages with =n..."
-# Список пакетов, которые нужно добавить с элементом =n
-# 
-##ADDnLIST=(
-##    bind
-##    automount
-##    bridger
-##)
-##
-##for pkg in "${ADDnLIST[@]}"; do
-##    # Добавляем новую строку, которая явно отключает пакет
 ##    echo "CONFIG_PACKAGE_${pkg}=n" >> ./.config
 ##done
 ####################################################################
