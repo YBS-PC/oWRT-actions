@@ -409,7 +409,7 @@ jobs:
         if [ "$VARIANT" != "minimal" ]; then
             echo ">>> Removing HomeProxy and Sing-box dependencies for $VARIANT compatibility..."
             sed -i '/homeproxy/d' ./.config
-            sed -i '/sing-box/d' ./.config
+            sed -i '/sing-box/Id' ./.config
         fi
         
         if [ "$VARIANT" == "passwall" ]; then
