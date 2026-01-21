@@ -53,10 +53,15 @@ on:
 env:
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: ./config/WRT.config
+  # 1. Источники
   DIY_P1_SH: ./sh/WRT-part1.sh
+  # 2. Фиксы (между update и install)
   DIY_P2_SH: ./sh/WRT-part2.sh
+  # 3. Пакеты и настройка (после install)
   DIY_P3_SH: ./sh/WRT-part3.sh
+  # 4. Финальный тюнинг (пустой)
   DIY_P4_SH: ./sh/WRT-part4.sh
+  
   UPLOAD_BIN_DIR: true
   UPLOAD_FIRMWARE: false
   TZ: Europe/Moscow
@@ -229,7 +234,6 @@ jobs:
                     VAR_COMMIT_HASH="$TAG_COMMIT"
                     
                     # Формируем путь релиза (удаляем 'v' из названия тега)
-                    # Пример: v25.12.0-rc2 -> releases/25.12.0-rc2
                     CLEAN_VER="${TAG_NAME#v}"
                     VAR_TARGET_RELEASE="releases/$CLEAN_VER"
                     
@@ -361,6 +365,11 @@ jobs:
       run: |
         cd openwrt
         [ -e $GITHUB_WORKSPACE/$FEEDS_CONF ] && cp $GITHUB_WORKSPACE/$FEEDS_CONF ./feeds.conf.default
+        
+        export VARIANT="${{ inputs.variant }}"
+        echo "Variant selected: $VARIANT"
+        
+        # 1. Запуск Part 1 (Добавление репозиториев)
         chmod +x $GITHUB_WORKSPACE/$DIY_P1_SH
         $GITHUB_WORKSPACE/$DIY_P1_SH
         
@@ -375,8 +384,7 @@ jobs:
             echo -e "\nsrc-git luciappxray https://github.com/yichya/luci-app-xray.git" >> feeds.conf.default
         fi
 
-        # --- ЗАМЕНА ЗЕРКАЛ (FIX 503 ERROR) ---
-        # Меняем git.openwrt.org на github.com/openwrt для стабильности
+        # --- ЗАМЕНА ЗЕРКАЛ (FIX 503 ERROR) Меняем git.openwrt.org на github.com---
         sed -i 's|https://git.openwrt.org/feed/packages.git|https://github.com/openwrt/packages.git|g' feeds.conf.default
         sed -i 's|https://git.openwrt.org/project/luci.git|https://github.com/openwrt/luci.git|g' feeds.conf.default
         sed -i 's|https://git.openwrt.org/feed/routing.git|https://github.com/openwrt/routing.git|g' feeds.conf.default
@@ -384,9 +392,21 @@ jobs:
         # -------------------------------------
         
         ./scripts/feeds update -a
-        chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
-        $GITHUB_WORKSPACE/$DIY_P2_SH
+        
+        # 2. Запуск Part 2 (Фиксы версий и Python - строго между update и install)
+        if [ -f "$GITHUB_WORKSPACE/$DIY_P2_SH" ]; then
+            chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
+            $GITHUB_WORKSPACE/$DIY_P2_SH
+        fi
+
         ./scripts/feeds install -a
+        
+        # 3. Запуск Part 3 (Замена пакетов, очистка, клонирование доп. софта)
+        # Выполняется ПОСЛЕ install, чтобы перезаписать ссылки
+        if [ -f "$GITHUB_WORKSPACE/$DIY_P3_SH" ]; then
+            chmod +x $GITHUB_WORKSPACE/$DIY_P3_SH
+            $GITHUB_WORKSPACE/$DIY_P3_SH
+        fi
         
         [ -e $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE ./.config
         [ -e $GITHUB_WORKSPACE/files ] && cp -r $GITHUB_WORKSPACE/files ./
@@ -453,15 +473,12 @@ jobs:
             echo 'CONFIG_PACKAGE_geoview=y' >> ./.config
         fi
         
-        chmod +x $GITHUB_WORKSPACE/$DIY_P3_SH
-        $GITHUB_WORKSPACE/$DIY_P3_SH
-
-        # --- ТЮНИНГ (Запуск внешнего скрипта) ---
+        # 4. Запуск Part 4 (Тюнинг перед defconfig)
         if [ -f "$GITHUB_WORKSPACE/$DIY_P4_SH" ]; then
             chmod +x $GITHUB_WORKSPACE/$DIY_P4_SH
             $GITHUB_WORKSPACE/$DIY_P4_SH
         else
-            echo ">>> Tweak script not found: $DIY_P4_SH"
+            echo ">>> P4 tweak script not found: $DIY_P4_SH"
         fi
              
         make defconfig
@@ -478,37 +495,33 @@ jobs:
     - name: Kernel Hash
       run: |
         cd openwrt
-        
         # 1. Определяем домен
-        if [[ "${{ env.REPO_URL }}" == *"immortalwrt"* ]]; then
+        if [[ "$REPO_URL" == *"immortalwrt"* ]]; then
             DOMAIN="immortalwrt.kyarucloud.moe"
         else
             DOMAIN="downloads.openwrt.org"
         fi
         
         # 2. Формируем основную ссылку
-        FULL_URL="https://$DOMAIN/${{ env.TARGET_RELEASE }}/targets/${{ env.KERNEL_PATH }}/kmods/"
+        FULL_URL="https://$DOMAIN/$TARGET_RELEASE/targets/$KERNEL_PATH/kmods/"
         echo ">>> [Primary] Checking Kernel at: $FULL_URL"
         
-        # 3. Пробуем получить список (ДОБАВЛЕНО '|| true', чтобы не падать при 404)
+        # 3. Пробуем получить список (с защитой от 404)
         KERNEL_LIST=$(curl -sf "$FULL_URL" | grep -oE '6\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+' || true)
         
-        # 4. Логика FALLBACK
+        # 4. Логика FALLBACK (Если по основной ссылке пусто)
         if [ -z "$KERNEL_LIST" ]; then
              echo ">>> Warning: Primary URL failed or empty."
              
-             BRANCH_NAME="${{ env.REPO_BRANCH }}"
-             
              # Если это не master/main
-             if [[ "$BRANCH_NAME" != "main" && "$BRANCH_NAME" != "master" ]]; then
-                 VERSION_NUM="${BRANCH_NAME#openwrt-}"
+             if [[ "$REPO_BRANCH" != "main" && "$REPO_BRANCH" != "master" ]]; then
+                 VERSION_NUM="${REPO_BRANCH#openwrt-}"
                  
                  # Формируем ссылку на SNAPSHOT этой ветки
-                 FALLBACK_URL="https://$DOMAIN/releases/${VERSION_NUM}-SNAPSHOT/targets/${{ env.KERNEL_PATH }}/kmods/"
+                 FALLBACK_URL="https://$DOMAIN/releases/${VERSION_NUM}-SNAPSHOT/targets/$KERNEL_PATH/kmods/"
                  
                  echo ">>> [Fallback] Trying Snapshot URL: $FALLBACK_URL"
                  
-                 # Здесь тоже добавляем '|| true'
                  KERNEL_LIST=$(curl -sf "$FALLBACK_URL" | grep -oE '6\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+' || true)
                  
                  if [ -n "$KERNEL_LIST" ]; then
@@ -524,7 +537,7 @@ jobs:
              KERNEL_LIST=$(curl -sf "$FULL_URL" | grep -oE '[0-9]\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+' || true)
         fi
 
-        # 6. Парсинг
+        # 6. Парсинг и выбор последнего хеша
         LATEST_HASH=$(echo "$KERNEL_LIST" | while read -r line; do
             version=$(echo "$line" | cut -d'-' -f1)
             major=$(echo "$version" | cut -d'.' -f1)
@@ -535,7 +548,7 @@ jobs:
         
         if [ -z "$LATEST_HASH" ]; then
           echo "::error::Failed to get kernel hash. Neither Primary nor Fallback worked."
-          echo "Last Checked URL: $FULL_URL"
+          echo "Checked URL: $FULL_URL"
           exit 1
         fi
         
