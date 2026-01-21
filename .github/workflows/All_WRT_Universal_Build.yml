@@ -367,7 +367,8 @@ jobs:
         [ -e $GITHUB_WORKSPACE/$FEEDS_CONF ] && cp $GITHUB_WORKSPACE/$FEEDS_CONF ./feeds.conf.default
         
         export VARIANT="${{ inputs.variant }}"
-        echo "Variant selected: $VARIANT"
+        export CURRENT_MATRIX_TARGET="${{ matrix.target }}"
+        echo ">>> Выбран: Variant=$VARIANT, Target=$CURRENT_MATRIX_TARGET"
         
         # 1. Запуск Part 1 (Добавление репозиториев)
         chmod +x $GITHUB_WORKSPACE/$DIY_P1_SH
@@ -401,6 +402,11 @@ jobs:
 
         ./scripts/feeds install -a
         
+        [ -e $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE ./.config
+        [ -e $GITHUB_WORKSPACE/files ] && cp -r $GITHUB_WORKSPACE/files ./
+        
+        eval "$DEVICE_CONFIG_COMMANDS"
+        
         # 3. Запуск Part 3 (Замена пакетов, очистка, клонирование доп. софта)
         # Выполняется ПОСЛЕ install, чтобы перезаписать ссылки
         if [ -f "$GITHUB_WORKSPACE/$DIY_P3_SH" ]; then
@@ -408,11 +414,6 @@ jobs:
             $GITHUB_WORKSPACE/$DIY_P3_SH
         fi
         
-        [ -e $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE ./.config
-        [ -e $GITHUB_WORKSPACE/files ] && cp -r $GITHUB_WORKSPACE/files ./
-        
-        eval "$DEVICE_CONFIG_COMMANDS"
-
         # === ОПТИМИЗАЦИЯ РАЗМЕРА СБОРКИ ===
         # Критично для OpenWrt + Passwall
         # echo ">>> Optimizing build config to save disk space..."
