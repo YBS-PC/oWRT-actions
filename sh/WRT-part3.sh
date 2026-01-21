@@ -64,7 +64,7 @@ if ! grep -q "immortalwrt/luci" feeds.conf.default; then
     git clone -b master https://github.com/immortalwrt/homeproxy.git ./package/luci-app-homeproxy/
     find package/ feeds/ -name Makefile 2>/dev/null | grep "luci-app-homeproxy" | xargs -r sed -i 's/+sing-box //g'
     find package/ feeds/ -name Makefile 2>/dev/null | grep "luci-app-homeproxy" | xargs -r sed -i 's/+sing-box//g'
-    echo ">>> [HomeProxy] Удаляем зависимость sing-box так как он включен уже в конфиг файле"
+    echo ">>> [HomeProxy] Удаляем зависимость sing-box, так как он уже включен в /config/WRT.config"
     echo ">>> [HomeProxy] Makefile patched to fix recursion dependency."
 else
     echo ">>> [HomeProxy] Обнаружен фид ImmortalWrt LuCI. HomeProxy должен быть встроен."
