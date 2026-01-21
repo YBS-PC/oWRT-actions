@@ -62,10 +62,6 @@ if ! grep -q "immortalwrt/luci" feeds.conf.default; then
     echo ">>> [HomeProxy] Добавляем HomeProxy вручную..."
     mkdir -p ./package/luci-app-homeproxy
     git clone -b master https://github.com/immortalwrt/homeproxy.git ./package/luci-app-homeproxy/
-    find package/ feeds/ -name Makefile 2>/dev/null | grep "luci-app-homeproxy" | xargs -r sed -i 's/+sing-box //g'
-    find package/ feeds/ -name Makefile 2>/dev/null | grep "luci-app-homeproxy" | xargs -r sed -i 's/+sing-box//g'
-    echo ">>> [HomeProxy] Удаляем зависимость sing-box, так как он уже включен в /config/WRT.config"
-    echo ">>> [HomeProxy] Makefile patched to fix recursion dependency."
 else
     echo ">>> [HomeProxy] Обнаружен фид ImmortalWrt LuCI. HomeProxy должен быть встроен."
 fi
@@ -148,14 +144,23 @@ echo 'CONFIG_BUSYBOX_DEFAULT_FEATURE_FAST_TOP=y' >> ./.config
 echo 'CONFIG_BUSYBOX_DEFAULT_FEATURE_USE_INITTAB=y' >> ./.config
 echo ">>> [Heavy packages] Тяжелые пакеты отключены."
         # Для 'minimal' ставим Tiny версию sing-box.
-        if [ "$VARIANT" = "minimal" ]; then
+        if [ "$VARIANT" == "minimal" ]; then
             echo ">>> [Heavy packages] Sing-box Tiny for $VARIANT compatibility..."
-            sed -i '/homeproxy/d' ./.config
             sed -i '/sing-box/Id' ./.config
-            echo 'CONFIG_PACKAGE_sing-box=n' >> ./.config
+            echo '# CONFIG_PACKAGE_sing-box is not set' >> ./.config
             echo 'CONFIG_PACKAGE_sing-box-tiny=y' >> ./.config
         fi
 fi
+
+# =========================================================
+# ФИКСЫ ЗАВИСИМОСТЕЙ (В самом конце!)
+# =========================================================
+# Удаляем зависимость +sing-box из Makefile.
+# Это позволяет нам ставить любую версию (Full или Tiny) через .config без ошибок рекурсии.
+echo ">>> [HomeProxy] Удаляем зависимость sing-box, так как он уже включен в /config/WRT.config"
+find package/ feeds/ -name Makefile 2>/dev/null | grep "luci-app-homeproxy" | xargs -r sed -i 's/+sing-box //g'
+find package/ feeds/ -name Makefile 2>/dev/null | grep "luci-app-homeproxy" | xargs -r sed -i 's/+sing-box//g'
+echo ">>> [HomeProxy] Makefile patched to fix recursion dependency."
 
 # =========================================================
 # Настройка сети и часового пояса
