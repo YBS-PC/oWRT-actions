@@ -149,6 +149,11 @@ echo ">>> [Heavy packages] Тяжелые пакеты отключены."
             sed -i '/sing-box/Id' ./.config
             echo '# CONFIG_PACKAGE_sing-box is not set' >> ./.config
             echo 'CONFIG_PACKAGE_sing-box-tiny=y' >> ./.config
+            # Удаляем скачанный в YML "жирный" бинарник из files/
+            if [ -f "files/usr/bin/sing-box" ]; then
+                echo ">>> [Heavy packages] Удаляем скачанный в YML sing-box."
+                rm -f files/usr/bin/sing-box
+            fi
         fi
 fi
 
