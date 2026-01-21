@@ -479,31 +479,28 @@ jobs:
       run: |
         cd openwrt
         
-        # 1. Определяем домен (Зеркало для Immortal)
+        # 1. Определяем домен
         if [[ "${{ env.REPO_URL }}" == *"immortalwrt"* ]]; then
-            # DOMAIN="downloads.immortalwrt.org"
             DOMAIN="immortalwrt.kyarucloud.moe"
         else
             DOMAIN="downloads.openwrt.org"
         fi
         
-        # 2. Формируем основную ссылку (Primary URL)
+        # 2. Формируем основную ссылку
         FULL_URL="https://$DOMAIN/${{ env.TARGET_RELEASE }}/targets/${{ env.KERNEL_PATH }}/kmods/"
         echo ">>> [Primary] Checking Kernel at: $FULL_URL"
         
-        # 3. Пробуем получить список (ищем ядро 6.x)
-        KERNEL_LIST=$(curl -sf "$FULL_URL" | grep -oE '6\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+')
+        # 3. Пробуем получить список (ДОБАВЛЕНО '|| true', чтобы не падать при 404)
+        KERNEL_LIST=$(curl -sf "$FULL_URL" | grep -oE '6\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+' || true)
         
-        # 4. Логика FALLBACK (Если по основной ссылке пусто)
+        # 4. Логика FALLBACK
         if [ -z "$KERNEL_LIST" ]; then
              echo ">>> Warning: Primary URL failed or empty."
              
-             # Получаем имя ветки из ENV (например, openwrt-25.12)
              BRANCH_NAME="${{ env.REPO_BRANCH }}"
              
-             # Если это не master/main (там fallback не нужен, там и так snapshots)
+             # Если это не master/main
              if [[ "$BRANCH_NAME" != "main" && "$BRANCH_NAME" != "master" ]]; then
-                 # Убираем префикс "openwrt-", получаем версию (например, 25.12)
                  VERSION_NUM="${BRANCH_NAME#openwrt-}"
                  
                  # Формируем ссылку на SNAPSHOT этой ветки
@@ -511,10 +508,9 @@ jobs:
                  
                  echo ">>> [Fallback] Trying Snapshot URL: $FALLBACK_URL"
                  
-                 # Пробуем скачать оттуда
-                 KERNEL_LIST=$(curl -sf "$FALLBACK_URL" | grep -oE '6\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+')
+                 # Здесь тоже добавляем '|| true'
+                 KERNEL_LIST=$(curl -sf "$FALLBACK_URL" | grep -oE '6\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+' || true)
                  
-                 # Если успешно - обновляем FULL_URL для отчета
                  if [ -n "$KERNEL_LIST" ]; then
                     FULL_URL="$FALLBACK_URL"
                     echo ">>> [Fallback] Success! Using Snapshot kmods."
@@ -522,13 +518,13 @@ jobs:
              fi
         fi
 
-        # 5. Резервная проверка на ядро не 6.x (на всякий случай, для старых веток)
+        # 5. Резервная проверка на ядро не 6.x
         if [ -z "$KERNEL_LIST" ]; then
              echo ">>> Warning: Kernel 6.x pattern not found. Trying generic pattern..."
-             KERNEL_LIST=$(curl -sf "$FULL_URL" | grep -oE '[0-9]\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+')
+             KERNEL_LIST=$(curl -sf "$FULL_URL" | grep -oE '[0-9]\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+' || true)
         fi
 
-        # 6. Парсинг и выбор последнего хеша
+        # 6. Парсинг
         LATEST_HASH=$(echo "$KERNEL_LIST" | while read -r line; do
             version=$(echo "$line" | cut -d'-' -f1)
             major=$(echo "$version" | cut -d'.' -f1)
@@ -539,7 +535,7 @@ jobs:
         
         if [ -z "$LATEST_HASH" ]; then
           echo "::error::Failed to get kernel hash. Neither Primary nor Fallback worked."
-          echo "Checked URL: $FULL_URL"
+          echo "Last Checked URL: $FULL_URL"
           exit 1
         fi
         
