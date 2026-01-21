@@ -147,6 +147,14 @@ echo 'CONFIG_BUSYBOX_DEFAULT_ASH_BUILTIN_TEST=y' >> ./.config
 echo 'CONFIG_BUSYBOX_DEFAULT_FEATURE_FAST_TOP=y' >> ./.config
 echo 'CONFIG_BUSYBOX_DEFAULT_FEATURE_USE_INITTAB=y' >> ./.config
 echo ">>> [Heavy packages] Тяжелые пакеты отключены."
+        # Для 'minimal' ставим Tiny версию sing-box.
+        if [ "$VARIANT" = "minimal" ]; then
+            echo ">>> [Heavy packages] Sing-box Tiny for $VARIANT compatibility..."
+            sed -i '/homeproxy/d' ./.config
+            sed -i '/sing-box/Id' ./.config
+            echo 'CONFIG_PACKAGE_sing-box=n' >> ./.config
+            echo 'CONFIG_PACKAGE_sing-box-tiny=y' >> ./.config
+        fi
 fi
 
 # =========================================================
