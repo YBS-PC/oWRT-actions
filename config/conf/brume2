@@ -1,7 +1,7 @@
 # GL.iNet Brume 2 (MT2500) Configuration
 TARGET_NAME="GL.iNet Brume 2 (MT2500)"
 KERNEL_PATH="mediatek/filogic"
-RELEASE_TAG="iWRT_Brume2"
+RELEASE_TAG="Brume2"
 
 DEVICE_CONFIG_COMMANDS=$(cat <<'EOF'
 echo "CONFIG_TARGET_mediatek=y" >> ./.config
