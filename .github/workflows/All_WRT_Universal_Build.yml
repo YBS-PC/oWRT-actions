@@ -623,6 +623,7 @@ jobs:
         # Ищем в папке bin/targets, исключая пакеты (.apk/.ipk)
         find bin/targets -type f -name "*idbloader.img" -exec cp -vf {} bin/u-boot-files/ \;
         find bin/targets -type f -name "*u-boot.itb" -exec cp -vf {} bin/u-boot-files/ \;
+        find bin/targets -type f -name "u-boot.elf" -exec cp -vf {} bin/u-boot-files/ \;
         
         echo ">>> ------------------------------------------------"
         echo ">>> SAVED BOOTLOADER FILES:"
