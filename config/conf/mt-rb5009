@@ -8,8 +8,15 @@ echo "CONFIG_TARGET_mvebu=y" >> ./.config
 echo "CONFIG_TARGET_mvebu_cortexa72=y" >> ./.config
 echo "CONFIG_TARGET_mvebu_cortexa72_DEVICE_mikrotik_rb5009=y" >> ./.config
 echo 'CONFIG_TARGET_ARCH_PACKAGES="aarch64_cortex-a72"' >> ./.config
+echo 'CONFIG_TARGET_ROOTFS_PARTSIZE=256' >> ./.config
+echo 'CONFIG_TARGET_IMAGES_GZIP=y' >> ./.config
+echo 'CONFIG_TARGET_ROOTFS_SQUASHFS=y' >> ./.config
 echo 'CONFIG_PACKAGE_kmod-i2c-gpio=y' >> ./.config
 echo 'CONFIG_PACKAGE_yafut=y' >> ./.config
 echo 'CONFIG_PACKAGE_kmod-dsa-mv88e6xxx=y' >> ./.config
+echo 'CONFIG_PACKAGE_losetup=y' >> ./.config
+echo 'CONFIG_PACKAGE_kmod-sfp=y' >> ./.config
+echo 'CONFIG_PACKAGE_kmod-phy-realtek=y' >> ./.config
+echo 'CONFIG_PACKAGE_kmod-phy-marvell=y' >> ./.config
 EOF
 )
