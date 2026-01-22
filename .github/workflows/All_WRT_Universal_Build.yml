@@ -11,6 +11,7 @@ on:
         options:
           - all
           - nanopi-r5s
+          - nanopi-r6s
           - slateax
           - ax59u
           - brume2
@@ -75,7 +76,7 @@ jobs:
     steps:
       - id: set-matrix
         run: |
-          targets="nanopi-r5s slateax ax59u brume2 mt-rb5009"
+          targets="nanopi-r5s nanopi-r6s slateax ax59u brume2 mt-rb5009"
           if [ "${{ github.event.inputs.target }}" == "all" ]; then
             selected=$targets
           else
