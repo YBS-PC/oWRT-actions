@@ -1,7 +1,7 @@
 # ASUS RT-AX59U Configuration
 TARGET_NAME="ASUS RT-AX59U"
 KERNEL_PATH="mediatek/filogic"
-RELEASE_TAG="ASUS-AX59U"
+RELEASE_TAG="ASUS-RT-AX59U"
 
 DEVICE_CONFIG_COMMANDS=$(cat <<'EOF'
 echo "CONFIG_TARGET_mediatek=y" >> ./.config
