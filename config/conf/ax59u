@@ -4,9 +4,9 @@ KERNEL_PATH="mediatek/filogic"
 RELEASE_TAG="RT-AX59U"
 
 DEVICE_CONFIG_COMMANDS=$(cat <<'EOF'
-echo "CONFIG_TARGET_mediatek=y" >> ./.config
-echo "CONFIG_TARGET_mediatek_filogic=y" >> ./.config
-echo "CONFIG_TARGET_mediatek_filogic_DEVICE_asus_rt-ax59u=y" >> ./.config
+echo 'CONFIG_TARGET_mediatek=y' >> ./.config
+echo 'CONFIG_TARGET_mediatek_filogic=y' >> ./.config
+echo 'CONFIG_TARGET_mediatek_filogic_DEVICE_asus_rt-ax59u=y' >> ./.config
 echo 'CONFIG_TARGET_ARCH_PACKAGES="aarch64_cortex-a53"' >> ./.config
 echo 'CONFIG_PACKAGE_facinstall=y' >> ./.config
 echo 'CONFIG_PACKAGE_fitblk=y' >> ./.config
