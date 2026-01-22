@@ -610,7 +610,7 @@ jobs:
         
         echo ">>> Starting deep search for Bootloader binaries..."
         
-        # 1. Прямой поиск специфичных файлов для Rockchip (R5S)
+        # 1. Прямой поиск специфичных файлов для Rockchip (R5S, R6S)
         # Мы ищем прямо в папке, где они компилировались (build_dir)
         find build_dir/target-* -name "idbloader.img" -type f -exec cp -vf {} bin/u-boot-files/ \;
         find build_dir/target-* -name "u-boot.itb" -type f -exec cp -vf {} bin/u-boot-files/ \;
