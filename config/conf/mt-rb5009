@@ -1,0 +1,15 @@
+# MikroTik RB5009 Configuration
+TARGET_NAME="MikroTik RB5009"
+KERNEL_PATH="mvebu/cortexa72"
+RELEASE_TAG="MikroTik_RB5009"
+
+DEVICE_CONFIG_COMMANDS=$(cat <<'EOF'
+echo "CONFIG_TARGET_mvebu=y" >> ./.config
+echo "CONFIG_TARGET_mvebu_cortexa72=y" >> ./.config
+echo "CONFIG_TARGET_mvebu_cortexa72_DEVICE_mikrotik_rb5009=y" >> ./.config
+echo 'CONFIG_TARGET_ARCH_PACKAGES="aarch64_cortex-a72"' >> ./.config
+echo 'CONFIG_PACKAGE_kmod-i2c-gpio=y' >> ./.config
+echo 'CONFIG_PACKAGE_yafut=y' >> ./.config
+echo 'CONFIG_PACKAGE_kmod-dsa-mv88e6xxx=y' >> ./.config
+EOF
+)
