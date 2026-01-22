@@ -1,7 +1,7 @@
 # FriendlyARM NanoPi R5S Configuration
 TARGET_NAME="FriendlyARM NanoPi R5S"
 KERNEL_PATH="rockchip/armv8"
-RELEASE_TAG="iWRT_NanoPi-R5S"
+RELEASE_TAG="NanoPi-R5S"
 
 DEVICE_CONFIG_COMMANDS=$(cat <<'EOF'
 echo "CONFIG_TARGET_rockchip=y" >> ./.config
