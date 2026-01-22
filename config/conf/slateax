@@ -5,11 +5,11 @@ RELEASE_TAG="Slate_GL-AXT1800"
 
 # Многострочная переменная с командами для .config
 DEVICE_CONFIG_COMMANDS=$(cat <<'EOF'
-echo "CONFIG_TARGET_qualcommax=y" >> ./.config
-echo "CONFIG_TARGET_qualcommax_ipq60xx=y" >> ./.config
-echo "CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_glinet_gl-axt1800=y" >> ./.config
-echo 'CONFIG_TARGET_PROFILE="DEVICE_glinet_gl-axt1800"' >> ./.config
-echo 'CONFIG_TARGET_ARCH_PACKAGES="aarch64_cortex-a53"' >> ./.config
+echo 'CONFIG_TARGET_qualcommax=y' >> ./.config
+echo 'CONFIG_TARGET_qualcommax_ipq60xx=y' >> ./.config
+echo 'CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_glinet_gl-axt1800=y' >> ./.config
+echo 'CONFIG_TARGET_PROFILE='DEVICE_glinet_gl-axt1800'' >> ./.config
+echo 'CONFIG_TARGET_ARCH_PACKAGES='aarch64_cortex-a53'' >> ./.config
 echo 'CONFIG_PACKAGE_ath11k-firmware-ipq6018=y' >> ./.config
 echo 'CONFIG_PACKAGE_ath11k-firmware-new-ipq6018=y' >> ./.config
 echo 'CONFIG_PACKAGE_dosfstools=y' >> ./.config
