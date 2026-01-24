@@ -299,6 +299,7 @@ jobs:
         
         # Устанавливаем полный список зависимостей
         sudo -E apt-get -qq install \
+          $(curl -fsSL https://raw.githubusercontent.com/Gzxhwq/OpenWrt-Actions/main/depends-ubuntu-2204) \
           ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
           bzip2 ccache cmake cpio curl device-tree-compiler ecj fastjar flex gawk gettext \
           gcc-multilib g++-multilib git gperf haveged help2man intltool lib32gcc-s1 \
