@@ -158,6 +158,45 @@ echo ">>> [Heavy packages] Тяжелые пакеты отключены."
 fi
 
 # =========================================================
+# СПЕЦИАЛЬНАЯ ЛОГИКА ДЛЯ MIKROTIK RB5009
+# =========================================================
+if [ "$CURRENT_MATRIX_TARGET" == "mt-rb5009" ]; then
+    echo ">>> [Mikrotik] Target RB5009 detected. Full Aggressive Cleanup..."
+
+    # 1. Удаляем скрипт автонастройки и ВСЕ скачанные бинарники
+    # Это самое важное, так как бинарники весят больше всего
+    rm -f "./files/etc/uci-defaults/zz1-final-offline-setup.sh"
+    rm -f "./files/usr/bin/sing-box"
+    rm -f "./files/usr/bin/AdGuardHome"
+    echo "   > Removed zz1-setup, sing-box and AdGuardHome from files"
+
+    # 2. Список пакетов для полной зачистки из .config
+    # Добавляем adguardhome в список
+    PACKAGES_TO_REMOVE=(
+        "adguardhome" "homeproxy" "sing-box" "youtubeUnblock" "zapret" 
+        "xray-core" "v2ray-plugin" "xray-plugin"
+        "v2ray-geoip" "v2ray-geosite" "v2ray-geodata" 
+        "chinadns-ng" "geoview"
+    )
+    
+    for PKG in "${PACKAGES_TO_REMOVE[@]}"; do
+        # Удаляем любые строки, где упоминается пакет (регистронезависимо)
+        sed -i "/${PKG}/Id" ./.config
+        
+        # Жестко прописываем отключение, чтобы зависимости не подтянули их обратно
+        echo "# CONFIG_PACKAGE_luci-app-${PKG} is not set" >> ./.config
+        echo "# CONFIG_PACKAGE_luci-i18n-${PKG}-ru is not set" >> ./.config
+        echo "# CONFIG_PACKAGE_${PKG} is not set" >> ./.config
+        echo "# CONFIG_PACKAGE_kmod-${PKG} is not set" >> ./.config
+    done
+    
+    # 3. Чистим остатки конфигурации AdGuardHome, если они были в WRT.config
+    sed -i '/adguardhome/Id' ./.config
+
+    echo ">>> [Mikrotik] RB5009 is now CLEAN. No proxy, no AGH."
+fi
+
+# =========================================================
 # ФИКСЫ ЗАВИСИМОСТЕЙ (В самом конце!)
 # =========================================================
 # Удаляем зависимость +sing-box из Makefile.
