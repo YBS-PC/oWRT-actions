@@ -381,8 +381,10 @@ jobs:
         
         # Добавление фидов в зависимости от варианта
         if [ "$VARIANT" == "passwall" ]; then
+            # echo -e "\nsrc-git passwall2 https://github.com/xiaorouji/openwrt-passwall2.git" >> feeds.conf.default
             echo -e "\nsrc-git passwall2 https://github.com/Openwrt-Passwall/openwrt-passwall2.git" >> feeds.conf.default
             # echo -e "\nsrc-git passwall_packages https://github.com/xiaorouji/openwrt-passwall-packages.git;main" >> feeds.conf.default
+            echo -e "\nsrc-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main" >> feeds.conf.default
         elif [ "$VARIANT" == "xray" ]; then
             echo -e "\nsrc-git luciappxray https://github.com/yichya/luci-app-xray.git" >> feeds.conf.default
         fi
