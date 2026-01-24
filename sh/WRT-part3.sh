@@ -79,10 +79,10 @@ if [ -d "$PW_FEED_DIR" ]; then
     echo "======================================================="
     echo ">>> [Passwall] Фид Passwall найден. Начинаем замену пакетов..."
     if [[ "$REPO_BRANCH" == "master" || "$REPO_BRANCH" == "main" ]]; then
-        PW_PACKAGES="$PW_PACKAGES xray-core xray-plugin v2ray-plugin sing-box geoview tcping"
-        echo ">>> [Passwall] Ветка $REPO_BRANCH: xray-core xray-plugin v2ray-plugin sing-box geoview tcping добавлен в список замены."
+        PW_PACKAGES="$PW_PACKAGES xray-plugin v2ray-plugin sing-box geoview tcping"
+        echo ">>> [Passwall] Ветка $REPO_BRANCH: $PW_PACKAGES добавлен в список замены."
     else
-        echo ">>> [Passwall] Ветка $REPO_BRANCH: xray-core xray-plugin v2ray-plugin sing-box geoview tcping ИСКЛЮЧЕН из замены."
+        echo ">>> [Passwall] Ветка $REPO_BRANCH: $PW_PACKAGES ИСКЛЮЧЕН из замены."
     fi
     echo ">>> [Passwall] Список для обработки: $PW_PACKAGES"
     for PKG in $PW_PACKAGES; do
