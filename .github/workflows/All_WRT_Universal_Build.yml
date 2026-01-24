@@ -500,6 +500,7 @@ jobs:
         cd openwrt
         # 1. Определяем домен
         if [[ "$REPO_URL" == *"immortalwrt"* ]]; then
+            # DOMAIN="downloads.immortalwrt.org"
             DOMAIN="immortalwrt.kyarucloud.moe"
         else
             DOMAIN="downloads.openwrt.org"
@@ -549,14 +550,20 @@ jobs:
             printf "%03d%03d%03d %s\n" "$major" "$minor" "$patch" "$line"
         done | sort -r | head -n1 | cut -d' ' -f2 | cut -d'-' -f3)
         
+        # 7. ИТОГОВАЯ ПРОВЕРКА И ПРИМЕНЕНИЕ
         if [ -z "$LATEST_HASH" ]; then
-          echo "::error::Failed to get kernel hash. Neither Primary nor Fallback worked."
-          echo "Checked URL: $FULL_URL"
-          exit 1
+            # === ЕСЛИ ХЕШ НЕ НАЙДЕН ===
+            echo ">>> WARNING: Failed to retrieve official kernel hash."
+            echo ">>> Continuing with LOCAL kernel hash generation (standard OpenWrt behavior)."
+            echo ">>> NOTE: Official kmods from repositories will NOT work with this build."
+            LATEST_HASH="LOCAL (Calculated during build)"
+            # Мы НЕ выполняем команду sed, оставляя $(MKHASH) md5 в Makefile
+        else
+            # === ЕСЛИ ХЕШ НАЙДЕН ===
+            echo ">>> Found Official Hash: ${LATEST_HASH}"
+            echo ">>> Applying hash to kernel-defaults.mk..."
+            sed -i "s/\$(MKHASH) md5/echo \"${LATEST_HASH}\"/g" include/kernel-defaults.mk
         fi
-        
-        echo "Latest hash is: ${LATEST_HASH}"
-        sed -i "s/\$(MKHASH) md5/echo \"${LATEST_HASH}\"/g" include/kernel-defaults.mk
         
         echo "=========================================="
         echo "       [KERNEL HASH SUMMARY]              "
@@ -565,7 +572,7 @@ jobs:
         echo "Final URL       : $FULL_URL"
         echo "Applied Hash    : $LATEST_HASH"
         echo "=========================================="
-
+    
     - name: Compile
       run: |
         cd openwrt
