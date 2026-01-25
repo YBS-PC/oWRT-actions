@@ -293,6 +293,37 @@ echo ">>> [HomeProxy] Makefile patched to fix recursion dependency."
 sed -i "s/192.168.1.1/192.168.2.1/g" ./package/base-files/files/bin/config_generate
 sed -i "s#zonename='UTC'#zonename='Europe/Moscow'#g" ./package/base-files/files/bin/config_generate
 sed -i "s#timezone='GMT0'#timezone='MSK-3'#g" ./package/base-files/files/bin/config_generate
-# =========================================================
 
+# =========================================================
+# ЗАПИСЬ ИНФОРМАЦИИ О ВАРИАНТЕ СБОРКИ
+# =========================================================
+echo ">>> Recording build variant: $VARIANT"
+
+# 1. Создаем директорию etc в папке files, если её нет
+mkdir -p ./files/etc
+
+# 2. Записываем в отдельный файл (удобно для проверки командой cat /etc/build_variant)
+echo "$VARIANT" > ./files/etc/build_variant
+echo "Build Date: $(date +'%Y-%m-%d %H:%M')" >> ./files/etc/build_variant
+
+# 3. Добавляем в баннер (будет видно сразу при входе по SSH)
+# Если файла banner в папке files нет, попробуем взять его из системы и дополнить
+if [ ! -f "./files/etc/banner" ]; then
+    cp ./package/base-files/files/etc/banner ./files/etc/banner 2>/dev/null || touch ./files/etc/banner
+fi
+
+# Очищаем старые записи о варианте, если они были, и добавляем новую
+sed -i "/Build Variant:/d" ./files/etc/banner
+echo " Build Variant: $VARIANT ($(date +'%Y-%m-%d'))" >> ./files/etc/banner
+
+# 4. Добавляем в системный релиз (иногда LuCI отображает это в статусе)
+if [ ! -f "./files/etc/openwrt_release" ]; then
+    cp ./package/base-files/files/etc/openwrt_release ./files/etc/openwrt_release 2>/dev/null || touch ./files/etc/openwrt_release
+fi
+sed -i "/DISTRIB_VARIANT/d" ./files/etc/openwrt_release
+echo "DISTRIB_VARIANT='$VARIANT'" >> ./files/etc/openwrt_release
+
+echo ">>> Build variant recorded successfully."
+
+# =========================================================
 echo ">>>>>>>>> WRT-part3 end"
