@@ -65,6 +65,8 @@ esac)
 
 HOSTNAME_PATTERN="${ROUTER_MODEL_NAME}-${ROUTER_NAME}"
 
+TAB_CHAR=$(printf '\t')
+
 # Читаем вариант из файла, который создал WRT-part3.sh
 CURRENT_VARIANT=$(cat /etc/build_variant 2>/dev/null | head -n 1)
 echo "Detected Build Variant: ${CURRENT_VARIANT:-unknown}"
@@ -257,7 +259,7 @@ chmod +x "$HELPER_SCRIPT_PATH"
 echo -e "${COLOR_WHITE}Создан скрипт-помощник для homeproxy: $HELPER_SCRIPT_PATH${COLOR_RESET}"
 # 2. Модифицируем init-скрипт homeproxy, чтобы он вызывал скрипт помощник
 HOMEPROXY_INIT_SCRIPT="/etc/init.d/homeproxy"
-TAB_CHAR=$'\t'
+
 HELPER_CALL_COMMAND="${TAB_CHAR}. ${HELPER_SCRIPT_PATH}"
 if [ -f "$HOMEPROXY_INIT_SCRIPT" ]; then
 	# Проверяем, не была ли команда добавлена ранее
@@ -452,12 +454,13 @@ EOF
         echo ">>> [Jail] Patching init script..."
         if ! grep -q 'local log_file' /etc/init.d/adguardhome; then
             sed -i "/local verbose=0/a \\\tlocal log_file='/var/AdGuardHome.log'" /etc/init.d/adguardhome
+			sed -i "/local verbose=0/a ${TAB_CHAR}local log_file='/var/AdGuardHome.log'" /etc/init.d/adguardhome
             sed -i 's/--logfile syslog/--logfile "$log_file"/' /etc/init.d/adguardhome
         fi
     else
         echo ">>> [Classic] Patching old-style init script..."
         if ! grep -q 'config_get LOG_FILE' /etc/init.d/adguardhome; then
-            sed -i "/config_get PID_FILE/a \\\tconfig_get LOG_FILE config logfile '/var/AdGuardHome.log'" /etc/init.d/adguardhome
+            sed -i "/config_get PID_FILE/a ${TAB_CHAR}config_get LOG_FILE config logfile '/var/AdGuardHome.log'" /etc/init.d/adguardhome
             sed -i 's/--pidfile "\$PID_FILE"/--pidfile "\$PID_FILE" --logfile "\$LOG_FILE"/' /etc/init.d/adguardhome
         fi
     fi
