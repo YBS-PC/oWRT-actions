@@ -422,145 +422,69 @@ else
 fi
 
 #################### Настройка и запуск AdGuardHome ####################
-if [ -x "/usr/bin/AdGuardHome" ]; then
+if [ -x "/usr/bin/AdGuardHome" ] && [ -f "/etc/config/adguardhome" ]; then
+    echo -e "${COLOR_MAGENTA}Настройка параметров AdGuardHome через UCI...${COLOR_RESET}"
 
-/etc/init.d/adguardhome disable
-/etc/init.d/adguardhome stop
+    # Отключаем на время настройки
+    /etc/init.d/adguardhome disable
+    /etc/init.d/adguardhome stop
 
-# Создание новой рабочей директории
-mkdir -p /opt/AdGuardHome
-chown -R root:root /opt/AdGuardHome
-chmod 755 /opt/AdGuardHome
+    # Подготовка путей
+    mkdir -p /opt/AdGuardHome
+    chown -R root:root /opt/AdGuardHome
+    chmod 755 /opt/AdGuardHome
+    
+    # Создаем пользователей/группы (на всякий случай для системы)
+    if ! grep -q '^adguardhome:' /etc/group; then echo "adguardhome:x:853:" >> /etc/group; fi
+    if ! grep -q '^adguardhome:' /etc/passwd; then echo "adguardhome:x:853:853:AdGuard Home:/var/lib/adguardhome:/bin/false" >> /etc/passwd; fi
 
-# Создаем пользователей/группы (на всякий случай)
-if ! grep -q '^adguardhome:' /etc/group; then echo "adguardhome:x:853:" >> /etc/group; fi
-if ! grep -q '^adguardhome:' /etc/passwd; then echo "adguardhome:x:853:853:AdGuard Home:/var/lib/adguardhome:/bin/false" >> /etc/passwd; fi
-
-if [[ "$CURRENT_VARIANT" != "clear" && "$CURRENT_VARIANT" != "crystal_clear" ]]; then
-echo -e "${COLOR_MAGENTA}Настройка и запуск AdGuardHome...${COLOR_RESET}"
-
-echo -e "${COLOR_CYAN}Генерация конфигурации AdGuardHome...${COLOR_RESET}"
-
-# ОПРЕДЕЛЕНИЕ ТИПА КОНФИГУРАЦИИ
-# Проверяем init-скрипт на наличие признаков новой версии (jail/work_dir)
-if grep -q "procd_add_jail" /etc/init.d/adguardhome; then
-    # ==========================================
-    # ВАРИАНТ ДЛЯ MASTER (Новый формат - JAIL)
-    # ==========================================
-    echo "Обнаружен Init-скрипт нового типа (Master/Jail). Создаю конфиг v2."
-
-cat > /etc/config/adguardhome << 'EOF'
-config adguardhome 'config'
-	option enabled '1'
-	# All paths must be readable by the configured user
-	option config_file '/etc/adguardhome/adguardhome.yaml'
-	# Where to store persistent data by AdGuard Home
-	option work_dir '/opt/AdGuardHome'
-	option log_file '/var/AdGuardHome.log'
-	option user 'root'
-	option group 'root'
-	option verbose '0'
-	# Files and directories that AdGuard Home has read-only access to
-	# list jail_mount '/etc/ssl/adguardhome.crt'
-	# list jail_mount '/etc/ssl/adguardhome.key'
+    # Применяем настройки ко всем вариантам (универсальный подход)
+    uci -q batch <<EOF
+        set adguardhome.config.enabled='1'
+        set adguardhome.config.work_dir='/opt/AdGuardHome'
+        set adguardhome.config.user='root'
+        set adguardhome.config.group='root'
+        commit adguardhome
 EOF
 
-    # Настройка init.d/adguardhome (MASTER)
-    if ! grep -q 'local log_file' /etc/init.d/adguardhome; then
-        echo "Патч init-скрипта Master (добавление log_file)..."
-        sed -i "/local verbose=0/a \\\tlocal log_file='/var/AdGuardHome.log'" /etc/init.d/adguardhome
+    # Патч init-скрипта (Handling Jail vs Classic)
+    if grep -q "procd_add_jail" /etc/init.d/adguardhome; then
+        echo ">>> [Jail] Patching init script..."
+        if ! grep -q 'local log_file' /etc/init.d/adguardhome; then
+            sed -i "/local verbose=0/a \\\tlocal log_file='/var/AdGuardHome.log'" /etc/init.d/adguardhome
+            sed -i 's/--logfile syslog/--logfile "$log_file"/' /etc/init.d/adguardhome
+        fi
     else
-        echo "Строка 'local log_file' уже существует."
+        echo ">>> [Classic] Patching old-style init script..."
+        if ! grep -q 'config_get LOG_FILE' /etc/init.d/adguardhome; then
+            sed -i "/config_get PID_FILE/a \\\tconfig_get LOG_FILE config logfile '/var/AdGuardHome.log'" /etc/init.d/adguardhome
+            sed -i 's/--pidfile "\$PID_FILE"/--pidfile "\$PID_FILE" --logfile "\$LOG_FILE"/' /etc/init.d/adguardhome
+        fi
     fi
 
-    sed -i 's/--logfile syslog/--logfile "$log_file"/' /etc/init.d/adguardhome
-
-else
-    # ==========================================
-    # ВАРИАНТ ДЛЯ 24.10 (Старый формат)
-    # ==========================================
-    echo "Обнаружен Init-скрипт старого типа (24.10). Создаю конфиг v1."
-
-cat > /etc/config/adguardhome << 'EOF'
-config adguardhome 'config'
-	option enabled '1'
-	option workdir '/opt/AdGuardHome'
-	option config '/etc/adguardhome/adguardhome.yaml'
-	option logfile '/var/AdGuardHome.log'
-	option pidfile '/run/adguardhome.pid'
-	option user 'root'
-	option group 'root'
-	option verbose '0'
-EOF
-
-    # Настройка init.d/adguardhome (24.10)
-    if ! grep -q 'config_get LOG_FILE' /etc/init.d/adguardhome; then
-        echo "Патч init-скрипта 24.10 (добавление log_file)..."
-        
-        # 1. Добавляем чтение переменной LOG_FILE (ищем PID_FILE заглавными)
-        sed -i "/config_get PID_FILE/a \\\tconfig_get LOG_FILE config logfile '/var/AdGuardHome.log'" /etc/init.d/adguardhome
-        
-        # 2. Добавляем аргумент --logfile в строку запуска (так как его там нет по умолчанию)
-        # Ищем --pidfile "$PID_FILE" и добавляем после него лог
-        sed -i 's/--pidfile "\$PID_FILE"/--pidfile "\$PID_FILE" --logfile "\$LOG_FILE"/' /etc/init.d/adguardhome
-    else
-        echo "Патч для 24.10 уже применен."
-    fi
-
-fi
-
-else
-    echo ">>> Variant is $CURRENT_VARIANT. Light AGH config."
-	# Меняем папку данных на /opt
-    sed -i "s|option work_dir '/var/lib/adguardhome'|option work_dir '/opt/AdGuardHome'|g" /etc/config/adguardhome
-    # Если в версии 24.10 опция называется workdir (без подчеркивания)
-    sed -i "s|option workdir .*|option workdir '/opt/AdGuardHome'|g" /etc/config/adguardhome
-    # Меняем пользователя и группу на root
-    sed -i "s|option user 'adguardhome'|option user 'root'|g" /etc/config/adguardhome
-    sed -i "s|option group 'adguardhome'|option group 'root'|g" /etc/config/adguardhome
-    # Включаем службу (option enabled '1')
-    sed -i "s|option enabled '0'|option enabled '1'|g" /etc/config/adguardhome
-fi
-
-
-AGH_version=$(/usr/bin/AdGuardHome --version 2>/dev/null | grep -oP 'v?\K[\d.]+')
-echo -e "${COLOR_YELLOW}Установленная версия AGH: $AGH_version${COLOR_RESET}"
-
-# Освобождение порта 53 для AdGuardHome
-uci set dhcp.@dnsmasq[0].port="54"
-uci delete dhcp.@dnsmasq[0].server
-uci commit dhcp
-echo -e "${COLOR_CYAN}Остановка ДНС сервера DNSmasq - порт 0...${COLOR_RESET}"
-
-if [ -n "$AGH_version" ]; then
-	echo -e "${COLOR_CYAN}Запуск AdGuardHome...${COLOR_RESET}"
-	echo -e "${COLOR_WHITE}Запущенная версия AdGuardHome: $AGH_version${COLOR_RESET}"
-
-
-	# Меню для перехода к AdGuardHome
-cat << 'EOF' > /usr/lib/lua/luci/controller/adguardhome_net.lua
+    # Меню для перехода к AdGuardHome в LuCI
+    cat << 'EOF' > /usr/lib/lua/luci/controller/adguardhome_net.lua
 module("luci.controller.adguardhome_net", package.seeall)
-
 function index()
 	entry({"admin", "network", "adguardhome"}, call("redirectToAdGuardHome"), _("AdGuardHome"), 40)
 end
-
 function redirectToAdGuardHome()
-	local router_ip = luci.http.getenv("SERVER_ADDR") -- Получаем IP-адрес роутера
-	local redirect_url = "http://" .. router_ip .. ":8080" -- Собираем URL
-	luci.http.redirect(redirect_url) -- Перенаправляем на адрес роутера с портом 8080
+	local router_ip = luci.http.getenv("SERVER_ADDR")
+	local redirect_url = "http://" .. router_ip .. ":8080"
+	luci.http.redirect(redirect_url)
 end
 EOF
 
-else
-	echo "AdGuardHome не найден."
-fi
+    # Освобождение порта 53 для AdGuardHome
+    uci set dhcp.@dnsmasq[0].port="54"
+    uci delete dhcp.@dnsmasq[0].server
+    uci commit dhcp
 
-/etc/init.d/adguardhome enable
-/etc/init.d/adguardhome start
-
+    /etc/init.d/adguardhome enable
+    /etc/init.d/adguardhome start
+    echo -e "${COLOR_GREEN}AdGuardHome успешно настроен и запущен.${COLOR_RESET}"
 else
-	echo -e "${COLOR_RED}AdGuardHome не установлен или не найден.${COLOR_RESET}"
+    echo -e "${COLOR_RED}AdGuardHome не установлен или конфиг отсутствует. Пропуск.${COLOR_RESET}"
 fi
 
 #################### Финальные настройки ####################
