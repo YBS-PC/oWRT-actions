@@ -46,6 +46,8 @@ on:
           - passwall
           - v2raya
           - xray
+          - clear
+          - crystal_clear
       
       commit_hash:
         description: 'Target Commit Hash (Optional)'
