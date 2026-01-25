@@ -453,8 +453,7 @@ EOF
     if grep -q "procd_add_jail" /etc/init.d/adguardhome; then
         echo ">>> [Jail] Patching init script..."
         if ! grep -q 'local log_file' /etc/init.d/adguardhome; then
-            sed -i "/local verbose=0/a \\\tlocal log_file='/var/AdGuardHome.log'" /etc/init.d/adguardhome
-			sed -i "/local verbose=0/a ${TAB_CHAR}local log_file='/var/AdGuardHome.log'" /etc/init.d/adguardhome
+            sed -i "/local verbose=0/a ${TAB_CHAR}local log_file='/var/AdGuardHome.log'" /etc/init.d/adguardhome
             sed -i 's/--logfile syslog/--logfile "$log_file"/' /etc/init.d/adguardhome
         fi
     else
