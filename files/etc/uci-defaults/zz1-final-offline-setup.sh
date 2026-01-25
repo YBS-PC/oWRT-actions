@@ -51,12 +51,16 @@ case "$NAME_VALUE" in
 	*) ROUTER_NAME="WRT" ;;
 esac
 
+MY_ROUTER=$(ubus call system board | grep '"board_name"' | cut -d '"' -f 4 | cut -d ',' -f 2)
 MODEL_FULL=$(ubus call system board | grep '"model"' | cut -d '"' -f 4)
 ROUTER_MODEL=$(echo $MODEL_FULL | awk '{print $NF}')
 ROUTER_MODEL_NAME=$(case "$ROUTER_MODEL" in 
 	"GL-MT2500") echo "Brume2" ;; 
-	"R5S") echo "R5S" ;; 
-	*) echo "$ROUTER_MODEL" ;; 
+	"R5S") echo "R5S" ;;
+	"R6S") echo "R6S" ;;
+	"GL-AXT1800") echo "SLATEX" ;;
+	"RB5009UG+S+IN") echo "RB5009" ;;
+	*) echo "$MY_ROUTER" ;; 
 esac)
 
 HOSTNAME_PATTERN="${ROUTER_MODEL_NAME}-${ROUTER_NAME}"
@@ -498,25 +502,26 @@ EOF
 
 fi
 
-AGH_version=$(/usr/bin/AdGuardHome --version 2>/dev/null | grep -oP 'v?\K[\d.]+')
-echo -e "${COLOR_YELLOW}Установленная версия AGH: $AGH_version${COLOR_RESET}"
+if [ -x "/usr/bin/AdGuardHome" ]; then
+	AGH_version=$(/usr/bin/AdGuardHome --version 2>/dev/null | grep -oP 'v?\K[\d.]+')
+	echo -e "${COLOR_YELLOW}Установленная версия AGH: $AGH_version${COLOR_RESET}"
 
-# Освобождение порта 53 для AdGuardHome
-uci set dhcp.@dnsmasq[0].port="54"
-uci delete dhcp.@dnsmasq[0].server
-uci commit dhcp
-echo -e "${COLOR_CYAN}Остановка ДНС сервера DNSmasq - порт 0...${COLOR_RESET}"
+	# Освобождение порта 53 для AdGuardHome
+	uci set dhcp.@dnsmasq[0].port="54"
+	uci delete dhcp.@dnsmasq[0].server
+	uci commit dhcp
+	echo -e "${COLOR_CYAN}Остановка ДНС сервера DNSmasq - порт 0...${COLOR_RESET}"
 
-if [ -n "$AGH_version" ]; then
-	echo -e "${COLOR_CYAN}Запуск AdGuardHome...${COLOR_RESET}"
-	/etc/init.d/adguardhome enable
-	/etc/init.d/adguardhome start
-	echo -e "${COLOR_WHITE}Запущенная версия AdGuardHome: $AGH_version${COLOR_RESET}"
-else
-	echo -e "${COLOR_RED}AdGuardHome не установлен или не найден.${COLOR_RESET}"
-fi
+	if [ -n "$AGH_version" ]; then
+		echo -e "${COLOR_CYAN}Запуск AdGuardHome...${COLOR_RESET}"
+		/etc/init.d/adguardhome enable
+		/etc/init.d/adguardhome start
+		echo -e "${COLOR_WHITE}Запущенная версия AdGuardHome: $AGH_version${COLOR_RESET}"
+	else
+		echo -e "${COLOR_RED}AdGuardHome не установлен или не найден.${COLOR_RESET}"
+	fi
 
-# Меню для перехода к AdGuardHome
+	# Меню для перехода к AdGuardHome
 cat << 'EOF' > /usr/lib/lua/luci/controller/adguardhome_net.lua
 module("luci.controller.adguardhome_net", package.seeall)
 
@@ -530,6 +535,10 @@ function redirectToAdGuardHome()
 	luci.http.redirect(redirect_url) -- Перенаправляем на адрес роутера с портом 8080
 end
 EOF
+
+else
+	echo "AdGuardHome не найден."
+fi
 
 #################### Финальные настройки ####################
 echo -e "${COLOR_MAGENTA}Финальные настройки системы...${COLOR_RESET}"
