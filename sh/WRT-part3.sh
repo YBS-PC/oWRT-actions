@@ -172,6 +172,19 @@ CRYSTAL_CLEAR_BLOAT=(
     "adguardhome" "homeproxy" "sing-box" "youtubeUnblock" "zapret" 
     "xray-core" "v2ray-plugin" "xray-plugin" "v2ray-geoip" 
     "v2ray-geosite" "v2ray-geodata" "chinadns-ng" "geoview" "tcping"
+    # Отдельные утилиты
+    "coreutils-base64" "coreutils-cat" "coreutils-chmod" "coreutils-chown"
+    "coreutils-cp" "coreutils-cut" "coreutils-date" "coreutils-df"
+    "coreutils-du" "coreutils-expand" "coreutils-head" "coreutils-ls"
+    "coreutils-md5sum" "coreutils-mkdir" "coreutils-mv" "coreutils-nohup"
+    "coreutils-numfmt" "coreutils-paste" "coreutils-rm" "coreutils-sha256sum"
+    "coreutils-sleep" "coreutils-sort" "coreutils-stat" "coreutils-strings"
+    "coreutils-tail" "coreutils-timeout" "coreutils-touch" "coreutils-tr"
+    "coreutils-unexpand" "coreutils-uniq" "coreutils-wc" "coreutils"
+    # Другие тяжелые утилиты (уже есть в BusyBox)
+    "grep" "sed" "gawk" "tar" "gzip" "unzip" "bzip2"
+    "findutils" "findutils-find" "findutils-locate" "findutils-xargs"
+    "diffutils"
 )
 
 # --- ЛОГИКА ДЛЯ ВАРИАНТА 'clear' ---
@@ -180,7 +193,7 @@ if [ "$VARIANT" == "clear" ]; then
     # Удаляем тяжелые бинарники, которые скачались в YML
     rm -f "./files/usr/bin/AdGuardHome"
     rm -f "./files/usr/bin/sing-box"
-    echo "   > Removed AdGuardHome and Sing-box binaries from files/"
+    echo "   > Removed AdGuardHome and Sing-box binaries from files"
     # Удаляем основной скрипт настройки
     rm -f "./files/etc/uci-defaults/zz1-final-offline-setup.sh"
     # Вычищаем пакеты из конфига
