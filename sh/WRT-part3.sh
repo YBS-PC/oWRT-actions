@@ -246,7 +246,7 @@ if [ "$VARIANT" == "clear" ]; then
     rm -f "./files/usr/bin/sing-box"
     echo "   > Removed Sing-box binaries from files"
     # Удаляем основной скрипт настройки
-    rm -f "./files/etc/uci-defaults/zz1-final-offline-setup.sh"
+    # rm -f "./files/etc/uci-defaults/zz1-final-offline-setup.sh"
     # Вычищаем пакеты из конфига
     for PKG in "${CLEAR_BLOAT[@]}"; do
         sed -i "/${PKG}/Id" ./.config
