@@ -163,37 +163,88 @@ fi
 
 # Списки "Прокси-мусора" (для варианта clear и crystal_clear)
 CLEAR_BLOAT=(
-    "adguardhome" "homeproxy" "sing-box" "youtubeUnblock" "zapret" 
-    "xray-core" "v2ray-plugin" "xray-plugin" "v2ray-geoip" 
-    "v2ray-geosite" "v2ray-geodata" "chinadns-ng" "geoview" "tcping"
+"chinadns-ng"
+"geoview"
+"homeproxy"
+"sing-box"
+"tcping"
+"v2ray-geodata"
+"v2ray-geoip"
+"v2ray-geosite"
+"v2ray-plugin"
+"xray-core"
+"xray-plugin"
+"youtubeUnblock"
+"zapret"
 )
 
 CRYSTAL_CLEAR_BLOAT=(
-    "adguardhome" "homeproxy" "sing-box" "youtubeUnblock" "zapret" 
-    "xray-core" "v2ray-plugin" "xray-plugin" "v2ray-geoip" 
-    "v2ray-geosite" "v2ray-geodata" "chinadns-ng" "geoview" "tcping"
-    # Отдельные утилиты
-    "coreutils-base64" "coreutils-cat" "coreutils-chmod" "coreutils-chown"
-    "coreutils-cp" "coreutils-cut" "coreutils-date" "coreutils-df"
-    "coreutils-du" "coreutils-expand" "coreutils-head" "coreutils-ls"
-    "coreutils-md5sum" "coreutils-mkdir" "coreutils-mv" "coreutils-nohup"
-    "coreutils-numfmt" "coreutils-paste" "coreutils-rm" "coreutils-sha256sum"
-    "coreutils-sleep" "coreutils-sort" "coreutils-stat" "coreutils-strings"
-    "coreutils-tail" "coreutils-timeout" "coreutils-touch" "coreutils-tr"
-    "coreutils-unexpand" "coreutils-uniq" "coreutils-wc" "coreutils"
-    # Другие тяжелые утилиты (уже есть в BusyBox)
-    "grep" "sed" "gawk" "tar" "gzip" "unzip" "bzip2"
-    "findutils" "findutils-find" "findutils-locate" "findutils-xargs"
-    "diffutils"
+"adguardhome"
+"bzip2"
+"chinadns-ng"
+"coreutils"
+"coreutils-base64"
+"coreutils-cat"
+"coreutils-chmod"
+"coreutils-chown"
+"coreutils-cp"
+"coreutils-cut"
+"coreutils-date"
+"coreutils-df"
+"coreutils-du"
+"coreutils-expand"
+"coreutils-head"
+"coreutils-ls"
+"coreutils-md5sum"
+"coreutils-mkdir"
+"coreutils-mv"
+"coreutils-nohup"
+"coreutils-numfmt"
+"coreutils-paste"
+"coreutils-rm"
+"coreutils-sha256sum"
+"coreutils-sleep"
+"coreutils-sort"
+"coreutils-stat"
+"coreutils-strings"
+"coreutils-tail"
+"coreutils-timeout"
+"coreutils-touch"
+"coreutils-tr"
+"coreutils-unexpand"
+"coreutils-uniq"
+"coreutils-wc"
+"diffutils"
+"findutils-find"
+"findutils-locate"
+"findutils-xargs"
+"findutils"
+"gawk"
+"geoview"
+"grep"
+"gzip"
+"homeproxy"
+"sed"
+"sing-box"
+"tar"
+"tcping"
+"unzip"
+"v2ray-geodata"
+"v2ray-geoip"
+"v2ray-geosite"
+"v2ray-plugin"
+"xray-core"
+"xray-plugin"
+"youtubeUnblock"
+"zapret"
 )
 
 # --- ЛОГИКА ДЛЯ ВАРИАНТА 'clear' ---
 if [ "$VARIANT" == "clear" ]; then
     echo ">>> [Variant: $VARIANT] Performing aggressive cleanup..."
     # Удаляем тяжелые бинарники, которые скачались в YML
-    rm -f "./files/usr/bin/AdGuardHome"
     rm -f "./files/usr/bin/sing-box"
-    echo "   > Removed AdGuardHome and Sing-box binaries from files"
+    echo "   > Removed Sing-box binaries from files"
     # Удаляем основной скрипт настройки
     rm -f "./files/etc/uci-defaults/zz1-final-offline-setup.sh"
     # Вычищаем пакеты из конфига
@@ -202,6 +253,9 @@ if [ "$VARIANT" == "clear" ]; then
         echo "# CONFIG_PACKAGE_luci-app-${PKG} is not set" >> ./.config
         echo "# CONFIG_PACKAGE_${PKG} is not set" >> ./.config
     done
+    sed -i '/CONFIG_PACKAGE_kmod-tcp-bbr=y/d' ./.config
+    sed -i '/CONFIG_TCP_CONG_BBR=y/d' ./.config
+    echo "# BBR disabled for clear build"
 fi
 
 # --- ЛОГИКА ДЛЯ ВАРИАНТА 'crystal_clear' ---
@@ -219,6 +273,9 @@ if [ "$VARIANT" == "crystal_clear" ]; then
         echo "# CONFIG_PACKAGE_luci-app-${PKG} is not set" >> ./.config
         echo "# CONFIG_PACKAGE_${PKG} is not set" >> ./.config
     done
+    sed -i '/CONFIG_PACKAGE_kmod-tcp-bbr=y/d' ./.config
+    sed -i '/CONFIG_TCP_CONG_BBR=y/d' ./.config
+    echo "# BBR disabled for clear build"
 fi
 
 # =========================================================
