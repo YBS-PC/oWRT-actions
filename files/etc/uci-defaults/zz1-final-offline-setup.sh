@@ -371,17 +371,6 @@ echo -e "Настройка internet-detector..."
 sed -i 's/START=[0-9][0-9]/START=99/' /etc/init.d/internet-detector
 echo -e "Служба internet-detector настроена (но отключена)."
 
-#################### Обновить баннер ####################
-echo -e "Обновить баннер..."
-cp /etc/banner /etc/banner.bak
-sed -i 's/W I R E L E S S/N E T W O R K/g' /etc/banner
-# Удаляем старую запись о варианте, если она есть
-sed -i "/Build Variant:/d" /etc/banner
-sed -i "/Kernel Version:/d" /etc/banner
-# Добавляем новые строки в конец
-echo " Kernel Version: $KERNEL_VERSION" >> /etc/banner
-echo " Build Variant: $CURRENT_VARIANT ($(date +'%Y-%m-%d'))" >> /etc/banner
-
 #################### Обновить имя хоста ####################
 echo -e "Обновить имя хоста..."
 uci set system.@system[0].hostname="$HOSTNAME_PATTERN"
@@ -612,6 +601,60 @@ fi
 /etc/init.d/phy-leds disable
 
 cat /tmp/sysinfo/model && . /etc/openwrt_release
+
+# =========================================================
+# ФИНАЛЬНЫЙ БЛОК: СИНХРОНИЗАЦИЯ ВРЕМЕНИ И БАННЕР
+# Перенесен в конец, чтобы успели отработать драйверы RTC
+# =========================================================
+# 1. Считываем время из аппаратных часов (RTC)
+# Это самое важное для R5S/R6S! Исправляет "2104" или "1970" сразу, даже без интернета.
+if command -v hwclock >/dev/null 2>&1; then
+    echo "Syncing from Hardware Clock (RTC)..."
+    hwclock -s -u 2>/dev/null
+fi
+# 2. Если есть интернет, пробуем точную синхронизацию по NTP
+# Проверяем доступность Google DNS (как маркер интернета)
+if ping -c 1 -W 1 8.8.8.8 >/dev/null 2>&1; then
+    echo "Internet detected. Forcing NTP sync..."
+    # Останавливаем фоновую службу, чтобы освободить порт UDP 123
+    /etc/init.d/sysntpd stop 2>/dev/null
+    # Принудительная синхронизация (ntpd из BusyBox)
+    # -q: выйти после синхронизации
+    # -n: не уходить в фон
+    # -p: сервер времени
+    ntpd -q -n -p ru.pool.ntp.org 2>/dev/null
+    # Запускаем службу обратно
+    /etc/init.d/sysntpd start 2>/dev/null
+    # Записываем точное время обратно в аппаратные часы (чтобы сохранить его на будущее)
+    if command -v hwclock >/dev/null 2>&1; then
+        hwclock -w -u 2>/dev/null
+    fi
+    echo -e "${COLOR_GREEN}Time synced with internet.${COLOR_RESET}"
+else
+    echo -e "${COLOR_YELLOW}No internet connection. Using RTC time.${COLOR_RESET}"
+    # Просто убеждаемся, что служба запущена
+    /etc/init.d/sysntpd restart 2>/dev/null
+fi
+# Даем системе пару секунд на осознание изменений
+sleep 2
+# 3. Обновление баннера (Теперь с правильной датой)
+echo -e "${COLOR_MAGENTA}Обновление баннера...${COLOR_RESET}"
+cp /etc/banner /etc/banner.bak
+sed -i 's/W I R E L E S S/N E T W O R K/g' /etc/banner
+# Удаляем старые записи
+sed -i "/Build Variant:/d" /etc/banner
+sed -i "/Kernel Version:/d" /etc/banner
+# Формируем строку даты
+CURRENT_YEAR=$(date +%Y)
+# Если год выглядит адекватным (между 2025 и 2050)
+if [ "$CURRENT_YEAR" -ge 2025 ] && [ "$CURRENT_YEAR" -le 2050 ]; then
+    DATE_STR=$(date +'%Y-%m-%d')
+else
+    # Если RTC сбойнул и интернета нет
+    DATE_STR=""
+fi
+echo " Kernel Version: $KERNEL_VERSION" >> /etc/banner
+echo " Build Variant: $CURRENT_VARIANT ($DATE_STR)" >> /etc/banner
 
 echo -e "Первоначальная настройка завершена успешно."
 
