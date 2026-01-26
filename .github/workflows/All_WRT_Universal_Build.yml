@@ -15,7 +15,7 @@ on:
           - slateax
           - ax59u
           - brume2
-          - mt-rb5009
+          - rb5009
       
       source:
         description: 'Source Code'
@@ -78,7 +78,7 @@ jobs:
     steps:
       - id: set-matrix
         run: |
-          targets="nanopi-r5s nanopi-r6s slateax ax59u brume2 mt-rb5009"
+          targets="nanopi-r5s nanopi-r6s slateax ax59u brume2 rb5009"
           if [ "${{ github.event.inputs.target }}" == "all" ]; then
             selected=$targets
           else
