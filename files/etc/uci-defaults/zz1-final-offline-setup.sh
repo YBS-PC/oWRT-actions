@@ -59,7 +59,7 @@ ROUTER_MODEL_NAME=$(case "$ROUTER_MODEL" in
 	"R5S") echo "R5S" ;;
 	"R6S") echo "R6S" ;;
 	"GL-AXT1800") echo "SLATEX" ;;
-	"RB5009UG+S+IN") echo "RB5009" ;;
+	"RB5009") echo "RB5009" ;;
 	*) echo "$MY_ROUTER" ;; 
 esac)
 
