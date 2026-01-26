@@ -398,10 +398,12 @@ echo -e "${COLOR_WHITE}Служба internet-detector настроена (но �
 echo -e "${COLOR_MAGENTA}Обновить баннер...${COLOR_RESET}"
 cp /etc/banner /etc/banner.bak
 sed -i 's/W I R E L E S S/N E T W O R K/g' /etc/banner
-ADD_TEXT="Kernel $KERNEL_VERSION,"
-if ! grep -q "Kernel $KERNEL_VERSION" /etc/banner; then
-	sed -i '/, r/s/,/, '"$ADD_TEXT"'/' /etc/banner
-fi
+# Удаляем старую запись о варианте, если она есть
+sed -i "/Build Variant:/d" /etc/banner
+sed -i "/Kernel Version:/d" /etc/banner
+# Добавляем новые строки в конец
+echo " Kernel Version: $KERNEL_VERSION" >> /etc/banner
+echo " Build Variant: $CURRENT_VARIANT ($(date +'%Y-%m-%d'))" >> /etc/banner
 
 #################### Обновить имя хоста ####################
 echo -e "${COLOR_MAGENTA}Обновить имя хоста...${COLOR_RESET}"
