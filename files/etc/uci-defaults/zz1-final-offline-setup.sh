@@ -14,29 +14,6 @@ echo "Running zz1-final-offline-setup.sh" > /root/setup_log.txt
 SETUP_LOGFILE="/root/setup_log.txt"
 exec > >(tee -a "$SETUP_LOGFILE") 2>&1
 
-# --- Управление цветами ---
-USE_COLORS="true"
-
-if [ "$USE_COLORS" = "true" ]; then
-    COLOR_RED='\033[31m'
-    COLOR_GREEN='\033[32m'
-    COLOR_YELLOW='\033[33m'
-    COLOR_BLUE='\033[34m'
-    COLOR_MAGENTA='\033[35m'
-    COLOR_CYAN='\033[36m'
-    COLOR_WHITE='\033[37m'
-    COLOR_RESET='\033[0m'
-else
-    COLOR_RED=''
-    COLOR_GREEN=''
-    COLOR_YELLOW=''
-    COLOR_BLUE=''
-    COLOR_MAGENTA=''
-    COLOR_CYAN=''
-    COLOR_WHITE=''
-    COLOR_RESET=''
-fi
-
 # -----------------------------
 #      ПЕРЕМЕННЫЕ СИСТЕМЫ
 # -----------------------------
@@ -75,31 +52,31 @@ echo "Detected Build Variant: ${CURRENT_VARIANT:-unknown}"
 #      НАСТРОЙКА РОУТЕРА      ########################################################
 # --------------------------------------------------------------------------------------------------------------------
 
-echo -e "${COLOR_MAGENTA}СКРИПТ ПЕРВОНАЧАЛЬНОЙ ОФЛАЙН-НАСТРОЙКИ РОУТЕРА${COLOR_RESET}"
+echo -e "СКРИПТ ПЕРВОНАЧАЛЬНОЙ ОФЛАЙН-НАСТРОЙКИ РОУТЕРА"
 
 #################### Удалить строку Enable FullCone NAT (если нужно) ####################
-echo -e "${COLOR_MAGENTA}Удалить строку Enable FullCone NAT...${COLOR_RESET}"
+echo -e "Удалить строку Enable FullCone NAT..."
 sed -i "/option fullcone '1'/d" /etc/config/firewall
 
 #################### Настройка системного времени (без NTP) ####################
-echo -e "${COLOR_MAGENTA}Настройка часового пояса...${COLOR_RESET}"
+echo -e "Настройка часового пояса..."
 uci set system.@system[0].zonename='Europe/Moscow'
 uci commit system
 #-#/etc/init.d/system reload
 date
 
 #################### Подготовка системы к установке пакетов ####################
-echo -e "${COLOR_MAGENTA}Подготовка системы к установке пакетов...${COLOR_RESET}"
+echo -e "Подготовка системы к установке пакетов..."
 
 # Проверяем, какой пакетный менеджер используется
 if command -v apk >/dev/null 2>&1; then
-	echo -e "${COLOR_CYAN}Обнаружен пакетный менеджер APK.${COLOR_RESET}"
+	echo -e "Обнаружен пакетный менеджер APK."
 	# 1. Убедимся, что архитектура указана верно
 	if ! grep -qF "${ARCH_VERSION}" /etc/apk/arch; then
-		echo -e "${COLOR_CYAN}Добавляю архитектуру ${ARCH_VERSION} в /etc/apk/arch...${COLOR_RESET}"
+		echo -e "Добавляю архитектуру ${ARCH_VERSION} в /etc/apk/arch..."
 		echo "${ARCH_VERSION}" > /etc/apk/arch
 	else
-		echo -e "${COLOR_CYAN}Архитектура в /etc/apk/arch уже настроена.${COLOR_RESET}"
+		echo -e "Архитектура в /etc/apk/arch уже настроена."
 	fi
 	# 2. Определяем список репозиториев
 	DISTFEEDS_FILE="/etc/apk/repositories.d/distfeeds.list"
@@ -112,13 +89,13 @@ if command -v apk >/dev/null 2>&1; then
 elif command -v opkg >/dev/null 2>&1; then
 	DISTFEEDS_FILE="/etc/opkg/distfeeds.conf"
 	CUSTOMFEEDS_FILE="/etc/opkg/customfeeds.conf"
-	echo -e "${COLOR_CYAN}Обнаружен пакетный менеджер OPKG.${COLOR_RESET}"
+	echo -e "Обнаружен пакетный менеджер OPKG."
 else
-	echo -e "${COLOR_RED}Ошибка: Пакетный менеджер (apk или opkg) не найден.${COLOR_RESET}"
+	echo -e "Ошибка: Пакетный менеджер (apk или opkg) не найден."
 fi
 
 if [ -f "$DISTFEEDS_FILE" ]; then
-	echo -e "${COLOR_WHITE}Очистка файла репозиториев $DISTFEEDS_FILE...${COLOR_RESET}"
+	echo -e "Очистка файла репозиториев $DISTFEEDS_FILE..."
 	# Создаем бэкап на всякий случай
 	cp "$DISTFEEDS_FILE" "${DISTFEEDS_FILE}.bak"
 	# Фильтруем содержимое файла и сохраняем результат в переменную
@@ -126,14 +103,14 @@ if [ -f "$DISTFEEDS_FILE" ]; then
 	# Проверяем, что переменная не пустая, прежде чем перезаписывать файл
 	if [ -n "$FILTERED_CONTENT" ]; then
 		echo "$FILTERED_CONTENT" > "$DISTFEEDS_FILE"
-		echo -e "${COLOR_GREEN}Файл репозиториев успешно очищен.${COLOR_RESET}"
+		echo -e "Файл репозиториев успешно очищен."
 	else
-		echo -e "${COLOR_RED}Ошибка: Фильтрация не нашла ни одной нужной строки! Оригинальный файл не изменен.${COLOR_RESET}"
+		echo -e "Ошибка: Фильтрация не нашла ни одной нужной строки! Оригинальный файл не изменен."
 	fi
 
     # --- АВТОМАТИЧЕСКОЕ ДОБАВЛЕНИЕ KMODS (ТОЛЬКО ДЛЯ APK) ---
     if command -v apk >/dev/null 2>&1; then
-        echo -e "${COLOR_MAGENTA}Попытка автоматического добавления репозитория kmods...${COLOR_RESET}"
+        echo -e "Попытка автоматического добавления репозитория kmods..."
         
         # 1. Получаем полную версию пакета через apk list
         # 2>/dev/null убирает WARNING о кеше, head -n1 берет первую строку, awk берет первое слово (имя-версия)
@@ -150,7 +127,7 @@ if [ -f "$DISTFEEDS_FILE" ]; then
             # Результат: 6.12.63-1-hash
             K_MODS_DIR=$(echo "$K_VER_TEMP" | sed 's/~/-1-/')
             
-            echo -e "${COLOR_CYAN}Определена версия ядра: ${K_VER_TEMP} -> Папка: ${K_MODS_DIR}${COLOR_RESET}"
+            echo -e "Определена версия ядра: ${K_VER_TEMP} -> Папка: ${K_MODS_DIR}"
             
             # 2. Ищем базовый URL в существующем файле
             BASE_REPO_URL=$(grep "/targets/.*/packages/packages.adb" "$DISTFEEDS_FILE" | head -n1)
@@ -164,16 +141,16 @@ if [ -f "$DISTFEEDS_FILE" ]; then
                 
                 # 4. Проверяем и записываем
                 if ! grep -q "$KMODS_URL" "$DISTFEEDS_FILE"; then
-                    echo -e "${COLOR_GREEN}Добавляю репозиторий kmods: ${KMODS_URL}${COLOR_RESET}"
+                    echo -e "Добавляю репозиторий kmods: ${KMODS_URL}"
                     echo "$KMODS_URL" >> "$DISTFEEDS_FILE"
                 else
-                    echo -e "${COLOR_YELLOW}Репозиторий kmods уже присутствует.${COLOR_RESET}"
+                    echo -e "Репозиторий kmods уже присутствует."
                 fi
             else
-                echo -e "${COLOR_RED}Ошибка: Не удалось найти базовый URL в $DISTFEEDS_FILE${COLOR_RESET}"
+                echo -e "Ошибка: Не удалось найти базовый URL в $DISTFEEDS_FILE"
             fi
         else
-            echo -e "${COLOR_RED}Ошибка: Не удалось определить версию ядра через apk list.${COLOR_RESET}"
+            echo -e "Ошибка: Не удалось определить версию ядра через apk list."
         fi
     fi
     # --------------------------------------------------------
@@ -190,37 +167,37 @@ cat << 'EOF' > "$CUSTOMFEEDS_FILE"
 EOF
 
 #################### Установка всех пакетов из /tmp/ ####################
-echo -e "${COLOR_MAGENTA}Установка пакетов из локальной директории...${COLOR_RESET}"
+echo -e "Установка пакетов из локальной директории..."
 
-echo -e "${COLOR_MAGENTA}Установка sing-box...${COLOR_RESET}"
+echo -e "Установка sing-box..."
 if [ -f /root/apps/sing-box.tar.gz ]; then
 	/etc/init.d/sing-box stop >/dev/null 2>&1
 	tar -xzf /root/apps/sing-box.tar.gz -C /tmp/
 	rm /root/apps/sing-box.tar.gz
 	cp /tmp/sing-box /usr/bin/sing-box
 	chmod +x /usr/bin/sing-box
-	echo -e "${COLOR_GREEN}Установлен sing-box из /root/apps/${COLOR_RESET}"
+	echo -e "Установлен sing-box из /root/apps/"
 else
-	echo -e "${COLOR_YELLOW}Файл sing-box не найден в /root/apps/. Пропускаем установку.${COLOR_RESET}"
+	echo -e "Файл sing-box не найден в /root/apps/. Пропускаем установку."
 fi
 
-echo -e "${COLOR_MAGENTA}Установка speedtest...${COLOR_RESET}"
+echo -e "Установка speedtest..."
 if [ -f /root/apps/speedtest.tar.gz ]; then
 	tar -xzf /root/apps/speedtest.tar.gz -C /tmp/
 	rm /root/apps/speedtest.tar.gz
 	cp /tmp/speedtest /usr/bin/speedtest
 	chmod +x /usr/bin/speedtest
-	echo -e "${COLOR_GREEN}Установлен speedtest из /root/apps/${COLOR_RESET}"
+	echo -e "Установлен speedtest из /root/apps/"
 else
-	echo -e "${COLOR_YELLOW}Файл speedtest не найден в /tmp/. Пропускаем установку.${COLOR_RESET}"
+	echo -e "Файл speedtest не найден в /tmp/. Пропускаем установку."
 fi
 
 #################### Настройка homeproxy ####################
 # Проверяем, установлен ли homeproxy, прежде чем пытаться его настраивать
 if [ -f "/etc/init.d/homeproxy" ]; then
 
-echo -e "${COLOR_MAGENTA}Настройка luci-app-homeproxy...${COLOR_RESET}"
-echo -e "${COLOR_YELLOW}Отключаем dns_hijacked в luci-app-homeproxy${COLOR_RESET}"
+echo -e "Настройка luci-app-homeproxy..."
+echo -e "Отключаем dns_hijacked в luci-app-homeproxy"
 sed -i "s/const dns_hijacked = uci\.get('dhcp', '@dnsmasq\[0\]', 'dns_redirect') || '0'/const dns_hijacked = '1'/" /etc/homeproxy/scripts/firewall_post.ut
 
 /etc/init.d/homeproxy disable
@@ -256,7 +233,7 @@ fi
 uci -q commit firewall
 EOF
 chmod +x "$HELPER_SCRIPT_PATH"
-echo -e "${COLOR_WHITE}Создан скрипт-помощник для homeproxy: $HELPER_SCRIPT_PATH${COLOR_RESET}"
+echo -e "Создан скрипт-помощник для homeproxy: $HELPER_SCRIPT_PATH"
 # 2. Модифицируем init-скрипт homeproxy, чтобы он вызывал скрипт помощник
 HOMEPROXY_INIT_SCRIPT="/etc/init.d/homeproxy"
 
@@ -267,25 +244,25 @@ if [ -f "$HOMEPROXY_INIT_SCRIPT" ]; then
 		# Вставляем вызов нашего скрипта в начало start_service() и stop_service()
 		sed -i "/start_service() {/a \\$HELPER_CALL_COMMAND" "$HOMEPROXY_INIT_SCRIPT"
 		sed -i "/stop_service() {/a \\$HELPER_CALL_COMMAND" "$HOMEPROXY_INIT_SCRIPT"
-		echo -e "${COLOR_WHITE}Init-скрипт homeproxy модифицирован для вызова помощника.${COLOR_RESET}"
+		echo -e "Init-скрипт homeproxy модифицирован для вызова помощника."
 	else
-		echo -e "${COLOR_GREEN}Init-скрипт homeproxy уже был модифицирован.${COLOR_RESET}"
+		echo -e "Init-скрипт homeproxy уже был модифицирован."
 	fi
 else
-	echo -e "${COLOR_YELLOW}Скрипт $HOMEPROXY_INIT_SCRIPT не найден.${COLOR_RESET}"
+	echo -e "Скрипт $HOMEPROXY_INIT_SCRIPT не найден."
 fi
 # 3. Первоначальный запуск помощника, чтобы исправить конфиг сразу
 . "$HELPER_SCRIPT_PATH"
 
 /etc/init.d/homeproxy enable
 
-echo -e "${COLOR_WHITE}luci-app-homeproxy настроен.${COLOR_RESET}"
+echo -e "luci-app-homeproxy настроен."
 
 SB_version=$(/usr/bin/sing-box version 2>/dev/null | grep -oP -m 1 'v?\K[\d.]+')
 echo -e "\e[37mУстановленная версия sing-box: $SB_version\e[0m"
 
 else
-    echo -e "${COLOR_YELLOW}Пакет homeproxy не найден. Настройка пропущена.${COLOR_RESET}"
+    echo -e "Пакет homeproxy не найден. Настройка пропущена."
 fi
 
 #################### Настройка Passwall 2 (Интеграция с AGH) ####################
@@ -293,7 +270,7 @@ fi
 PASSWALL_INIT="/etc/init.d/passwall2"
 
 if [ -f "$PASSWALL_INIT" ]; then
-    echo -e "${COLOR_MAGENTA}Настройка Passwall 2 для работы с AdGuardHome...${COLOR_RESET}"
+    echo -e "Настройка Passwall 2 для работы с AdGuardHome..."
     
     # Отключаем службу перед настройкой
     "$PASSWALL_INIT" disable
@@ -320,18 +297,18 @@ if [ -f "$PASSWALL_INIT" ]; then
         commit passwall2
 EOF
     
-    echo -e "${COLOR_WHITE}DNS перехват в Passwall 2 отключен. DNS полностью управляется AdGuardHome.${COLOR_RESET}"
+    echo -e "DNS перехват в Passwall 2 отключен. DNS полностью управляется AdGuardHome."
 
     # Включаем службу
     "$PASSWALL_INIT" enable
-    echo -e "${COLOR_GREEN}Passwall 2 настроен и включен.${COLOR_RESET}"
+    echo -e "Passwall 2 настроен и включен."
     
 else
-    echo -e "${COLOR_YELLOW}Passwall 2 не найден. Пропуск.${COLOR_RESET}"
+    echo -e "Passwall 2 не найден. Пропуск."
 fi
 
 #################### Настройка youtubeUnblock ####################
-echo -e "${COLOR_MAGENTA}Настройка youtubeUnblock...${COLOR_RESET}"
+echo -e "Настройка youtubeUnblock..."
 
 sed -i 's/meta l4proto { tcp, udp } flow offload @ft;/meta l4proto { tcp, udp } ct original packets ge 30 flow offload @ft;/' /usr/share/firewall4/templates/ruleset.uc
 
@@ -375,7 +352,7 @@ EOF
 
 # Проверяем, установлен ли youtubeUnblock. 
 if [ -x "/usr/bin/youtubeUnblock" ]; then
-	echo -e "${COLOR_WHITE}Служба youtubeUnblock установлена. Применяем конфигурацию...${COLOR_RESET}"
+	echo -e "Служба youtubeUnblock установлена. Применяем конфигурацию..."
 	# Отключаем службу на время настройки
 	/etc/init.d/youtubeUnblock disable
 	echo "$YTB_NFT_FILE_CONTENT" > "$YTB_NFT_FILE"
@@ -383,19 +360,19 @@ if [ -x "/usr/bin/youtubeUnblock" ]; then
 	echo "$YTB_NFT_GUEST_MARK_CONTENT" > "$YTB_NFT_GUEST_MARK_FILE"
 	chmod 0644 "$YTB_NFT_GUEST_MARK_FILE"
 	/etc/init.d/youtubeUnblock enable
-	echo -e "${COLOR_WHITE}youtubeUnblock настроен и включен.${COLOR_RESET}"
+	echo -e "youtubeUnblock настроен и включен."
 else
-	echo -e "${COLOR_YELLOW}Служба youtubeUnblock не установлена. Настройка пропущена.${COLOR_RESET}"
+	echo -e "Служба youtubeUnblock не установлена. Настройка пропущена."
 fi
 
 #################### Настройка internet-detector ####################
-echo -e "${COLOR_MAGENTA}Настройка internet-detector...${COLOR_RESET}"
+echo -e "Настройка internet-detector..."
 /etc/init.d/internet-detector disable
 sed -i 's/START=[0-9][0-9]/START=99/' /etc/init.d/internet-detector
-echo -e "${COLOR_WHITE}Служба internet-detector настроена (но отключена).${COLOR_RESET}"
+echo -e "Служба internet-detector настроена (но отключена)."
 
 #################### Обновить баннер ####################
-echo -e "${COLOR_MAGENTA}Обновить баннер...${COLOR_RESET}"
+echo -e "Обновить баннер..."
 cp /etc/banner /etc/banner.bak
 sed -i 's/W I R E L E S S/N E T W O R K/g' /etc/banner
 # Удаляем старую запись о варианте, если она есть
@@ -406,28 +383,28 @@ echo " Kernel Version: $KERNEL_VERSION" >> /etc/banner
 echo " Build Variant: $CURRENT_VARIANT ($(date +'%Y-%m-%d'))" >> /etc/banner
 
 #################### Обновить имя хоста ####################
-echo -e "${COLOR_MAGENTA}Обновить имя хоста...${COLOR_RESET}"
+echo -e "Обновить имя хоста..."
 uci set system.@system[0].hostname="$HOSTNAME_PATTERN"
 uci commit system
 uci set uhttpd.defaults.commonname="$HOSTNAME_PATTERN"
 uci commit uhttpd
-echo -e "${COLOR_CYAN}Имя хоста установлено: $HOSTNAME_PATTERN${COLOR_RESET}"
+echo -e "Имя хоста установлено: $HOSTNAME_PATTERN"
 
-sed -i "s/File Manager/Файловый менеджер/" /usr/share/luci/menu.d/luci-app-filemanager.json && echo -e "${COLOR_CYAN}Обновлен Файловый менеджер${COLOR_RESET}"
+sed -i "s/File Manager/Файловый менеджер/" /usr/share/luci/menu.d/luci-app-filemanager.json && echo -e "Обновлен Файловый менеджер"
 
 #################### Настройка путей для owut (attendedsysupgrade) ####################
-echo -e "${COLOR_MAGENTA}Настройка путей для owut...${COLOR_RESET}"
+echo -e "Настройка путей для owut..."
 if [ "$NAME_VALUE" == "OpenWrt" ]; then
 	sed -i "s|option url 'https://asu-2.kyarucloud.moe'|option url 'https://sysupgrade.openwrt.org'|" /etc/config/attendedsysupgrade
-	echo -e "${COLOR_CYAN}owut настроен на OpenWrt${COLOR_RESET}"
+	echo -e "owut настроен на OpenWrt"
 else
 	sed -i "s|option url 'https://sysupgrade.openwrt.org'|option url 'https://asu-2.kyarucloud.moe'|" /etc/config/attendedsysupgrade
-	echo -e "${COLOR_CYAN}owut настроен на ImmortalWrt${COLOR_RESET}"
+	echo -e "owut настроен на ImmortalWrt"
 fi
 
 #################### Настройка и запуск AdGuardHome ####################
 if [ -x "/usr/bin/AdGuardHome" ] && [ -f "/etc/config/adguardhome" ]; then
-    echo -e "${COLOR_MAGENTA}Настройка параметров AdGuardHome через UCI...${COLOR_RESET}"
+    echo -e "Настройка параметров AdGuardHome через UCI..."
 
     # Отключаем на время настройки
     /etc/init.d/adguardhome disable
@@ -486,18 +463,92 @@ EOF
 
     /etc/init.d/adguardhome enable
     /etc/init.d/adguardhome start
-    echo -e "${COLOR_GREEN}AdGuardHome успешно настроен и запущен.${COLOR_RESET}"
+    echo -e "AdGuardHome успешно настроен и запущен."
 else
-    echo -e "${COLOR_RED}AdGuardHome не установлен или конфиг отсутствует. Пропуск.${COLOR_RESET}"
+    echo -e "AdGuardHome не установлен или конфиг отсутствует. Пропуск."
 fi
 
+#################### Патч для SQM (Сохранение кастомных опций) ####################
+/etc/init.d/sqm disable
+echo -e "Патчинг службы SQM для поддержки 'невидимых' опций..."
+
+SQM_RUN_SCRIPT="/usr/lib/sqm/run.sh"
+SQM_FUNCTIONS_SCRIPT="${SQM_LIB_DIR:-/usr/lib/sqm}/functions.sh"
+
+if [ -f "$SQM_RUN_SCRIPT" ] && [ -f "$SQM_FUNCTIONS_SCRIPT" ]; then
+
+    # --- ПАТЧ 1: /usr/lib/sqm/run.sh (Главный скрипт) ---
+    # Мы добавляем чтение 'невидимых' опций custom_iqdisc_opts и custom_eqdisc_opts
+    # и, если они есть, записываем их значения в переменные IQDISC_OPTS и EQDISC_OPTS.
+    if ! grep -q "custom_iqdisc_opts" "$SQM_RUN_SCRIPT"; then
+        sed -i "/export EQDISC_OPTS/a \
+    # Load custom opts if they exist, overriding LuCI's empty values\
+    custom_i_opts=\$(config_get \"\$section\" custom_iqdisc_opts)\
+    custom_e_opts=\$(config_get \"\$section\" custom_eqdisc_opts)\
+    [ -n \"\$custom_i_opts\" ] \&\& export IQDISC_OPTS=\"\$custom_i_opts\"\
+    [ -n \"\$custom_e_opts\" ] \&\& export EQDISC_OPTS=\"\$custom_e_opts\"" "$SQM_RUN_SCRIPT"
+        
+        echo -e "Файл run.sh успешно пропатчен."
+    else
+        echo -e "Файл run.sh уже был пропатчен."
+    fi
+
+    # --- ПАТЧ 2: /usr/lib/sqm/functions.sh (Вспомогательный скрипт) ---
+    # Мы добавляем функцию 'save_custom_opts', которая будет вызываться перед остановкой
+    # сервиса, чтобы спасти текущие опции, если LuCI собирается их стереть.
+    if ! grep -q "save_custom_opts" "$SQM_FUNCTIONS_SCRIPT"; then
+        # Добавляем новую функцию в конец файла
+        cat <<'EOF' >> "$SQM_FUNCTIONS_SCRIPT"
+
+# --- Custom Options Saver ---
+save_custom_opts() {
+    local iface_name="$1"
+    
+    # Ищем секцию для нужного интерфейса
+    config_get iface "$iface_name" interface
+    if [ -z "$iface" ]; then return 1; fi
+    
+    # Читаем текущие "живые" опции
+    cur_i_opts=$(config_get "$iface_name" iqdisc_opts)
+    cur_e_opts=$(config_get "$iface_name" eqdisc_opts)
+    
+    # Если опции не пустые, сохраняем их в "невидимые" переменные
+    if [ -n "$cur_i_opts" ]; then
+        uci set sqm."$iface_name".custom_iqdisc_opts="$cur_i_opts"
+        logger "SQM: Saved custom ingress opts for $iface_name"
+    fi
+    
+    if [ -n "$cur_e_opts" ]; then
+        uci set sqm."$iface_name".custom_eqdisc_opts="$cur_e_opts"
+        logger "SQM: Saved custom egress opts for $iface_name"
+    fi
+    uci commit sqm
+}
+EOF
+        # Теперь модифицируем функцию stop_service(), чтобы она вызывала нашу "спасательную" функцию
+        # Мы вставляем вызов в самое начало, ДО того, как сервис реально остановится.
+        sed -i '/stop_service() {/a \
+    save_custom_opts "$IFACE"' /usr/lib/sqm/run.sh # <-- ВАЖНО: правим run.sh, а не functions.sh
+        
+        echo -e "Файл functions.sh и run.sh успешно пропатчены для сохранения опций."
+    else
+        echo -e "Функция save_custom_opts уже существует."
+    fi
+
+else
+    echo -e "Пакет SQM не установлен. Патчинг пропущен."
+fi
+
+/etc/init.d/sqm enable
+echo "sqm включен"
+
 #################### Финальные настройки ####################
-echo -e "${COLOR_MAGENTA}Финальные настройки системы...${COLOR_RESET}"
+echo -e "Финальные настройки системы..."
 
 # Очистка временных файлов конфигурации
 find /etc/config/ -type f -name '*-opkg' -exec rm {} \;
 find /etc/config/ -type f -name '*apk-new' -exec rm {} \;
-echo -e "${COLOR_CYAN}Удалены временные файлы конфигурации.${COLOR_RESET}"
+echo -e "Удалены временные файлы конфигурации."
 
 # Расширение интерфейса bootstrap
 if ! grep -q "/* LuCI Bootstrap: Custom Fullwidth CSS */" /www/luci-static/bootstrap/cascade.css; then
@@ -536,9 +587,9 @@ fi
 # Включение FullCone NAT
 if [ -f "/lib/modules/$(uname -r)/nft_fullcone.ko" ] || lsmod | grep -q nft_fullcone || [ -d "/sys/module/nft_fullcone" ]; then
 	uci set firewall.@defaults[0].fullcone='1' && uci commit firewall
-	echo -e "${COLOR_WHITE}FullCone NAT включен${COLOR_RESET}"
+	echo -e "FullCone NAT включен"
 else
-	echo -e "${COLOR_WHITE}FullCone не доступен${COLOR_RESET}"
+	echo -e "FullCone не доступен"
 fi
 
 # Включить TCP BBR
@@ -550,27 +601,22 @@ if [ -f "/lib/modules/$(uname -r)/tcp_bbr.ko" ] || grep -q "bbr" /proc/sys/net/i
     sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' /etc/sysctl.conf
     # Добавляем правильные настройки: fq_codel для совместимости с CAKE и bbr для TCP
     echo -e "\n# TCP BBR\nnet.core.default_qdisc = fq_codel\nnet.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.conf
-    echo -e "${COLOR_GREEN}TCP BBR включен.${COLOR_RESET}"
+    echo -e "TCP BBR включен."
 else
     # Если BBR недоступен, убираем настройки, чтобы не было ошибок при загрузке
     sed -i '/net\.core\.default_qdisc.*fq/d; /net\.ipv4\.tcp_congestion_control.*bbr/d; /# TCP BBR/d' /etc/sysctl.conf
-    echo -e "${COLOR_YELLOW}TCP BBR недоступен.${COLOR_RESET}"
+    echo -e "TCP BBR недоступен."
 fi
-
-# Включить sqm
-/etc/init.d/sqm disable
-/etc/init.d/sqm enable
-echo "sqm включен"
 
 #Отключаем старый скрипт управления диодами phy-leds
 /etc/init.d/phy-leds disable
 
 cat /tmp/sysinfo/model && . /etc/openwrt_release
 
-echo -e "${COLOR_GREEN}Первоначальная настройка завершена успешно.${COLOR_RESET}"
+echo -e "Первоначальная настройка завершена успешно."
 
 # Отложенная перезагрузка в фоне (&) в дочерней оболочке ()...
-echo -e "${COLOR_GREEN}Запрос на перезагрузку системы...${COLOR_RESET}"
+echo -e "Запрос на перезагрузку системы..."
 (sleep 120; sync; reboot) &
 
 # ВАЖНО: Завершаем скрипт с кодом 0 для его автоматического удаления
