@@ -471,7 +471,8 @@ if [ -f "$SQM_RUN_SCRIPT" ]; then
     cat > "$CUSTOM_CONF" <<EOF
 # Custom SQM Options
 # LuCI удаляет эти опции из /etc/config/sqm, поэтому мы храним их здесь.
-# Формат: option имя_опции 'значение' (обязательно в одинарных кавычках!)
+# nowash - нужен для работы ручных правил DSCP (VIP gaming)
+# diffserv4 - разделяет трафик на 4 полосы (Voice, Video, BestEffort, Bulk)
 
 option iqdisc_opts 'nat dual-dsthost diffserv4 nowash'
 option eqdisc_opts 'nat dual-srchost diffserv4 nowash'
