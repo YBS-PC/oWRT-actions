@@ -457,60 +457,60 @@ else
     echo -e "AdGuardHome не установлен или конфиг отсутствует. Пропуск."
 fi
 
-#################### Патч для SQM (Сохранение кастомных опций) ####################
+#################### Патч для SQM (Внешний файл конфигурации) ####################
+echo -e "Настройка SQM на использование внешнего конфига /opt/sqm_custom.conf..."
 /etc/init.d/sqm disable
 
-echo -e "Настройка SQM для защиты кастомных опций..."
 SQM_RUN_SCRIPT="/usr/lib/sqm/run.sh"
+CUSTOM_CONF="/opt/sqm_custom.conf"
+
 if [ -f "$SQM_RUN_SCRIPT" ]; then
-    # 1. Исправляем run.sh (Внедряем чтение кастомных переменных)
-    # Используем надежный метод вставки через временный файл, чтобы избежать проблем с sed
-    if ! grep -q "custom_iqdisc_opts" "$SQM_RUN_SCRIPT"; then
-        echo ">>> Патчинг $SQM_RUN_SCRIPT ..."
-        # Создаем фрагмент кода для вставки
-        cat <<'EOF' > /tmp/sqm_code_snippet.txt
-    # --- Custom Opts Patch ---
-    # LuCI удаляет стандартные iqdisc_opts, поэтому мы читаем их из custom_ переменных,
-    # которые сохраняются в конфиге постоянно.
-    local custom_i_opts=$(config_get "$section" custom_iqdisc_opts)
-    local custom_e_opts=$(config_get "$section" custom_eqdisc_opts)
-    [ -n "$custom_i_opts" ] && export IQDISC_OPTS="$custom_i_opts"
-    [ -n "$custom_e_opts" ] && export EQDISC_OPTS="$custom_e_opts"
-    # -------------------------
+    # 1. Создаем файл кастомных настроек
+    # Этот файл переживет любые изменения в LuCI
+    mkdir -p /opt
+    cat > "$CUSTOM_CONF" <<EOF
+# Custom SQM Options
+# LuCI удаляет эти опции из /etc/config/sqm, поэтому мы храним их здесь.
+# Формат: option имя_опции 'значение' (обязательно в одинарных кавычках!)
+
+option iqdisc_opts 'nat dual-dsthost diffserv4'
+option eqdisc_opts 'nat dual-srchost diffserv4'
 EOF
-        # Вставляем код ПОСЛЕ строки "export EQDISC_OPTS"
-        sed -i '/export EQDISC_OPTS/r /tmp/sqm_code_snippet.txt' "$SQM_RUN_SCRIPT"
-        rm /tmp/sqm_code_snippet.txt
+    echo -e "Создан файл $CUSTOM_CONF"
+    # 2. Патчим run.sh, чтобы он читал этот файл
+    if ! grep -q "sqm_custom.conf" "$SQM_RUN_SCRIPT"; then
+        echo ">>> Внедрение чтения $CUSTOM_CONF в $SQM_RUN_SCRIPT ..."
+        # Готовим код для вставки.
+        # FIX: Добавлена '^' в grep, чтобы игнорировать закомментированные строки (#)
+        cat <<'EOF' > /tmp/sqm_loader.txt
+
+    # --- Load Custom Config (/opt/sqm_custom.conf) ---
+    if [ -f "/opt/sqm_custom.conf" ]; then
+        # Ищем строки, начинающиеся с "option ...", и берем текст внутри одинарных кавычек
+        cust_i=$(grep "^option iqdisc_opts" /opt/sqm_custom.conf | cut -d"'" -f2)
+        cust_e=$(grep "^option eqdisc_opts" /opt/sqm_custom.conf | cut -d"'" -f2)
+        
+        # Если нашли значения, применяем их поверх стандартных
+        [ -n "$cust_i" ] && export IQDISC_OPTS="$cust_i"
+        [ -n "$cust_e" ] && export EQDISC_OPTS="$cust_e"
+    fi
+    # -------------------------------------------------
+EOF
+        # Вставляем этот блок ПОСЛЕ того, как скрипт прочитал стандартные настройки
+        # (после строки "export EQDISC_OPTS")
+        sed -i '/export EQDISC_OPTS/r /tmp/sqm_loader.txt' "$SQM_RUN_SCRIPT"
+        rm /tmp/sqm_loader.txt
         echo -e "Скрипт SQM успешно пропатчен."
     else
-        echo "Скрипт SQM уже содержит патч."
+        echo -e "Скрипт SQM уже настроен на чтение custom файла."
     fi
-    # 2. Прописываем настройки в конфиг через UCI
-    # Мы пишем сразу в custom_ переменные, которые LuCI не удалит.
-    # Находим имя секции (обычно 'eth1', 'wan' или 'p1')
-    # Берем первую доступную секцию
-    SQM_SECTION=$(uci show sqm | grep "=queue" | head -n 1 | cut -d'.' -f2 | cut -d'=' -f1)
-    if [ -n "$SQM_SECTION" ]; then
-        echo ">>> Настройка секции SQM: $SQM_SECTION"
-        uci -q batch <<EOF
-            set sqm.${SQM_SECTION}.iqdisc_opts='nat dual-dsthost diffserv4'
-            set sqm.${SQM_SECTION}.eqdisc_opts='nat dual-srchost diffserv4'
-            set sqm.${SQM_SECTION}.custom_iqdisc_opts='nat dual-dsthost diffserv4'
-            set sqm.${SQM_SECTION}.custom_eqdisc_opts='nat dual-srchost diffserv4'
-            set sqm.${SQM_SECTION}.squash_dscp='0'
-            set sqm.${SQM_SECTION}.squash_ingress='0'
-            commit sqm
-EOF
-        echo -e "Кастомные опции SQM записаны (в custom поля)."
-        /etc/init.d/sqm enable
-        /etc/init.d/sqm restart
-    else
-        echo -e "Секция SQM не найдена (возможно, пакет не настроен)."
-    fi
+    # 3. Перезапускаем SQM для применения
+    /etc/init.d/sqm enable
+    /etc/init.d/sqm restart
+    echo -e "SQM перезапущен с новыми настройками."
 else
-    echo -e "Файл $SQM_RUN_SCRIPT не найден. SQM не установлен?"
+    echo -e "Пакет SQM не установлен. Пропуск."
 fi
-
 /etc/init.d/sqm enable
 echo "sqm включен"
 
