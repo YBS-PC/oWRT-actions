@@ -459,14 +459,17 @@ fi
 
 #################### Патч для SQM (Внешний файл конфигурации) ####################
 echo -e "Настройка SQM на использование внешнего конфига /opt/sqm_custom.conf..."
-/etc/init.d/sqm disable
+
+# 1. Проверяем текущее состояние SQM в конфиге (включен или нет)
+# Если опция не задана или равна 0, считаем, что сервис выключен.
+SQM_ENABLED_STATE=$(uci -q get sqm.@queue[0].enabled)
 
 SQM_RUN_SCRIPT="/usr/lib/sqm/run.sh"
 CUSTOM_CONF="/opt/sqm_custom.conf"
 
 if [ -f "$SQM_RUN_SCRIPT" ]; then
-    # 1. Создаем файл кастомных настроек
-    # Этот файл переживет любые изменения в LuCI
+
+    # 2. Создаем файл кастомных настроек
     mkdir -p /opt
     cat > "$CUSTOM_CONF" <<EOF
 # Custom SQM Options
@@ -478,42 +481,45 @@ option iqdisc_opts 'nat dual-dsthost diffserv4 nowash'
 option eqdisc_opts 'nat dual-srchost diffserv4 nowash'
 EOF
     echo -e "Создан файл $CUSTOM_CONF"
-    # 2. Патчим run.sh, чтобы он читал этот файл
+
+    # 3. Патчим run.sh, чтобы он читал этот файл
     if ! grep -q "sqm_custom.conf" "$SQM_RUN_SCRIPT"; then
         echo ">>> Внедрение чтения $CUSTOM_CONF в $SQM_RUN_SCRIPT ..."
-        # Готовим код для вставки.
-        # FIX: Добавлена '^' в grep, чтобы игнорировать закомментированные строки (#)
+        
         cat <<'EOF' > /tmp/sqm_loader.txt
 
     # --- Load Custom Config (/opt/sqm_custom.conf) ---
     if [ -f "/opt/sqm_custom.conf" ]; then
-        # Ищем строки, начинающиеся с "option ...", и берем текст внутри одинарных кавычек
         cust_i=$(grep "^option iqdisc_opts" /opt/sqm_custom.conf | cut -d"'" -f2)
         cust_e=$(grep "^option eqdisc_opts" /opt/sqm_custom.conf | cut -d"'" -f2)
         
-        # Если нашли значения, применяем их поверх стандартных
         [ -n "$cust_i" ] && export IQDISC_OPTS="$cust_i"
         [ -n "$cust_e" ] && export EQDISC_OPTS="$cust_e"
     fi
     # -------------------------------------------------
 EOF
-        # Вставляем этот блок ПОСЛЕ того, как скрипт прочитал стандартные настройки
-        # (после строки "export EQDISC_OPTS")
         sed -i '/export EQDISC_OPTS/r /tmp/sqm_loader.txt' "$SQM_RUN_SCRIPT"
         rm /tmp/sqm_loader.txt
         echo -e "Скрипт SQM успешно пропатчен."
     else
         echo -e "Скрипт SQM уже настроен на чтение custom файла."
     fi
-    # 3. Перезапускаем SQM для применения
-    /etc/init.d/sqm enable
-    /etc/init.d/sqm restart
-    echo -e "SQM перезапущен с новыми настройками."
+
+    # 4. Умный перезапуск (только если SQM был включен)
+    if [ "$SQM_ENABLED_STATE" == "1" ]; then
+        echo -e "SQM активен в конфиге. Перезапуск для применения патча..."
+        /etc/init.d/sqm enable
+        /etc/init.d/sqm restart
+        echo -e "SQM успешно перезапущен."
+    else
+        echo -e "SQM отключен в конфиге (enabled='0' или отсутствует). Служба не запущена."
+        # На всякий случай убираем из автозагрузки, если он там был
+        /etc/init.d/sqm disable 2>/dev/null
+    fi
+
 else
     echo -e "Пакет SQM не установлен. Пропуск."
 fi
-/etc/init.d/sqm enable
-echo "sqm включен"
 
 #################### Финальные настройки ####################
 echo -e "Финальные настройки системы..."
