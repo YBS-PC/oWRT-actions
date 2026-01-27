@@ -473,8 +473,8 @@ if [ -f "$SQM_RUN_SCRIPT" ]; then
 # LuCI удаляет эти опции из /etc/config/sqm, поэтому мы храним их здесь.
 # Формат: option имя_опции 'значение' (обязательно в одинарных кавычках!)
 
-option iqdisc_opts 'nat dual-dsthost diffserv4'
-option eqdisc_opts 'nat dual-srchost diffserv4'
+option iqdisc_opts 'nat dual-dsthost diffserv4 nowash'
+option eqdisc_opts 'nat dual-srchost diffserv4 nowash'
 EOF
     echo -e "Создан файл $CUSTOM_CONF"
     # 2. Патчим run.sh, чтобы он читал этот файл
