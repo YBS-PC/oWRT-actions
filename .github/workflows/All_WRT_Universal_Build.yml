@@ -6,7 +6,7 @@ on:
       target:
         description: 'Target Device'
         required: true
-        default: 'rb5009'
+        default: 'nanopi-r6s'
         type: choice
         options:
           - all
@@ -78,7 +78,7 @@ jobs:
     steps:
       - id: set-matrix
         run: |
-          targets="nanopi-r6s rb5009"
+          targets="nanopi-r6s nanopi-r5s rb5009"
           if [ "${{ github.event.inputs.target }}" == "all" ]; then
             selected=$targets
           else
