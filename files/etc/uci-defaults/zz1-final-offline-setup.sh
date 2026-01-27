@@ -459,73 +459,56 @@ fi
 
 #################### Патч для SQM (Сохранение кастомных опций) ####################
 /etc/init.d/sqm disable
-echo -e "Патчинг службы SQM для поддержки 'невидимых' опций..."
 
+echo -e "Настройка SQM для защиты кастомных опций..."
 SQM_RUN_SCRIPT="/usr/lib/sqm/run.sh"
-SQM_FUNCTIONS_SCRIPT="${SQM_LIB_DIR:-/usr/lib/sqm}/functions.sh"
-
-if [ -f "$SQM_RUN_SCRIPT" ] && [ -f "$SQM_FUNCTIONS_SCRIPT" ]; then
-
-    # --- ПАТЧ 1: /usr/lib/sqm/run.sh (Главный скрипт) ---
-    # Мы добавляем чтение 'невидимых' опций custom_iqdisc_opts и custom_eqdisc_opts
-    # и, если они есть, записываем их значения в переменные IQDISC_OPTS и EQDISC_OPTS.
+if [ -f "$SQM_RUN_SCRIPT" ]; then
+    # 1. Исправляем run.sh (Внедряем чтение кастомных переменных)
+    # Используем надежный метод вставки через временный файл, чтобы избежать проблем с sed
     if ! grep -q "custom_iqdisc_opts" "$SQM_RUN_SCRIPT"; then
-        sed -i "/export EQDISC_OPTS/a \
-    # Load custom opts if they exist, overriding LuCI's empty values\
-    custom_i_opts=\$(config_get \"\$section\" custom_iqdisc_opts)\
-    custom_e_opts=\$(config_get \"\$section\" custom_eqdisc_opts)\
-    [ -n \"\$custom_i_opts\" ] \&\& export IQDISC_OPTS=\"\$custom_i_opts\"\
-    [ -n \"\$custom_e_opts\" ] \&\& export EQDISC_OPTS=\"\$custom_e_opts\"" "$SQM_RUN_SCRIPT"
-        
-        echo -e "Файл run.sh успешно пропатчен."
-    else
-        echo -e "Файл run.sh уже был пропатчен."
-    fi
-
-    # --- ПАТЧ 2: /usr/lib/sqm/functions.sh (Вспомогательный скрипт) ---
-    # Мы добавляем функцию 'save_custom_opts', которая будет вызываться перед остановкой
-    # сервиса, чтобы спасти текущие опции, если LuCI собирается их стереть.
-    if ! grep -q "save_custom_opts" "$SQM_FUNCTIONS_SCRIPT"; then
-        # Добавляем новую функцию в конец файла
-        cat <<'EOF' >> "$SQM_FUNCTIONS_SCRIPT"
-
-# --- Custom Options Saver ---
-save_custom_opts() {
-    local iface_name="$1"
-    
-    # Ищем секцию для нужного интерфейса
-    config_get iface "$iface_name" interface
-    if [ -z "$iface" ]; then return 1; fi
-    
-    # Читаем текущие "живые" опции
-    cur_i_opts=$(config_get "$iface_name" iqdisc_opts)
-    cur_e_opts=$(config_get "$iface_name" eqdisc_opts)
-    
-    # Если опции не пустые, сохраняем их в "невидимые" переменные
-    if [ -n "$cur_i_opts" ]; then
-        uci set sqm."$iface_name".custom_iqdisc_opts="$cur_i_opts"
-        logger "SQM: Saved custom ingress opts for $iface_name"
-    fi
-    
-    if [ -n "$cur_e_opts" ]; then
-        uci set sqm."$iface_name".custom_eqdisc_opts="$cur_e_opts"
-        logger "SQM: Saved custom egress opts for $iface_name"
-    fi
-    uci commit sqm
-}
+        echo ">>> Патчинг $SQM_RUN_SCRIPT ..."
+        # Создаем фрагмент кода для вставки
+        cat <<'EOF' > /tmp/sqm_code_snippet.txt
+    # --- Custom Opts Patch ---
+    # LuCI удаляет стандартные iqdisc_opts, поэтому мы читаем их из custom_ переменных,
+    # которые сохраняются в конфиге постоянно.
+    local custom_i_opts=$(config_get "$section" custom_iqdisc_opts)
+    local custom_e_opts=$(config_get "$section" custom_eqdisc_opts)
+    [ -n "$custom_i_opts" ] && export IQDISC_OPTS="$custom_i_opts"
+    [ -n "$custom_e_opts" ] && export EQDISC_OPTS="$custom_e_opts"
+    # -------------------------
 EOF
-        # Теперь модифицируем функцию stop_service(), чтобы она вызывала нашу "спасательную" функцию
-        # Мы вставляем вызов в самое начало, ДО того, как сервис реально остановится.
-        sed -i '/stop_service() {/a \
-    save_custom_opts "$IFACE"' /usr/lib/sqm/run.sh # <-- ВАЖНО: правим run.sh, а не functions.sh
-        
-        echo -e "Файл functions.sh и run.sh успешно пропатчены для сохранения опций."
+        # Вставляем код ПОСЛЕ строки "export EQDISC_OPTS"
+        sed -i '/export EQDISC_OPTS/r /tmp/sqm_code_snippet.txt' "$SQM_RUN_SCRIPT"
+        rm /tmp/sqm_code_snippet.txt
+        echo -e "Скрипт SQM успешно пропатчен."
     else
-        echo -e "Функция save_custom_opts уже существует."
+        echo "Скрипт SQM уже содержит патч."
     fi
-
+    # 2. Прописываем настройки в конфиг через UCI
+    # Мы пишем сразу в custom_ переменные, которые LuCI не удалит.
+    # Находим имя секции (обычно 'eth1', 'wan' или 'p1')
+    # Берем первую доступную секцию
+    SQM_SECTION=$(uci show sqm | grep "=queue" | head -n 1 | cut -d'.' -f2 | cut -d'=' -f1)
+    if [ -n "$SQM_SECTION" ]; then
+        echo ">>> Настройка секции SQM: $SQM_SECTION"
+        uci -q batch <<EOF
+            set sqm.${SQM_SECTION}.iqdisc_opts='nat dual-dsthost diffserv4'
+            set sqm.${SQM_SECTION}.eqdisc_opts='nat dual-srchost diffserv4'
+            set sqm.${SQM_SECTION}.custom_iqdisc_opts='nat dual-dsthost diffserv4'
+            set sqm.${SQM_SECTION}.custom_eqdisc_opts='nat dual-srchost diffserv4'
+            set sqm.${SQM_SECTION}.squash_dscp='0'
+            set sqm.${SQM_SECTION}.squash_ingress='0'
+            commit sqm
+EOF
+        echo -e "Кастомные опции SQM записаны (в custom поля)."
+        /etc/init.d/sqm enable
+        /etc/init.d/sqm restart
+    else
+        echo -e "Секция SQM не найдена (возможно, пакет не настроен)."
+    fi
 else
-    echo -e "Пакет SQM не установлен. Патчинг пропущен."
+    echo -e "Файл $SQM_RUN_SCRIPT не найден. SQM не установлен?"
 fi
 
 /etc/init.d/sqm enable
