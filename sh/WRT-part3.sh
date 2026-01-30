@@ -143,8 +143,8 @@ echo 'CONFIG_BUSYBOX_DEFAULT_ASH_BUILTIN_TEST=y' >> ./.config
 echo 'CONFIG_BUSYBOX_DEFAULT_FEATURE_FAST_TOP=y' >> ./.config
 echo 'CONFIG_BUSYBOX_DEFAULT_FEATURE_USE_INITTAB=y' >> ./.config
 echo ">>> [Heavy packages] Тяжелые пакеты отключены."
-        # Для 'minimal' ставим Tiny версию sing-box.
-        if [ "$VARIANT" == "minimal" ]; then
+        # Для 'standart' ставим Tiny версию sing-box.
+        if [ "$VARIANT" == "standart" ]; then
             echo ">>> [Heavy packages] Sing-box Tiny for $VARIANT compatibility..."
             sed -i '/sing-box/Id' ./.config
             echo '# CONFIG_PACKAGE_sing-box is not set' >> ./.config
@@ -158,10 +158,16 @@ echo ">>> [Heavy packages] Тяжелые пакеты отключены."
 fi
 
 # =========================================================
-# ЦЕНТРАЛИЗОВАННАЯ ОЧИСТКА (Варианты clear и crystal_clear)
+# ЦЕНТРАЛИЗОВАННАЯ ОЧИСТКА (Варианты minimal, clear и crystal_clear)
 # =========================================================
 
 # Списки "Прокси-мусора" (для варианта clear и crystal_clear)
+
+MINIMAL_BLOAT=(
+"sqm"
+"sqm-scripts"
+)
+
 CLEAR_BLOAT=(
 "chinadns-ng"
 "homeproxy"
@@ -175,6 +181,18 @@ CRYSTAL_CLEAR_BLOAT=(
 "sqm"
 "sqm-scripts"
 )
+
+# --- ЛОГИКА ДЛЯ ВАРИАНТА 'minimal' ---
+if [ "$VARIANT" == "minimal" ]; then
+    echo ">>> [Variant: $VARIANT] Performing cleanup..."
+    # Вычищаем пакеты из конфига
+    for PKG in "${MINIMAL_BLOAT[@]}"; do
+        sed -i "/${PKG}/Id" ./.config
+        echo "# CONFIG_PACKAGE_luci-app-${PKG} is not set" >> ./.config
+        echo "# CONFIG_PACKAGE_luci-i18n-${PKG}-ru is not set" >> ./.config
+        echo "# CONFIG_PACKAGE_${PKG} is not set" >> ./.config
+    done
+fi
 
 # --- ЛОГИКА ДЛЯ ВАРИАНТА 'clear' ---
 if [ "$VARIANT" == "clear" ]; then
