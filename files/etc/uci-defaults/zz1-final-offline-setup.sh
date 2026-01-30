@@ -410,7 +410,7 @@ if [ -x "/usr/bin/AdGuardHome" ] && [ -f "/etc/config/adguardhome" ]; then
 
     # Применяем настройки ко всем вариантам (универсальный подход)
     uci -q batch <<EOF
-        set adguardhome.config.enabled='1'
+        #set adguardhome.config.enabled='1'
         set adguardhome.config.work_dir='/opt/AdGuardHome'
         set adguardhome.config.user='root'
         set adguardhome.config.group='root'
