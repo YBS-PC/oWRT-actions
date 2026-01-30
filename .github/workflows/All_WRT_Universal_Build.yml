@@ -42,6 +42,7 @@ on:
         default: 'minimal'
         type: choice
         options:
+          - standart
           - minimal
           - passwall
           - v2raya
@@ -454,8 +455,7 @@ jobs:
         
         # ВАЖНОЕ ИСПРАВЛЕНИЕ:
         # Удаляем HomeProxy и Sing-Box только если выбран "тяжелый" вариант (Passwall/Xray/V2rayA).
-        # Для 'minimal' мы их ОСТАВЛЯЕМ (если они есть в WRT.config).
-        if [ "$VARIANT" != "minimal" ]; then
+        if [[ "$VARIANT" == "passwall" || "$VARIANT" == "v2raya" || "$VARIANT" == "xray" ]]; then
             echo ">>> Removing HomeProxy and Sing-box dependencies for $VARIANT compatibility..."
             sed -i '/homeproxy/d' ./.config
             sed -i '/sing-box/Id' ./.config
@@ -694,3 +694,4 @@ jobs:
       with:
         retain_days: 10
         keep_minimum_runs: 6
+        
