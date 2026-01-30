@@ -49,6 +49,12 @@ on:
           - clear
           - crystal_clear
       
+      exclude_keywords:
+        description: 'Exclude Packages (Space separated keywords)'
+        required: false
+        default: ''
+        type: string
+      
       commit_hash:
         description: 'Target Commit Hash (Optional)'
         required: false
@@ -503,6 +509,25 @@ jobs:
         else
             echo ">>> P4 tweak script not found: $DIY_P4_SH"
         fi
+
+        # =======================================================
+        # ЛОГИКА ИСКЛЮЧЕНИЯ ПАКЕТОВ (EXCLUDE KEYWORDS)
+        # =======================================================
+        EXCLUDE_INPUT="${{ inputs.exclude_keywords }}"
+        if [ -n "$EXCLUDE_INPUT" ]; then
+            echo ">>> [EXCLUDE] Processing keywords: $EXCLUDE_INPUT"
+            for WORD in $EXCLUDE_INPUT; do
+                echo "   > Searching for enabled packages containing '$WORD'..."
+                # Ищем только включенные (=y) пакеты с этим словом
+                grep -i "^CONFIG_PACKAGE_.*${WORD}.*=y" .config | cut -d'=' -f1 | while read -r CONFIG_NAME; do
+                    echo "      - Disabling: $CONFIG_NAME"
+                    # Жестко отключаем пакет, чтобы он не собрался
+                    sed -i "s|^${CONFIG_NAME}=y|# ${CONFIG_NAME} is not set|" .config
+                done
+            done
+            echo ">>> [EXCLUDE] Done."
+        fi
+        # =======================================================
              
         make defconfig
         
