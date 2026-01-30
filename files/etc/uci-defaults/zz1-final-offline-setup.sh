@@ -619,16 +619,16 @@ if ping -c 1 -W 1 8.8.8.8 >/dev/null 2>&1; then
     if command -v hwclock >/dev/null 2>&1; then
         hwclock -w -u 2>/dev/null
     fi
-    echo -e "${COLOR_GREEN}Time synced with internet.${COLOR_RESET}"
+    echo -e "Time synced with internet."
 else
-    echo -e "${COLOR_YELLOW}No internet connection. Using RTC time.${COLOR_RESET}"
+    echo -e "No internet connection. Using RTC time."
     # Просто убеждаемся, что служба запущена
     /etc/init.d/sysntpd restart 2>/dev/null
 fi
 # Даем системе пару секунд на осознание изменений
 sleep 2
 # 3. Обновление баннера (Теперь с правильной датой)
-echo -e "${COLOR_MAGENTA}Обновление баннера...${COLOR_RESET}"
+echo -e "Обновление баннера..."
 cp /etc/banner /etc/banner.bak
 sed -i 's/W I R E L E S S/N E T W O R K/g' /etc/banner
 # Удаляем старые записи
