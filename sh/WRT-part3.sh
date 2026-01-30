@@ -143,8 +143,8 @@ echo 'CONFIG_BUSYBOX_DEFAULT_ASH_BUILTIN_TEST=y' >> ./.config
 echo 'CONFIG_BUSYBOX_DEFAULT_FEATURE_FAST_TOP=y' >> ./.config
 echo 'CONFIG_BUSYBOX_DEFAULT_FEATURE_USE_INITTAB=y' >> ./.config
 echo ">>> [Heavy packages] Тяжелые пакеты отключены."
-        # Для 'standart' ставим Tiny версию sing-box.
-        if [ "$VARIANT" == "standart" ]; then
+        # Для standart и minimal ставим Tiny версию sing-box.
+        if [[ "$VARIANT" == "standart" || "$VARIANT" == "minimal" ]]; then
             echo ">>> [Heavy packages] Sing-box Tiny for $VARIANT compatibility..."
             sed -i '/sing-box/Id' ./.config
             echo '# CONFIG_PACKAGE_sing-box is not set' >> ./.config
