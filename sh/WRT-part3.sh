@@ -167,11 +167,13 @@ CLEAR_BLOAT=(
 "homeproxy"
 "sing-box"
 "youtubeUnblock"
+"adguardhome"
 )
 
 CRYSTAL_CLEAR_BLOAT=(
 "${CLEAR_BLOAT[@]}"
-"adguardhome"
+"sqm"
+"sqm-scripts"
 )
 
 # --- ЛОГИКА ДЛЯ ВАРИАНТА 'clear' ---
@@ -179,13 +181,13 @@ if [ "$VARIANT" == "clear" ]; then
     echo ">>> [Variant: $VARIANT] Performing aggressive cleanup..."
     # Удаляем тяжелые бинарники, которые скачались в YML
     rm -f "./files/usr/bin/sing-box"
+    rm -f "./files/usr/bin/AdGuardHome"
     echo "   > Removed Sing-box binaries from files"
-    # Удаляем основной скрипт настройки
-    # rm -f "./files/etc/uci-defaults/zz1-final-offline-setup.sh"
     # Вычищаем пакеты из конфига
     for PKG in "${CLEAR_BLOAT[@]}"; do
         sed -i "/${PKG}/Id" ./.config
         echo "# CONFIG_PACKAGE_luci-app-${PKG} is not set" >> ./.config
+        echo "# CONFIG_PACKAGE_luci-i18n-${PKG}-ru is not set" >> ./.config
         echo "# CONFIG_PACKAGE_${PKG} is not set" >> ./.config
     done
     sed -i '/CONFIG_PACKAGE_kmod-tcp-bbr=y/d' ./.config
@@ -197,8 +199,8 @@ fi
 if [ "$VARIANT" == "crystal_clear" ]; then
     echo ">>> [Variant: $VARIANT] Performing aggressive cleanup..."
     # Удаляем тяжелые бинарники, которые скачались в YML
-    rm -f "./files/usr/bin/AdGuardHome"
     rm -f "./files/usr/bin/sing-box"
+    rm -f "./files/usr/bin/AdGuardHome"
     echo "   > Removed AdGuardHome and Sing-box binaries from files/"
     # Удаляем основной скрипт настройки
     rm -f "./files/etc/uci-defaults/zz1-final-offline-setup.sh"
@@ -206,6 +208,7 @@ if [ "$VARIANT" == "crystal_clear" ]; then
     for PKG in "${CRYSTAL_CLEAR_BLOAT[@]}"; do
         sed -i "/${PKG}/Id" ./.config
         echo "# CONFIG_PACKAGE_luci-app-${PKG} is not set" >> ./.config
+        echo "# CONFIG_PACKAGE_luci-i18n-${PKG}-ru is not set" >> ./.config
         echo "# CONFIG_PACKAGE_${PKG} is not set" >> ./.config
     done
     sed -i '/CONFIG_PACKAGE_kmod-tcp-bbr=y/d' ./.config
