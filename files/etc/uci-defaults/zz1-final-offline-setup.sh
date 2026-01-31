@@ -622,6 +622,7 @@ if ping -c 1 -W 1 8.8.8.8 >/dev/null 2>&1; then
     echo -e "Time synced with internet."
 else
     echo -e "No internet connection. Using RTC time."
+	date
     # Просто убеждаемся, что служба запущена
     /etc/init.d/sysntpd restart 2>/dev/null
 fi
@@ -639,12 +640,16 @@ CURRENT_YEAR=$(date +%Y)
 # Если год выглядит адекватным (между 2025 и 2050)
 if [ "$CURRENT_YEAR" -ge 2025 ] && [ "$CURRENT_YEAR" -le 2050 ]; then
     DATE_STR=$(date +'%Y-%m-%d')
+	echo " Kernel Version: $KERNEL_VERSION" >> /etc/banner
+	echo " Build Variant: $CURRENT_VARIANT ($DATE_STR)" >> /etc/banner
 else
     # Если RTC сбойнул и интернета нет
     DATE_STR=""
+	echo " Kernel Version: $KERNEL_VERSION" >> /etc/banner
+	echo " Build Variant: $CURRENT_VARIANT" >> /etc/banner
 fi
-echo " Kernel Version: $KERNEL_VERSION" >> /etc/banner
-echo " Build Variant: $CURRENT_VARIANT ($DATE_STR)" >> /etc/banner
+
+
 
 echo -e "Первоначальная настройка завершена успешно."
 
