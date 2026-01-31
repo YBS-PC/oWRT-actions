@@ -638,20 +638,20 @@ sed -i 's/W I R E L E S S/N E T W O R K/g' /etc/banner
 sed -i "/Build Variant:/d" /etc/banner
 sed -i "/Kernel Version:/d" /etc/banner
 # Формируем строку даты
-CURRENT_YEAR=$(date +%Y)
-# Если год выглядит адекватным (между 2025 и 2050)
-if [ "$CURRENT_YEAR" -ge 2025 ] && [ "$CURRENT_YEAR" -le 2050 ]; then
-    DATE_STR=$(date +'%Y-%m-%d')
-	echo " Kernel Version: $KERNEL_VERSION" >> /etc/banner
-	echo " Build Variant: $CURRENT_VARIANT ($DATE_STR)" >> /etc/banner
+if [ -f "/etc/build_date" ]; then
+    DATE_STR=$(cat /etc/build_date)
 else
-    # Если RTC сбойнул и интернета нет
-    DATE_STR=""
-	echo " Kernel Version: $KERNEL_VERSION" >> /etc/banner
-	echo " Build Variant: $CURRENT_VARIANT" >> /etc/banner
+    CURRENT_YEAR=$(date +%Y)
+    # Если год выглядит адекватным (между 2025 и 2050)
+    if [ "$CURRENT_YEAR" -ge 2025 ] && [ "$CURRENT_YEAR" -le 2050 ]; then
+        DATE_STR=$(date +'%Y-%m-%d')
+    else
+        DATE_STR="***"
+    fi
 fi
 
-
+echo " Kernel Version: $KERNEL_VERSION" >> /etc/banner
+echo " Build Variant: $CURRENT_VARIANT ($DATE_STR)" >> /etc/banner
 
 echo -e "Первоначальная настройка завершена успешно."
 
