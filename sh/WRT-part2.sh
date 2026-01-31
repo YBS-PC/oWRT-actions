@@ -11,85 +11,85 @@ echo ">>>>>>>>> WRT-part2 start. Использование: после feeds up
 # Обновление youtubeUnblock (Выполняется ВСЕГДА)
 # --------------------------------------------------------------------------
 
-#----#echo "=================================================="
-#----#echo "Блок обновления youtubeUnblock до latest main..."
-#----#echo "=================================================="
+echo "=================================================="
+echo "Блок обновления youtubeUnblock до latest main..."
+echo "=================================================="
 
 # Получаем последний коммит из main
-#----#echo "Получение последнего коммита из GitHub..."
-#----#LATEST_COMMIT=$(curl -sL "https://api.github.com/repos/Waujito/youtubeUnblock/commits/main" | grep -m 1 '"sha"' | sed 's/.*"sha": "\([^"]*\)".*/\1/')
+echo "Получение последнего коммита из GitHub..."
+LATEST_COMMIT_YTB=$(curl -sL "https://api.github.com/repos/Waujito/youtubeUnblock/commits/main" | grep -m 1 '"sha"' | sed 's/.*"sha": "\([^"]*\)".*/\1/')
 
 # Fallback на git ls-remote если API не сработал
-#----#if [ -z "$LATEST_COMMIT" ]; then
-#----#    echo "GitHub API недоступен, использую git ls-remote..."
-#----#    LATEST_COMMIT=$(git ls-remote https://github.com/Waujito/youtubeUnblock.git main | cut -f1)
-#----#fi
+if [ -z "$LATEST_COMMIT_YTB" ]; then
+    echo "GitHub API недоступен, использую git ls-remote..."
+    LATEST_COMMIT_YTB=$(git ls-remote https://github.com/Waujito/youtubeUnblock.git main | cut -f1)
+fi
 
-#----#if [ -z "$LATEST_COMMIT" ]; then
-#----#    echo "✗ Ошибка: не удалось получить последний коммит"
-#----#    exit 1
-#----#fi
+if [ -z "$LATEST_COMMIT_YTB" ]; then
+    echo "✗ Ошибка: не удалось получить последний коммит"
+    exit 1
+fi
 
-#----#echo "✓ Последний коммит: $LATEST_COMMIT"
+echo "✓ Последний коммит: $LATEST_COMMIT_YTB"
 
 # Находим Makefile
-#----#PKG_FILE=""
-#----#for path in \
-#----#    "feeds/youtubeUnblock/youtubeUnblock/Makefile" \
-#----#    "package/feeds/youtubeUnblock/youtubeUnblock/Makefile" \
-#----#    "feeds/packages/net/youtubeUnblock/Makefile"; do
-#----#    if [ -f "$path" ]; then
-#----#        PKG_FILE="$path"
-#----#        break
-#----#    fi
-#----#done
+PKG_FILE_YTB=""
+for path in \
+    "feeds/youtubeUnblock/youtubeUnblock/Makefile" \
+    "package/feeds/youtubeUnblock/youtubeUnblock/Makefile" \
+    "feeds/packages/net/youtubeUnblock/Makefile"; do
+    if [ -f "$path" ]; then
+        PKG_FILE_YTB="$path"
+        break
+    fi
+done
 
-#----#if [ -z "$PKG_FILE" ]; then
-#----#    echo "✗ Ошибка: Makefile youtubeUnblock не найден"
-#----#    echo "  Проверьте что feeds обновлены (./scripts/feeds update -a)"
-#----#    exit 1
-#----#fi
+if [ -z "$PKG_FILE_YTB" ]; then
+    echo "✗ Ошибка: Makefile youtubeUnblock не найден"
+    echo "  Проверьте что feeds обновлены (./scripts/feeds update -a)"
+    exit 1
+fi
 
-#----#echo "✓ Найден Makefile: $PKG_FILE"
+echo "✓ Найден Makefile: $PKG_FILE_YTB"
 
 # Получаем текущий PKG_REV
-#----#CURRENT_REV=$(grep "^PKG_REV" "$PKG_FILE" | cut -d'=' -f2 | tr -d ' :' | head -1)
+CURRENT_REV_YTB=$(grep "^PKG_REV" "$PKG_FILE_YTB" | cut -d'=' -f2 | tr -d ' :' | head -1)
 
 # === ИСПРАВЛЕННАЯ ЛОГИКА ===
-#----#if [ "$CURRENT_REV" = "$LATEST_COMMIT" ]; then
-#----#    echo "✓ PKG_REV уже актуален, обновление youtubeUnblock не требуется."
-#----#else
-#----#    echo "Обновление PKG_REV..."
-#----#    echo "  Было: ${CURRENT_REV:0:12}..."
-#----#    echo "  Стало: ${LATEST_COMMIT:0:12}..."
+if [ "$CURRENT_REV_YTB" = "$LATEST_COMMIT_YTB" ]; then
+    echo "✓ PKG_REV уже актуален, обновление youtubeUnblock не требуется."
+else
+    echo "Обновление PKG_REV..."
+    echo "  Было: ${CURRENT_REV_YTB:0:12}..."
+    echo "  Стало: ${LATEST_COMMIT_YTB:0:12}..."
 
     # Обновляем PKG_REV
-#----#    sed -i "s|^PKG_REV:=.*|PKG_REV:=$LATEST_COMMIT|" "$PKG_FILE"
+    sed -i "s|^PKG_REV:=.*|PKG_REV:=$LATEST_COMMIT_YTB|" "$PKG_FILE_YTB"
 
     # Увеличиваем PKG_RELEASE
-#----#    CURRENT_RELEASE=$(grep "^PKG_RELEASE" "$PKG_FILE" | cut -d'=' -f2 | tr -d ' :')
-#----#    if [ ! -z "$CURRENT_RELEASE" ]; then
-#----#        NEW_RELEASE=$((CURRENT_RELEASE + 1))
-#----#        sed -i "s|^PKG_RELEASE:=.*|PKG_RELEASE:=$NEW_RELEASE|" "$PKG_FILE"
-#----#        echo "✓ PKG_RELEASE: $CURRENT_RELEASE → $NEW_RELEASE"
-#----#    fi
+    CURRENT_RELEASE=$(grep "^PKG_RELEASE" "$PKG_FILE_YTB" | cut -d'=' -f2 | tr -d ' :')
+    if [ ! -z "$CURRENT_RELEASE" ]; then
+        NEW_RELEASE=$((CURRENT_RELEASE + 1))
+        sed -i "s|^PKG_RELEASE:=.*|PKG_RELEASE:=$NEW_RELEASE|" "$PKG_FILE_YTB"
+        echo "✓ PKG_RELEASE: $CURRENT_RELEASE → $NEW_RELEASE"
+    fi
 
     # Удаляем старые хеши и добавляем skip
-#----#    sed -i '/^PKG_HASH:=/d' "$PKG_FILE"
-#----#    sed -i '/^PKG_MIRROR_HASH:=/d' "$PKG_FILE"
-#----#    sed -i '/PKG_SOURCE_VERSION:=/a PKG_MIRROR_HASH:=skip' "$PKG_FILE"
+    sed -i '/^PKG_HASH:=/d' "$PKG_FILE_YTB"
+    sed -i '/^PKG_MIRROR_HASH:=/d' "$PKG_FILE_YTB"
+    sed -i '/PKG_SOURCE_VERSION:=/a PKG_MIRROR_HASH:=skip' "$PKG_FILE_YTB"
 
     # Проверяем результат
-#----#    UPDATED_REV=$(grep "^PKG_REV" "$PKG_FILE" | cut -d'=' -f2 | tr -d ' :')
-#----#    if [ "$UPDATED_REV" = "$LATEST_COMMIT" ]; then
-#----#        echo "=================================================="
-#----#        echo "✓ Обновление youtubeUnblock успешно завершено!"
-#----#        echo "=================================================="
-#----#    else
-#----#        echo "✗ Ошибка при обновлении youtubeUnblock"
-#----#        exit 1
-#----#    fi
-#----#fi
+    UPDATED_REV=$(grep "^PKG_REV" "$PKG_FILE_YTB" | cut -d'=' -f2 | tr -d ' :')
+    if [ "$UPDATED_REV" = "$LATEST_COMMIT_YTB" ]; then
+        echo "=================================================="
+        echo "✓ Обновление youtubeUnblock успешно завершено!"
+        echo "=================================================="
+    else
+        echo "✗ Ошибка при обновлении youtubeUnblock"
+        exit 1
+    fi
+fi
 
 # --------------------------------------------------------------------------
 # Фиксы Python (ТОЛЬКО ДЛЯ ВЕТКИ MASTER или MAIN)
