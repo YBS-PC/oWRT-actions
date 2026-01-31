@@ -8,86 +8,81 @@ echo ">>>>>>>>> WRT-part2 start. Использование: после feeds up
 # =========================================================
 
 # --------------------------------------------------------------------------
-# Обновление youtubeUnblock (Выполняется ВСЕГДА)
+# Обновление youtubeUnblock
 # --------------------------------------------------------------------------
 
-echo "=================================================="
-echo "Блок обновления youtubeUnblock до latest main..."
-echo "=================================================="
-
-# Получаем последний коммит из main
-echo "Получение последнего коммита из GitHub..."
-LATEST_COMMIT_YTB=$(curl -sL "https://api.github.com/repos/Waujito/youtubeUnblock/commits/main" | grep -m 1 '"sha"' | sed 's/.*"sha": "\([^"]*\)".*/\1/')
-
-# Fallback на git ls-remote если API не сработал
-if [ -z "$LATEST_COMMIT_YTB" ]; then
-    echo "GitHub API недоступен, использую git ls-remote..."
-    LATEST_COMMIT_YTB=$(git ls-remote https://github.com/Waujito/youtubeUnblock.git main | cut -f1)
-fi
-
-if [ -z "$LATEST_COMMIT_YTB" ]; then
-    echo "✗ Ошибка: не удалось получить последний коммит"
-    exit 1
-fi
-
-echo "✓ Последний коммит: $LATEST_COMMIT_YTB"
-
-# Находим Makefile
-PKG_FILE_YTB=""
-for path in \
-    "feeds/youtubeUnblock/youtubeUnblock/Makefile" \
-    "package/feeds/youtubeUnblock/youtubeUnblock/Makefile" \
-    "feeds/packages/net/youtubeUnblock/Makefile"; do
-    if [ -f "$path" ]; then
-        PKG_FILE_YTB="$path"
-        break
-    fi
-done
-
-if [ -z "$PKG_FILE_YTB" ]; then
-    echo "✗ Ошибка: Makefile youtubeUnblock не найден"
-    echo "  Проверьте что feeds обновлены (./scripts/feeds update -a)"
-    exit 1
-fi
-
-echo "✓ Найден Makefile: $PKG_FILE_YTB"
-
-# Получаем текущий PKG_REV
-CURRENT_REV_YTB=$(grep "^PKG_REV" "$PKG_FILE_YTB" | cut -d'=' -f2 | tr -d ' :' | head -1)
-
-# === ИСПРАВЛЕННАЯ ЛОГИКА ===
-if [ "$CURRENT_REV_YTB" = "$LATEST_COMMIT_YTB" ]; then
-    echo "✓ PKG_REV уже актуален, обновление youtubeUnblock не требуется."
+# Проверка: Нужно ли нам это обновление?
+# Если вариант "чистый", то youtubeUnblock будет удален в part3, нет смысла его обновлять.
+if [[ "$VARIANT" == "clear" || "$VARIANT" == "crystal_clear" ]]; then
+    echo ">>> Variant is '$VARIANT'. Skipping youtubeUnblock update."
 else
-    echo "Обновление PKG_REV..."
-    echo "  Было: ${CURRENT_REV_YTB:0:12}..."
-    echo "  Стало: ${LATEST_COMMIT_YTB:0:12}..."
+    echo "=================================================="
+    echo "Блок обновления youtubeUnblock до latest main..."
+    echo "=================================================="
 
-    # Обновляем PKG_REV
-    sed -i "s|^PKG_REV:=.*|PKG_REV:=$LATEST_COMMIT_YTB|" "$PKG_FILE_YTB"
+    # Поиск Makefile
+    PKG_FILE_YTB=""
+    for path in \
+        "feeds/youtubeUnblock/youtubeUnblock/Makefile" \
+        "package/feeds/youtubeUnblock/youtubeUnblock/Makefile" \
+        "feeds/packages/net/youtubeUnblock/Makefile"; do
+        if [ -f "$path" ]; then
+            PKG_FILE_YTB="$path"
+            break
+        fi
+    done
 
-    # Увеличиваем PKG_RELEASE
-    CURRENT_RELEASE=$(grep "^PKG_RELEASE" "$PKG_FILE_YTB" | cut -d'=' -f2 | tr -d ' :')
-    if [ ! -z "$CURRENT_RELEASE" ]; then
-        NEW_RELEASE=$((CURRENT_RELEASE + 1))
-        sed -i "s|^PKG_RELEASE:=.*|PKG_RELEASE:=$NEW_RELEASE|" "$PKG_FILE_YTB"
-        echo "✓ PKG_RELEASE: $CURRENT_RELEASE → $NEW_RELEASE"
-    fi
-
-    # Удаляем старые хеши и добавляем skip
-    sed -i '/^PKG_HASH:=/d' "$PKG_FILE_YTB"
-    sed -i '/^PKG_MIRROR_HASH:=/d' "$PKG_FILE_YTB"
-    sed -i '/PKG_SOURCE_VERSION:=/a PKG_MIRROR_HASH:=skip' "$PKG_FILE_YTB"
-
-    # Проверяем результат
-    UPDATED_REV=$(grep "^PKG_REV" "$PKG_FILE_YTB" | cut -d'=' -f2 | tr -d ' :')
-    if [ "$UPDATED_REV" = "$LATEST_COMMIT_YTB" ]; then
-        echo "=================================================="
-        echo "✓ Обновление youtubeUnblock успешно завершено!"
-        echo "=================================================="
+    # Если файл найден — обновляем, если нет — просто пропускаем (БЕЗ ОШИБКИ)
+    if [ -z "$PKG_FILE_YTB" ]; then
+        echo "⚠ ВНИМАНИЕ: Makefile youtubeUnblock не найден."
+        echo "  Возможно, фид не был добавлен. Пропускаем обновление."
     else
-        echo "✗ Ошибка при обновлении youtubeUnblock"
-        exit 1
+        echo "✓ Найден Makefile: $PKG_FILE_YTB"
+
+        # Получаем последний коммит из main
+        echo "Получение последнего коммита из GitHub..."
+        LATEST_COMMIT_YTB=$(curl -sL "https://api.github.com/repos/Waujito/youtubeUnblock/commits/main" | grep -m 1 '"sha"' | sed 's/.*"sha": "\([^"]*\)".*/\1/')
+
+        # Fallback
+        if [ -z "$LATEST_COMMIT_YTB" ]; then
+            echo "GitHub API недоступен, использую git ls-remote..."
+            LATEST_COMMIT_YTB=$(git ls-remote https://github.com/Waujito/youtubeUnblock.git main | cut -f1)
+        fi
+
+        if [ -z "$LATEST_COMMIT_YTB" ]; then
+            echo "✗ Ошибка: не удалось получить хеш коммита. Пропуск."
+        else
+            echo "✓ Последний коммит: $LATEST_COMMIT_YTB"
+            
+            # Получаем текущий PKG_REV
+            CURRENT_REV_YTB=$(grep "^PKG_REV" "$PKG_FILE_YTB" | cut -d'=' -f2 | tr -d ' :' | head -1)
+
+            if [ "$CURRENT_REV_YTB" = "$LATEST_COMMIT_YTB" ]; then
+                echo "✓ PKG_REV уже актуален."
+            else
+                echo "Обновление PKG_REV..."
+                echo "  Было: ${CURRENT_REV_YTB:0:12}..."
+                echo "  Стало: ${LATEST_COMMIT_YTB:0:12}..."
+
+                # Обновляем PKG_REV
+                sed -i "s|^PKG_REV:=.*|PKG_REV:=$LATEST_COMMIT_YTB|" "$PKG_FILE_YTB"
+
+                # Увеличиваем PKG_RELEASE
+                CURRENT_RELEASE=$(grep "^PKG_RELEASE" "$PKG_FILE_YTB" | cut -d'=' -f2 | tr -d ' :')
+                if [ ! -z "$CURRENT_RELEASE" ]; then
+                    NEW_RELEASE=$((CURRENT_RELEASE + 1))
+                    sed -i "s|^PKG_RELEASE:=.*|PKG_RELEASE:=$NEW_RELEASE|" "$PKG_FILE_YTB"
+                    echo "✓ PKG_RELEASE: $CURRENT_RELEASE → $NEW_RELEASE"
+                fi
+
+                # Хак хешей
+                sed -i '/^PKG_HASH:=/d' "$PKG_FILE_YTB"
+                sed -i '/^PKG_MIRROR_HASH:=/d' "$PKG_FILE_YTB"
+                sed -i '/PKG_SOURCE_VERSION:=/a PKG_MIRROR_HASH:=skip' "$PKG_FILE_YTB"
+
+                echo "✓ Обновление успешно завершено!"
+            fi
+        fi
     fi
 fi
 
