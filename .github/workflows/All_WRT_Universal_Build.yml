@@ -396,6 +396,9 @@ jobs:
         export VARIANT="${{ inputs.variant }}"
         export CURRENT_MATRIX_TARGET="${{ matrix.target }}"
         echo ">>> Выбран: Variant=$VARIANT, Target=$CURRENT_MATRIX_TARGET"
+
+        mkdir -p files/etc
+        date +'%Y-%m-%d' > files/etc/build_date
         
         # 1. Запуск Part 1 (Добавление репозиториев)
         chmod +x $GITHUB_WORKSPACE/$DIY_P1_SH
