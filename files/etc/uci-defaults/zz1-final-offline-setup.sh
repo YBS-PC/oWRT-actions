@@ -588,7 +588,9 @@ else
 fi
 
 #Отключаем старый скрипт управления диодами phy-leds
+if [ -x "/etc/init.d/phy-leds" ]; then
 /etc/init.d/phy-leds disable
+fi
 
 cat /tmp/sysinfo/model && . /etc/openwrt_release
 
