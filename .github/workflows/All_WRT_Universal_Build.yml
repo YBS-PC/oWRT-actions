@@ -168,6 +168,7 @@ jobs:
       run: |
         # AdGuardHome
         curl -L -o AGH.tar.gz "https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_arm64.tar.gz"
+        echo "AdGuardHome downloaded from https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_arm64.tar.gz"
         tar -xzf AGH.tar.gz
         mkdir -p ./files/usr/bin
         cp ./AdGuardHome/AdGuardHome ./files/usr/bin/ && chmod 755 ./files/usr/bin/AdGuardHome
@@ -176,6 +177,7 @@ jobs:
         # Sing-box
         SB_URL=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest | grep "browser_download_url.*linux-arm64.tar.gz" | cut -d '"' -f 4 | head -n 1)
         curl -L -o sb.tar.gz "$SB_URL"
+        echo "sing-box downloaded from $SB_URL"
         tar -xzf sb.tar.gz
         cp sing-box-*/sing-box ./files/usr/bin/ && chmod 755 ./files/usr/bin/sing-box
         rm -rf sb.tar.gz sing-box-*
@@ -183,7 +185,6 @@ jobs:
         echo "=========================================="
         echo "       [BINARIES SUMMARY]                 "
         echo "=========================================="
-        echo "Sing-Box URL: $SB_URL"
         echo "Files in destination:"
         ls -lh ./files/usr/bin/
         echo "=========================================="
