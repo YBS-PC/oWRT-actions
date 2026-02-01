@@ -164,6 +164,7 @@ fi
 # Списки "Прокси-мусора" (для варианта clear и crystal_clear)
 
 MINIMAL_BLOAT=(
+"luci-app-sqm"
 "sqm"
 "sqm-scripts"
 )
@@ -181,21 +182,6 @@ CRYSTAL_CLEAR_BLOAT=(
 "sing-box"
 "youtubeUnblock"
 "adguardhome"
-"dnsmasq-full"
-"dnsmasq"
-"firewall"
-"firewall4"
-"iptables-nft"
-"kmod-nf-conntrack"
-"kmod-nf-nat"
-"kmod-nft-core"
-"kmod-ppp"
-"luci-app-firewall"
-"nftables"
-"odhcpd-ipv6only"
-"odhcpd"
-"ppp-mod-pppoe"
-"ppp"
 "luci-app-sqm"
 "sqm-scripts"
 "sqm"
