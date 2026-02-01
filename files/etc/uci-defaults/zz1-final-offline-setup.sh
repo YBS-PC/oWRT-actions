@@ -600,39 +600,31 @@ fi
 
 cat /tmp/sysinfo/model && . /etc/openwrt_release && cat /etc/build_variant
 
-if [ "$CURRENT_VARIANT" == "crystal_clear" ]; then
-    echo -e ">>> АКТИВАЦИЯ РЕЖИМА КОММУТАТОРА (SWITCH) <<<"
-    
-    # Определяем порты
-    ALL_PORTS=$(ls /sys/class/net/ | grep -vE "^lo$|^sit|^tun|^br-" | tr '\n' ' ')
-    echo "Ports detected: $ALL_PORTS"
-    
-    # Удаляем WAN
-    uci delete network.wan 2>/dev/null
-    uci delete network.wan6 2>/dev/null
-    
-    # Настраиваем LAN мост на ВСЕ порты + DHCP клиент
-    uci set network.lan.device='br-lan'
-    uci set network.lan.type='bridge'
-    uci set network.lan.ports="$ALL_PORTS"
-    uci set network.lan.proto='dhcp'
-    
-    # Удаляем статику
-    uci delete network.lan.ipaddr 2>/dev/null
-    uci delete network.lan.netmask 2>/dev/null
-    
-    # Удаляем DHCP сервер (мы же клиент)
-    uci delete dhcp.lan 2>/dev/null
-    uci delete dhcp.wan 2>/dev/null
-    
-    uci commit network
-    uci commit dhcp
-    
-    # Перезапуск сети
-    /etc/init.d/network restart
-    
-    echo -e "Роутер переведен в режим управляемого свитча. IP будет получен по DHCP."
-fi
+###-###if [ "$CURRENT_VARIANT" == "crystal_clear" ]; then
+###-###    echo -e ">>> АКТИВАЦИЯ РЕЖИМА КОММУТАТОРА (SWITCH) <<<"
+###-###    # Определяем порты
+###-###    ALL_PORTS=$(ls /sys/class/net/ | grep -vE "^lo$|^sit|^tun|^br-" | tr '\n' ' ')
+###-###    echo "Ports detected: $ALL_PORTS"
+###-###    # Удаляем WAN
+###-###    uci delete network.wan 2>/dev/null
+###-###    uci delete network.wan6 2>/dev/null
+###-###    # Настраиваем LAN мост на ВСЕ порты + DHCP клиент
+###-###    uci set network.lan.device='br-lan'
+###-###    uci set network.lan.type='bridge'
+###-###    uci set network.lan.ports="$ALL_PORTS"
+###-###    uci set network.lan.proto='dhcp'
+###-###    # Удаляем статику
+###-###    uci delete network.lan.ipaddr 2>/dev/null
+###-###    uci delete network.lan.netmask 2>/dev/null
+###-###    # Удаляем DHCP сервер (мы же клиент)
+###-###    uci delete dhcp.lan 2>/dev/null
+###-###    uci delete dhcp.wan 2>/dev/null
+###-###    uci commit network
+###-###    uci commit dhcp
+###-###    # Перезапуск сети
+###-###    /etc/init.d/network restart
+###-###    echo -e "Роутер переведен в режим управляемого свитча. IP будет получен по DHCP."
+###-###fi
 
 # =========================================================
 # ФИНАЛЬНЫЙ БЛОК: СИНХРОНИЗАЦИЯ ВРЕМЕНИ И БАННЕР
