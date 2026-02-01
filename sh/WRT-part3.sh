@@ -169,7 +169,6 @@ MINIMAL_BLOAT=(
 )
 
 CLEAR_BLOAT=(
-"chinadns-ng"
 "homeproxy"
 "sing-box"
 "youtubeUnblock"
@@ -177,9 +176,29 @@ CLEAR_BLOAT=(
 )
 
 CRYSTAL_CLEAR_BLOAT=(
-"${CLEAR_BLOAT[@]}"
-"sqm"
+# "${CLEAR_BLOAT[@]}"
+"homeproxy"
+"sing-box"
+"youtubeUnblock"
+"adguardhome"
+"dnsmasq-full"
+"dnsmasq"
+"firewall"
+"firewall4"
+"iptables-nft"
+"kmod-nf-conntrack"
+"kmod-nf-nat"
+"kmod-nft-core"
+"kmod-ppp"
+"luci-app-firewall"
+"nftables"
+"odhcpd-ipv6only"
+"odhcpd"
+"ppp-mod-pppoe"
+"ppp"
+"luci-app-sqm"
 "sqm-scripts"
+"sqm"
 )
 
 # --- ЛОГИКА ДЛЯ ВАРИАНТА 'minimal' ---
@@ -221,7 +240,7 @@ if [ "$VARIANT" == "crystal_clear" ]; then
     rm -f "./files/usr/bin/AdGuardHome"
     echo "   > Removed AdGuardHome and Sing-box binaries from files/"
     # Удаляем основной скрипт настройки
-    rm -f "./files/etc/uci-defaults/zz1-final-offline-setup.sh"
+    # rm -f "./files/etc/uci-defaults/zz1-final-offline-setup.sh"
     # Вычищаем пакеты из конфига
     for PKG in "${CRYSTAL_CLEAR_BLOAT[@]}"; do
         sed -i "/${PKG}/Id" ./.config
