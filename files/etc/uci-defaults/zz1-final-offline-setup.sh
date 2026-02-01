@@ -169,8 +169,8 @@ EOF
 #################### Установка всех пакетов из /tmp/ ####################
 echo -e "Установка пакетов из локальной директории..."
 
-echo -e "Установка sing-box..."
 if [ -f /root/apps/sing-box.tar.gz ]; then
+	echo -e "Установка sing-box..."
 	/etc/init.d/sing-box stop >/dev/null 2>&1
 	tar -xzf /root/apps/sing-box.tar.gz -C /tmp/
 	rm /root/apps/sing-box.tar.gz
@@ -181,8 +181,8 @@ else
 	echo -e "Файл sing-box не найден в /root/apps/. Пропускаем установку."
 fi
 
-echo -e "Установка speedtest..."
 if [ -f /root/apps/speedtest.tar.gz ]; then
+	echo -e "Установка speedtest..."
 	tar -xzf /root/apps/speedtest.tar.gz -C /tmp/
 	rm /root/apps/speedtest.tar.gz
 	cp /tmp/speedtest /usr/bin/speedtest
@@ -196,17 +196,17 @@ fi
 # Проверяем, установлен ли homeproxy, прежде чем пытаться его настраивать
 if [ -f "/etc/init.d/homeproxy" ]; then
 
-echo -e "Настройка luci-app-homeproxy..."
-echo -e "Отключаем dns_hijacked в luci-app-homeproxy"
-sed -i "s/const dns_hijacked = uci\.get('dhcp', '@dnsmasq\[0\]', 'dns_redirect') || '0'/const dns_hijacked = '1'/" /etc/homeproxy/scripts/firewall_post.ut
+	echo -e "Настройка luci-app-homeproxy..."
+	echo -e "Отключаем dns_hijacked в luci-app-homeproxy"
+	sed -i "s/const dns_hijacked = uci\.get('dhcp', '@dnsmasq\[0\]', 'dns_redirect') || '0'/const dns_hijacked = '1'/" /etc/homeproxy/scripts/firewall_post.ut
 
-/etc/init.d/homeproxy disable
+	/etc/init.d/homeproxy disable
 
-# Проблема: uci-defaults для homeproxy создает  по умолчанию в конфиге firewall ссылки на файлы, которые homeproxy создает только в режимах TUN или Server.
-# 1. Создаем скрипт-помощник
-# Используем кавычки вокруг EOF, чтобы $ не интерпретировался
-HELPER_SCRIPT_PATH="/etc/homeproxy/scripts/update_firewall_rules.sh"
-cat << 'EOF' > "$HELPER_SCRIPT_PATH"
+	# Проблема: uci-defaults для homeproxy создает  по умолчанию в конфиге firewall ссылки на файлы, которые homeproxy создает только в режимах TUN или Server.
+	# 1. Создаем скрипт-помощник
+	# Используем кавычки вокруг EOF, чтобы $ не интерпретировался
+	HELPER_SCRIPT_PATH="/etc/homeproxy/scripts/update_firewall_rules.sh"
+	cat << 'EOF' > "$HELPER_SCRIPT_PATH"
 #!/bin/sh
 PROXY_MODE=$(uci -q get homeproxy.config.proxy_mode || echo "redirect_tproxy")
 SERVER_ENABLED=$(uci -q get homeproxy.server.enabled || echo "0")
@@ -232,34 +232,34 @@ E_O_F
 fi
 uci -q commit firewall
 EOF
-chmod +x "$HELPER_SCRIPT_PATH"
-echo -e "Создан скрипт-помощник для homeproxy: $HELPER_SCRIPT_PATH"
-# 2. Модифицируем init-скрипт homeproxy, чтобы он вызывал скрипт помощник
-HOMEPROXY_INIT_SCRIPT="/etc/init.d/homeproxy"
+	chmod +x "$HELPER_SCRIPT_PATH"
+	echo -e "Создан скрипт-помощник для homeproxy: $HELPER_SCRIPT_PATH"
+	# 2. Модифицируем init-скрипт homeproxy, чтобы он вызывал скрипт помощник
+	HOMEPROXY_INIT_SCRIPT="/etc/init.d/homeproxy"
 
-HELPER_CALL_COMMAND="${TAB_CHAR}. ${HELPER_SCRIPT_PATH}"
-if [ -f "$HOMEPROXY_INIT_SCRIPT" ]; then
-	# Проверяем, не была ли команда добавлена ранее
-	if ! grep -q "$HELPER_SCRIPT_PATH" "$HOMEPROXY_INIT_SCRIPT"; then
-		# Вставляем вызов нашего скрипта в начало start_service() и stop_service()
-		sed -i "/start_service() {/a \\$HELPER_CALL_COMMAND" "$HOMEPROXY_INIT_SCRIPT"
-		sed -i "/stop_service() {/a \\$HELPER_CALL_COMMAND" "$HOMEPROXY_INIT_SCRIPT"
-		echo -e "Init-скрипт homeproxy модифицирован для вызова помощника."
+	HELPER_CALL_COMMAND="${TAB_CHAR}. ${HELPER_SCRIPT_PATH}"
+	if [ -f "$HOMEPROXY_INIT_SCRIPT" ]; then
+		# Проверяем, не была ли команда добавлена ранее
+		if ! grep -q "$HELPER_SCRIPT_PATH" "$HOMEPROXY_INIT_SCRIPT"; then
+			# Вставляем вызов нашего скрипта в начало start_service() и stop_service()
+			sed -i "/start_service() {/a \\$HELPER_CALL_COMMAND" "$HOMEPROXY_INIT_SCRIPT"
+			sed -i "/stop_service() {/a \\$HELPER_CALL_COMMAND" "$HOMEPROXY_INIT_SCRIPT"
+			echo -e "Init-скрипт homeproxy модифицирован для вызова помощника."
+		else
+			echo -e "Init-скрипт homeproxy уже был модифицирован."
+		fi
 	else
-		echo -e "Init-скрипт homeproxy уже был модифицирован."
+		echo -e "Скрипт $HOMEPROXY_INIT_SCRIPT не найден."
 	fi
-else
-	echo -e "Скрипт $HOMEPROXY_INIT_SCRIPT не найден."
-fi
-# 3. Первоначальный запуск помощника, чтобы исправить конфиг сразу
-. "$HELPER_SCRIPT_PATH"
+	# 3. Первоначальный запуск помощника, чтобы исправить конфиг сразу
+	. "$HELPER_SCRIPT_PATH"
 
-/etc/init.d/homeproxy enable
+	/etc/init.d/homeproxy enable
 
-echo -e "luci-app-homeproxy настроен."
+	echo -e "luci-app-homeproxy настроен."
 
-SB_version=$(/usr/bin/sing-box version 2>/dev/null | grep -oP -m 1 'v?\K[\d.]+')
-echo -e "\e[37mУстановленная версия sing-box: $SB_version\e[0m"
+	SB_version=$(/usr/bin/sing-box version 2>/dev/null | grep -oP -m 1 'v?\K[\d.]+')
+	echo -e "\e[37mУстановленная версия sing-box: $SB_version\e[0m"
 
 else
     echo -e "Пакет homeproxy не найден. Настройка пропущена."
@@ -366,10 +366,12 @@ else
 fi
 
 #################### Настройка internet-detector ####################
-echo -e "Настройка internet-detector..."
-/etc/init.d/internet-detector disable
-sed -i 's/START=[0-9][0-9]/START=99/' /etc/init.d/internet-detector
-echo -e "Служба internet-detector настроена (но отключена)."
+if [ -f "/etc/init.d/internet-detector" ]; then
+	echo -e "Настройка internet-detector..."
+	/etc/init.d/internet-detector disable
+	sed -i 's/START=[0-9][0-9]/START=99/' /etc/init.d/internet-detector
+	echo -e "Служба internet-detector настроена (но отключена)."
+fi
 
 #################### Обновить имя хоста ####################
 echo -e "Обновить имя хоста..."
@@ -589,10 +591,48 @@ fi
 
 #Отключаем старый скрипт управления диодами phy-leds
 if [ -x "/etc/init.d/phy-leds" ]; then
-/etc/init.d/phy-leds disable
+	/etc/init.d/phy-leds disable
 fi
 
-cat /tmp/sysinfo/model && . /etc/openwrt_release
+# =========================================================
+# СПЕЦИАЛЬНАЯ НАСТРОЙКА ДЛЯ РЕЖИМА СВИТЧА (CRYSTAL_CLEAR)
+# =========================================================
+
+cat /tmp/sysinfo/model && . /etc/openwrt_release && cat /etc/build_variant
+
+if [ "$CURRENT_VARIANT" == "crystal_clear" ]; then
+    echo -e ">>> АКТИВАЦИЯ РЕЖИМА КОММУТАТОРА (SWITCH) <<<"
+    
+    # Определяем порты
+    ALL_PORTS=$(ls /sys/class/net/ | grep -vE "^lo$|^sit|^tun|^br-" | tr '\n' ' ')
+    echo "Ports detected: $ALL_PORTS"
+    
+    # Удаляем WAN
+    uci delete network.wan 2>/dev/null
+    uci delete network.wan6 2>/dev/null
+    
+    # Настраиваем LAN мост на ВСЕ порты + DHCP клиент
+    uci set network.lan.device='br-lan'
+    uci set network.lan.type='bridge'
+    uci set network.lan.ports="$ALL_PORTS"
+    uci set network.lan.proto='dhcp'
+    
+    # Удаляем статику
+    uci delete network.lan.ipaddr 2>/dev/null
+    uci delete network.lan.netmask 2>/dev/null
+    
+    # Удаляем DHCP сервер (мы же клиент)
+    uci delete dhcp.lan 2>/dev/null
+    uci delete dhcp.wan 2>/dev/null
+    
+    uci commit network
+    uci commit dhcp
+    
+    # Перезапуск сети
+    /etc/init.d/network restart
+    
+    echo -e "Роутер переведен в режим управляемого свитча. IP будет получен по DHCP."
+fi
 
 # =========================================================
 # ФИНАЛЬНЫЙ БЛОК: СИНХРОНИЗАЦИЯ ВРЕМЕНИ И БАННЕР
