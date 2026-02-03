@@ -32,7 +32,6 @@ echo 'CONFIG_PACKAGE_kmod-qrtr-tun=y' >> ./.config
 echo 'CONFIG_PACKAGE_kmod-qrtr=y' >> ./.config
 echo 'CONFIG_PACKAGE_kmod-usb-dwc3-qcom=y' >> ./.config
 echo 'CONFIG_PACKAGE_kmod-usb-dwc3=y' >> ./.config
-echo 'CONFIG_PACKAGE_kmod-usb3=y' >> ./.config
 echo 'CONFIG_PACKAGE_libiwinfo=y' >> ./.config
 echo 'CONFIG_PACKAGE_losetup=y' >> ./.config
 echo 'CONFIG_PACKAGE_luci-app-fancontrol=y' >> ./.config
