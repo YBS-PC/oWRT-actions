@@ -12,7 +12,6 @@ echo 'CONFIG_PACKAGE_eip197-mini-firmware=y' >> ./.config
 echo 'CONFIG_PACKAGE_fitblk=y' >> ./.config
 echo 'CONFIG_PACKAGE_kmod-crypto-hw-safexcel=y' >> ./.config
 echo 'CONFIG_PACKAGE_kmod-mt7981-firmware=y' >> ./.config
-echo 'CONFIG_PACKAGE_kmod-usb3=y' >> ./.config
 echo 'CONFIG_PACKAGE_mt7981-wo-firmware=y' >> ./.config
 echo 'CONFIG_PACKAGE_kmod-mt76=m' >> ./.config
 EOF
