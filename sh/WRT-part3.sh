@@ -178,13 +178,189 @@ CLEAR_BLOAT=(
 
 CRYSTAL_CLEAR_BLOAT=(
 # "${CLEAR_BLOAT[@]}"
-"homeproxy"
+# СПИСОК ПАКЕТОВ НА УДАЛЕНИЕ для задачи "чистый L2 switch"
+## 1. VPN, PROXY, DNS ФИЛЬТРАЦИЯ
+"adguardhome"
 "sing-box"
 "youtubeUnblock"
-"adguardhome"
-"luci-app-sqm"
+"luci-app-homeproxy"
+"luci-app-youtubeUnblock"
+## 2. ВСЕ COREUTILS (заменяются busybox)
+"coreutils-base64"
+"coreutils-cat"
+"coreutils-chmod"
+"coreutils-chown"
+"coreutils-cp"
+"coreutils-cut"
+"coreutils-date"
+"coreutils-df"
+"coreutils-du"
+"coreutils-expand"
+"coreutils-head"
+"coreutils-ls"
+"coreutils-md5sum"
+"coreutils-mkdir"
+"coreutils-mv"
+"coreutils-nohup"
+"coreutils-numfmt"
+"coreutils-paste"
+"coreutils-rm"
+"coreutils-sha256sum"
+"coreutils-sleep"
+"coreutils-sort"
+"coreutils-stat"
+"coreutils-strings"
+"coreutils-tail"
+"coreutils-timeout"
+"coreutils-touch"
+"coreutils-tr"
+"coreutils-unexpand"
+"coreutils-uniq"
+"coreutils-wc"
+"coreutils"
+## 3. FINDUTILS (заменяются busybox)
+"findutils-find"
+"findutils-locate"
+"findutils-xargs"
+"findutils"
+## 4. АРХИВАТОРЫ (заменяются busybox)
+"bsdtar"
+"gzip"
+"xz-utils"
+"xz"
+"unzip"
+## 5. ФАЙЛОВЫЕ СИСТЕМЫ (если не используете USB накопители)
+"kmod-fs-exfat"
+"kmod-fs-ext4"
+"kmod-fs-f2fs"
+"kmod-fs-ntfs3"
+"kmod-fs-vfat"
+"kmod-nls-base"
+"kmod-nls-cp437"
+"kmod-nls-iso8859-1"
+"kmod-nls-utf8"
+## 6. УТИЛИТЫ РАЗМЕТКИ ДИСКОВ
+"blkid"
+"cfdisk"
+"fdisk"
+"gdisk"
+"lsblk"
+"parted"
+"libparted"
+## 7. USB STORAGE (если не используете USB накопители)
+"kmod-usb-storage"
+"kmod-usb-storage-extras"
+"kmod-usb-storage-uas"
+"kmod-scsi-core"
+## 8. USB NETWORK АДАПТЕРЫ
+"kmod-usb-net"
+"kmod-usb-net-asix"
+"kmod-usb-net-asix-ax88179"
+"kmod-usb-net-cdc-ether"
+"kmod-usb-net-rtl8150"
+"kmod-usb-net-rtl8152"
+"r8152-firmware"
+## 9. CRYPTO МОДУЛИ (для VPN, не нужны для L2 switch)
+"kmod-crypto-aead"
+"kmod-crypto-arc4"
+"kmod-crypto-authenc"
+"kmod-crypto-crc32"
+"kmod-crypto-ctr"
+"kmod-crypto-ecb"
+"kmod-crypto-gcm"
+"kmod-crypto-geniv"
+"kmod-crypto-gf128"
+"kmod-crypto-ghash"
+"kmod-crypto-hmac"
+"kmod-crypto-kpp"
+"kmod-crypto-manager"
+"kmod-crypto-null"
+"kmod-crypto-rng"
+"kmod-crypto-seqiv"
+"kmod-crypto-sha1"
+"kmod-crypto-sha256"
+"kmod-crypto-sha3"
+"kmod-crypto-sha512"
+"kmod-crypto-user"
+"kmod-cryptodev"
+"kmod-asn1-decoder"
+## 10. VPN/TUNNEL МОДУЛИ
+"kmod-tun"
+"kmod-mppe"
+"kmod-tls"
+## 11. QoS И TRAFFIC SHAPING
 "sqm-scripts"
-"sqm"
+"luci-app-sqm"
+"luci-i18n-sqm-ru"
+"kmod-sched-cake"
+"kmod-ifb"
+"tc-full"
+"kmod-sched-core"
+## 12. NAT HELPERS (не нужны без NAT)
+"kmod-nf-nathelper"
+"kmod-nf-nathelper-extra"
+## 13. IPSET (не нужен без firewall правил)
+"ipset"
+"libipset13"
+"kmod-ipt-ipset"
+## 14. ДОПОЛНИТЕЛЬНЫЕ IPTABLES/NFT МОДУЛИ
+"iptables-mod-ipopt"
+"kmod-ipt-ipopt"
+"kmod-nft-fullcone"
+"kmod-nft-queue"
+"kmod-nfnetlink-queue"
+## 15. MACVLAN
+"kmod-macvlan"
+## 16. SOCKET/TPROXY (не нужно для L2)
+"kmod-nf-socket"
+"kmod-nf-tproxy"
+"kmod-nft-socket"
+"kmod-nft-tproxy"
+## 17. ДОПОЛНИТЕЛЬНЫЕ LUCI ПРИЛОЖЕНИЯ
+"luci-app-internet-detector"
+"luci-i18n-internet-detector-ru"
+## 18. УТИЛИТЫ (избыточные или ненужные)
+"bind-dig"
+"dnslookup"
+"drill"
+"gawk"
+"internet-detector"
+"mtr-json"
+"procps-ng-watch"
+"resolveip"
+"shadow-groupadd"
+"shadow-useradd"
+"sysstat"
+## 19. PCI/USB УТИЛИТЫ (если не нужна диагностика)
+"pciids"
+"pciutils"
+"usbids"
+"usbutils"
+## 20. БИБЛИОТЕКИ (зависимости удалённых пакетов)
+"libarchive"
+"libbz2"
+"libelf1"
+"libevdev"
+"libexpat"
+"libfdisk1"
+"libgpiod"
+"liblzma"
+"libmagic"
+"libmount1"
+"libparted"
+"libpcap1"
+"libpci"
+"libtirpc"
+"libudev-zero"
+"libusb"
+## 21. LUA ДОПОЛНЕНИЯ (не нужны)
+"lua-bit32"
+"luaposix"
+## 22. OPENSSL УТИЛИТЫ (если не используете вручную)
+"openssl-util"
+## 23. UCODE МОДУЛИ (если не используете)
+"ucode-mod-digest"
+"ucode-mod-lua"
 )
 
 # --- ЛОГИКА ДЛЯ ВАРИАНТА 'minimal' ---
@@ -230,9 +406,9 @@ if [ "$VARIANT" == "crystal_clear" ]; then
     # Вычищаем пакеты из конфига
     for PKG in "${CRYSTAL_CLEAR_BLOAT[@]}"; do
         sed -i "/${PKG}/Id" ./.config
-        echo "# CONFIG_PACKAGE_luci-app-${PKG} is not set" >> ./.config
-        echo "# CONFIG_PACKAGE_luci-i18n-${PKG}-ru is not set" >> ./.config
-        echo "# CONFIG_PACKAGE_${PKG} is not set" >> ./.config
+        # echo "# CONFIG_PACKAGE_luci-app-${PKG} is not set" >> ./.config
+        # echo "# CONFIG_PACKAGE_luci-i18n-${PKG}-ru is not set" >> ./.config
+        # echo "# CONFIG_PACKAGE_${PKG} is not set" >> ./.config
     done
     sed -i '/CONFIG_PACKAGE_kmod-tcp-bbr=y/d' ./.config
     sed -i '/CONFIG_TCP_CONG_BBR=y/d' ./.config
