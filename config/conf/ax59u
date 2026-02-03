@@ -13,7 +13,6 @@ echo 'CONFIG_PACKAGE_fitblk=y' >> ./.config
 echo 'CONFIG_PACKAGE_kmod-crypto-hw-safexcel=y' >> ./.config
 echo 'CONFIG_PACKAGE_kmod-mt7915e=y' >> ./.config
 echo 'CONFIG_PACKAGE_kmod-mt7986-firmware=y' >> ./.config
-echo 'CONFIG_PACKAGE_kmod-usb3=y' >> ./.config
 echo 'CONFIG_PACKAGE_luci-app-wifischedule=y' >> ./.config
 echo 'CONFIG_PACKAGE_luci-i18n-wifischedule-ru=y' >> ./.config
 echo 'CONFIG_PACKAGE_mt7986-wo-firmware=y' >> ./.config
