@@ -251,7 +251,7 @@ echo ">>> [HomeProxy] Makefile patched to fix recursion dependency."
 
 # =========================================================
 # Настройка сети и часового пояса
-sed -i "s/192.168.1.1/192.168.2.1/g" ./package/base-files/files/bin/config_generate
+# sed -i "s/192.168.1.1/192.168.2.1/g" ./package/base-files/files/bin/config_generate
 sed -i "s#zonename='UTC'#zonename='Europe/Moscow'#g" ./package/base-files/files/bin/config_generate
 sed -i "s#timezone='GMT0'#timezone='MSK-3'#g" ./package/base-files/files/bin/config_generate
 
