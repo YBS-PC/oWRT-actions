@@ -11,15 +11,12 @@ echo ">>>>>>>>> WRT-part2 start. Использование: после feeds up
 # Обновление youtubeUnblock
 # --------------------------------------------------------------------------
 
-# Проверка: Нужно ли нам это обновление?
-# Если вариант "чистый", то youtubeUnblock будет удален в part3, нет смысла его обновлять.
 if [[ "$VARIANT" == "clear" || "$VARIANT" == "crystal_clear" ]]; then
     echo ">>> Variant is '$VARIANT'. Skipping youtubeUnblock update."
 else
     echo "=================================================="
     echo "Блок обновления youtubeUnblock до latest main..."
     echo "=================================================="
-
     # Поиск Makefile
     PKG_FILE_YTB=""
     for path in \
@@ -31,55 +28,57 @@ else
             break
         fi
     done
-
-    # Если файл найден — обновляем, если нет — просто пропускаем (БЕЗ ОШИБКИ)
     if [ -z "$PKG_FILE_YTB" ]; then
         echo "⚠ ВНИМАНИЕ: Makefile youtubeUnblock не найден."
         echo "  Возможно, фид не был добавлен. Пропускаем обновление."
     else
         echo "✓ Найден Makefile: $PKG_FILE_YTB"
-
-        # Получаем последний коммит из main
+        # Получаем последний коммит
         echo "Получение последнего коммита из GitHub..."
         LATEST_COMMIT_YTB=$(curl -sL "https://api.github.com/repos/Waujito/youtubeUnblock/commits/main" | grep -m 1 '"sha"' | sed 's/.*"sha": "\([^"]*\)".*/\1/')
-
-        # Fallback
+        # Fallback на git ls-remote
         if [ -z "$LATEST_COMMIT_YTB" ]; then
             echo "GitHub API недоступен, использую git ls-remote..."
             LATEST_COMMIT_YTB=$(git ls-remote https://github.com/Waujito/youtubeUnblock.git main | cut -f1)
         fi
-
         if [ -z "$LATEST_COMMIT_YTB" ]; then
             echo "✗ Ошибка: не удалось получить хеш коммита. Пропуск."
         else
             echo "✓ Последний коммит: $LATEST_COMMIT_YTB"
-            
-            # Получаем текущий PKG_REV
+            # Получаем текущий PKG_REV из файла
             CURRENT_REV_YTB=$(grep "^PKG_REV" "$PKG_FILE_YTB" | cut -d'=' -f2 | tr -d ' :' | head -1)
-
             if [ "$CURRENT_REV_YTB" = "$LATEST_COMMIT_YTB" ]; then
                 echo "✓ PKG_REV уже актуален."
             else
                 echo "Обновление PKG_REV..."
                 echo "  Было: ${CURRENT_REV_YTB:0:12}..."
                 echo "  Стало: ${LATEST_COMMIT_YTB:0:12}..."
-
-                # Обновляем PKG_REV
-                sed -i "s|^PKG_REV:=.*|PKG_REV:=$LATEST_COMMIT_YTB|" "$PKG_FILE_YTB"
-
-                # Увеличиваем PKG_RELEASE
-                CURRENT_RELEASE=$(grep "^PKG_RELEASE" "$PKG_FILE_YTB" | cut -d'=' -f2 | tr -d ' :')
-                if [ ! -z "$CURRENT_RELEASE" ]; then
-                    NEW_RELEASE=$((CURRENT_RELEASE + 1))
-                    sed -i "s|^PKG_RELEASE:=.*|PKG_RELEASE:=$NEW_RELEASE|" "$PKG_FILE_YTB"
-                    echo "✓ PKG_RELEASE: $CURRENT_RELEASE → $NEW_RELEASE"
+                # 1. Обновляем переменную коммита
+                if grep -q "^PKG_REV:=" "$PKG_FILE_YTB"; then
+                    sed -i "s|^PKG_REV:=.*|PKG_REV:=$LATEST_COMMIT_YTB|" "$PKG_FILE_YTB"
+                elif grep -q "^PKG_SOURCE_VERSION:=" "$PKG_FILE_YTB"; then
+                    sed -i "s|^PKG_SOURCE_VERSION:=.*|PKG_SOURCE_VERSION:=$LATEST_COMMIT_YTB|" "$PKG_FILE_YTB"
                 fi
-
-                # Хак хешей
+                # 2. Получаем реальную версию из upstream Makefile
+                # Улучшенный grep: ищет PKG_VERSION или VERSION с возможными пробелами перед =
+                REAL_VER=$(curl -sL "https://raw.githubusercontent.com/Waujito/youtubeUnblock/main/Makefile" | grep -E "^(PKG_)?VERSION[: ]*=" | cut -d'=' -f2 | tr -d ' ')
+                if [ -z "$REAL_VER" ]; then
+                    REAL_VER="1.0"
+                fi
+                # Формируем версию: 1.3.0-20260203
+                FINAL_VER="${REAL_VER}-$(date +%Y%m%d)"
+                echo "  Новая версия: $FINAL_VER"
+                sed -i "s|^PKG_VERSION:=.*|PKG_VERSION:=$FINAL_VER|" "$PKG_FILE_YTB"
+                # 3. Сбрасываем PKG_RELEASE в 1 (так как версия изменилась)
+                # Это стандарт OpenWrt: новая версия = релиз 1
+                sed -i "s|^PKG_RELEASE:=.*|PKG_RELEASE:=1|" "$PKG_FILE_YTB"
+                echo "✓ PKG_RELEASE сброшен в 1"
+                # 4. Хак хешей (отключаем проверку)
                 sed -i '/^PKG_HASH:=/d' "$PKG_FILE_YTB"
                 sed -i '/^PKG_MIRROR_HASH:=/d' "$PKG_FILE_YTB"
-                sed -i '/PKG_SOURCE_VERSION:=/a PKG_MIRROR_HASH:=skip' "$PKG_FILE_YTB"
-
+                if ! grep -q "PKG_MIRROR_HASH:=skip" "$PKG_FILE_YTB"; then
+                    sed -i '/PKG_SOURCE_VERSION:=/a PKG_MIRROR_HASH:=skip' "$PKG_FILE_YTB"
+                fi
                 echo "✓ Обновление успешно завершено!"
             fi
         fi
