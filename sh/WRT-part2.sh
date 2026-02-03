@@ -65,7 +65,7 @@ else
                 if [ -z "$REAL_VER" ]; then
                     REAL_VER="1.0"
                 fi
-                # Формируем версию: 1.3.0-20260203
+                # Формируем версию: 1.3.0.20260203
                 FINAL_VER="${REAL_VER}.$(date +%Y%m%d)"
                 echo "  Новая версия: $FINAL_VER"
                 sed -i "s|^PKG_VERSION:=.*|PKG_VERSION:=$FINAL_VER|" "$PKG_FILE_YTB"
