@@ -699,4 +699,9 @@ jobs:
       with:
         retain_days: 10
         keep_minimum_runs: 6
-        
+
+    - name: Delete old artifacts
+      uses: c-hive/gha-remove-artifacts@v1
+      with:
+        age: '10 days'
+        skip-recent: 6
