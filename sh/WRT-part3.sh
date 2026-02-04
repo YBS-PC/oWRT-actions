@@ -164,16 +164,19 @@ fi
 # Списки "Прокси-мусора" (для варианта clear и crystal_clear)
 
 MINIMAL_BLOAT=(
-"luci-app-sqm"
 "sqm"
 "sqm-scripts"
+"luci-app-sqm"
+"luci-i18n-sqm-ru"
 )
 
 CLEAR_BLOAT=(
-"homeproxy"
-"sing-box"
-"youtubeUnblock"
 "adguardhome"
+"sing-box"
+"homeproxy"
+"luci-app-homeproxy"
+"youtubeUnblock"
+"luci-app-youtubeUnblock"
 )
 
 CRYSTAL_CLEAR_BLOAT=(
@@ -182,8 +185,9 @@ CRYSTAL_CLEAR_BLOAT=(
 ## 1. VPN, PROXY, DNS ФИЛЬТРАЦИЯ
 "adguardhome"
 "sing-box"
-"youtubeUnblock"
+"homeproxy"
 "luci-app-homeproxy"
+"youtubeUnblock"
 "luci-app-youtubeUnblock"
 ## 2. ВСЕ COREUTILS (заменяются busybox)
 "coreutils-base64"
@@ -296,6 +300,9 @@ CRYSTAL_CLEAR_BLOAT=(
 "kmod-ifb"
 "tc-full"
 "kmod-sched-core"
+"irqbalance"
+"luci-app-irqbalance"
+"luci-i18n-irqbalance-ru"
 ## 12. NAT HELPERS (не нужны без NAT)
 "kmod-nf-nathelper"
 "kmod-nf-nathelper-extra"
@@ -317,6 +324,7 @@ CRYSTAL_CLEAR_BLOAT=(
 "kmod-nft-socket"
 "kmod-nft-tproxy"
 ## 17. ДОПОЛНИТЕЛЬНЫЕ LUCI ПРИЛОЖЕНИЯ
+"internet-detector"
 "luci-app-internet-detector"
 "luci-i18n-internet-detector-ru"
 ## 18. УТИЛИТЫ (избыточные или ненужные)
@@ -324,7 +332,6 @@ CRYSTAL_CLEAR_BLOAT=(
 "dnslookup"
 "drill"
 "gawk"
-"internet-detector"
 "mtr-json"
 "procps-ng-watch"
 "resolveip"
