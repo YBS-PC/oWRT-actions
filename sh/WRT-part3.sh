@@ -121,7 +121,7 @@ REMOVE_LIST=(
     "coreutils-tail" "coreutils-timeout" "coreutils-touch" "coreutils-tr"
     "coreutils-unexpand" "coreutils-uniq" "coreutils-wc"
     # Другие тяжелые утилиты (уже есть в BusyBox)
-    "grep" "sed" "gawk" "tar" "gzip" "unzip" "bzip2"
+    "grep" "gawk" "gzip" "unzip" "bzip2"
     "findutils" "findutils-find" "findutils-locate" "findutils-xargs"
     "diffutils"
     # Управление пользователями (не нужно для роутера)
