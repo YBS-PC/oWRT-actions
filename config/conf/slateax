@@ -41,5 +41,6 @@ echo 'CONFIG_PACKAGE_nss-eip-firmware=y' >> ./.config
 echo 'CONFIG_PACKAGE_nss-firmware-default=y' >> ./.config
 echo 'CONFIG_PACKAGE_nss-firmware-ipq6018=y' >> ./.config
 echo 'CONFIG_PACKAGE_wpad-openssl=y' >> ./.config
+sed -i "/irqbalance/Id" ./.config
 EOF
 )
