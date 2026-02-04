@@ -402,6 +402,8 @@ if [ "$VARIANT" == "crystal_clear" ]; then
     rm -f "./files/usr/bin/sing-box"
     rm -f "./files/usr/bin/AdGuardHome"
     echo "   > Removed AdGuardHome and Sing-box binaries from files/"
+    # Удаляем тяжелые файлы
+    rm -f "./files/root/apps/speedtest.tar.gz"
     # Удаляем основной скрипт настройки
     # rm -f "./files/etc/uci-defaults/zz1-final-offline-setup.sh"
     # Вычищаем пакеты из конфига
