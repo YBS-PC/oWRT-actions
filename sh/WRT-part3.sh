@@ -121,7 +121,7 @@ REMOVE_LIST=(
     "coreutils-tail" "coreutils-timeout" "coreutils-touch" "coreutils-tr"
     "coreutils-unexpand" "coreutils-uniq" "coreutils-wc"
     # Другие тяжелые утилиты (уже есть в BusyBox)
-    "grep" "gawk" "gzip" "unzip" "bzip2"
+    "bzip2"
     "findutils" "findutils-find" "findutils-locate" "findutils-xargs"
     "diffutils"
     # Управление пользователями (не нужно для роутера)
@@ -229,10 +229,8 @@ CRYSTAL_CLEAR_BLOAT=(
 "findutils"
 ## 4. АРХИВАТОРЫ (заменяются busybox)
 "bsdtar"
-"gzip"
 "xz-utils"
 "xz"
-"unzip"
 ## 5. ФАЙЛОВЫЕ СИСТЕМЫ (если не используете USB накопители)
 "kmod-fs-exfat"
 "kmod-fs-ext4"
@@ -327,10 +325,7 @@ CRYSTAL_CLEAR_BLOAT=(
 "luci-app-internet-detector"
 "luci-i18n-internet-detector-ru"
 ## 18. УТИЛИТЫ (избыточные или ненужные)
-"bind-dig"
-"dnslookup"
 "drill"
-"gawk"
 "mtr-json"
 "procps-ng-watch"
 "resolveip"
