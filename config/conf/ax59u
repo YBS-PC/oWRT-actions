@@ -18,5 +18,6 @@ echo 'CONFIG_PACKAGE_luci-i18n-wifischedule-ru=y' >> ./.config
 echo 'CONFIG_PACKAGE_mt7986-wo-firmware=y' >> ./.config
 echo 'CONFIG_PACKAGE_wifischedule=y' >> ./.config
 echo 'CONFIG_PACKAGE_wpad-openssl=y' >> ./.config
+sed -i "/irqbalance/Id" ./.config
 EOF
 )
