@@ -244,7 +244,6 @@ CRYSTAL_CLEAR_BLOAT=(
 "kmod-nls-iso8859-1"
 "kmod-nls-utf8"
 ## 6. УТИЛИТЫ РАЗМЕТКИ ДИСКОВ
-"blkid"
 "cfdisk"
 "fdisk"
 "gdisk"
