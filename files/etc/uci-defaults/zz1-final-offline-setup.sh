@@ -310,6 +310,39 @@ fi
 #################### Настройка youtubeUnblock ####################
 echo -e "Настройка youtubeUnblock..."
 
+echo -e "Проверка и создание необходимых IPSet'ов..."
+# Список всех ipset'ов, которые используются в правилах ниже.
+# Если добавишь новое правило с новым ipset'ом, просто добавь его имя сюда.
+REQUIRED_IPSETS="dpi_ips no_dpi_ips dpi_guest_ips"
+FIREWALL_CONFIG_CHANGED=0
+for ipset_name in $REQUIRED_IPSETS; do
+    # Ищем ipset с таким именем в конфиге firewall.
+    # `uci show firewall` выводит всю конфигурацию.
+    # `grep` ищет строку вида: firewall.cfgXXXXXX.name='имя_нашего_ipset'
+    if ! uci show firewall | grep -q "\.name='$ipset_name'"; then
+        echo "--> IPSet '$ipset_name' не найден. Создаем его как пустой..."
+        # 1. Создаем новую секцию ipset и получаем ее ID (например, cfg037416)
+        handle=$(uci add firewall ipset)
+        # 2. Устанавливаем параметры для этой новой секции
+        uci set firewall."$handle".name="$ipset_name"
+        uci set firewall."$handle".match="net"
+        uci set firewall."$handle".family="ipv4" # или "ipv6", если нужно. Для DPI обычно ipv4.
+        uci set firewall."$handle".storage="hash"
+        # Устанавливаем флаг, что конфиг был изменен
+        FIREWALL_CONFIG_CHANGED=1
+    else
+        echo "--> IPSet '$ipset_name' уже существует. Пропускаем."
+    fi
+done
+# Если мы внесли хотя бы одно изменение, коммитим конфиг firewall
+if [ "$FIREWALL_CONFIG_CHANGED" -eq 1 ]; then
+    echo "Сохранение изменений в /etc/config/firewall..."
+    uci commit firewall
+    # Можно добавить перезагрузку firewall, чтобы изменения применились немедленно,
+    # хотя init-скрипт youtubeUnblock, скорее всего, сделает это сам.
+    # /etc/init.d/firewall reload
+fi
+
 sed -i 's/meta l4proto { tcp, udp } flow offload @ft;/meta l4proto { tcp, udp } ct original packets ge 30 flow offload @ft;/' /usr/share/firewall4/templates/ruleset.uc
 
 # Путь к файлу правил и его код
