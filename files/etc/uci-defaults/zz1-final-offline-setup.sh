@@ -327,7 +327,6 @@ for ipset_name in $REQUIRED_IPSETS; do
         uci set firewall."$handle".name="$ipset_name"
         uci set firewall."$handle".match="net"
         uci set firewall."$handle".family="ipv4" # или "ipv6", если нужно. Для DPI обычно ipv4.
-        uci set firewall."$handle".storage="hash"
         # Устанавливаем флаг, что конфиг был изменен
         FIREWALL_CONFIG_CHANGED=1
     else
