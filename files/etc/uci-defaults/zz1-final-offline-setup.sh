@@ -345,7 +345,7 @@ YTB_NFT_GUEST_MARK_FILE="/etc/nftables.d/guest_mark.nft"
 YTB_NFT_GUEST_MARK_CONTENT=$(cat << "EOF"
 chain guest_mark {
 	type filter hook prerouting priority mangle; policy accept;
-	iifname "br-guest" ip saddr != @dpi_local_ips meta mark set 0x00000042
+	iifname "br-guest" ip saddr != @dpi_guest_ips meta mark set 0x00000042
 }
 EOF
 )
