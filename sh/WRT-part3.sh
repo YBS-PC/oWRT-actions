@@ -177,6 +177,8 @@ CLEAR_BLOAT=(
 "luci-app-homeproxy"
 "youtubeUnblock"
 "luci-app-youtubeUnblock"
+"avahi-nodbus-daemon"
+"libavahi-nodbus-support"
 )
 
 CRYSTAL_CLEAR_BLOAT=(
@@ -189,6 +191,8 @@ CRYSTAL_CLEAR_BLOAT=(
 "luci-app-homeproxy"
 "youtubeUnblock"
 "luci-app-youtubeUnblock"
+"avahi-nodbus-daemon"
+"libavahi-nodbus-support"
 ## 2. ВСЕ COREUTILS (заменяются busybox)
 "coreutils-base64"
 "coreutils-cat"
