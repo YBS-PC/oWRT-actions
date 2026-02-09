@@ -336,8 +336,8 @@ CRYSTAL_CLEAR_BLOAT=(
 "shadow-groupadd"
 "shadow-useradd"
 "sysstat"
-"lm-sensors"
-"sysfsutils"
+# "lm-sensors"
+# "sysfsutils"
 ## 19. PCI/USB УТИЛИТЫ (если не нужна диагностика)
 "pciids"
 "pciutils"
