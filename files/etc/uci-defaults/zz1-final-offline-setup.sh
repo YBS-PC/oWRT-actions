@@ -638,8 +638,17 @@ cat /tmp/sysinfo/model && . /etc/openwrt_release && cat /etc/build_variant
 ###-###    uci delete network.lan
 ###-###    uci delete network.wan
 ###-###    uci delete network.wan6
-###-###    ALL_PORTS=$(ls /sys/class/net/ | grep -vE "^lo$|^sit|^tun|^br-" | tr '\n' ' ')
-###-###    FILTERED_PORTS=$(echo "$ALL_PORTS" | grep -qE '\bp[0-9]+\b' && echo "$ALL_PORTS" | sed 's/eth0 //g' || echo "$ALL_PORTS")
+###-###    RAW_PORTS=$(ls /sys/class/net/)
+###-###    # Фильтр для исключения системных интерфейсов и Wi-Fi
+###-###    EXCLUDE_PATTERN="^lo$|^sit|^tun|^br-|^wlan|^phy|^mon|^bond|^veth|^docker"
+###-###    if echo "$RAW_PORTS" | grep -qE "^p[0-9]+"; then
+###-###        echo "Обнаружена архитектура DSA (есть порты p1...). Исключаем eth0."
+###-###        FILTERED_PORTS=$(echo "$RAW_PORTS" | grep -vE "$EXCLUDE_PATTERN|^eth0$" | tr '\n' ' ')
+###-###    else
+###-###        echo "Архитектура DSA не обнаружена. Оставляем eth0."
+###-###        FILTERED_PORTS=$(echo "$RAW_PORTS" | grep -vE "$EXCLUDE_PATTERN" | tr '\n' ' ')
+###-###    fi
+###-###    FILTERED_PORTS=$(echo $FILTERED_PORTS)
 ###-###    echo $FILTERED_PORTS
 ###-###    uci set network.@device[0].name='br-lan'
 ###-###    uci set network.@device[0].type='bridge'
