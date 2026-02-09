@@ -634,27 +634,44 @@ cat /tmp/sysinfo/model && . /etc/openwrt_release && cat /etc/build_variant
 
 ###-###if [ "$CURRENT_VARIANT" == "crystal_clear" ]; then
 ###-###    echo -e ">>> АКТИВАЦИЯ РЕЖИМА КОММУТАТОРА (SWITCH) <<<"
-###-###    # Определяем порты
+###-###    echo "Настройка сетевых интерфейсов, моста и защиты от петель..."
+###-###    uci delete network.lan
+###-###    uci delete network.wan
+###-###    uci delete network.wan6
 ###-###    ALL_PORTS=$(ls /sys/class/net/ | grep -vE "^lo$|^sit|^tun|^br-" | tr '\n' ' ')
-###-###    echo "Ports detected: $ALL_PORTS"
-###-###    # Удаляем WAN
-###-###    uci delete network.wan 2>/dev/null
-###-###    uci delete network.wan6 2>/dev/null
-###-###    # Настраиваем LAN мост на ВСЕ порты + DHCP клиент
+###-###    FILTERED_PORTS=$(echo "$ALL_PORTS" | grep -qE '\bp[0-9]+\b' && echo "$ALL_PORTS" | sed 's/eth0 //g' || echo "$ALL_PORTS")
+###-###    echo $FILTERED_PORTS
+###-###    uci set network.@device[0].name='br-lan'
+###-###    uci set network.@device[0].type='bridge'
+###-###    uci set network.@device[0].ports="$FILTERED_PORTS"
+###-###    uci set network.@device[0].stp='1'
+###-###    uci set network.@device[0].igmp_snooping='1'
+###-###    uci set network.@device[0].multicast_querier='1'
+###-###    uci set network.lan=interface
 ###-###    uci set network.lan.device='br-lan'
-###-###    uci set network.lan.type='bridge'
-###-###    uci set network.lan.ports="$ALL_PORTS"
 ###-###    uci set network.lan.proto='dhcp'
-###-###    # Удаляем статику
-###-###    uci delete network.lan.ipaddr 2>/dev/null
-###-###    uci delete network.lan.netmask 2>/dev/null
-###-###    # Удаляем DHCP сервер (мы же клиент)
-###-###    uci delete dhcp.lan 2>/dev/null
-###-###    uci delete dhcp.wan 2>/dev/null
-###-###    uci commit network
-###-###    uci commit dhcp
-###-###    # Перезапуск сети
-###-###    /etc/init.d/network restart
+###-###    uci set network.lan.ip6assign='0'
+###-###    uci -q delete network.globals.ula_prefix
+###-###    echo "Отключение встроенного DHCP-сервера..."
+###-###    uci set dhcp.lan.ignore='1'
+###-###    uci set dhcp.lan.dhcpv6='disabled'
+###-###    uci set dhcp.lan.ra='disabled'
+###-###    uci -q delete dhcp.odhcpd
+###-###    uci set dhcp.odhcpd=odhcpd
+###-###    uci set dhcp.odhcpd.disabled='1'
+###-###    echo "Упрощение Firewall и включение аппаратного ускорения..."
+###-###    uci -q delete firewall.@zone[1]
+###-###    uci -q delete firewall.@forwarding[0]
+###-###    uci set firewall.@defaults[0].flow_offloading='1'
+###-###    uci set firewall.@defaults[0].flow_offloading_hw='1'
+###-###    uci set firewall.@zone[0].name='lan'
+###-###    uci set firewall.@zone[0].network='lan'
+###-###    uci set firewall.@zone[0].input='ACCEPT'
+###-###    uci set firewall.@zone[0].output='ACCEPT'
+###-###    uci set firewall.@zone[0].forward='ACCEPT'
+###-###    while uci -q delete firewall.@rule[0]; do :; done
+###-###    echo "Сохранение конфигурации..."
+###-###    uci commit
 ###-###    echo -e "Роутер переведен в режим управляемого свитча. IP будет получен по DHCP."
 ###-###fi
 
