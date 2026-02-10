@@ -413,7 +413,7 @@ if [ "$VARIANT" == "crystal_clear" ]; then
     # Удаляем тяжелые файлы
     rm -f "./files/root/apps/speedtest.tar.gz"
     # Удаляем основной скрипт настройки
-    # rm -f "./files/etc/uci-defaults/zz1-final-offline-setup.sh"
+    rm -f "./files/etc/uci-defaults/zz1-final-offline-setup.sh"
     # Вычищаем пакеты из конфига
     for PKG in "${CRYSTAL_CLEAR_BLOAT[@]}"; do
         sed -i "/${PKG}/Id" ./.config
