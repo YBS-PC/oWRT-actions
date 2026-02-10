@@ -1,4 +1,4 @@
-name: Universal Build
+name: Universal WRT Builder
 
 on:
   workflow_dispatch:
