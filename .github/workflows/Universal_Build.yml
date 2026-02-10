@@ -94,7 +94,7 @@ jobs:
             json='{"include":[
               {"target":"nanopi-r5s", "variant":"minimal"},
               {"target":"rb5009",     "variant":"clear"},
-              {"target":"rb5009",     "variant":"crystal_clear"}
+              {"target":"rb5009",     "variant":"switch"}
             ]}'
           else
             targets="nanopi-r6s nanopi-r5s rb5009 slateax ax59u brume2"
