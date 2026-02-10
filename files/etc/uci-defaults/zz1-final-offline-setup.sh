@@ -632,57 +632,57 @@ fi
 
 cat /tmp/sysinfo/model && . /etc/openwrt_release && cat /etc/build_variant
 
-###-###if [ "$CURRENT_VARIANT" == "crystal_clear" ]; then
-###-###    echo -e ">>> АКТИВАЦИЯ РЕЖИМА КОММУТАТОРА (SWITCH) <<<"
-###-###    echo "Настройка сетевых интерфейсов, моста и защиты от петель..."
-###-###    uci delete network.lan
-###-###    uci delete network.wan
-###-###    uci delete network.wan6
-###-###    RAW_PORTS=$(ls /sys/class/net/)
-###-###    # Фильтр для исключения системных интерфейсов и Wi-Fi
-###-###    EXCLUDE_PATTERN="^lo$|^sit|^tun|^br-|^wlan|^phy|^mon|^bond|^veth|^docker"
-###-###    if echo "$RAW_PORTS" | grep -qE "^p[0-9]+"; then
-###-###        echo "Обнаружена архитектура DSA (есть порты p1...). Исключаем eth0."
-###-###        FILTERED_PORTS=$(echo "$RAW_PORTS" | grep -vE "$EXCLUDE_PATTERN|^eth0$" | tr '\n' ' ')
-###-###    else
-###-###        echo "Архитектура DSA не обнаружена. Оставляем eth0."
-###-###        FILTERED_PORTS=$(echo "$RAW_PORTS" | grep -vE "$EXCLUDE_PATTERN" | tr '\n' ' ')
-###-###    fi
-###-###    FILTERED_PORTS=$(echo $FILTERED_PORTS)
-###-###    echo $FILTERED_PORTS
-###-###    uci set network.@device[0].name='br-lan'
-###-###    uci set network.@device[0].type='bridge'
-###-###    uci set network.@device[0].ports="$FILTERED_PORTS"
-###-###    uci set network.@device[0].stp='1'
-###-###    uci set network.@device[0].igmp_snooping='1'
-###-###    uci set network.@device[0].multicast_querier='1'
-###-###    uci set network.lan=interface
-###-###    uci set network.lan.device='br-lan'
-###-###    uci set network.lan.proto='dhcp'
-###-###    uci set network.lan.ip6assign='0'
-###-###    uci -q delete network.globals.ula_prefix
-###-###    echo "Отключение встроенного DHCP-сервера..."
-###-###    uci set dhcp.lan.ignore='1'
-###-###    uci set dhcp.lan.dhcpv6='disabled'
-###-###    uci set dhcp.lan.ra='disabled'
-###-###    uci -q delete dhcp.odhcpd
-###-###    uci set dhcp.odhcpd=odhcpd
-###-###    uci set dhcp.odhcpd.disabled='1'
-###-###    echo "Упрощение Firewall и включение аппаратного ускорения..."
-###-###    uci -q delete firewall.@zone[1]
-###-###    uci -q delete firewall.@forwarding[0]
-###-###    uci set firewall.@defaults[0].flow_offloading='1'
-###-###    uci set firewall.@defaults[0].flow_offloading_hw='1'
-###-###    uci set firewall.@zone[0].name='lan'
-###-###    uci set firewall.@zone[0].network='lan'
-###-###    uci set firewall.@zone[0].input='ACCEPT'
-###-###    uci set firewall.@zone[0].output='ACCEPT'
-###-###    uci set firewall.@zone[0].forward='ACCEPT'
-###-###    while uci -q delete firewall.@rule[0]; do :; done
-###-###    echo "Сохранение конфигурации..."
-###-###    uci commit
-###-###    echo -e "Роутер переведен в режим управляемого свитча. IP будет получен по DHCP."
-###-###fi
+if [ "$CURRENT_VARIANT" == "switch" ]; then
+    echo -e ">>> АКТИВАЦИЯ РЕЖИМА КОММУТАТОРА (SWITCH) <<<"
+    echo "Настройка сетевых интерфейсов, моста и защиты от петель..."
+    uci delete network.lan
+    uci delete network.wan
+    uci delete network.wan6
+    RAW_PORTS=$(ls /sys/class/net/)
+    # Фильтр для исключения системных интерфейсов и Wi-Fi
+    EXCLUDE_PATTERN="^lo$|^sit|^tun|^br-|^wlan|^phy|^mon|^bond|^veth|^docker"
+    if echo "$RAW_PORTS" | grep -qE "^p[0-9]+"; then
+        echo "Обнаружена архитектура DSA (есть порты p1...). Исключаем eth0."
+        FILTERED_PORTS=$(echo "$RAW_PORTS" | grep -vE "$EXCLUDE_PATTERN|^eth0$" | tr '\n' ' ')
+    else
+        echo "Архитектура DSA не обнаружена. Оставляем eth0."
+        FILTERED_PORTS=$(echo "$RAW_PORTS" | grep -vE "$EXCLUDE_PATTERN" | tr '\n' ' ')
+    fi
+    FILTERED_PORTS=$(echo $FILTERED_PORTS)
+    echo $FILTERED_PORTS
+    uci set network.@device[0].name='br-lan'
+    uci set network.@device[0].type='bridge'
+    uci set network.@device[0].ports="$FILTERED_PORTS"
+    uci set network.@device[0].stp='1'
+    uci set network.@device[0].igmp_snooping='1'
+    uci set network.@device[0].multicast_querier='1'
+    uci set network.lan=interface
+    uci set network.lan.device='br-lan'
+    uci set network.lan.proto='dhcp'
+    uci set network.lan.ip6assign='0'
+    uci -q delete network.globals.ula_prefix
+    echo "Отключение встроенного DHCP-сервера..."
+    uci set dhcp.lan.ignore='1'
+    uci set dhcp.lan.dhcpv6='disabled'
+    uci set dhcp.lan.ra='disabled'
+    uci -q delete dhcp.odhcpd
+    uci set dhcp.odhcpd=odhcpd
+    uci set dhcp.odhcpd.disabled='1'
+    echo "Упрощение Firewall и включение аппаратного ускорения..."
+    uci -q delete firewall.@zone[1]
+    uci -q delete firewall.@forwarding[0]
+    uci set firewall.@defaults[0].flow_offloading='1'
+    uci set firewall.@defaults[0].flow_offloading_hw='1'
+    uci set firewall.@zone[0].name='lan'
+    uci set firewall.@zone[0].network='lan'
+    uci set firewall.@zone[0].input='ACCEPT'
+    uci set firewall.@zone[0].output='ACCEPT'
+    uci set firewall.@zone[0].forward='ACCEPT'
+    while uci -q delete firewall.@rule[0]; do :; done
+    echo "Сохранение конфигурации..."
+    uci commit
+    echo -e "Роутер переведен в режим управляемого свитча. IP будет получен по DHCP."
+fi
 
 # =========================================================
 # ФИНАЛЬНЫЙ БЛОК: СИНХРОНИЗАЦИЯ ВРЕМЕНИ И БАННЕР
