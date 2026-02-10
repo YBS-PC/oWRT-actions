@@ -11,7 +11,7 @@ echo ">>>>>>>>> WRT-part2 start. Использование: после feeds up
 # Обновление youtubeUnblock
 # --------------------------------------------------------------------------
 
-if [[ "$VARIANT" == "clear" || "$VARIANT" == "crystal_clear" ]]; then
+if [[ "$VARIANT" == "clear" || "$VARIANT" == "crystal_clear" || "$VARIANT" == "switch" ]]; then
     echo ">>> Variant is '$VARIANT'. Skipping youtubeUnblock update."
 else
     echo "=================================================="
