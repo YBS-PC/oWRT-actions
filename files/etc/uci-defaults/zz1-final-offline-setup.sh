@@ -689,11 +689,11 @@ if [ ! -f "$LOCK_FILE" ] && [ "$CURRENT_VARIANT" = "switch" ]; then
     uci set firewall.@zone[0].forward='ACCEPT'
     while uci -q delete firewall.@rule[0]; do :; done
     echo "Сохранение конфигурации..."
-	HOSTNAME_PATTERN="${ROUTER_MODEL_NAME}-${CURRENT_VARIANT}"
-	uci set system.@system[0].hostname="$HOSTNAME_PATTERN"
-	uci set uhttpd.defaults.commonname="$HOSTNAME_PATTERN"
-	uci commit
-	echo -e "Имя хоста установлено: $HOSTNAME_PATTERN"
+    HOSTNAME_PATTERN="${ROUTER_MODEL_NAME}-${CURRENT_VARIANT}"
+    uci set system.@system[0].hostname="$HOSTNAME_PATTERN"
+    uci set uhttpd.defaults.commonname="$HOSTNAME_PATTERN"
+    uci commit
+    echo -e "Имя хоста установлено: $HOSTNAME_PATTERN"
     echo -e "Роутер переведен в режим управляемого свитча. IP будет получен по DHCP."
 fi
 
