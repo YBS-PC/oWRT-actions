@@ -91,11 +91,7 @@ jobs:
           INPUT_VARIANT="${{ github.event.inputs.variant }}"
           if [ "$INPUT_TARGET" == "combo" ]; then
             echo ">>> Generating COMBO matrix..."
-            json='{"include":[
-              {"target":"nanopi-r5s", "variant":"minimal"},
-              {"target":"rb5009",     "variant":"clear"},
-              {"target":"rb5009",     "variant":"switch"}
-            ]}'
+            json='{"include":[{"target":"nanopi-r5s","variant":"minimal"},{"target":"rb5009","variant":"clear"},{"target":"rb5009","variant":"switch"}]}'
           else
             targets="nanopi-r6s nanopi-r5s rb5009 slateax ax59u brume2"
             if [ "$INPUT_TARGET" == "all" ]; then
@@ -103,22 +99,22 @@ jobs:
             else
               selected="$INPUT_TARGET"
             fi
-            json="{\"include\":["
-            first=true
+            json_parts=""
             for t in $selected; do
-              [ "$first" = false ] && json="$json,"
-              json="$json{\"target\":\"$t\", \"variant\":\"$INPUT_VARIANT\"}"
-              first=false
+              [ -n "$json_parts" ] && json_parts="$json_parts,"
+              json_parts="$json_parts{\"target\":\"$t\",\"variant\":\"$INPUT_VARIANT\"}"
             done
-            json="$json]}"
+            json="{\"include\":[$json_parts]}"
           fi
-          echo "matrix=$json" >> $GITHUB_OUTPUT
           echo "=========================================="
           echo "       [SETUP SUMMARY]                    "
           echo "=========================================="
           echo "Mode: $INPUT_TARGET"
           echo "Generated Matrix: $json"
           echo "=========================================="
+          echo "matrix<<EOF" >> $GITHUB_OUTPUT
+          echo "$json" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
   build:
     needs: setup
