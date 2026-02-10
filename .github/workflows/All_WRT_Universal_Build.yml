@@ -49,6 +49,7 @@ on:
           - xray
           - clear
           - crystal_clear
+          - switch
       
       exclude_keywords:
         description: 'Exclude Packages (Space separated keywords)'
