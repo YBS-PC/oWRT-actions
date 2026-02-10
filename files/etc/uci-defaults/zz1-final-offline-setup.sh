@@ -50,11 +50,11 @@ echo "Detected Build Variant: ${CURRENT_VARIANT:-unknown}"
 
 # --- БЛОК ЗАЩИТЫ ОТ ПОВТОРНОГО ЗАПУСКА ---
 LOCK_FILE="/root/.setup_completed"
-# if [ -f "$LOCK_FILE" ]; then
-if [ -f "$LOCK_FILE" ] && { [ "$CURRENT_VARIANT" = "clear" ] || [ "$CURRENT_VARIANT" = "crystal_clear" ]; }; then
-    echo "Скрипт уже был выполнен ранее."
-    # exit 0
-fi
+#if [ -f "$LOCK_FILE" ]; then
+#if [ -f "$LOCK_FILE" ] && { [ "$CURRENT_VARIANT" = "clear" ] || [ "$CURRENT_VARIANT" = "crystal_clear" ]; }; then
+#    echo "Скрипт уже был выполнен ранее."
+#    exit 0
+#fi
 # -----------------------------------------
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -641,7 +641,7 @@ fi
 
 cat /tmp/sysinfo/model && . /etc/openwrt_release && cat /etc/build_variant
 
-if [ "$CURRENT_VARIANT" == "switch" ]; then
+if [ ! -f "$LOCK_FILE" ] && [ "$CURRENT_VARIANT" = "switch" ]; then
     echo -e ">>> АКТИВАЦИЯ РЕЖИМА КОММУТАТОРА (SWITCH) <<<"
     echo "Настройка сетевых интерфейсов, моста и защиты от петель..."
     uci delete network.lan
