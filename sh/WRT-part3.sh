@@ -158,10 +158,8 @@ echo ">>> [Heavy packages] Тяжелые пакеты отключены."
 fi
 
 # =========================================================
-# ЦЕНТРАЛИЗОВАННАЯ ОЧИСТКА (Варианты minimal, clear и crystal_clear)
+# ЦЕНТРАЛИЗОВАННАЯ ОЧИСТКА (Варианты minimal, switch, clear и crystal_clear)
 # =========================================================
-
-# Списки "Прокси-мусора" (для варианта clear и crystal_clear)
 
 MINIMAL_BLOAT=(
 "sqm"
@@ -370,6 +368,10 @@ CRYSTAL_CLEAR_BLOAT=(
 "ucode-mod-lua"
 )
 
+SWITCH_BLOAT=(
+"${CRYSTAL_CLEAR_BLOAT[@]}"
+)
+
 # --- ЛОГИКА ДЛЯ ВАРИАНТА 'minimal' ---
 if [ "$VARIANT" == "minimal" ]; then
     echo ">>> [Variant: $VARIANT] Performing cleanup..."
@@ -414,6 +416,29 @@ if [ "$VARIANT" == "crystal_clear" ]; then
     # rm -f "./files/etc/uci-defaults/zz1-final-offline-setup.sh"
     # Вычищаем пакеты из конфига
     for PKG in "${CRYSTAL_CLEAR_BLOAT[@]}"; do
+        sed -i "/${PKG}/Id" ./.config
+        # echo "# CONFIG_PACKAGE_luci-app-${PKG} is not set" >> ./.config
+        # echo "# CONFIG_PACKAGE_luci-i18n-${PKG}-ru is not set" >> ./.config
+        # echo "# CONFIG_PACKAGE_${PKG} is not set" >> ./.config
+    done
+    sed -i '/CONFIG_PACKAGE_kmod-tcp-bbr=y/d' ./.config
+    sed -i '/CONFIG_TCP_CONG_BBR=y/d' ./.config
+    echo "# BBR disabled for clear build"
+fi
+
+# --- ЛОГИКА ДЛЯ ВАРИАНТА 'switch' ---
+if [ "$VARIANT" == "switch" ]; then
+    echo ">>> [Variant: $VARIANT] Performing aggressive cleanup..."
+    # Удаляем тяжелые бинарники, которые скачались в YML
+    rm -f "./files/usr/bin/sing-box"
+    rm -f "./files/usr/bin/AdGuardHome"
+    echo "   > Removed AdGuardHome and Sing-box binaries from files/"
+    # Удаляем тяжелые файлы
+    rm -f "./files/root/apps/speedtest.tar.gz"
+    # Удаляем основной скрипт настройки
+    # rm -f "./files/etc/uci-defaults/zz1-final-offline-setup.sh"
+    # Вычищаем пакеты из конфига
+    for PKG in "${SWITCH_BLOAT[@]}"; do
         sed -i "/${PKG}/Id" ./.config
         # echo "# CONFIG_PACKAGE_luci-app-${PKG} is not set" >> ./.config
         # echo "# CONFIG_PACKAGE_luci-i18n-${PKG}-ru is not set" >> ./.config
