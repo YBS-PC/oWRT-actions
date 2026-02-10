@@ -52,8 +52,8 @@ echo "Detected Build Variant: ${CURRENT_VARIANT:-unknown}"
 LOCK_FILE="/root/.setup_completed"
 # if [ -f "$LOCK_FILE" ]; then
 if [ -f "$LOCK_FILE" ] && { [ "$CURRENT_VARIANT" = "clear" ] || [ "$CURRENT_VARIANT" = "crystal_clear" ]; }; then
-    echo "Скрипт уже был выполнен ранее. Пропускаем."
-    exit 0
+    echo "Скрипт уже был выполнен ранее."
+    # exit 0
 fi
 # -----------------------------------------
 
