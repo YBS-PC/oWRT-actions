@@ -48,7 +48,6 @@ on:
           - v2raya
           - xray
           - clear
-          - switch
           - crystal_clear
       
       exclude_keywords:
