@@ -484,7 +484,12 @@ end
 function redirectToAdGuardHome()
 	local router_ip = luci.http.getenv("SERVER_ADDR")
 	local redirect_url = "http://" .. router_ip .. ":8080"
-	luci.http.redirect(redirect_url)
+	
+	luci.http.prepare_content("text/html")
+	luci.http.write(string.format([[
+		<script>window.location='%s'; window.open('%s', '_blank');</script>
+		<a href="%s" target="_blank">Click here if redirect fails</a>
+	]], "javascript:history.back()", redirect_url, redirect_url))
 end
 EOF
 
