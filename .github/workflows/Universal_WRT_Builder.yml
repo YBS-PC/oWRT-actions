@@ -174,7 +174,7 @@ jobs:
 
     - name: Download binaries
       # Условие: выполнять только если вариант НЕ switch И НЕ crystal_clear
-      if: matrix.variant != 'switch' && matrix.variant != 'crystal_clear'
+      if: matrix.variant != 'switch' && matrix.variant != 'clear' && matrix.variant != 'crystal_clear'
       run: |
         # AdGuardHome
         AGH_URL="https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_arm64.tar.gz"
