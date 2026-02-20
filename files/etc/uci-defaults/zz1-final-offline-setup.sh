@@ -414,16 +414,6 @@ if [ -f "/etc/init.d/internet-detector" ]; then
 	echo -e "Служба internet-detector настроена (но отключена)."
 fi
 
-#################### Обновить имя хоста ####################
-echo -e "Обновить имя хоста..."
-uci set system.@system[0].hostname="$HOSTNAME_PATTERN"
-uci commit system
-uci set uhttpd.defaults.commonname="$HOSTNAME_PATTERN"
-uci commit uhttpd
-echo -e "Имя хоста установлено: $HOSTNAME_PATTERN"
-
-sed -i "s/File Manager/Файловый менеджер/" /usr/share/luci/menu.d/luci-app-filemanager.json && echo -e "Обновлен Файловый менеджер"
-
 #################### Настройка путей для owut (attendedsysupgrade) ####################
 echo -e "Настройка путей для owut..."
 if [ "$NAME_VALUE" == "OpenWrt" ]; then
@@ -702,6 +692,10 @@ if [ ! -f "$LOCK_FILE" ] && [ "$CURRENT_VARIANT" = "switch" ]; then
     echo -e "Роутер переведен в режим управляемого свитча. IP будет получен по DHCP."
 fi
 
+if [ "$CURRENT_VARIANT" = "switch" ]; then
+    HOSTNAME_PATTERN="${ROUTER_MODEL_NAME}-${CURRENT_VARIANT}"
+fi
+
 # =========================================================
 # ФИНАЛЬНЫЙ БЛОК: СИНХРОНИЗАЦИЯ ВРЕМЕНИ И БАННЕР
 # Перенесен в конец, чтобы успели отработать драйверы RTC
@@ -762,6 +756,16 @@ echo " Kernel Version: $KERNEL_VERSION" >> /etc/banner
 echo " Build Variant: $CURRENT_VARIANT ($DATE_STR)" >> /etc/banner
 
 echo -e "Первоначальная настройка завершена успешно."
+
+#################### Обновить имя хоста ####################
+echo -e "Обновить имя хоста..."
+uci set system.@system[0].hostname="$HOSTNAME_PATTERN"
+uci commit system
+uci set uhttpd.defaults.commonname="$HOSTNAME_PATTERN"
+uci commit uhttpd
+echo -e "Имя хоста установлено: $HOSTNAME_PATTERN"
+
+sed -i "s/File Manager/Файловый менеджер/" /usr/share/luci/menu.d/luci-app-filemanager.json && echo -e "Обновлен Файловый менеджер"
 
 # --- СОЗДАЕМ LOCK-ФАЙЛ ПЕРЕД ВЫХОДОМ ---
 touch "$LOCK_FILE"
