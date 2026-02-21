@@ -171,7 +171,7 @@ jobs:
         [ -d "./files/usr/bin" ] && ls -l ./files/usr/bin | head -n 5 || echo "No custom bins"
         echo "=========================================="
 
-    - name: Download binaries
+    - name: Download AdGuardHome
       # Условие: выполнять только если вариант НЕ switch И НЕ clear и НЕ crystal_clear
       if: matrix.variant != 'switch' && matrix.variant != 'clear' && matrix.variant != 'crystal_clear'
       run: |
@@ -183,17 +183,21 @@ jobs:
         mkdir -p ./files/usr/bin
         cp ./AdGuardHome/AdGuardHome ./files/usr/bin/ && chmod 755 ./files/usr/bin/AdGuardHome
         rm -rf AGH.tar.gz AdGuardHome
+        echo "=========================================="
+        echo "Files in destination:"
+        ls -lh ./files/usr/bin/
+        echo "=========================================="
         
-        # Sing-box
+    - name: Download Sing-box
+      # Sing-box не качаем для чистых сборок И для сборок со своими прокси-ядрами
+      if: matrix.variant != 'switch' && matrix.variant != 'clear' && matrix.variant != 'crystal_clear' && matrix.variant != 'passwall' && matrix.variant != 'v2raya' && matrix.variant != 'xray'
+      run: |
         SB_URL=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest | grep "browser_download_url.*linux-arm64.tar.gz" | cut -d '"' -f 4 | head -n 1)
         echo ">>> Downloading sing-box from: $SB_URL"
         curl -L -o sb.tar.gz "$SB_URL"
         tar -xzf sb.tar.gz
         cp sing-box-*/sing-box ./files/usr/bin/ && chmod 755 ./files/usr/bin/sing-box
         rm -rf sb.tar.gz sing-box-*
-        
-        echo "=========================================="
-        echo "       [BINARIES SUMMARY]                 "
         echo "=========================================="
         echo "Files in destination:"
         ls -lh ./files/usr/bin/
