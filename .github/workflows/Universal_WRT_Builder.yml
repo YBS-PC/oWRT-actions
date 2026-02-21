@@ -45,8 +45,8 @@ on:
         options:
           - standart
           - minimal
-          - switch
           - clear
+          - switch
           - crystal_clear
           - passwall
           - v2raya
