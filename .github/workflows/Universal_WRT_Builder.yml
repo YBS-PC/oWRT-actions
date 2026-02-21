@@ -161,15 +161,14 @@ jobs:
 
     - name: Set permissions
       run: |
-        [ -d "./files/usr/bin" ] && chmod 755 ./files/usr/bin/*
-        [ -d "./files/etc/uci-defaults" ] && chmod 755 ./files/etc/uci-defaults/* || true
+        [ -d "./files/usr/bin" ] && find ./files/usr/bin -maxdepth 1 -type f -exec chmod 755 {} + || true
+        [ -d "./files/etc/uci-defaults" ] && find ./files/etc/uci-defaults -maxdepth 1 -type f -exec chmod 755 {} + || true
         
         echo "=========================================="
         echo "       [PERMISSIONS SUMMARY]              "
         echo "=========================================="
         echo "Permissions set for ./files/usr/bin and uci-defaults."
-        ls -l ./files/usr/bin | head -n 5
-        echo "..."
+        [ -d "./files/usr/bin" ] && ls -l ./files/usr/bin | head -n 5 || echo "No custom bins"
         echo "=========================================="
 
     - name: Download binaries
