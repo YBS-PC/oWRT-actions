@@ -87,8 +87,8 @@ jobs:
     steps:
       - id: set-matrix
         run: |
-          INPUT_TARGET="${{ github.event.inputs.target }}"
-          INPUT_VARIANT="${{ github.event.inputs.variant }}"
+          INPUT_TARGET="${{ inputs.target }}"
+          INPUT_VARIANT="${{ inputs.variant }}"
           if [ "$INPUT_TARGET" == "combo" ]; then
             echo ">>> Generating COMBO matrix..."
             json='{"include":[{"target":"nanopi-r5s","variant":"minimal"},{"target":"nanopi-r6s","variant":"minimal"},{"target":"rb5009","variant":"clear"},{"target":"rb5009","variant":"switch"}]}'
