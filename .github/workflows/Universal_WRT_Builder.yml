@@ -278,7 +278,7 @@ jobs:
             # ФОЛБЭК (Если API не нашел тег или произошла ошибка)
             if [ -z "$VAR_TARGET_RELEASE" ]; then
                 if [[ "$INPUT_BRANCH" == *"25.12"* ]]; then
-                     VAR_TARGET_RELEASE="releases/25.12.0-rc4"
+                     VAR_TARGET_RELEASE="releases/25.12.0-rc5"
                 elif [[ "$INPUT_BRANCH" == *"24.10"* ]]; then
                      if [ "${{ inputs.source }}" == "immortalwrt" ]; then
                         VAR_TARGET_RELEASE="releases/24.10-SNAPSHOT"
