@@ -456,7 +456,7 @@ fi
 # =========================================================
 # Удаляем зависимость +sing-box из Makefile.
 # Это позволяет нам ставить любую версию (Full или Tiny) через .config без ошибок рекурсии.
-echo ">>> [HomeProxy] Удаляем зависимость sing-box, так как он уже включен в /config/WRT.config"
+echo ">>> [HomeProxy] Удаляем зависимость sing-box, так как он уже включен в /config/WRT.config для вариантов, где он используется"
 find package/ feeds/ -name Makefile 2>/dev/null | grep "luci-app-homeproxy" | xargs -r sed -i 's/+sing-box //g'
 find package/ feeds/ -name Makefile 2>/dev/null | grep "luci-app-homeproxy" | xargs -r sed -i 's/+sing-box//g'
 echo ">>> [HomeProxy] Makefile patched to fix recursion dependency."
