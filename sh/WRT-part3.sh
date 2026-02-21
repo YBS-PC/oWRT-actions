@@ -461,10 +461,6 @@ find package/ feeds/ -name Makefile 2>/dev/null | grep "luci-app-homeproxy" | xa
 find package/ feeds/ -name Makefile 2>/dev/null | grep "luci-app-homeproxy" | xargs -r sed -i 's/+sing-box//g'
 echo ">>> [HomeProxy] Makefile patched to fix recursion dependency."
 
-if [[ "$VARIANT" == "passwall" || "$VARIANT" == "v2raya" || "$VARIANT" == "xray" ]]; then
-    rm -f "./files/usr/bin/sing-box"
-fi
-
 # =========================================================
 # Настройка сети и часового пояса
 # sed -i "s/192.168.1.1/192.168.2.1/g" ./package/base-files/files/bin/config_generate
