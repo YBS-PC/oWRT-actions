@@ -618,7 +618,7 @@ jobs:
         if [ -z "$LATEST_HASH" ]; then
             # === ЕСЛИ ХЕШ НЕ НАЙДЕН ===
             echo ">>> WARNING: Failed to retrieve official kernel hash."
-            echo ">>> Continuing with LOCAL kernel hash generation (standard OpenWrt behavior)."
+            echo ">>> Continuing with LOCAL kernel hash generation (OpenWrt behavior)."
             echo ">>> NOTE: Official kmods from repositories will NOT work with this build."
             LATEST_HASH="LOCAL (Calculated during build)"
             # Мы НЕ выполняем команду sed, оставляя $(MKHASH) md5 в Makefile
