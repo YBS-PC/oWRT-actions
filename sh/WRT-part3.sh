@@ -57,13 +57,15 @@ fi
 # УСЛОВНЫЙ БЛОК: Добавление HomeProxy
 # Если в фидах нет репозитория 'immortalwrt/luci'
 # =========================================================
-if ! grep -q "immortalwrt/luci" feeds.conf.default; then
-    echo ">>> [HomeProxy] В фидах НЕ найден ImmortalWrt LuCI. Считаем, что это Official OpenWrt."
-    echo ">>> [HomeProxy] Добавляем HomeProxy вручную..."
-    mkdir -p ./package/luci-app-homeproxy
-    git clone -b master https://github.com/immortalwrt/homeproxy.git ./package/luci-app-homeproxy/
-else
-    echo ">>> [HomeProxy] Обнаружен фид ImmortalWrt LuCI. HomeProxy должен быть встроен."
+if [[ "$VARIANT" != "clear" && "$VARIANT" != "crystal_clear" && "$VARIANT" != "switch" && "$VARIANT" != "passwall" && "$VARIANT" != "xray" && "$VARIANT" != "v2raya" ]]; then
+    if ! grep -q "immortalwrt/luci" feeds.conf.default; then
+        echo ">>> [HomeProxy] В фидах НЕ найден ImmortalWrt LuCI. Считаем, что это Official OpenWrt."
+        echo ">>> [HomeProxy] Добавляем HomeProxy вручную..."
+        mkdir -p ./package/luci-app-homeproxy
+        git clone -b master https://github.com/immortalwrt/homeproxy.git ./package/luci-app-homeproxy/
+    else
+        echo ">>> [HomeProxy] Обнаружен фид ImmortalWrt LuCI. HomeProxy должен быть встроен."
+    fi
 fi
 
 # =========================================================
@@ -145,8 +147,8 @@ echo 'CONFIG_BUSYBOX_DEFAULT_ASH_BUILTIN_TEST=y' >> ./.config
 echo 'CONFIG_BUSYBOX_DEFAULT_FEATURE_FAST_TOP=y' >> ./.config
 echo 'CONFIG_BUSYBOX_DEFAULT_FEATURE_USE_INITTAB=y' >> ./.config
 echo ">>> [Heavy packages] Тяжелые пакеты отключены."
-        # Для standart и minimal ставим Tiny версию sing-box.
-        if [[ "$VARIANT" == "standart" || "$VARIANT" == "minimal" ]]; then
+        # Для standard и minimal ставим Tiny версию sing-box.
+        if [[ "$VARIANT" == "standard" || "$VARIANT" == "minimal" ]]; then
             echo ">>> [Heavy packages] Sing-box Tiny for $VARIANT compatibility..."
             sed -i '/sing-box/Id' ./.config
             echo '# CONFIG_PACKAGE_sing-box is not set' >> ./.config
@@ -390,9 +392,10 @@ fi
 if [ "$VARIANT" == "clear" ]; then
     echo ">>> [Variant: $VARIANT] Performing aggressive cleanup..."
     # Удаляем тяжелые бинарники, которые скачались в YML
+    # Они вообще не скачиватся согласно условию в yml
     rm -f "./files/usr/bin/sing-box"
     rm -f "./files/usr/bin/AdGuardHome"
-    echo "   > Removed Sing-box binaries from files"
+    echo "   > Cleaned up binary files (if any were present)"
     # Вычищаем пакеты из конфига
     for PKG in "${CLEAR_BLOAT[@]}"; do
         sed -i "/${PKG}/Id" ./.config
