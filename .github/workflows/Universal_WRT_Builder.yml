@@ -40,10 +40,10 @@ on:
       variant:
         description: 'Build Variant'
         required: true
-        default: 'standart'
+        default: 'standard'
         type: choice
         options:
-          - standart
+          - standard
           - minimal
           - clear
           - switch
