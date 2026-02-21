@@ -414,7 +414,7 @@ if [ "$VARIANT" == "crystal_clear" ]; then
     # Удаляем тяжелые бинарники, которые скачались в YML
     rm -f "./files/usr/bin/sing-box"
     rm -f "./files/usr/bin/AdGuardHome"
-    echo "   > Removed AdGuardHome and Sing-box binaries from files/"
+    echo "   > Cleaned up binary files (if any were present)"
     # Удаляем тяжелые файлы
     rm -f "./files/root/apps/speedtest.tar.gz"
     # Удаляем основной скрипт настройки
@@ -437,7 +437,7 @@ if [ "$VARIANT" == "switch" ]; then
     # Удаляем тяжелые бинарники, которые скачались в YML
     rm -f "./files/usr/bin/sing-box"
     rm -f "./files/usr/bin/AdGuardHome"
-    echo "   > Removed AdGuardHome and Sing-box binaries from files/"
+    echo "   > Cleaned up binary files (if any were present)"
     # Удаляем тяжелые файлы
     rm -f "./files/root/apps/speedtest.tar.gz"
     # Удаляем основной скрипт настройки
