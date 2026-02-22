@@ -48,6 +48,7 @@ on:
           - clear
           - switch
           - crystal_clear
+          - podkop
           - passwall
           - v2raya
           - xray
@@ -431,6 +432,8 @@ jobs:
             echo -e "\nsrc-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main" >> feeds.conf.default
         elif [ "$VARIANT" == "xray" ]; then
             echo -e "\nsrc-git luciappxray https://github.com/yichya/luci-app-xray.git" >> feeds.conf.default
+        elif [ "$VARIANT" == "podkop" ]; then
+            echo -e "\nsrc-git podkop https://github.com/itdoginfo/podkop.git" >> feeds.conf.default
         fi
 
         # --- ЗАМЕНА ЗЕРКАЛ (FIX 503 ERROR) Меняем git.openwrt.org на github.com---
@@ -480,6 +483,11 @@ jobs:
             sed -i '/sing-box/Id' ./.config
         fi
         
+        if [[ "$VARIANT" == "podkop" ]]; then
+            echo ">>> Removing HomeProxy for $VARIANT compatibility..."
+            sed -i '/homeproxy/d' ./.config
+        fi
+        
         if [ "$VARIANT" == "passwall" ]; then
             # Очищаем любые упоминания shadowsocks перед настройкой, чтобы не было конфликтов
             sed -i '/[Ss][Hh][Aa][Dd][Oo][Ww][Ss][Oo][Cc][Kk][Ss]/d' ./.config
@@ -519,6 +527,12 @@ jobs:
             echo 'CONFIG_PACKAGE_xray-core=y' >> ./.config
             echo 'CONFIG_PACKAGE_v2ray-geodata=y' >> ./.config
             echo 'CONFIG_PACKAGE_geoview=y' >> ./.config
+        
+        elif [ "$VARIANT" == "podkop" ]; then
+            echo 'CONFIG_PACKAGE_podkop=y' >> ./.config
+            echo 'CONFIG_PACKAGE_luci-app-podkop=y' >> ./.config
+            echo 'CONFIG_PACKAGE_luci-i18n-podkop-ru=y' >> ./.config
+        
         fi
         
         # 4. Запуск Part 4 (Тюнинг перед defconfig)
@@ -556,7 +570,7 @@ jobs:
         echo "Variant selected: $VARIANT"
         echo "Checking key packages in .config:"
         # Проверяем наличие ключевых пакетов для уверенности
-        grep -E "CONFIG_PACKAGE_(luci-app-homeproxy|sing-box|luci-app-passwall2|luci-app-v2raya|xray-core)=" .config || echo "None found"
+        grep -E "CONFIG_PACKAGE_(luci-app-homeproxy|sing-box|luci-app-passwall2|luci-app-v2raya|xray-core|luci-app-podkop)=" .config || echo "None found"
         echo "=========================================="
 
     - name: Kernel Hash
