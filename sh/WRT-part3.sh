@@ -57,7 +57,7 @@ fi
 # УСЛОВНЫЙ БЛОК: Добавление HomeProxy
 # Если в фидах нет репозитория 'immortalwrt/luci'
 # =========================================================
-if [[ "$VARIANT" != "clear" && "$VARIANT" != "crystal_clear" && "$VARIANT" != "switch" && "$VARIANT" != "passwall" && "$VARIANT" != "xray" && "$VARIANT" != "v2raya" ]]; then
+if [[ "$VARIANT" != "clear" && "$VARIANT" != "crystal_clear" && "$VARIANT" != "switch" && "$VARIANT" != "passwall" && "$VARIANT" != "xray" && "$VARIANT" != "v2raya" && "$VARIANT" != "podkop" ]]; then
     if ! grep -q "immortalwrt/luci" feeds.conf.default; then
         echo ">>> [HomeProxy] В фидах НЕ найден ImmortalWrt LuCI. Считаем, что это Official OpenWrt."
         echo ">>> [HomeProxy] Добавляем HomeProxy вручную..."
@@ -148,7 +148,7 @@ echo 'CONFIG_BUSYBOX_DEFAULT_FEATURE_FAST_TOP=y' >> ./.config
 echo 'CONFIG_BUSYBOX_DEFAULT_FEATURE_USE_INITTAB=y' >> ./.config
 echo ">>> [Heavy packages] Тяжелые пакеты отключены."
         # Для standard и minimal ставим Tiny версию sing-box.
-        if [[ "$VARIANT" == "standard" || "$VARIANT" == "minimal" ]]; then
+        if [[ "$VARIANT" == "standard" || "$VARIANT" == "minimal" || "$VARIANT" == "podkop" ]]; then
             echo ">>> [Heavy packages] Sing-box Tiny for $VARIANT compatibility..."
             sed -i '/sing-box/Id' ./.config
             echo '# CONFIG_PACKAGE_sing-box is not set' >> ./.config
@@ -378,6 +378,18 @@ SWITCH_BLOAT=(
 
 # --- ЛОГИКА ДЛЯ ВАРИАНТА 'minimal' ---
 if [ "$VARIANT" == "minimal" ]; then
+    echo ">>> [Variant: $VARIANT] Performing cleanup..."
+    # Вычищаем пакеты из конфига
+    for PKG in "${MINIMAL_BLOAT[@]}"; do
+        sed -i "/${PKG}/Id" ./.config
+        echo "# CONFIG_PACKAGE_luci-app-${PKG} is not set" >> ./.config
+        echo "# CONFIG_PACKAGE_luci-i18n-${PKG}-ru is not set" >> ./.config
+        echo "# CONFIG_PACKAGE_${PKG} is not set" >> ./.config
+    done
+fi
+
+# --- ЛОГИКА ДЛЯ ВАРИАНТА 'podkop' ---
+if [ "$VARIANT" == "podkop" ]; then
     echo ">>> [Variant: $VARIANT] Performing cleanup..."
     # Вычищаем пакеты из конфига
     for PKG in "${MINIMAL_BLOAT[@]}"; do
