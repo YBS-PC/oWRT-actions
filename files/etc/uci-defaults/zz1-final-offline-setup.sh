@@ -287,23 +287,13 @@ if [ -f "$PASSWALL_INIT" ]; then
 
     # --- КОНФИГУРАЦИЯ ЧЕРЕЗ UCI ---
     uci -q batch <<-EOF
-        # 1. Отключаем перехват DNS (Redirect/Tproxy на 53 порту)
         set passwall2.@global[0].dns_redirect='0'
-        
-        # 2. Отключаем Shunt (разделение DNS), так как AGH сам все решит
-        set passwall2.@global[0].dns_shunt='closed'
-        
-        # 3. Указываем Passwall использовать локальный AGH как DNS
-        set passwall2.@global[0].remote_dns='127.0.0.1:53'
+		set passwall2.@global[0].dns_shunt='closed'
+		set passwall2.@global[0].remote_dns='127.0.0.1:53'
         set passwall2.@global[0].china_dns='127.0.0.1:53'
-        
-        # 4. Отключаем любые попытки фильтрации UDP
-        set passwall2.@global[0].adblock='0'
-        
-        # 5. Убеждаемся, что Passwall включен глобально
-        set passwall2.@global[0].enabled='1'
-        
-        commit passwall2
+		set passwall2.@global[0].adblock='0'
+		set passwall2.@global[0].enabled='1'
+		commit passwall2
 EOF
     
     echo -e "DNS перехват в Passwall 2 отключен. DNS полностью управляется AdGuardHome."
@@ -441,9 +431,8 @@ if [ -x "/usr/bin/AdGuardHome" ] && [ -f "/etc/config/adguardhome" ]; then
     if ! grep -q '^adguardhome:' /etc/group; then echo "adguardhome:x:853:" >> /etc/group; fi
     if ! grep -q '^adguardhome:' /etc/passwd; then echo "adguardhome:x:853:853:AdGuard Home:/var/lib/adguardhome:/bin/false" >> /etc/passwd; fi
 
-    # Применяем настройки ко всем вариантам (универсальный подход)
+    # Применяем настройки ко всем вариантам (универсальный подход) может понадобится set adguardhome.config.enabled='1'
     uci -q batch <<EOF
-        #set adguardhome.config.enabled='1'
         set adguardhome.config.work_dir='/opt/AdGuardHome'
         set adguardhome.config.user='root'
         set adguardhome.config.group='root'
