@@ -19,24 +19,24 @@ echo 'CONFIG_PACKAGE_resize2fs=y' >> ./.config
 # Удаляем старые драйверы (он не нужен)
 sed -i "/r8169/Id" ./.config
 sed -i "/kmod-r8125/Id" ./.config
-###echo 'CONFIG_PACKAGE_kmod-r8169=n' >> ./.config
-###echo 'CONFIG_PACKAGE_r8169-firmware=n' >> ./.config
+echo 'CONFIG_PACKAGE_kmod-r8169=n' >> ./.config
+echo 'CONFIG_PACKAGE_r8169-firmware=n' >> ./.config
 
-#### Выбираем правильный r8125 в зависимости от репозитория
-###if [[ "$REPO_URL" == *"immortalwrt"* ]]; then
-###    # Для ImmortalWrt: Ставим стандартный (он там единственный)
-###    echo ">>> Config: Selecting Standard r8125 for ImmortalWrt"
-###    echo 'CONFIG_PACKAGE_kmod-r8125=y' >> ./.config
-###else
-###    # Для OpenWrt (Official): Ставим RSS версию (стандартная там без многопоточности)
-###    echo ">>> Config: Selecting RSS r8125 for OpenWrt"
-###    echo '# CONFIG_PACKAGE_kmod-r8125 is not set' >> ./.config
-###    echo 'CONFIG_PACKAGE_kmod-r8125-rss=y' >> ./.config
-###fi
+# Выбираем правильный r8125 в зависимости от репозитория
+if [[ "$REPO_URL" == *"immortalwrt"* ]]; then
+    # Для ImmortalWrt: Ставим стандартный (он там единственный)
+    echo ">>> Config: Selecting Standard r8125 for ImmortalWrt"
+    echo 'CONFIG_PACKAGE_kmod-r8125=y' >> ./.config
+else
+    # Для OpenWrt (Official): Ставим RSS версию (стандартная там без многопоточности)
+    echo ">>> Config: Selecting RSS r8125 for OpenWrt"
+    echo '# CONFIG_PACKAGE_kmod-r8125 is not set' >> ./.config
+    echo 'CONFIG_PACKAGE_kmod-r8125-rss=y' >> ./.config
+fi
 
-# R8125-rss PPPoE Flapping on 25.12.0-rc5
-echo 'CONFIG_PACKAGE_kmod-r8169=y' >> ./.config
-echo 'CONFIG_PACKAGE_r8169-firmware=y' >> ./.config
+#### R8125-rss PPPoE Flapping on 25.12.0-rc5
+###echo 'CONFIG_PACKAGE_kmod-r8169=y' >> ./.config
+###echo 'CONFIG_PACKAGE_r8169-firmware=y' >> ./.config
 
 EOF
 )
