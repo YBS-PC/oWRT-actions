@@ -91,9 +91,9 @@ jobs:
           INPUT_VARIANT="${{ inputs.variant }}"
           if [ "$INPUT_TARGET" == "combo" ]; then
             echo ">>> Generating COMBO matrix..."
-            json='{"include":[{"target":"nanopi-r5s","variant":"minimal"},{"target":"nanopi-r6s","variant":"minimal"},{"target":"rb5009","variant":"clear"},{"target":"rb5009","variant":"switch"}]}'
+            json='{"include":[{"target":"nanopi-r6s","variant":"minimal"},{"target":"rb5009","variant":"clear"},{"target":"rb5009","variant":"switch"}]}'
           else
-            targets="nanopi-r6s nanopi-r5s rb5009 slateax ax59u brume2"
+            targets="nanopi-r6s rb5009"
             if [ "$INPUT_TARGET" == "all" ]; then
               selected=$targets
             else
