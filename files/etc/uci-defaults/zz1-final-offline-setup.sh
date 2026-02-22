@@ -198,7 +198,7 @@ if [ -f /root/apps/speedtest.tar.gz ]; then
 	chmod +x /usr/bin/speedtest
 	echo -e "Установлен speedtest из /root/apps/"
 else
-	echo -e "Файл speedtest не найден в /tmp/. Пропускаем установку."
+	echo -e "Файл speedtest не найден в /root/apps/. Пропускаем установку."
 fi
 
 #################### Настройка homeproxy ####################
