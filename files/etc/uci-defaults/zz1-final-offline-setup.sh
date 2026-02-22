@@ -653,6 +653,8 @@ if [ ! -f "$LOCK_FILE" ] && [ "$CURRENT_VARIANT" = "switch" ]; then
     uci set network.lan.device='br-lan'
     uci set network.lan.proto='dhcp'
     uci set network.lan.ip6assign='0'
+	uci set network.@device[0].ipv6='0'
+	uci set network.globals.packet_steering='2'
     uci -q delete network.globals.ula_prefix
     echo "Отключение встроенного DHCP-сервера..."
     uci set dhcp.lan.ignore='1'
@@ -661,6 +663,7 @@ if [ ! -f "$LOCK_FILE" ] && [ "$CURRENT_VARIANT" = "switch" ]; then
     uci -q delete dhcp.odhcpd
     uci set dhcp.odhcpd=odhcpd
     uci set dhcp.odhcpd.disabled='1'
+	/etc/init.d/odhcpd disable
     echo "Упрощение Firewall и включение аппаратного ускорения..."
     uci -q delete firewall.@zone[1]
     uci -q delete firewall.@forwarding[0]
@@ -672,6 +675,7 @@ if [ ! -f "$LOCK_FILE" ] && [ "$CURRENT_VARIANT" = "switch" ]; then
     uci set firewall.@zone[0].output='ACCEPT'
     uci set firewall.@zone[0].forward='ACCEPT'
     while uci -q delete firewall.@rule[0]; do :; done
+	uci -q delete dhcp.wan
     echo "Сохранение конфигурации..."
     uci commit
     echo -e "Роутер переведен в режим управляемого свитча. IP будет получен по DHCP."
