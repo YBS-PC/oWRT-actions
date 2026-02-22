@@ -433,7 +433,7 @@ jobs:
         elif [ "$VARIANT" == "xray" ]; then
             echo -e "\nsrc-git luciappxray https://github.com/yichya/luci-app-xray.git" >> feeds.conf.default
         elif [ "$VARIANT" == "podkop" ]; then
-            echo -e "\nsrc-git podkop https://github.com/itdoginfo/podkop.git" >> feeds.conf.default
+            echo -e "\nsrc-git podkop https://github.com/itdoginfo/podkop.git;main" >> feeds.conf.default
         fi
 
         # --- ЗАМЕНА ЗЕРКАЛ (FIX 503 ERROR) Меняем git.openwrt.org на github.com---
