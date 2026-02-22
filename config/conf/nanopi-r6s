@@ -19,8 +19,8 @@ echo 'CONFIG_PACKAGE_resize2fs=y' >> ./.config
 # Удаляем старые драйверы (он не нужен)
 sed -i "/r8169/Id" ./.config
 sed -i "/kmod-r8125/Id" ./.config
-echo 'CONFIG_PACKAGE_kmod-r8169=n' >> ./.config
-echo 'CONFIG_PACKAGE_r8169-firmware=n' >> ./.config
+###echo 'CONFIG_PACKAGE_kmod-r8169=n' >> ./.config
+###echo 'CONFIG_PACKAGE_r8169-firmware=n' >> ./.config
 
 #### Выбираем правильный r8125 в зависимости от репозитория
 ###if [[ "$REPO_URL" == *"immortalwrt"* ]]; then
