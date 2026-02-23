@@ -75,6 +75,7 @@ on:
           - clear
           - switch
           - crystal_clear
+          - podkop
           - passwall
           - v2raya
           - xray
@@ -491,6 +492,8 @@ jobs:
           echo "src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main" >> feeds.conf.default
         elif [ "$VARIANT" == "xray" ]; then
           echo "src-git luciappxray https://github.com/yichya/luci-app-xray.git" >> feeds.conf.default
+        elif [ "$VARIANT" == "podkop" ]; then
+          echo "src-git podkop https://github.com/itdoginfo/podkop.git;main" >> feeds.conf.default
         fi
 
         # Slateax: fancontrol
@@ -508,7 +511,8 @@ jobs:
         # HomeProxy (только для вариантов, которые его используют)
         if [[ "$VARIANT" != "clear" && "$VARIANT" != "crystal_clear" && \
               "$VARIANT" != "switch" && "$VARIANT" != "passwall" && \
-              "$VARIANT" != "xray" && "$VARIANT" != "v2raya" ]]; then
+              "$VARIANT" != "xray" && "$VARIANT" != "v2raya" && \
+              "$VARIANT" != "podkop" ]]; then
           # Только для Official OpenWrt (в ImmortalWrt homeproxy уже в фидах)
           if [[ "$SOURCE_NAME" == "openwrt" ]]; then
             mkdir -p package/luci-app-homeproxy
@@ -592,6 +596,12 @@ jobs:
         # Xray app
         if [ "$VARIANT" == "xray" ]; then
           compile_pkg "luci-app-xray"
+        fi
+
+        # Podkop
+        if [ "$VARIANT" == "podkop" ]; then
+          compile_pkg "luci-app-podkop"
+          compile_pkg "luci-i18n-podkop-ru"
         fi
 
         # facinstall (ax59u)
@@ -814,7 +824,7 @@ jobs:
             # Убираем прокси-пакеты, сохраняем базовый функционал
             VARIANT_REMOVE="luci-app-homeproxy sing-box luci-app-youtubeUnblock youtubeUnblock \
                              luci-app-internet-detector internet-detector \
-                             luci-app-sqm sqm-scripts adguardhome luci-app-adguardhome"
+                             adguardhome"
             ;;
           crystal_clear)
             # Минималистичный вариант
@@ -825,12 +835,18 @@ jobs:
                              coreutils-base64 coreutils-cat coreutils-chmod coreutils-chown \
                              coreutils-cp coreutils-cut coreutils-date coreutils-df"
             ;;
+          podkop)
+            # Удаляем SQM, HomeProxy и встроенный sing-box (жирный)
+            VARIANT_REMOVE="luci-app-sqm sqm-scripts luci-app-homeproxy"
+            # Добавляем AdGuardHome, пакеты Podkop
+            VARIANT_ADD="adguardhome podkop luci-app-podkop luci-i18n-podkop-ru"
+            ;;
           switch)
             # Только сеть + базовый веб-интерфейс
             VARIANT_REMOVE="luci-app-homeproxy sing-box luci-app-youtubeUnblock youtubeUnblock \
                              luci-app-internet-detector internet-detector luci-app-sqm \
                              sqm-scripts adguardhome luci-app-adguardhome lm-sensors sysstat \
-                             luci-app-commands luci-app-filemanager pciutils usbutils \
+                             luci-app-commands pciutils usbutils \
                              bsdtar mtr-json tcpdump"
             ;;
         esac
