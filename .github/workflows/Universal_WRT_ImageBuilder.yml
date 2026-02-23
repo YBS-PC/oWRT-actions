@@ -685,11 +685,14 @@ jobs:
         # Это официальный поддерживаемый метод для IB (документирован в OpenWrt wiki).
         PKG_COPIED=0
 
-        # Определяем целевую папку пакетов в IB (зависит от архитектуры)
-        # Image Builder хранит пакеты в packages/<arch>/ или packages/
-        IB_PKG_DIR=$(ls -d "$IB_DIR"/packages/*/base 2>/dev/null | head -1 | xargs dirname 2>/dev/null || echo "")
-        [ -z "$IB_PKG_DIR" ] && IB_PKG_DIR=$(ls -d "$IB_DIR"/packages/* 2>/dev/null | head -1 || echo "$IB_DIR/packages")
+        # Определяем целевую папку пакетов в IB (строго ищем только директорию, игнорируем README.md)
+        # -mindepth 1 -maxdepth 1 -type d гарантирует, что мы найдем только вложенную папку (например aarch64_cortex-a72)
+        IB_PKG_DIR=$(find "$IB_DIR/packages" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+        
+        # Если подпапок нет, используем сам корень packages
         [ -z "$IB_PKG_DIR" ] && IB_PKG_DIR="$IB_DIR/packages"
+        
+        echo ">>> Target package directory: $IB_PKG_DIR"
         mkdir -p "$IB_PKG_DIR"
 
         if [ "$PKG_MANAGER" == "apk" ]; then
