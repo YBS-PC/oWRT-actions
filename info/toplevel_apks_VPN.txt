@@ -1,3 +1,7 @@
+-apk-mbedtls
+-dnsmasq
+-libustream-mbedtls
+-kmod-r8169
 adguardhome
 apk-openssl
 avahi-nodbus-daemon
@@ -52,7 +56,6 @@ grep
 gzip
 htop
 hwclock
-internet-detector  # (явный, исключён из анализа зависимостей)
 ip-full
 ip6tables-nft
 iperf3
@@ -83,7 +86,7 @@ kmod-nft-queue
 kmod-nft-socket
 kmod-nft-tproxy
 kmod-phy-aquantia
-kmod-r8169
+kmod-r8125-rss
 kmod-sched-cake
 kmod-tcp-bbr
 kmod-tls
@@ -106,19 +109,13 @@ losetup
 lsblk
 lsof
 luaposix
-luci-app-homeproxy  # (явный, исключён из анализа зависимостей)
-luci-app-internet-detector  # (явный, исключён из анализа зависимостей)
-luci-app-log-viewer  # (явный, исключён из анализа зависимостей)
-luci-app-youtubeUnblock  # (явный, исключён из анализа зависимостей)
 luci-compat
 luci-i18n-attendedsysupgrade-ru
 luci-i18n-base-ru
 luci-i18n-commands-ru
 luci-i18n-filemanager-ru
 luci-i18n-firewall-ru
-luci-i18n-internet-detector-ru  # (явный, исключён из анализа зависимостей)
 luci-i18n-irqbalance-ru
-luci-i18n-log-viewer-ru  # (явный, исключён из анализа зависимостей)
 luci-i18n-package-manager-ru
 luci-i18n-ttyd-ru
 mkf2fs
@@ -150,5 +147,12 @@ unzip
 urandom-seed
 urngd
 usbutils
-youtubeUnblock  # (явный, исключён из анализа зависимостей)
 zoneinfo-europe
+internet-detector  # (явный, исключён из анализа зависимостей)
+luci-app-homeproxy  # (явный, исключён из анализа зависимостей)
+luci-app-internet-detector  # (явный, исключён из анализа зависимостей)
+luci-app-log-viewer  # (явный, исключён из анализа зависимостей)
+luci-app-youtubeUnblock  # (явный, исключён из анализа зависимостей)
+luci-i18n-internet-detector-ru  # (явный, исключён из анализа зависимостей)
+luci-i18n-log-viewer-ru  # (явный, исключён из анализа зависимостей)
+youtubeUnblock  # (явный, исключён из анализа зависимостей)
