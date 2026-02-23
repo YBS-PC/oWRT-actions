@@ -87,12 +87,12 @@ fi
 
 # --------------------------------------------------------------------------
 # --- Фикс Rust 1.90.0: download-ci-llvm=true несовместим с GitHub Actions (CI=true) ---
-RUST_MK="feeds/packages/lang/rust/Makefile"
-if [ -f "$RUST_MK" ]; then
-    echo ">>> [Rust fix] Patching $RUST_MK..."
-    sed -i 's/--set=llvm.download-ci-llvm=true/--set=llvm.download-ci-llvm=if-unchanged/' "$RUST_MK"
-    echo ">>> [Rust fix] Done."
-fi
+#-----#RUST_MK="feeds/packages/lang/rust/Makefile"
+#-----#if [ -f "$RUST_MK" ]; then
+#-----#    echo ">>> [Rust fix] Patching $RUST_MK..."
+#-----#    sed -i 's/--set=llvm.download-ci-llvm=true/--set=llvm.download-ci-llvm=if-unchanged/' "$RUST_MK"
+#-----#    echo ">>> [Rust fix] Done."
+#-----#fi
 
 # --------------------------------------------------------------------------
 # Фиксы Python (ТОЛЬКО ДЛЯ ВЕТКИ MASTER или MAIN)
