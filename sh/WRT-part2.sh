@@ -86,27 +86,12 @@ else
 fi
 
 # --------------------------------------------------------------------------
-# --- Фикс Rust 1.90.0: llvm.download-ci-llvm несовместим с CI=true ---
-# GitHub Actions выставляет CI=true, что блокирует сборку Rust 1.90.0+
-# Патчим Makefile фида, чтобы он генерировал правильное значение
-RUST_MAKEFILE=""
-for path in \
-    "feeds/packages/lang/rust/Makefile" \
-    "package/feeds/packages/rust/Makefile"; do
-    if [ -f "$path" ]; then
-        RUST_MAKEFILE="$path"
-        break
-    fi
-done
-
-if [ -n "$RUST_MAKEFILE" ]; then
-    echo ">>> [Rust fix] Patching $RUST_MAKEFILE for CI compatibility..."
-    sed -i 's/download-ci-llvm = true/download-ci-llvm = if-unchanged/g' "$RUST_MAKEFILE"
-    # На случай если значение в кавычках или другом формате
-    sed -i 's/download-ci-llvm = "true"/download-ci-llvm = "if-unchanged"/g' "$RUST_MAKEFILE"
+# --- Фикс Rust 1.90.0: download-ci-llvm=true несовместим с GitHub Actions (CI=true) ---
+RUST_MK="feeds/packages/lang/rust/Makefile"
+if [ -f "$RUST_MK" ]; then
+    echo ">>> [Rust fix] Patching $RUST_MK..."
+    sed -i 's/--set=llvm.download-ci-llvm=true/--set=llvm.download-ci-llvm=if-unchanged/' "$RUST_MK"
     echo ">>> [Rust fix] Done."
-else
-    echo ">>> [Rust fix] Rust Makefile not found, skipping."
 fi
 
 # --------------------------------------------------------------------------
