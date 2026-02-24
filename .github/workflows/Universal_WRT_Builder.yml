@@ -517,10 +517,11 @@ jobs:
             echo 'CONFIG_PACKAGE_v2ray-geodata=y' >> ./.config
             
         elif [ "$VARIANT" == "v2raya" ]; then
-            echo 'CONFIG_PACKAGE_luci-app-v2raya=y' >> ./.config
+            echo 'CONFIG_PACKAGE_xray-core=y' >> ./.config
             echo 'CONFIG_PACKAGE_v2rayA=y' >> ./.config
             echo 'CONFIG_PACKAGE_v2ray-geodata=y' >> ./.config
-            echo 'CONFIG_PACKAGE_xray-core=y' >> ./.config
+            echo 'CONFIG_PACKAGE_luci-app-v2raya=y' >> ./.config
+            echo 'CONFIG_PACKAGE_luci-i18n-v2raya-ru=y' >> ./.config
             
         elif [ "$VARIANT" == "xray" ]; then
             echo 'CONFIG_PACKAGE_luci-app-xray=y' >> ./.config
