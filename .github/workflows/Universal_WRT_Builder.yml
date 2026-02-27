@@ -52,6 +52,12 @@ on:
           - passwall
           - v2raya
           - xray
+
+      download_binaries:
+        description: 'Download latest binaries (AGH, Sing-Box)'
+        required: true
+        type: boolean
+        default: false
       
       exclude_keywords:
         description: 'Exclude Packages (Space separated keywords)'
@@ -174,7 +180,7 @@ jobs:
 
     - name: Download AdGuardHome
       # Условие: выполнять только если вариант НЕ switch И НЕ clear и НЕ crystal_clear
-      if: matrix.variant != 'switch' && matrix.variant != 'clear' && matrix.variant != 'crystal_clear'
+      if: inputs.download_binaries && matrix.variant != 'switch' && matrix.variant != 'clear' && matrix.variant != 'crystal_clear'
       run: |
         # AdGuardHome
         AGH_URL="https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_arm64.tar.gz"
@@ -191,7 +197,7 @@ jobs:
         
     - name: Download Sing-box
       # Sing-box не качаем для чистых сборок И для сборок со своими прокси-ядрами
-      if: matrix.variant != 'switch' && matrix.variant != 'clear' && matrix.variant != 'crystal_clear' && matrix.variant != 'passwall' && matrix.variant != 'v2raya' && matrix.variant != 'xray'
+      if: inputs.download_binaries && matrix.variant != 'switch' && matrix.variant != 'clear' && matrix.variant != 'crystal_clear' && matrix.variant != 'passwall' && matrix.variant != 'v2raya' && matrix.variant != 'xray'
       run: |
         SB_URL=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest | grep "browser_download_url.*linux-arm64.tar.gz" | cut -d '"' -f 4 | head -n 1)
         echo ">>> Downloading sing-box from: $SB_URL"
