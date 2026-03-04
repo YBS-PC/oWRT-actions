@@ -275,6 +275,7 @@ else
 fi
 
 #################### Настройка Passwall 2 (Интеграция с AGH) ####################
+if [ ! -f "$LOCK_FILE" ] && [ "$CURRENT_VARIANT" = "passwall" ]; then
 # Проверяем, установлен ли passwall2
 PASSWALL_INIT="/etc/init.d/passwall2"
 
@@ -304,6 +305,7 @@ EOF
     
 else
     echo -e "Passwall 2 не найден. Пропуск."
+fi
 fi
 
 #################### Настройка youtubeUnblock ####################
