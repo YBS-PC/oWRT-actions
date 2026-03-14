@@ -390,8 +390,8 @@ if [ -x "/usr/bin/youtubeUnblock" ]; then
 	/etc/init.d/youtubeUnblock disable
 	echo "$YTB_NFT_FILE_CONTENT" > "$YTB_NFT_FILE"
 	chmod 0644 "$YTB_NFT_FILE"
-	echo "$YTB_NFT_GUEST_MARK_CONTENT" > "$YTB_NFT_GUEST_MARK_FILE"
-	chmod 0644 "$YTB_NFT_GUEST_MARK_FILE"
+	#-#echo "$YTB_NFT_GUEST_MARK_CONTENT" > "$YTB_NFT_GUEST_MARK_FILE"
+	#-#chmod 0644 "$YTB_NFT_GUEST_MARK_FILE"
 	/etc/init.d/youtubeUnblock enable
 	echo -e "youtubeUnblock настроен и включен."
 else
