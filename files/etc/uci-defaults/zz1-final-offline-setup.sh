@@ -289,12 +289,12 @@ if [ -f "$PASSWALL_INIT" ]; then
     # --- КОНФИГУРАЦИЯ ЧЕРЕЗ UCI ---
     uci -q batch <<-EOF
         set passwall2.@global[0].dns_redirect='0'
-		set passwall2.@global[0].dns_shunt='closed'
-		set passwall2.@global[0].remote_dns='127.0.0.1:53'
+        set passwall2.@global[0].dns_shunt='closed'
+        set passwall2.@global[0].remote_dns='127.0.0.1:53'
         set passwall2.@global[0].china_dns='127.0.0.1:53'
-		set passwall2.@global[0].adblock='0'
-		set passwall2.@global[0].enabled='1'
-		commit passwall2
+        set passwall2.@global[0].adblock='0'
+        set passwall2.@global[0].enabled='1'
+        commit passwall2
 EOF
     
     echo -e "DNS перехват в Passwall 2 отключен. DNS полностью управляется AdGuardHome."
