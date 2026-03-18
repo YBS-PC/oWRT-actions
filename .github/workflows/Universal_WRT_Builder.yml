@@ -96,6 +96,8 @@ env:
   UPLOAD_FIRMWARE: false
   TZ: Europe/Moscow
 
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   setup:
     runs-on: ubuntu-latest
@@ -773,7 +775,7 @@ jobs:
         path: openwrt/bin
 
     - name: Delete workflow runs
-      uses: Mattraks/delete-workflow-runs@v2.0.6
+      uses: Mattraks/delete-workflow-runs@v2
       with:
         retain_days: 10
         keep_minimum_runs: 6
