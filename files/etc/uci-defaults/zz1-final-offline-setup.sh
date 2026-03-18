@@ -357,6 +357,9 @@ add rule inet fw4 prerouting ip daddr @dpi_ips udp dport 443 reject with icmp po
 # DPI through youtubeUnblock
 add chain inet fw4 youtubeUnblock { type filter hook postrouting priority mangle - 1; policy accept; }
 
+# Skip sing-box own packets (SO_MARK=0x64, set by homeproxy)
+add rule inet fw4 youtubeUnblock meta mark 0x00000064 counter return
+
 # Exclusion of the guest network by tag (traffic will bypass the queue)
 add rule inet fw4 youtubeUnblock meta mark 0x00000042 counter return
 
