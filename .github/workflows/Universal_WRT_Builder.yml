@@ -777,15 +777,10 @@ jobs:
       with:
         name: ${{ inputs.source }}_${{ inputs.branch }}_${{ matrix.variant }}_${{ matrix.target }}_${{ env.FILE_DATE }}
         path: openwrt/bin
+        retention-days: 10
 
     - name: Delete workflow runs
-      uses: Mattraks/delete-workflow-runs@v2
+      uses: Mattraks/delete-workflow-runs@main
       with:
         retain_days: 10
         keep_minimum_runs: 6
-
-    - name: Delete old artifacts
-      uses: c-hive/gha-remove-artifacts@v1
-      with:
-        age: '10 days'
-        skip-recent: 6
