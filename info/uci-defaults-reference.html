@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Справочник: zz1-final-offline-setup.sh</title>
+<style>
+  body { font-family: Arial, sans-serif; font-size: 13px; margin: 20px; color: #222; background: #fff; }
+  h1 { font-size: 18px; border-bottom: 2px solid #2c5f8a; padding-bottom: 6px; color: #2c5f8a; }
+  h2 { font-size: 14px; background: #2c5f8a; color: #fff; padding: 5px 10px; margin-top: 28px; margin-bottom: 0; }
+  table { border-collapse: collapse; width: 100%; margin-top: 0; }
+  th { background: #dce8f5; color: #1a3a5c; font-size: 12px; padding: 6px 8px; border: 1px solid #aac4df; text-align: left; }
+  td { border: 1px solid #ccc; padding: 6px 8px; vertical-align: top; }
+  tr:nth-child(even) { background: #f5f9ff; }
+  .always { background: #e8f5e9; font-weight: bold; color: #2e7d32; }
+  .cond { background: #fff8e1; font-weight: bold; color: #f57c00; }
+  .variant { background: #fce4ec; font-weight: bold; color: #c62828; }
+  .device { background: #ede7f6; font-weight: bold; color: #4527a0; }
+  code { background: #f0f0f0; padding: 1px 4px; border-radius: 3px; font-family: Consolas, monospace; font-size: 12px; }
+  .legend { display: flex; gap: 16px; margin: 12px 0; flex-wrap: wrap; }
+  .leg { padding: 3px 10px; border-radius: 3px; font-size: 12px; font-weight: bold; }
+  .note { background: #fff3cd; border-left: 3px solid #ffc107; padding: 6px 10px; margin: 4px 0; font-size: 12px; }
+  .section-info { background: #f0f4f8; padding: 6px 10px; font-size: 12px; color: #555; border-left: 3px solid #2c5f8a; margin-bottom: 2px; }
+</style>
+</head>
+<body>
+
+<h1>Справочник изменений: zz1-final-offline-setup.sh</h1>
+<p>Файл: <code>/etc/uci-defaults/zz1-final-offline-setup.sh</code> &nbsp;|&nbsp; Запускается однократно при первой загрузке после прошивки. После успешного завершения (<code>exit 0</code>) — удаляется автоматически.</p>
+
+<div class="legend">
+  <span class="leg always">ВСЕГДА</span> — выполняется при любом варианте и устройстве
+  <span class="leg cond">УСЛОВИЕ</span> — только если указанный файл/пакет существует
+  <span class="leg variant">ВАРИАНТ</span> — только для конкретного значения <code>/etc/build_variant</code>
+  <span class="leg device">УСТРОЙСТВО</span> — зависит от аппаратной платформы
+</div>
+
+<!-- ===================== БЛОК 1: ПЕРЕМЕННЫЕ ===================== -->
+<h2>1. Определение переменных системы (всегда, самый первый блок)</h2>
+<div class="section-info">Никаких изменений в файлах не производится. Только читаются данные для использования далее.</div>
+<table>
+  <tr><th width="22%">Переменная</th><th width="38%">Откуда берётся</th><th>Результат (пример для R6S/OpenWrt)</th></tr>
+  <tr><td><code>KERNEL_VERSION</code></td><td><code>/proc/version</code></td><td><code>6.12.74</code></td></tr>
+  <tr><td><code>ARCH_VERSION</code></td><td><code>/etc/os-release</code> строка ARCH</td><td><code>aarch64_generic</code></td></tr>
+  <tr><td><code>NAME_VALUE</code></td><td><code>/etc/os-release</code> строка NAME</td><td><code>OpenWrt</code> или <code>ImmortalWrt</code></td></tr>
+  <tr><td><code>ROUTER_NAME</code></td><td>из NAME_VALUE</td><td><code>oWRT</code> (OpenWrt) / <code>iWRT</code> (ImmortalWrt) / <code>WRT</code> (прочее)</td></tr>
+  <tr><td><code>ROUTER_MODEL</code></td><td><code>ubus call system board</code>, последнее слово модели</td><td><code>R6S</code>, <code>R5S</code>, <code>RB5009</code>, <code>GL-MT2500</code>, <code>GL-AXT1800</code></td></tr>
+  <tr><td><code>ROUTER_MODEL_NAME</code></td><td>маппинг из ROUTER_MODEL</td><td><code>R6S</code> → <code>R6S</code>, <code>GL-MT2500</code> → <code>Brume2</code>, <code>GL-AXT1800</code> → <code>SLATEX</code>, прочее → board_name</td></tr>
+  <tr><td><code>HOSTNAME_PATTERN</code></td><td>склейка MODEL_NAME + ROUTER_NAME</td><td><code>R6S-oWRT</code>, <code>RB5009-iWRT</code>, <code>Brume2-oWRT</code></td></tr>
+  <tr><td><code>CURRENT_VARIANT</code></td><td><code>/etc/build_variant</code></td><td><code>minimal</code>, <code>passwall</code>, <code>switch</code>, <code>clear</code>, <code>crystal_clear</code> или пусто</td></tr>
+  <tr><td><code>LOCK_FILE</code></td><td>константа</td><td><code>/root/.setup_completed</code> — создаётся в конце скрипта</td></tr>
+</table>
+
+<!-- ===================== БЛОК 2: FIREWALL FULLCONE УДАЛЕНИЕ ===================== -->
+<h2>2. Firewall — удаление FullCone NAT в начале</h2>
+<table>
+  <tr><th width="22%">Условие</th><th width="38%">Файл</th><th>Что делается</th></tr>
+  <tr>
+    <td><span class="always">ВСЕГДА</span></td>
+    <td><code>/etc/config/firewall</code></td>
+    <td>Удаляется строка <code>option fullcone '1'</code> если она есть. Смысл: в конце скрипта она добавляется обратно только если модуль ядра реально присутствует.</td>
+  </tr>
+</table>
+
+<!-- ===================== БЛОК 3: ЧАСОВОЙ ПОЯС ===================== -->
+<h2>3. Часовой пояс</h2>
+<table>
+  <tr><th width="22%">Условие</th><th width="38%">Файл</th><th>Что делается</th></tr>
+  <tr>
+    <td><span class="always">ВСЕГДА</span></td>
+    <td><code>/etc/config/system</code></td>
+    <td>Устанавливается <code>option zonename 'Europe/Moscow'</code></td>
+  </tr>
+</table>
+
+<!-- ===================== БЛОК 4: ПАКЕТНЫЙ МЕНЕДЖЕР ===================== -->
+<h2>4. Пакетный менеджер и репозитории</h2>
+<table>
+  <tr><th width="22%">Условие</th><th width="38%">Файл</th><th>Что делается</th></tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: есть apk</span><br>Архитектура ещё не прописана</td>
+    <td><code>/etc/apk/arch</code></td>
+    <td>Записывается значение <code>ARCH_VERSION</code> (например <code>aarch64_generic</code>)</td>
+  </tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: есть apk</span><br>ключ отсутствует</td>
+    <td><code>/etc/apk/keys/</code></td>
+    <td>Копируются ключи подписи из <code>/root/apps/</code>: <code>immortalwrt-snapshots.pem</code>, <code>openwrt-snapshots.pem</code>, <code>youtubeUnblock.pem</code>, <code>public-key.pem</code> — каждый только если его ещё нет</td>
+  </tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: есть apk</span></td>
+    <td><code>/etc/apk/repositories.d/distfeeds.list</code></td>
+    <td>
+      1. Создаётся бэкап <code>distfeeds.list.bak</code><br>
+      2. Из файла оставляются только строки с: <code>targets</code>, <code>base</code>, <code>luci</code>, <code>packages</code>, <code>routing</code>, <code>telephony</code>, <code>video</code><br>
+      3. В конец добавляется URL репозитория kmods вида:<br>
+      <code>…/kmods/6.12.74-1-e30f543.../packages.adb</code><br>
+      (версия определяется автоматически из установленного ядра)
+    </td>
+  </tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: есть opkg</span></td>
+    <td><code>/etc/opkg/distfeeds.conf</code></td>
+    <td>Те же фильтрация и бэкап. Kmods не добавляется (только для apk).</td>
+  </tr>
+  <tr>
+    <td><span class="always">ВСЕГДА</span> (если менеджер найден)</td>
+    <td><code>customfeeds.list</code> или <code>customfeeds.conf</code></td>
+    <td>Файл перезаписывается в пустой шаблон с комментарием</td>
+  </tr>
+</table>
+
+<!-- ===================== БЛОК 5: БИНАРНИКИ ===================== -->
+<h2>5. Установка бинарников из /root/apps/</h2>
+<table>
+  <tr><th width="22%">Условие</th><th width="38%">Файл</th><th>Что делается</th></tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: существует<br>/root/apps/sing-box.tar.gz</span></td>
+    <td><code>/usr/bin/sing-box</code></td>
+    <td>Останавливается служба sing-box (если запущена), архив распаковывается в <code>/tmp/</code>, бинарник копируется в <code>/usr/bin/sing-box</code>, устанавливается <code>chmod +x</code>. Архив удаляется из <code>/root/apps/</code>.</td>
+  </tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: существует<br>/root/apps/speedtest.tar.gz</span></td>
+    <td><code>/usr/bin/speedtest</code></td>
+    <td>То же самое: распаковка, копирование в <code>/usr/bin/speedtest</code>, <code>chmod +x</code>, удаление архива.</td>
+  </tr>
+</table>
+<div class="note">⚠ Если архивы отсутствуют в /root/apps/ — бинарники не устанавливаются. В логе R6S sing-box.tar.gz отсутствовал, sing-box работал из предыдущей прошивки.</div>
+
+<!-- ===================== БЛОК 6: HOMEPROXY ===================== -->
+<h2>6. Настройка homeproxy</h2>
+<table>
+  <tr><th width="22%">Условие</th><th width="38%">Файл</th><th>Что делается</th></tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: существует<br>/etc/init.d/homeproxy</span></td>
+    <td><code>/etc/homeproxy/scripts/firewall_post.ut</code></td>
+    <td>Строка <code>const dns_hijacked = uci.get('dhcp', '@dnsmasq[0]', 'dns_redirect') || '0'</code> заменяется на <code>const dns_hijacked = '1'</code>. Homeproxy перестаёт проверять настройку dnsmasq и считает DNS-перехват всегда активным.</td>
+  </tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: существует<br>/etc/init.d/homeproxy</span></td>
+    <td><code>/etc/homeproxy/scripts/update_firewall_rules.sh</code></td>
+    <td>Файл создаётся целиком. Содержит логику: если proxy_mode содержит «tun» или server.enabled=1 — добавляет в firewall правила для <code>fw4_forward.nft</code> и <code>fw4_input.nft</code>; иначе удаляет их.</td>
+  </tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: существует<br>/etc/init.d/homeproxy</span><br>и хук ещё не добавлен</td>
+    <td><code>/etc/init.d/homeproxy</code></td>
+    <td>В функции <code>start_service()</code> и <code>stop_service()</code> добавляется первой строкой вызов: <code>. /etc/homeproxy/scripts/update_firewall_rules.sh</code>. Проверяется что хук ещё не добавлен (идемпотентно).</td>
+  </tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: существует<br>/etc/init.d/homeproxy</span></td>
+    <td>автозапуск</td>
+    <td>homeproxy включается в автозапуск (<code>enable</code>)</td>
+  </tr>
+</table>
+
+<!-- ===================== БЛОК 7: PASSWALL2 ===================== -->
+<h2>7. Настройка Passwall 2</h2>
+<table>
+  <tr><th width="22%">Условие</th><th width="38%">Файл</th><th>Что делается</th></tr>
+  <tr>
+    <td>
+      <span class="variant">ВАРИАНТ: passwall</span><br>
+      + <span class="cond">lock-файл ещё не создан</span><br>
+      + <span class="cond">существует /etc/init.d/passwall2</span>
+    </td>
+    <td><code>/etc/config/passwall2</code></td>
+    <td>
+      Устанавливается через UCI:<br>
+      <code>dns_redirect = '0'</code><br>
+      <code>dns_shunt = 'closed'</code><br>
+      <code>remote_dns = '127.0.0.1:53'</code><br>
+      <code>china_dns = '127.0.0.1:53'</code><br>
+      <code>adblock = '0'</code><br>
+      <code>enabled = '1'</code><br>
+      Смысл: Passwall2 не управляет DNS — всё отдаётся AdGuardHome на порт 53.
+    </td>
+  </tr>
+</table>
+<div class="note">Для вариантов minimal, clear, crystal_clear, switch — этот блок полностью пропускается.</div>
+
+<!-- ===================== БЛОК 8: YOUTUBEUNBLOCK ===================== -->
+<h2>8. Настройка youtubeUnblock</h2>
+<table>
+  <tr><th width="22%">Условие</th><th width="38%">Файл</th><th>Что делается</th></tr>
+  <tr>
+    <td><span class="always">ВСЕГДА</span><br>(для каждого из трёх ipset)</td>
+    <td><code>/etc/config/firewall</code></td>
+    <td>Проверяется наличие ipset-секций: <code>dpi_ips</code>, <code>no_dpi_ips</code>, <code>dpi_guest_ips</code>. Если какой-то нет — создаётся пустой ipset с <code>match=net</code>, <code>family=ipv4</code>.</td>
+  </tr>
+  <tr>
+    <td><span class="always">ВСЕГДА</span></td>
+    <td><code>/usr/share/firewall4/templates/ruleset.uc</code></td>
+    <td>Строка <code>meta l4proto { tcp, udp } flow offload @ft;</code> заменяется на <code>meta l4proto { tcp, udp } ct original packets ge 30 flow offload @ft;</code>. Flow offload включается только после 30 пакетов, давая youtubeUnblock время обработать начало соединения.</td>
+  </tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: /usr/bin/youtubeUnblock существует и исполняем</span></td>
+    <td><code>/usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft</code></td>
+    <td>
+      Файл создаётся или перезаписывается целиком. Содержимое:<br>
+      1. Блокировка QUIC (UDP 443 к dpi_ips → reject)<br>
+      2. Цепочка youtubeUnblock в postrouting, mangle-1<br>
+      3. mark 0x42 (гостевая сеть) → return<br>
+      4. no_dpi_ips → return (исключения, сюда добавлять IP VPN-серверов)<br>
+      5. dpi_ips + TCP 443 + &lt;20 пакетов → NFQUEUE 537<br>
+      6. dpi_ips + UDP + &lt;9 пакетов → NFQUEUE 537<br>
+      7. output: mark 0x8000 → accept (уже обработанные youtubeUnblock)
+    </td>
+  </tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: youtubeUnblock установлен</span></td>
+    <td>автозапуск</td>
+    <td>youtubeUnblock включается в автозапуск (<code>enable</code>)</td>
+  </tr>
+</table>
+<div class="note">⚠ guest_mark.nft закомментирован в скрипте — НЕ создаётся. Гостевая сеть через метку 0x42 работать не будет до раскомментирования.</div>
+
+<!-- ===================== БЛОК 9: INTERNET-DETECTOR ===================== -->
+<h2>9. Настройка internet-detector</h2>
+<table>
+  <tr><th width="22%">Условие</th><th width="38%">Файл</th><th>Что делается</th></tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: существует<br>/etc/init.d/internet-detector</span></td>
+    <td><code>/etc/init.d/internet-detector</code></td>
+    <td>Служба отключается из автозапуска. Параметр <code>START=XX</code> меняется на <code>START=99</code> (поздний запуск).</td>
+  </tr>
+</table>
+
+<!-- ===================== БЛОК 10: OWUT ===================== -->
+<h2>10. Настройка owut (сервер обновлений)</h2>
+<table>
+  <tr><th width="22%">Условие</th><th width="38%">Файл</th><th>Что делается</th></tr>
+  <tr>
+    <td><span class="always">ВСЕГДА</span><br>NAME_VALUE = OpenWrt</td>
+    <td><code>/etc/config/attendedsysupgrade</code></td>
+    <td>URL меняется на <code>https://sysupgrade.openwrt.org</code></td>
+  </tr>
+  <tr>
+    <td><span class="always">ВСЕГДА</span><br>NAME_VALUE = ImmortalWrt или другое</td>
+    <td><code>/etc/config/attendedsysupgrade</code></td>
+    <td>URL меняется на <code>https://asu-2.kyarucloud.moe</code></td>
+  </tr>
+</table>
+
+<!-- ===================== БЛОК 11: ADGUARDHOME ===================== -->
+<h2>11. Настройка AdGuardHome</h2>
+<table>
+  <tr><th width="22%">Условие</th><th width="38%">Файл</th><th>Что делается</th></tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: /usr/bin/AdGuardHome исполняем И /etc/config/adguardhome существует</span></td>
+    <td><code>/etc/config/adguardhome</code></td>
+    <td>
+      Через UCI устанавливается:<br>
+      <code>work_dir = '/opt/AdGuardHome'</code><br>
+      <code>user = 'root'</code><br>
+      <code>group = 'root'</code>
+    </td>
+  </tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: AGH установлен</span></td>
+    <td><code>/opt/AdGuardHome/</code></td>
+    <td>Создаётся директория <code>mkdir -p</code>, устанавливается <code>chmod 755</code>, владелец root.</td>
+  </tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: AGH установлен</span><br>записи ещё нет</td>
+    <td><code>/etc/group</code><br><code>/etc/passwd</code></td>
+    <td>Добавляется строка <code>adguardhome:x:853:</code> в group и <code>adguardhome:x:853:853:AdGuard Home:/var/lib/adguardhome:/bin/false</code> в passwd — только если таких записей ещё нет.</td>
+  </tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: AGH установлен</span><br>init-скрипт содержит <code>procd_add_jail</code><br>патч ещё не применён</td>
+    <td><code>/etc/init.d/adguardhome</code></td>
+    <td><b>[Jail-вариант]</b> После строки <code>local verbose=0</code> добавляется <code>local log_file='/var/AdGuardHome.log'</code>. Строка <code>--logfile syslog</code> заменяется на <code>--logfile "$log_file"</code>.</td>
+  </tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: AGH установлен</span><br>init-скрипт НЕ содержит <code>procd_add_jail</code><br>патч ещё не применён</td>
+    <td><code>/etc/init.d/adguardhome</code></td>
+    <td><b>[Classic-вариант]</b> После <code>config_get PID_FILE</code> добавляется <code>config_get LOG_FILE config logfile '/var/AdGuardHome.log'</code>. К строке запуска добавляется <code>--logfile "$LOG_FILE"</code>.</td>
+  </tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: AGH установлен</span></td>
+    <td><code>/usr/lib/lua/luci/controller/adguardhome_net.lua</code></td>
+    <td>Создаётся файл целиком. Добавляет пункт меню <b>Network → AdGuardHome</b> в LuCI, при клике открывает <code>http://IP_роутера:8080</code>.</td>
+  </tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: AGH установлен</span></td>
+    <td><code>/etc/config/dhcp</code></td>
+    <td>dnsmasq переводится на порт 54 (<code>dnsmasq[0].port = '54'</code>). Удаляется список <code>server</code> у dnsmasq. AGH занимает порт 53.</td>
+  </tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: AGH установлен</span></td>
+    <td>автозапуск</td>
+    <td>AGH включается в автозапуск и запускается немедленно.</td>
+  </tr>
+</table>
+
+<!-- ===================== БЛОК 12: SQM ===================== -->
+<h2>12. Настройка SQM</h2>
+<table>
+  <tr><th width="22%">Условие</th><th width="38%">Файл</th><th>Что делается</th></tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: существует<br>/usr/lib/sqm/run.sh</span></td>
+    <td><code>/opt/sqm_custom.conf</code></td>
+    <td>
+      Файл создаётся с содержимым:<br>
+      <code>option iqdisc_opts 'nat dual-dsthost diffserv4 nowash'</code><br>
+      <code>option eqdisc_opts 'nat dual-srchost diffserv4 nowash'</code><br>
+      Смысл: хранит опции которые LuCI удаляет при сохранении настроек SQM.
+    </td>
+  </tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: SQM установлен</span><br>патч ещё не применён</td>
+    <td><code>/usr/lib/sqm/run.sh</code></td>
+    <td>После строки <code>export EQDISC_OPTS</code> вставляется блок, читающий <code>/opt/sqm_custom.conf</code> и применяющий из него <code>iqdisc_opts</code> и <code>eqdisc_opts</code>.</td>
+  </tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: SQM установлен</span><br>sqm.@queue[0].enabled = '1'</td>
+    <td>автозапуск + процесс</td>
+    <td>SQM включается в автозапуск и перезапускается для применения патча.</td>
+  </tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: SQM установлен</span><br>enabled ≠ '1' или не задан</td>
+    <td>автозапуск</td>
+    <td>SQM убирается из автозапуска. Служба не запускается.</td>
+  </tr>
+</table>
+<div class="note">В варианте minimal SQM не установлен — весь блок пропускается.</div>
+
+<!-- ===================== БЛОК 13: ФИНАЛЬНЫЕ НАСТРОЙКИ ===================== -->
+<h2>13. Финальные настройки системы</h2>
+<table>
+  <tr><th width="22%">Условие</th><th width="38%">Файл</th><th>Что делается</th></tr>
+  <tr>
+    <td><span class="always">ВСЕГДА</span></td>
+    <td><code>/etc/config/</code></td>
+    <td>Удаляются временные файлы <code>*-opkg</code> и <code>*apk-new</code></td>
+  </tr>
+  <tr>
+    <td><span class="always">ВСЕГДА</span><br>если блок ещё не добавлен</td>
+    <td><code>/www/luci-static/bootstrap/cascade.css</code></td>
+    <td>
+      В конец файла добавляется CSS-блок:<br>
+      — мобильные (≤1199px или touch) → 100% ширина контента<br>
+      — ПК/ноутбук (≥1200px, hover) → 50% ширина контента<br>
+      Проверяется по маркеру <code>/* LuCI Bootstrap: Custom Fullwidth CSS */</code>
+    </td>
+  </tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: модуль nft_fullcone найден</span><br>(в /lib/modules/, lsmod, или /sys/module/)</td>
+    <td><code>/etc/config/firewall</code></td>
+    <td>Добавляется <code>option fullcone '1'</code> в секцию defaults</td>
+  </tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: модуль tcp_bbr найден</span><br>(файл .ko или в /proc/sys/)</td>
+    <td><code>/etc/sysctl.conf</code></td>
+    <td>
+      Удаляются старые строки BBR (если были).<br>
+      Добавляется в конец:<br>
+      <code># TCP BBR</code><br>
+      <code>net.core.default_qdisc = fq_codel</code><br>
+      <code>net.ipv4.tcp_congestion_control = bbr</code>
+    </td>
+  </tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: модуль tcp_bbr НЕ найден</span></td>
+    <td><code>/etc/sysctl.conf</code></td>
+    <td>Строки BBR удаляются из файла (если были) чтобы не было ошибок при загрузке.</td>
+  </tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: /etc/init.d/phy-leds исполняем</span></td>
+    <td>автозапуск</td>
+    <td>Служба phy-leds отключается из автозапуска.</td>
+  </tr>
+</table>
+
+<!-- ===================== БЛОК 14: SWITCH ===================== -->
+<h2>14. Режим коммутатора (switch)</h2>
+<table>
+  <tr><th width="22%">Условие</th><th width="38%">Файл</th><th>Что делается</th></tr>
+  <tr>
+    <td>
+      <span class="variant">ВАРИАНТ: switch</span><br>
+      + lock-файл ещё не создан
+    </td>
+    <td><code>/etc/config/network</code></td>
+    <td>
+      Удаляются интерфейсы lan, wan, wan6.<br>
+      Все физические порты (кроме системных, Wi-Fi, br-, tun, sit и на DSA-устройствах — eth0) объединяются в мост <code>br-lan</code>.<br>
+      Настройки моста: <code>stp=1</code>, <code>igmp_snooping=1</code>, <code>multicast_querier=1</code>, <code>ipv6=0</code>.<br>
+      LAN получает IP по DHCP (<code>proto=dhcp</code>).<br>
+      <code>packet_steering=2</code>, удаляется <code>ula_prefix</code>.
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <span class="variant">ВАРИАНТ: switch</span><br>
+      + lock-файл ещё не создан
+    </td>
+    <td><code>/etc/config/dhcp</code></td>
+    <td>
+      <code>lan.ignore=1</code> — DHCP-сервер на LAN отключён.<br>
+      <code>lan.dhcpv6=disabled</code>, <code>lan.ra=disabled</code>.<br>
+      <code>odhcpd.disabled=1</code>, odhcpd отключается из автозапуска.<br>
+      Удаляется секция <code>dhcp.wan</code>.
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <span class="variant">ВАРИАНТ: switch</span><br>
+      + lock-файл ещё не создан
+    </td>
+    <td><code>/etc/config/firewall</code></td>
+    <td>
+      Удаляется зона WAN (zone[1]).<br>
+      Удаляется forwarding[0].<br>
+      Удаляются все rule-секции (<code>while uci delete firewall.@rule[0]</code>).<br>
+      Зона LAN: input/output/forward = ACCEPT.<br>
+      Включается аппаратное ускорение: <code>flow_offloading=1</code>, <code>flow_offloading_hw=1</code>.
+    </td>
+  </tr>
+  <tr>
+    <td><span class="variant">ВАРИАНТ: switch</span></td>
+    <td>hostname</td>
+    <td>Hostname меняется на <code>МОДЕЛЬ-switch</code> вместо <code>МОДЕЛЬ-oWRT</code> (например <code>RB5009-switch</code>)</td>
+  </tr>
+</table>
+<div class="note">⚠ DSA-определение: если в /sys/class/net/ есть порты вида p1, p2… — это DSA-архитектура (RB5009), eth0 исключается из моста. Для R6S такие порты есть, поэтому eth0 исключается.</div>
+
+<!-- ===================== БЛОК 15: ВРЕМЯ И БАННЕР ===================== -->
+<h2>15. Синхронизация времени и баннер</h2>
+<table>
+  <tr><th width="22%">Условие</th><th width="38%">Файл/действие</th><th>Что делается</th></tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: hwclock доступен</span></td>
+    <td>системное время</td>
+    <td><code>hwclock -s -u</code> — читает время из аппаратных RTC-часов. Критично для R5S/R6S (без этого может быть 1970 или 2104).</td>
+  </tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: ping 8.8.8.8 успешен</span><br>(есть интернет)</td>
+    <td>системное время + RTC</td>
+    <td>Останавливается sysntpd, принудительная синхронизация через <code>ntpd -q -n -p ru.pool.ntp.org</code>, sysntpd запускается снова, точное время записывается в RTC (<code>hwclock -w</code>).</td>
+  </tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: нет интернета</span></td>
+    <td>автозапуск</td>
+    <td>sysntpd перезапускается. Используется время из RTC.</td>
+  </tr>
+  <tr>
+    <td><span class="always">ВСЕГДА</span></td>
+    <td><code>/etc/banner</code></td>
+    <td>
+      Бэкап в <code>/etc/banner.bak</code>.<br>
+      <code>WIRELESS</code> → <code>NETWORK</code>.<br>
+      Старые строки <code>Build Variant:</code> и <code>Kernel Version:</code> удаляются.<br>
+      В конец добавляется:<br>
+      <code> Kernel Version: 6.12.74</code><br>
+      <code> Build Variant: minimal (2026-03-19)</code><br>
+      Дата берётся из <code>/etc/build_date</code> если файл есть, иначе из <code>date</code> (если год 2025-2050), иначе <code>***</code>.
+    </td>
+  </tr>
+</table>
+
+<!-- ===================== БЛОК 16: ФИНАЛ ===================== -->
+<h2>16. Финальные операции</h2>
+<table>
+  <tr><th width="22%">Условие</th><th width="38%">Файл</th><th>Что делается</th></tr>
+  <tr>
+    <td><span class="always">ВСЕГДА</span></td>
+    <td><code>/etc/config/system</code></td>
+    <td><code>hostname = МОДЕЛЬ-oWRT</code> (или <code>МОДЕЛЬ-switch</code> для switch-варианта)</td>
+  </tr>
+  <tr>
+    <td><span class="always">ВСЕГДА</span></td>
+    <td><code>/etc/config/uhttpd</code></td>
+    <td><code>uhttpd.defaults.commonname = МОДЕЛЬ-oWRT</code> (имя в HTTPS-сертификате)</td>
+  </tr>
+  <tr>
+    <td><span class="cond">УСЛОВИЕ: файл существует</span></td>
+    <td><code>/usr/share/luci/menu.d/luci-app-filemanager.json</code></td>
+    <td>Текст <code>File Manager</code> заменяется на <code>Файловый менеджер</code></td>
+  </tr>
+  <tr>
+    <td><span class="always">ВСЕГДА</span></td>
+    <td><code>/root/.setup_completed</code></td>
+    <td>Создаётся пустой lock-файл</td>
+  </tr>
+  <tr>
+    <td><span class="always">ВСЕГДА</span></td>
+    <td>процесс в фоне</td>
+    <td><code>(sleep 120; sync; reboot) &amp;</code> — через 2 минуты роутер перезагружается</td>
+  </tr>
+  <tr>
+    <td><span class="always">ВСЕГДА</span></td>
+    <td>uci-defaults механизм</td>
+    <td><code>exit 0</code> — скрипт удаляется из <code>/etc/uci-defaults/</code> и больше не запустится</td>
+  </tr>
+</table>
+
+<!-- ===================== ИТОГОВАЯ МАТРИЦА ===================== -->
+<h2>Итоговая матрица: что происходит для каждого варианта</h2>
+<table>
+  <tr>
+    <th>Блок</th>
+    <th>minimal</th>
+    <th>clear / crystal_clear</th>
+    <th>passwall</th>
+    <th>switch</th>
+  </tr>
+  <tr><td>Репозитории, ключи APK</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr>
+  <tr><td>sing-box из /root/apps/</td><td>если есть архив</td><td>если есть архив</td><td>если есть архив</td><td>если есть архив</td></tr>
+  <tr><td>homeproxy (патч + хук)</td><td>если установлен</td><td>если установлен</td><td>если установлен</td><td>если установлен</td></tr>
+  <tr><td>Passwall2 настройка</td><td>❌</td><td>❌</td><td>✅ (первый запуск)</td><td>❌</td></tr>
+  <tr><td>youtubeUnblock nft</td><td>если установлен</td><td>если установлен</td><td>если установлен</td><td>если установлен</td></tr>
+  <tr><td>ipset dpi_ips/no_dpi_ips</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr>
+  <tr><td>AdGuardHome настройка</td><td>если установлен</td><td>если установлен</td><td>если установлен</td><td>если установлен</td></tr>
+  <tr><td>dnsmasq → порт 54</td><td>если AGH установлен</td><td>если AGH установлен</td><td>если AGH установлен</td><td>если AGH установлен</td></tr>
+  <tr><td>SQM патч</td><td>❌ (не установлен)</td><td>если установлен</td><td>если установлен</td><td>если установлен</td></tr>
+  <tr><td>FullCone NAT</td><td>если модуль есть</td><td>если модуль есть</td><td>если модуль есть</td><td>если модуль есть</td></tr>
+  <tr><td>TCP BBR</td><td>✅ (модуль есть)</td><td>✅</td><td>✅</td><td>✅</td></tr>
+  <tr><td>LuCI CSS 50%/100%</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr>
+  <tr><td>Hostname</td><td>R6S-oWRT</td><td>R6S-oWRT</td><td>R6S-oWRT</td><td>R6S-switch</td></tr>
+  <tr><td>Сеть → режим свитча</td><td>❌</td><td>❌</td><td>❌</td><td>✅ (первый запуск)</td></tr>
+  <tr><td>Firewall → один LAN, offload</td><td>❌</td><td>❌</td><td>❌</td><td>✅ (первый запуск)</td></tr>
+</table>
+
+<!-- ===================== ТАБЛИЦА УСТРОЙСТВ ===================== -->
+<h2>Особенности для каждого устройства</h2>
+<table>
+  <tr>
+    <th>Устройство</th>
+    <th>ROUTER_MODEL_NAME</th>
+    <th>Hostname (OpenWrt)</th>
+    <th>Hostname (switch)</th>
+    <th>DSA-архитектура<br>(eth0 исключается из br-lan)</th>
+    <th>Примечание</th>
+  </tr>
+  <tr>
+    <td>FriendlyElec NanoPi R6S</td>
+    <td><code>R6S</code></td>
+    <td><code>R6S-oWRT</code></td>
+    <td><code>R6S-switch</code></td>
+    <td>✅ (есть p1, p2…)</td>
+    <td>hwclock особенно важен (RTC без батарейки может показывать 1970)</td>
+  </tr>
+  <tr>
+    <td>FriendlyElec NanoPi R5S</td>
+    <td><code>R5S</code></td>
+    <td><code>R5S-oWRT</code></td>
+    <td><code>R5S-switch</code></td>
+    <td>✅</td>
+    <td>Аналогично R6S</td>
+  </tr>
+  <tr>
+    <td>MikroTik RB5009</td>
+    <td><code>RB5009</code></td>
+    <td><code>RB5009-oWRT</code></td>
+    <td><code>RB5009-switch</code></td>
+    <td>✅ (есть p1..p8)</td>
+    <td>eth0 — uplink, DSA-порты p1-p8 — в мост при switch</td>
+  </tr>
+  <tr>
+    <td>GL.iNet GL-MT2500 (Brume 2)</td>
+    <td><code>Brume2</code></td>
+    <td><code>Brume2-oWRT</code></td>
+    <td><code>Brume2-switch</code></td>
+    <td>❌ (нет p1…)</td>
+    <td>eth0 включается в br-lan при switch</td>
+  </tr>
+  <tr>
+    <td>GL.iNet GL-AXT1800 (Slate AX)</td>
+    <td><code>SLATEX</code></td>
+    <td><code>SLATEX-oWRT</code></td>
+    <td><code>SLATEX-switch</code></td>
+    <td>❌</td>
+    <td>eth0 включается в br-lan при switch</td>
+  </tr>
+  <tr>
+    <td>Любое другое устройство</td>
+    <td>значение board_name из ubus</td>
+    <td><code>boardname-oWRT</code></td>
+    <td><code>boardname-switch</code></td>
+    <td>зависит от наличия p1…</td>
+    <td></td>
+  </tr>
+</table>
+
+<!-- ===================== ЧТО ПРОВЕРИТЬ ===================== -->
+<h2>Быстрая проверка после прошивки</h2>
+<table>
+  <tr><th width="40%">Что проверить</th><th>Команда</th></tr>
+  <tr><td>Весь лог выполнения</td><td><code>cat /root/setup_log.txt</code></td></tr>
+  <tr><td>Hostname</td><td><code>uci get system.@system[0].hostname</code></td></tr>
+  <tr><td>Порт dnsmasq (54 если AGH)</td><td><code>uci get dhcp.@dnsmasq[0].port</code></td></tr>
+  <tr><td>TCP BBR</td><td><code>sysctl net.ipv4.tcp_congestion_control</code></td></tr>
+  <tr><td>Репозитории с kmods</td><td><code>cat /etc/apk/repositories.d/distfeeds.list</code></td></tr>
+  <tr><td>youtubeUnblock правила</td><td><code>cat /usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft</code></td></tr>
+  <tr><td>no_dpi_ips (IP VPN-серверов)</td><td><code>nft list set inet fw4 no_dpi_ips</code></td></tr>
+  <tr><td>homeproxy хук в init</td><td><code>grep -n update_firewall_rules /etc/init.d/homeproxy</code></td></tr>
+  <tr><td>flow offload патч</td><td><code>grep "ct original packets" /usr/share/firewall4/templates/ruleset.uc</code></td></tr>
+  <tr><td>FullCone NAT</td><td><code>uci get firewall.@defaults[0].fullcone</code></td></tr>
+  <tr><td>Активные nft правила</td><td><code>nft list ruleset | grep -A3 youtubeUnblock</code></td></tr>
+</table>
+
+<p style="margin-top:20px;font-size:11px;color:#888">Сгенерировано по версии скрипта от 2026-03-19 | R6S / OpenWrt 25.12.1 / вариант minimal</p>
+</body>
+</html>
