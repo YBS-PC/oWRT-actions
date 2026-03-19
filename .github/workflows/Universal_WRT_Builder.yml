@@ -797,7 +797,7 @@ jobs:
         RUN_IDS=$(gh run list --limit 100 --json databaseId,createdAt --jq ".[] | select(.createdAt < \"$CUTOFF_DATE\") | .databaseId")
         
         # 3. Удаляем найденные запуски
-        if[ -z "$RUN_IDS" ]; then
+        if [ -z "$RUN_IDS" ]; then
           echo ">>> No old runs found to delete."
         else
           for ID in $RUN_IDS; do
