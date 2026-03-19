@@ -773,14 +773,20 @@ jobs:
         echo ">>> ------------------------------------------------"
     
     - name: Upload
-      uses: actions/upload-artifact@main
+      uses: actions/upload-artifact@v7
       with:
         name: ${{ inputs.source }}_${{ inputs.branch }}_${{ matrix.variant }}_${{ matrix.target }}_${{ env.FILE_DATE }}
         path: openwrt/bin
         retention-days: 10
 
     - name: Delete workflow runs
-      uses: Mattraks/delete-workflow-runs@main
-      with:
-        retain_days: 10
-        keep_minimum_runs: 6
+      #uses: Mattraks/delete-workflow-runs@main
+      #with:
+        #retain_days: 10
+        #keep_minimum_runs: 6
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        echo ">>> Deleting workflow runs older than 10 days..."
+        # Находим и удаляем старые запуски через официальный API GitHub
+        gh run list --limit 100 --json databaseId,createdAt --jq '.
