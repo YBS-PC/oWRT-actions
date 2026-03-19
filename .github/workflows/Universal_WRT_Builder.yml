@@ -788,5 +788,20 @@ jobs:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         echo ">>> Deleting workflow runs older than 10 days..."
-        # Находим и удаляем старые запуски через официальный API GitHub
-        gh run list --limit 100 --json databaseId,createdAt --jq '.
+        
+        # 1. Вычисляем дату "10 дней назад" в правильном формате ISO 8601
+        CUTOFF_DATE=$(date -d "10 days ago" -Iseconds)
+        echo ">>> Cutoff date: $CUTOFF_DATE"
+        
+        # 2. Получаем список запусков и фильтруем через jq те, что старше CUTOFF_DATE
+        RUN_IDS=$(gh run list --limit 100 --json databaseId,createdAt --jq ".[] | select(.createdAt < \"$CUTOFF_DATE\") | .databaseId")
+        
+        # 3. Удаляем найденные запуски
+        if[ -z "$RUN_IDS" ]; then
+          echo ">>> No old runs found to delete."
+        else
+          for ID in $RUN_IDS; do
+            echo ">>> Deleting run ID: $ID"
+            gh run delete "$ID" || echo "Failed to delete $ID (maybe currently running)"
+          done
+        fi
