@@ -1,0 +1,1566 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Universal WRT Builder — Справочник</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Syne:wght@400;600;700;800&display=swap');
+
+  :root {
+    --bg:        #0d1117;
+    --bg2:       #161b22;
+    --bg3:       #1c2128;
+    --border:    #30363d;
+    --border2:   #21262d;
+    --text:      #c9d1d9;
+    --muted:     #6e7681;
+    --accent:    #58a6ff;
+    --green:     #3fb950;
+    --red:       #f85149;
+    --yellow:    #d29922;
+    --orange:    #e3b341;
+    --purple:    #a371f7;
+    --cyan:      #39d353;
+    --teal:      #56d364;
+    --head-bg:   #1f6feb22;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  /* ── SIDEBAR NAV ── */
+  #sidebar {
+    position: fixed;
+    top: 0; left: 0;
+    width: 220px;
+    height: 100vh;
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    z-index: 100;
+    padding: 20px 0;
+  }
+
+  #sidebar .logo {
+    padding: 0 16px 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 12px;
+  }
+  #sidebar .logo span {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 14px;
+    color: var(--accent);
+    letter-spacing: .5px;
+    display: block;
+  }
+  #sidebar .logo small {
+    color: var(--muted);
+    font-size: 10px;
+  }
+
+  #sidebar a {
+    display: block;
+    padding: 5px 16px;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 11px;
+    transition: color .15s, background .15s;
+    border-left: 2px solid transparent;
+  }
+  #sidebar a:hover { color: var(--text); background: var(--bg3); }
+  #sidebar a.active { color: var(--accent); border-left-color: var(--accent); background: var(--head-bg); }
+  #sidebar .nav-section {
+    padding: 14px 16px 4px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+  }
+
+  /* ── MAIN ── */
+  #main {
+    margin-left: 220px;
+    padding: 32px 40px 80px;
+    max-width: 1100px;
+  }
+
+  /* ── SECTIONS ── */
+  section { margin-bottom: 52px; }
+  
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-num {
+    width: 28px; height: 28px;
+    background: var(--accent);
+    color: var(--bg);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 13px;
+    flex-shrink: 0;
+  }
+  .section-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    color: #e6edf3;
+  }
+  .section-sub {
+    color: var(--muted);
+    font-size: 11px;
+    margin-left: auto;
+  }
+
+  /* ── TABLES ── */
+  .tbl-wrap { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 20px; }
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    background: var(--bg3);
+    color: #8b949e;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    padding: 8px 12px;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border2);
+    vertical-align: top;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #ffffff05; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+
+  /* ── BADGES ── */
+  .badge {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .b-green  { background: #1a4731; color: var(--green);  border: 1px solid #2ea04322; }
+  .b-red    { background: #3d1a1a; color: var(--red);    border: 1px solid #f8514922; }
+  .b-yellow { background: #3d2d00; color: var(--orange); border: 1px solid #d2992222; }
+  .b-blue   { background: #0c2d6b; color: var(--accent); border: 1px solid #58a6ff22; }
+  .b-purple { background: #2d1f4a; color: var(--purple); border: 1px solid #a371f722; }
+  .b-gray   { background: #21262d; color: var(--muted);  border: 1px solid var(--border); }
+  .b-teal   { background: #0a3622; color: #56d364;       border: 1px solid #56d36422; }
+
+  /* ── CODE INLINE ── */
+  code {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 11.5px;
+    color: #f78166;
+  }
+
+  /* ── CODE BLOCK ── */
+  pre {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-size: 11.5px;
+    line-height: 1.7;
+    color: var(--text);
+    margin-bottom: 14px;
+  }
+  pre .c  { color: var(--muted); }
+  pre .k  { color: #ff7b72; }
+  pre .s  { color: #a5d6ff; }
+  pre .v  { color: var(--orange); }
+  pre .f  { color: #d2a8ff; }
+
+  /* ── CALLOUT ── */
+  .callout {
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 14px;
+    border-left: 3px solid;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .callout.warn  { background: #3d2d0022; border-color: var(--orange); }
+  .callout.info  { background: #0c2d6b22; border-color: var(--accent); }
+  .callout.ok    { background: #1a473122; border-color: var(--green); }
+  .callout.error { background: #3d1a1a22; border-color: var(--red); }
+  .callout strong { display: block; margin-bottom: 4px; }
+  .callout.warn  strong { color: var(--orange); }
+  .callout.info  strong { color: var(--accent); }
+  .callout.ok    strong { color: var(--green); }
+  .callout.error strong { color: var(--red); }
+
+  /* ── PIPELINE ── */
+  .pipeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+  .pipe-step {
+    display: grid;
+    grid-template-columns: 28px 1fr;
+    gap: 0 12px;
+    position: relative;
+  }
+  .pipe-step:not(:last-child) .pipe-line::after {
+    content: '';
+    position: absolute;
+    top: 28px; left: 13px;
+    width: 2px;
+    height: calc(100% - 4px);
+    background: var(--border);
+  }
+  .pipe-num {
+    position: relative;
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700;
+    flex-shrink: 0;
+    z-index: 1;
+    margin-top: 10px;
+  }
+  .pipe-num.always  { background: #1a4731; color: var(--green);  border: 1px solid var(--green); }
+  .pipe-num.cond    { background: #3d2d00; color: var(--orange); border: 1px solid var(--orange); }
+  .pipe-num.upload  { background: #0c2d6b; color: var(--accent); border: 1px solid var(--accent); }
+  
+  .pipe-body {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 6px 0;
+  }
+  .pipe-body h4 {
+    color: #e6edf3;
+    font-size: 12.5px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .pipe-body p  { color: var(--muted); font-size: 11px; margin-bottom: 3px; }
+  .pipe-body .cond-badge { font-size: 10px; color: var(--orange); }
+
+  /* ── MATRIX GRID ── */
+  .matrix-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .matrix-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .matrix-card h4 {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 8px;
+    letter-spacing: .3px;
+  }
+  .matrix-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 3px 0;
+    border-bottom: 1px solid var(--border2);
+  }
+  .matrix-row:last-child { border: none; }
+  .matrix-row .dev { color: var(--text); font-size: 11px; }
+  .matrix-row .var { font-size: 10px; }
+
+  /* ── VARIANT ROWS ── */
+  .variant-icon {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-right: 5px;
+  }
+
+  /* ── ENV TABLE ── */
+  .env-key { color: var(--orange); }
+  .env-val { color: #a5d6ff; }
+
+  /* ── TITLE BLOCK ── */
+  #hero {
+    margin-bottom: 40px;
+    padding: 28px;
+    background: linear-gradient(135deg, #0d1117 0%, #161b22 100%);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    position: relative;
+    overflow: hidden;
+  }
+  #hero::before {
+    content: '';
+    position: absolute;
+    top: -40px; right: -40px;
+    width: 200px; height: 200px;
+    background: radial-gradient(circle, #58a6ff18 0%, transparent 70%);
+    pointer-events: none;
+  }
+  #hero h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: 26px;
+    font-weight: 800;
+    color: #e6edf3;
+    margin-bottom: 6px;
+  }
+  #hero h1 span { color: var(--accent); }
+  #hero p { color: var(--muted); font-size: 12px; }
+  #hero .meta { display: flex; gap: 16px; margin-top: 14px; }
+  #hero .meta-item { font-size: 11px; }
+  #hero .meta-item span { color: var(--muted); }
+  #hero .meta-item strong { color: var(--text); }
+
+  /* ── scrollbar ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg2); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .pill-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; }
+
+  hr.sec { border: none; border-top: 1px solid var(--border2); margin: 20px 0; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media(max-width: 800px) { .two-col { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<nav id="sidebar">
+  <div class="logo">
+    <span>WRT Builder</span>
+    <small>Universal Reference v1.0</small>
+  </div>
+  <div class="nav-section">Параметры</div>
+  <a href="#inputs">① Входные параметры</a>
+  <a href="#matrix">② Матрица сборки</a>
+  <a href="#devices">③ Устройства</a>
+  <div class="nav-section">Варианты</div>
+  <a href="#variants">④ Варианты сборки</a>
+  <a href="#binaries">⑤ Скачиваемые бинари</a>
+  <div class="nav-section">Сборка</div>
+  <a href="#pipeline">⑥ Этапы пайплайна</a>
+  <a href="#feeds">⑦ Фиды и скрипты</a>
+  <a href="#kernel">⑧ Kernel Hash</a>
+  <a href="#compile">⑨ Компиляция</a>
+  <div class="nav-section">Прочее</div>
+  <a href="#env">⑩ Переменные окружения</a>
+  <a href="#artifacts">⑪ Артефакты</a>
+  <a href="#matrix-quick">⑫ Быстрая шпаргалка</a>
+</nav>
+
+<!-- MAIN -->
+<main id="main">
+
+  <!-- HERO -->
+  <div id="hero">
+    <h1>Universal <span>WRT</span> Builder</h1>
+    <p>Полный справочник по GitHub Actions workflow для компиляции OpenWrt/ImmortalWrt прошивок</p>
+    <div class="meta">
+      <div class="meta-item"><span>Триггер: </span><strong>workflow_dispatch (вручную)</strong></div>
+      <div class="meta-item"><span>Runner: </span><strong>ubuntu-22.04</strong></div>
+      <div class="meta-item"><span>Timezone: </span><strong>Europe/Moscow</strong></div>
+      <div class="meta-item"><span>Jobs: </span><strong>setup + build (matrix)</strong></div>
+    </div>
+  </div>
+
+  <!-- ──────────────────────────────────────────── -->
+  <!-- 1. ВХОДНЫЕ ПАРАМЕТРЫ -->
+  <!-- ──────────────────────────────────────────── -->
+  <section id="inputs">
+    <div class="section-header">
+      <div class="section-num">1</div>
+      <div class="section-title">Входные параметры запуска</div>
+      <div class="section-sub">все 8 параметров · workflow_dispatch</div>
+    </div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Параметр</th>
+            <th>Тип</th>
+            <th>По умолчанию</th>
+            <th>Допустимые значения</th>
+            <th>Описание</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>target</code></td>
+            <td><span class="badge b-blue">choice</span></td>
+            <td><code>combo</code></td>
+            <td>
+              <div class="pill-row">
+                <span class="badge b-purple">combo</span>
+                <span class="badge b-gray">rb5009</span>
+                <span class="badge b-gray">nanopi-r6s</span>
+                <span class="badge b-gray">nanopi-r5s</span>
+                <span class="badge b-gray">slateax</span>
+                <span class="badge b-gray">ax59u</span>
+                <span class="badge b-gray">brume2</span>
+                <span class="badge b-yellow">all</span>
+              </div>
+            </td>
+            <td>Целевое устройство. <code>combo</code> — жёстко заданная матрица из 3 jobs. <code>all</code> — запускает для rb5009 + nanopi-r6s с выбранным variant.</td>
+          </tr>
+          <tr>
+            <td><code>source</code></td>
+            <td><span class="badge b-blue">choice</span></td>
+            <td><code>openwrt</code></td>
+            <td>
+              <div class="pill-row">
+                <span class="badge b-green">openwrt</span>
+                <span class="badge b-teal">immortalwrt</span>
+              </div>
+            </td>
+            <td>Исходники: официальный OpenWrt или ImmortalWrt (китайский форк с расширенными пакетами).</td>
+          </tr>
+          <tr>
+            <td><code>branch</code></td>
+            <td><span class="badge b-blue">choice</span></td>
+            <td><code>openwrt-25.12</code></td>
+            <td>
+              <div class="pill-row">
+                <span class="badge b-yellow">master</span>
+                <span class="badge b-gray">openwrt-24.10</span>
+                <span class="badge b-green">openwrt-25.12</span>
+              </div>
+            </td>
+            <td><code>master</code> = snapshots (нестабильная). Стабильные ветки автоматически находят последний тег через GitHub API и фиксируют коммит.</td>
+          </tr>
+          <tr>
+            <td><code>variant</code></td>
+            <td><span class="badge b-blue">choice</span></td>
+            <td><code>standard</code></td>
+            <td>
+              <div class="pill-row">
+                <span class="badge b-gray">standard</span>
+                <span class="badge b-gray">minimal</span>
+                <span class="badge b-gray">clear</span>
+                <span class="badge b-gray">switch</span>
+                <span class="badge b-gray">crystal_clear</span>
+                <span class="badge b-purple">podkop</span>
+                <span class="badge b-red">passwall</span>
+                <span class="badge b-blue">v2raya</span>
+                <span class="badge b-yellow">xray</span>
+              </div>
+            </td>
+            <td>Набор пакетов. Определяет, что добавляется в <code>.config</code> и какие feeds подключаются. Подробно — в разделе 4.</td>
+          </tr>
+          <tr>
+            <td><code>download_binaries_agh</code></td>
+            <td><span class="badge b-blue">boolean</span></td>
+            <td><code>false</code></td>
+            <td>
+              <span class="badge b-green">true</span> / <span class="badge b-gray">false</span>
+            </td>
+            <td>Скачать последний бинарник AdGuardHome (arm64) с GitHub и поместить в <code>files/usr/bin/</code>. <strong>Не работает для</strong> switch / clear / crystal_clear.</td>
+          </tr>
+          <tr>
+            <td><code>download_binaries_sb</code></td>
+            <td><span class="badge b-blue">choice</span></td>
+            <td><code>no</code></td>
+            <td>
+              <div class="pill-row">
+                <span class="badge b-gray">no</span>
+                <span class="badge b-green">latest</span>
+                <span class="badge b-teal">1.12.x</span>
+              </div>
+            </td>
+            <td>Скачать бинарник Sing-Box (arm64) напрямую с GitHub вместо версии из feed. <code>1.12.x</code> — последний стабильный релиз из ветки LTS. <strong>Работает только</strong> для: standard, minimal, podkop, crystal_clear.</td>
+          </tr>
+          <tr>
+            <td><code>exclude_keywords</code></td>
+            <td><span class="badge b-gray">string</span></td>
+            <td><em>(пусто)</em></td>
+            <td>Произвольная строка</td>
+            <td>Пробел-разделённые ключевые слова. Все пакеты в <code>.config</code>, содержащие эти слова и отмеченные <code>=y</code>, будут принудительно отключены (<code>is not set</code>) перед <code>make defconfig</code>.</td>
+          </tr>
+          <tr>
+            <td><code>commit_hash</code></td>
+            <td><span class="badge b-gray">string</span></td>
+            <td><em>(пусто)</em></td>
+            <td>Полный SHA коммита</td>
+            <td>Опционально. Если указан — пропускает автопоиск тега через API и фиксирует именно этот коммит. Игнорируется для <code>master</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ──────────────────────────────────────────── -->
+  <!-- 2. МАТРИЦА СБОРКИ -->
+  <!-- ──────────────────────────────────────────── -->
+  <section id="matrix">
+    <div class="section-header">
+      <div class="section-num">2</div>
+      <div class="section-title">Матрица сборки — что запускается</div>
+      <div class="section-sub">job: setup → build (matrix)</div>
+    </div>
+
+    <div class="callout info">
+      <strong>Как это работает</strong>
+      Job <code>setup</code> генерирует JSON-матрицу, которую затем параллельно выполняет job <code>build</code>.
+      Каждый элемент матрицы — отдельный runner с парой <code>target</code> + <code>variant</code>.
+    </div>
+
+    <div class="matrix-grid">
+      <div class="matrix-card">
+        <h4>🔀 combo <span class="badge b-purple">жёсткая матрица</span></h4>
+        <div class="matrix-row">
+          <span class="dev">nanopi-r6s</span>
+          <span class="var"><span class="badge b-gray">minimal</span></span>
+        </div>
+        <div class="matrix-row">
+          <span class="dev">rb5009</span>
+          <span class="var"><span class="badge b-gray">clear</span></span>
+        </div>
+        <div class="matrix-row">
+          <span class="dev">rb5009</span>
+          <span class="var"><span class="badge b-gray">switch</span></span>
+        </div>
+        <p style="color:var(--muted);font-size:10px;margin-top:8px">Параметр variant полностью игнорируется</p>
+      </div>
+
+      <div class="matrix-card">
+        <h4>📦 all <span class="badge b-yellow">два устройства</span></h4>
+        <div class="matrix-row">
+          <span class="dev">nanopi-r6s</span>
+          <span class="var"><span class="badge b-blue">выбранный variant</span></span>
+        </div>
+        <div class="matrix-row">
+          <span class="dev">rb5009</span>
+          <span class="var"><span class="badge b-blue">выбранный variant</span></span>
+        </div>
+        <p style="color:var(--muted);font-size:10px;margin-top:8px">2 параллельных job</p>
+      </div>
+
+      <div class="matrix-card">
+        <h4>🎯 конкретное устройство</h4>
+        <div class="matrix-row">
+          <span class="dev">rb5009 / nanopi-r6s / nanopi-r5s / slateax / ax59u / brume2</span>
+          <span class="var"></span>
+        </div>
+        <div class="matrix-row">
+          <span class="dev" style="color:var(--muted);">+ variant = выбранный</span>
+          <span class="var"><span class="badge b-blue">1 job</span></span>
+        </div>
+        <p style="color:var(--muted);font-size:10px;margin-top:8px">1 job с выбранным variant</p>
+      </div>
+    </div>
+
+    <div class="callout warn">
+      <strong>⚠ Важно: nanopi-r5s, slateax, ax59u, brume2</strong>
+      Эти устройства присутствуют в списке выбора <code>target</code>, но логика job <code>setup</code> обрабатывает только
+      <code>nanopi-r6s</code> и <code>rb5009</code> как часть списка <code>all</code>.
+      При ручном выборе этих устройств создаётся 1 job, но конфигурация читается из файла <code>./config/conf/{target}</code>,
+      который должен существовать в репозитории.
+    </div>
+  </section>
+
+  <!-- ──────────────────────────────────────────── -->
+  <!-- 3. УСТРОЙСТВА -->
+  <!-- ──────────────────────────────────────────── -->
+  <section id="devices">
+    <div class="section-header">
+      <div class="section-num">3</div>
+      <div class="section-title">Устройства</div>
+      <div class="section-sub">конфиг из ./config/conf/{target}</div>
+    </div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>target</th>
+            <th>Устройство</th>
+            <th>Архитектура / SoC</th>
+            <th>Переменные конфига</th>
+            <th>Статус</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>rb5009</code></td>
+            <td>MikroTik RB5009UG+S+IN</td>
+            <td>ARM64 / Marvell CN9130</td>
+            <td><code>TARGET_NAME</code>, <code>KERNEL_PATH</code>, <code>DEVICE_CONFIG_COMMANDS</code></td>
+            <td><span class="badge b-green">Основное</span></td>
+          </tr>
+          <tr>
+            <td><code>nanopi-r6s</code></td>
+            <td>FriendlyARM NanoPi R6S</td>
+            <td>ARM64 / Rockchip RK3588S</td>
+            <td><code>TARGET_NAME</code>, <code>KERNEL_PATH</code>, <code>DEVICE_CONFIG_COMMANDS</code></td>
+            <td><span class="badge b-green">Основное</span></td>
+          </tr>
+          <tr>
+            <td><code>nanopi-r5s</code></td>
+            <td>FriendlyARM NanoPi R5S</td>
+            <td>ARM64 / Rockchip RK3568</td>
+            <td>Из файла <code>./config/conf/nanopi-r5s</code></td>
+            <td><span class="badge b-yellow">Доп. (нет в auto/all)</span></td>
+          </tr>
+          <tr>
+            <td><code>slateax</code></td>
+            <td>GL.iNet GL-AXT1800 (Slate AX)</td>
+            <td>ARM / IPQ6000 (MediaTek Filogic?)</td>
+            <td>Из файла <code>./config/conf/slateax</code></td>
+            <td><span class="badge b-yellow">Доп. (нет в auto/all)</span></td>
+          </tr>
+          <tr>
+            <td><code>ax59u</code></td>
+            <td>ASUS TUF-AX59U</td>
+            <td>ARM / MediaTek Filogic 820 (MT7986)</td>
+            <td>Из файла <code>./config/conf/ax59u</code></td>
+            <td><span class="badge b-yellow">Доп. (нет в auto/all)</span></td>
+          </tr>
+          <tr>
+            <td><code>brume2</code></td>
+            <td>GL.iNet GL-MT2500 (Brume 2)</td>
+            <td>ARM / MediaTek MT7981</td>
+            <td>Из файла <code>./config/conf/brume2</code></td>
+            <td><span class="badge b-yellow">Доп. (нет в auto/all)</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout info">
+      <strong>Конфиг устройства</strong>
+      Каждый файл <code>./config/conf/{target}</code> задаёт как минимум: <code>TARGET_NAME</code> (имя для разметки артефакта),
+      <code>KERNEL_PATH</code> (путь для поиска kernel hash, например <code>rockchip/armv8</code>),
+      и <code>DEVICE_CONFIG_COMMANDS</code> — shell-команды, применяемые к <code>.config</code> для выбора конкретной платформы.
+    </div>
+  </section>
+
+  <!-- ──────────────────────────────────────────── -->
+  <!-- 4. ВАРИАНТЫ СБОРКИ -->
+  <!-- ──────────────────────────────────────────── -->
+  <section id="variants">
+    <div class="section-header">
+      <div class="section-num">4</div>
+      <div class="section-title">Варианты сборки (variant)</div>
+      <div class="section-sub">что добавляется в .config и какие feeds подключаются</div>
+    </div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Variant</th>
+            <th>Прокси / Ядро</th>
+            <th>Добавляемые пакеты в .config</th>
+            <th>Удаляемое из .config</th>
+            <th>Доп. feed</th>
+            <th>AGH</th>
+            <th>SB</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="badge b-gray">standard</span></td>
+            <td>homeproxy / sing-box</td>
+            <td><em>только базовый .config без изменений</em></td>
+            <td>—</td>
+            <td>—</td>
+            <td><span class="badge b-green">✓</span></td>
+            <td><span class="badge b-green">✓</span></td>
+          </tr>
+          <tr>
+            <td><span class="badge b-gray">minimal</span></td>
+            <td>homeproxy / sing-box</td>
+            <td><em>определяется .config (минимальный набор)</em></td>
+            <td>—</td>
+            <td>—</td>
+            <td><span class="badge b-green">✓</span></td>
+            <td><span class="badge b-green">✓</span></td>
+          </tr>
+          <tr>
+            <td><span class="badge b-gray">clear</span></td>
+            <td>нет прокси</td>
+            <td><em>только базовый .config</em></td>
+            <td>—</td>
+            <td>—</td>
+            <td><span class="badge b-red">✗</span></td>
+            <td><span class="badge b-red">✗</span></td>
+          </tr>
+          <tr>
+            <td><span class="badge b-gray">switch</span></td>
+            <td>нет прокси (только свитч)</td>
+            <td><em>только базовый .config</em></td>
+            <td>—</td>
+            <td>—</td>
+            <td><span class="badge b-red">✗</span></td>
+            <td><span class="badge b-red">✗</span></td>
+          </tr>
+          <tr>
+            <td><span class="badge b-gray">crystal_clear</span></td>
+            <td>нет прокси</td>
+            <td><em>только базовый .config</em></td>
+            <td>—</td>
+            <td>—</td>
+            <td><span class="badge b-red">✗</span></td>
+            <td><span class="badge b-green">✓</span></td>
+          </tr>
+          <tr>
+            <td><span class="badge b-purple">podkop</span></td>
+            <td>podkop (sing-box внутри)</td>
+            <td>
+              <code>podkop=y</code><br>
+              <code>luci-app-podkop=y</code><br>
+              <code>luci-i18n-podkop-ru=y</code>
+            </td>
+            <td><code>homeproxy</code> строки</td>
+            <td><code>itdoginfo/podkop</code></td>
+            <td><span class="badge b-green">✓</span></td>
+            <td><span class="badge b-green">✓</span></td>
+          </tr>
+          <tr>
+            <td><span class="badge b-red">passwall</span></td>
+            <td>passwall2 + xray-core</td>
+            <td>
+              <code>luci-app-passwall2=y</code><br>
+              <code>Nftables_Transparent_Proxy=y</code><br>
+              <code>INCLUDE_Xray=y</code><br>
+              <code>INCLUDE_IPv6_Nat=y</code><br>
+              <code>INCLUDE_V2ray_Plugin=y</code><br>
+              <code>xray-core=y</code><br>
+              <code>geoview=y</code><br>
+              <code>v2ray-plugin=y</code><br>
+              <code>v2ray-geodata=y</code>
+            </td>
+            <td>
+              <code>homeproxy</code> строки<br>
+              <code>sing-box</code> строки<br>
+              все <code>shadowsocks</code> строки<br>
+              <code>Haproxy=n</code><br>
+              <code>NaiveProxy=n</code><br>
+              <code>SingBox=n</code><br>
+              <code>tuic_client=n</code><br>
+              <code>iptables proxy=n</code>
+            </td>
+            <td>
+              <code>Openwrt-Passwall/openwrt-passwall2</code><br>
+              <code>Openwrt-Passwall/openwrt-passwall-packages</code>
+            </td>
+            <td><span class="badge b-green">✓</span></td>
+            <td><span class="badge b-red">✗</span></td>
+          </tr>
+          <tr>
+            <td><span class="badge b-blue">v2raya</span></td>
+            <td>xray-core + v2rayA</td>
+            <td>
+              <code>xray-core=y</code><br>
+              <code>v2rayA=y</code><br>
+              <code>v2ray-geodata=y</code><br>
+              <code>luci-app-v2raya=y</code><br>
+              <code>luci-i18n-v2raya-ru=y</code>
+            </td>
+            <td>
+              <code>homeproxy</code> строки<br>
+              <code>sing-box</code> строки
+            </td>
+            <td>—</td>
+            <td><span class="badge b-green">✓</span></td>
+            <td><span class="badge b-red">✗</span></td>
+          </tr>
+          <tr>
+            <td><span class="badge b-yellow">xray</span></td>
+            <td>luci-app-xray + xray-core</td>
+            <td>
+              <code>luci-app-xray=y</code><br>
+              <code>xray-core=y</code><br>
+              <code>v2ray-geodata=y</code><br>
+              <code>geoview=y</code>
+            </td>
+            <td>
+              <code>homeproxy</code> строки<br>
+              <code>sing-box</code> строки
+            </td>
+            <td><code>yichya/luci-app-xray</code></td>
+            <td><span class="badge b-green">✓</span></td>
+            <td><span class="badge b-red">✗</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p style="color:var(--muted);font-size:11px;">
+      AGH = AdGuardHome (при <code>download_binaries_agh=true</code>) &nbsp;|&nbsp;
+      SB = Sing-Box бинарник (при <code>download_binaries_sb != no</code>) &nbsp;|&nbsp;
+      <span class="badge b-red">✗</span> = игнорируется даже если включено
+    </p>
+  </section>
+
+  <!-- ──────────────────────────────────────────── -->
+  <!-- 5. СКАЧИВАЕМЫЕ БИНАРИ -->
+  <!-- ──────────────────────────────────────────── -->
+  <section id="binaries">
+    <div class="section-header">
+      <div class="section-num">5</div>
+      <div class="section-title">Скачиваемые бинарники</div>
+      <div class="section-sub">AdGuardHome + Sing-Box · помещаются в files/usr/bin/</div>
+    </div>
+
+    <div class="two-col">
+      <div>
+        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px;">
+          <h4 style="color:var(--green);margin-bottom:10px;font-size:13px;">🛡 AdGuardHome (arm64)</h4>
+          <p style="color:var(--muted);font-size:11px;margin-bottom:8px;">Источник: <code>AdguardTeam/AdGuardHome</code> releases/latest</p>
+          <p style="color:var(--muted);font-size:11px;margin-bottom:10px;">Файл: <code>AdGuardHome_linux_arm64.tar.gz</code></p>
+          <p style="font-size:11px;margin-bottom:6px;color:var(--text);">Условие загрузки:</p>
+          <pre style="margin:0;font-size:11px;"><span class="k">if</span> <span class="v">download_binaries_agh</span> == <span class="s">true</span>
+   AND variant != <span class="s">switch</span>
+   AND variant != <span class="s">clear</span>
+   AND variant != <span class="s">crystal_clear</span></pre>
+          <p style="color:var(--muted);font-size:10px;margin-top:8px;">Кладётся в <code>./files/usr/bin/AdGuardHome</code> (chmod 755)</p>
+        </div>
+      </div>
+      <div>
+        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px;">
+          <h4 style="color:var(--purple);margin-bottom:10px;font-size:13px;">📦 Sing-Box (arm64)</h4>
+          <p style="color:var(--muted);font-size:11px;margin-bottom:8px;">Источник: <code>SagerNet/sing-box</code></p>
+
+          <div style="margin-bottom:10px;">
+            <span class="badge b-green">latest</span>
+            <span style="color:var(--muted);font-size:11px;margin-left:6px;">— последний stable из любой ветки (<code>/releases/latest</code>)</span>
+          </div>
+          <div style="margin-bottom:10px;">
+            <span class="badge b-teal">1.12.x</span>
+            <span style="color:var(--muted);font-size:11px;margin-left:6px;">— последний stable из ветки LTS (фильтр: <code>prerelease=false</code> + тег начинается с <code>v1.12.</code>)</span>
+          </div>
+
+          <p style="font-size:11px;margin-bottom:6px;color:var(--text);">Условие загрузки:</p>
+          <pre style="margin:0;font-size:11px;"><span class="k">if</span> <span class="v">download_binaries_sb</span> != <span class="s">'no'</span>
+   AND variant != <span class="s">switch</span>
+   AND variant != <span class="s">clear</span>
+   AND variant != <span class="s">crystal_clear</span>
+   AND variant != <span class="s">passwall</span>
+   AND variant != <span class="s">v2raya</span>
+   AND variant != <span class="s">xray</span></pre>
+          <p style="color:var(--muted);font-size:10px;margin-top:8px;">Кладётся в <code>./files/usr/bin/sing-box</code> (chmod 755)</p>
+          <p style="color:var(--yellow);font-size:10px;">При ошибке загрузки — fallback на версию из OpenWrt feed</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ──────────────────────────────────────────── -->
+  <!-- 6. ЭТАПЫ ПАЙПЛАЙНА -->
+  <!-- ──────────────────────────────────────────── -->
+  <section id="pipeline">
+    <div class="section-header">
+      <div class="section-num">6</div>
+      <div class="section-title">Этапы пайплайна (steps)</div>
+      <div class="section-sub">порядок выполнения · job: build</div>
+    </div>
+
+    <div class="pipeline">
+
+      <div class="pipe-step">
+        <div class="pipe-line">
+          <div class="pipe-num always">1</div>
+        </div>
+        <div class="pipe-body">
+          <h4>Free up disk space</h4>
+          <p>Удаляет: dotnet, Android SDK, Haskell, Azure CLI, Java JVM, Boost, Swift, Chromium, PowerShell.</p>
+          <p>Очищает Docker images (~3–4 ГБ). Удаляет браузеры, БД, mono через apt-get purge.</p>
+          <p style="color:var(--green);font-size:10px;">Всегда. Освобождает ~15–20 ГБ для сборки.</p>
+        </div>
+      </div>
+
+      <div class="pipe-step">
+        <div class="pipe-line">
+          <div class="pipe-num always">2</div>
+        </div>
+        <div class="pipe-body">
+          <h4>Checkout</h4>
+          <p>Клонирует репозиторий самого workflow (<code>actions/checkout@main</code>).</p>
+          <p style="color:var(--green);font-size:10px;">Всегда.</p>
+        </div>
+      </div>
+
+      <div class="pipe-step">
+        <div class="pipe-line">
+          <div class="pipe-num always">3</div>
+        </div>
+        <div class="pipe-body">
+          <h4>Set permissions</h4>
+          <p>Устанавливает <code>chmod 755</code> на все файлы в <code>files/usr/bin/</code> и <code>files/etc/uci-defaults/</code> (если папки существуют).</p>
+          <p style="color:var(--green);font-size:10px;">Всегда.</p>
+        </div>
+      </div>
+
+      <div class="pipe-step">
+        <div class="pipe-line">
+          <div class="pipe-num cond">4</div>
+        </div>
+        <div class="pipe-body">
+          <h4>Download AdGuardHome</h4>
+          <p>Скачивает <code>AdGuardHome_linux_arm64.tar.gz</code> → <code>files/usr/bin/AdGuardHome</code>.</p>
+          <p class="cond-badge">⚡ Условие: <code>download_binaries_agh=true</code> AND variant ∉ {switch, clear, crystal_clear}</p>
+        </div>
+      </div>
+
+      <div class="pipe-step">
+        <div class="pipe-line">
+          <div class="pipe-num cond">5</div>
+        </div>
+        <div class="pipe-body">
+          <h4>Download Sing-box</h4>
+          <p>Скачивает <code>sing-box-*-linux-arm64.tar.gz</code> → <code>files/usr/bin/sing-box</code>.</p>
+          <p>Версия <code>latest</code> — через <code>/releases/latest</code>. Версия <code>1.12.x</code> — поиск через API с фильтром по тегу.</p>
+          <p class="cond-badge">⚡ Условие: <code>download_binaries_sb != 'no'</code> AND variant ∉ {switch, clear, crystal_clear, passwall, v2raya, xray}</p>
+        </div>
+      </div>
+
+      <div class="pipe-step">
+        <div class="pipe-line">
+          <div class="pipe-num always">6</div>
+        </div>
+        <div class="pipe-body">
+          <h4>Configure Build Variables</h4>
+          <p>Определяет: <code>REPO_URL</code>, <code>REPO_BRANCH</code>, <code>TARGET_RELEASE</code>, <code>AUTO_COMMIT_HASH</code>, <code>KERNEL_PATH</code>, <code>DEVICE_CONFIG_COMMANDS</code>.</p>
+          <p>Логика ветки: для <code>master</code> → branch=main (openwrt) / snapshots. Для стабильных — поиск последнего тега через GitHub API (или ручной коммит).</p>
+          <p>ImmortalWrt-специфика: проверяет HTTP 200 на папке релиза; если 404 → SNAPSHOT.</p>
+          <p>Фолбэк: 25.12 → <code>releases/25.12.1</code> (openwrt) / <code>releases/25.12-SNAPSHOT</code> (immortalwrt); 24.10 → аналогично.</p>
+          <p style="color:var(--green);font-size:10px;">Всегда.</p>
+        </div>
+      </div>
+
+      <div class="pipe-step">
+        <div class="pipe-line">
+          <div class="pipe-num always">7</div>
+        </div>
+        <div class="pipe-body">
+          <h4>Init Env</h4>
+          <p>Устанавливает зависимости сборки через apt-get. Список из внешнего скрипта + ручной полный список (ack, binutils, cmake, device-tree-compiler, jq, python3, и др.).</p>
+          <p>Устанавливает timezone = <code>Europe/Moscow</code>. Создаёт <code>/workdir</code>.</p>
+          <p style="color:var(--green);font-size:10px;">Всегда.</p>
+        </div>
+      </div>
+
+      <div class="pipe-step">
+        <div class="pipe-line">
+          <div class="pipe-num always">8</div>
+        </div>
+        <div class="pipe-body">
+          <h4>Clone Source</h4>
+          <p>Клонирует в <code>/workdir/openwrt</code>: <code>git clone --branch {REPO_BRANCH} {REPO_URL}</code>.</p>
+          <p>Если задан <code>AUTO_COMMIT_HASH</code> — выполняет <code>git checkout {hash}</code> (точная версия).</p>
+          <p>Создаёт симлинк <code>{GITHUB_WORKSPACE}/openwrt → /workdir/openwrt</code>.</p>
+          <p style="color:var(--green);font-size:10px;">Всегда.</p>
+        </div>
+      </div>
+
+      <div class="pipe-step">
+        <div class="pipe-line">
+          <div class="pipe-num cond">9</div>
+        </div>
+        <div class="pipe-body">
+          <h4>Apply custom patches</h4>
+          <p>Ищет <code>*.patch</code> файлы в директории <code>patches/</code>. Применяет каждый через <code>patch -p1 -d openwrt</code>.</p>
+          <p>Если папки нет или пуста — пропускается без ошибки.</p>
+          <p class="cond-badge">⚡ Условно: только если файлы *.patch существуют в patches/</p>
+        </div>
+      </div>
+
+      <div class="pipe-step">
+        <div class="pipe-line">
+          <div class="pipe-num always">10</div>
+        </div>
+        <div class="pipe-body">
+          <h4>Update Feeds &amp; Config</h4>
+          <p>Комплексный шаг. Порядок:</p>
+          <p>① Копирует <code>feeds.conf.default</code> (если есть) → ② Запускает <code>WRT-part1.sh</code> (добавление репозиториев) → ③ Добавляет variant-специфичные feeds → ④ Заменяет зеркала git.openwrt.org на github.com → ⑤ <code>feeds update -a</code> → ⑥ <code>WRT-part2.sh</code> (фиксы версий, строго между update и install) → ⑦ <code>feeds install -a</code> → ⑧ Копирует <code>WRT.config</code> и <code>files/</code> → ⑨ Применяет <code>DEVICE_CONFIG_COMMANDS</code> → ⑩ <code>WRT-part3.sh</code> → ⑪ Модификации .config по variant → ⑫ <code>WRT-part4.sh</code> → ⑬ Логика exclude_keywords → ⑭ <code>make defconfig</code>.</p>
+          <p style="color:var(--green);font-size:10px;">Всегда.</p>
+        </div>
+      </div>
+
+      <div class="pipe-step">
+        <div class="pipe-line">
+          <div class="pipe-num always">11</div>
+        </div>
+        <div class="pipe-body">
+          <h4>Kernel Hash</h4>
+          <p>Получает актуальный хеш ядра с официального сервера загрузок и применяет в <code>include/kernel-defaults.mk</code>.</p>
+          <p>Это нужно для совместимости с официальными kmod-пакетами из репозитория.</p>
+          <p>Подробно — раздел 8.</p>
+          <p style="color:var(--green);font-size:10px;">Всегда.</p>
+        </div>
+      </div>
+
+      <div class="pipe-step">
+        <div class="pipe-line">
+          <div class="pipe-num always">12</div>
+        </div>
+        <div class="pipe-body">
+          <h4>Compile</h4>
+          <p>① Попытка: <code>make -j$(nproc + 1)</code> (параллельно). ② При ошибке: <code>make -j1 V=s &gt; build.log 2&gt;&amp;1</code> (verbose, однопоточно). При повторной ошибке: показывает последние 200 строк лога, сохраняет <code>bin/build_failure.log</code>, завершается с кодом 1.</p>
+          <p style="color:var(--green);font-size:10px;">Всегда.</p>
+        </div>
+      </div>
+
+      <div class="pipe-step">
+        <div class="pipe-line">
+          <div class="pipe-num always">13</div>
+        </div>
+        <div class="pipe-body">
+          <h4>Save Bootloader files (Deep Search)</h4>
+          <p>Ищет и копирует в <code>bin/u-boot-files/</code>:</p>
+          <p>— Rockchip (R5S/R6S): <code>idbloader.img</code>, <code>u-boot.itb</code> из <code>build_dir/target-*</code></p>
+          <p>— MediaTek (Filogic/SlateAX/AX59U): <code>*.fip</code>, <code>u-boot.bin</code> из папок u-boot</p>
+          <p>— Дополнительно: <code>*idbloader.img</code>, <code>*u-boot.itb</code>, <code>u-boot.elf</code> из <code>bin/targets</code></p>
+          <p style="color:var(--green);font-size:10px;">Всегда (ищет, не падает если не найдено).</p>
+        </div>
+      </div>
+
+      <div class="pipe-step">
+        <div class="pipe-line">
+          <div class="pipe-num upload">14</div>
+        </div>
+        <div class="pipe-body">
+          <h4>Upload artifact</h4>
+          <p>Загружает всю папку <code>openwrt/bin</code> (прошивки + kmod пакеты + u-boot файлы + лог при ошибке) как GitHub Actions artifact.</p>
+          <p>Имя: <code>{source}_{branch}_{variant}_{target}_{YYYYMMDDHHMM}</code></p>
+          <p>Retention: <strong>10 дней</strong>. Действие: <code>actions/upload-artifact@v7</code>.</p>
+          <p style="color:var(--green);font-size:10px;">Всегда.</p>
+        </div>
+      </div>
+
+      <div class="pipe-step">
+        <div class="pipe-line">
+          <div class="pipe-num always">15</div>
+        </div>
+        <div class="pipe-body">
+          <h4>Delete workflow runs</h4>
+          <p>Удаляет старые запуски workflow старше 10 дней через <code>gh run delete</code>.</p>
+          <p>Лимит выборки: 100 последних запусков. Использует <code>GITHUB_TOKEN</code>.</p>
+          <p style="color:var(--yellow);font-size:10px;">⚠ Есть синтаксическая ошибка в скрипте: <code>if[ -z "$RUN_IDS" ]</code> (нет пробела перед [). Скрипт может упасть, но это не прервёт основную задачу.</p>
+        </div>
+      </div>
+
+    </div>
+
+    <div style="display:flex;gap:12px;margin-top:16px;font-size:11px;">
+      <div><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#1a4731;border:1px solid var(--green);margin-right:5px;vertical-align:middle;"></span>Всегда выполняется</div>
+      <div><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#3d2d00;border:1px solid var(--orange);margin-right:5px;vertical-align:middle;"></span>Условно</div>
+      <div><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#0c2d6b;border:1px solid var(--accent);margin-right:5px;vertical-align:middle;"></span>Загрузка</div>
+    </div>
+  </section>
+
+  <!-- ──────────────────────────────────────────── -->
+  <!-- 7. ФИДЫ И СКРИПТЫ -->
+  <!-- ──────────────────────────────────────────── -->
+  <section id="feeds">
+    <div class="section-header">
+      <div class="section-num">7</div>
+      <div class="section-title">Фиды и кастомные скрипты</div>
+      <div class="section-sub">DIY_P1..P4_SH · замена зеркал</div>
+    </div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Скрипт</th>
+            <th>Когда запускается</th>
+            <th>Назначение</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>./sh/WRT-part1.sh</code></td>
+            <td>До <code>feeds update -a</code></td>
+            <td>Добавление дополнительных источников (src-git) в feeds.conf. Вносит изменения на уровне объявления репозиториев.</td>
+          </tr>
+          <tr>
+            <td><code>./sh/WRT-part2.sh</code></td>
+            <td>После <code>feeds update</code>, до <code>feeds install</code></td>
+            <td>Фиксы версий пакетов, Python-зависимости, патчи на уровне исходников фидов (строго между update и install).</td>
+          </tr>
+          <tr>
+            <td><code>./sh/WRT-part3.sh</code></td>
+            <td>После <code>feeds install -a</code></td>
+            <td>Замена пакетов, клонирование дополнительного ПО, очистка. Выполняется после install, чтобы перезаписать символические ссылки.</td>
+          </tr>
+          <tr>
+            <td><code>./sh/WRT-part4.sh</code></td>
+            <td>Перед <code>make defconfig</code></td>
+            <td>Финальный тюнинг .config. Описан как пустой, но предназначен для last-minute правок.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout info">
+      <strong>Замена зеркал (fix 503)</strong>
+      Все ссылки на <code>git.openwrt.org</code> автоматически заменяются на <code>github.com/openwrt/</code>:
+      <code>packages</code>, <code>luci</code>, <code>routing</code>, <code>telephony</code>.
+    </div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Variant</th>
+            <th>Добавляемый feed</th>
+            <th>Репозиторий</th>
+            <th>Ветка</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="badge b-red">passwall</span></td>
+            <td><code>passwall2</code></td>
+            <td><code>Openwrt-Passwall/openwrt-passwall2</code></td>
+            <td>default</td>
+          </tr>
+          <tr>
+            <td><span class="badge b-red">passwall</span></td>
+            <td><code>passwall_packages</code></td>
+            <td><code>Openwrt-Passwall/openwrt-passwall-packages</code></td>
+            <td>main</td>
+          </tr>
+          <tr>
+            <td><span class="badge b-yellow">xray</span></td>
+            <td><code>luciappxray</code></td>
+            <td><code>yichya/luci-app-xray</code></td>
+            <td>default</td>
+          </tr>
+          <tr>
+            <td><span class="badge b-purple">podkop</span></td>
+            <td><code>podkop</code></td>
+            <td><code>itdoginfo/podkop</code></td>
+            <td>main</td>
+          </tr>
+          <tr>
+            <td><em>остальные</em></td>
+            <td>—</td>
+            <td>Только стандартные feeds из feeds.conf.default</td>
+            <td>—</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ──────────────────────────────────────────── -->
+  <!-- 8. KERNEL HASH -->
+  <!-- ──────────────────────────────────────────── -->
+  <section id="kernel">
+    <div class="section-header">
+      <div class="section-num">8</div>
+      <div class="section-title">Логика Kernel Hash</div>
+      <div class="section-sub">совместимость с официальными kmod-репозиториями</div>
+    </div>
+
+    <div class="callout info">
+      <strong>Зачем это нужно</strong>
+      OpenWrt включает хеш ядра в имена kmod-пакетов. Если хеш отличается от официального (собранного на серверах OpenWrt),
+      то пакеты из официального репозитория нельзя будет установить через opkg. Скрипт синхронизирует хеш
+      с официальными серверами ещё до сборки.
+    </div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr><th>Шаг</th><th>Что происходит</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1. Домен</td>
+            <td>immortalwrt → <code>immortalwrt.kyarucloud.moe</code> (зеркало, т.к. основной нестабилен)<br>openwrt → <code>downloads.openwrt.org</code></td>
+          </tr>
+          <tr>
+            <td>2. Primary URL</td>
+            <td><code>https://{domain}/{TARGET_RELEASE}/targets/{KERNEL_PATH}/kmods/</code><br>Парсит список, ищет паттерн <code>6.x.x-N-{hash}</code></td>
+          </tr>
+          <tr>
+            <td>3. Fallback</td>
+            <td>Если Primary пуст И ветка не master/main → пробует <code>releases/{version}-SNAPSHOT/targets/{KERNEL_PATH}/kmods/</code></td>
+          </tr>
+          <tr>
+            <td>4. Generic fallback</td>
+            <td>Если паттерн 6.x не найден → пробует любой паттерн <code>N.N.N-N-{hash}</code></td>
+          </tr>
+          <tr>
+            <td>5. Выбор хеша</td>
+            <td>Из всех найденных версий берёт наибольшую (сортировка по major.minor.patch). Извлекает только хеш (3-я часть после дефиса).</td>
+          </tr>
+          <tr>
+            <td>6. Применение</td>
+            <td><strong>Найден:</strong> <code>sed -i "s/$(MKHASH) md5/echo "{hash}"/g" include/kernel-defaults.mk</code><br><strong>Не найден:</strong> файл не меняется, OpenWrt генерирует хеш сам (kmod из репо работать не будут)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ──────────────────────────────────────────── -->
+  <!-- 9. КОМПИЛЯЦИЯ -->
+  <!-- ──────────────────────────────────────────── -->
+  <section id="compile">
+    <div class="section-header">
+      <div class="section-num">9</div>
+      <div class="section-title">Компиляция</div>
+      <div class="section-sub">многопоточная → однопоточная fallback</div>
+    </div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr><th>Попытка</th><th>Команда</th><th>Поведение при ошибке</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="badge b-green">1-я (быстрая)</span></td>
+            <td><code>make -j$(nproc + 1)</code></td>
+            <td>Переходит к 2-й попытке</td>
+          </tr>
+          <tr>
+            <td><span class="badge b-yellow">2-я (verbose)</span></td>
+            <td><code>make -j1 V=s &gt; build.log 2&gt;&amp;1</code></td>
+            <td>Показывает tail -200 лога. Сохраняет <code>bin/build_failure.log</code>. Завершается с exit 1.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout ok">
+      <strong>После успешной компиляции</strong>
+      Записывает <code>FILE_DATE=_YYYYMMDDHHMM</code> в GITHUB_ENV (используется в имени артефакта).
+    </div>
+  </section>
+
+  <!-- ──────────────────────────────────────────── -->
+  <!-- 10. ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ -->
+  <!-- ──────────────────────────────────────────── -->
+  <section id="env">
+    <div class="section-header">
+      <div class="section-num">10</div>
+      <div class="section-title">Переменные окружения (env)</div>
+      <div class="section-sub">статические + динамические</div>
+    </div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr><th>Переменная</th><th>Значение / Источник</th><th>Назначение</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code class="env-key">FEEDS_CONF</code></td>
+            <td><span class="env-val">feeds.conf.default</span></td>
+            <td>Имя файла конфигурации фидов</td>
+          </tr>
+          <tr>
+            <td><code class="env-key">CONFIG_FILE</code></td>
+            <td><span class="env-val">./config/WRT.config</span></td>
+            <td>Базовый .config файл для всех сборок</td>
+          </tr>
+          <tr>
+            <td><code class="env-key">DIY_P1_SH</code></td>
+            <td><span class="env-val">./sh/WRT-part1.sh</span></td>
+            <td>Скрипт добавления репозиториев (до feeds update)</td>
+          </tr>
+          <tr>
+            <td><code class="env-key">DIY_P2_SH</code></td>
+            <td><span class="env-val">./sh/WRT-part2.sh</span></td>
+            <td>Фиксы версий (между feeds update и install)</td>
+          </tr>
+          <tr>
+            <td><code class="env-key">DIY_P3_SH</code></td>
+            <td><span class="env-val">./sh/WRT-part3.sh</span></td>
+            <td>Замена пакетов, клонирование (после feeds install)</td>
+          </tr>
+          <tr>
+            <td><code class="env-key">DIY_P4_SH</code></td>
+            <td><span class="env-val">./sh/WRT-part4.sh</span></td>
+            <td>Финальный тюнинг перед make defconfig</td>
+          </tr>
+          <tr>
+            <td><code class="env-key">UPLOAD_BIN_DIR</code></td>
+            <td><span class="env-val">true</span></td>
+            <td>Флаг загрузки папки bin (статический, но не используется как условие в коде — загрузка безусловная)</td>
+          </tr>
+          <tr>
+            <td><code class="env-key">UPLOAD_FIRMWARE</code></td>
+            <td><span class="env-val">false</span></td>
+            <td>Флаг отдельной загрузки firmware (не используется активно)</td>
+          </tr>
+          <tr>
+            <td><code class="env-key">TZ</code></td>
+            <td><span class="env-val">Europe/Moscow</span></td>
+            <td>Timezone для сборочной машины</td>
+          </tr>
+          <tr>
+            <td><code class="env-key">FORCE_JAVASCRIPT_ACTIONS_TO_NODE24</code></td>
+            <td><span class="env-val">true</span></td>
+            <td>Форсирует Node.js 24 для actions (совместимость)</td>
+          </tr>
+          <tr style="background:var(--bg3)">
+            <td colspan="3" style="color:var(--muted);font-size:10px;padding:6px 12px;">— Динамические (устанавливаются в процессе) —</td>
+          </tr>
+          <tr>
+            <td><code class="env-key">REPO_URL</code></td>
+            <td><span class="env-val">Configure Build Variables</span></td>
+            <td>URL исходников (openwrt.git или immortalwrt.git)</td>
+          </tr>
+          <tr>
+            <td><code class="env-key">REPO_BRANCH</code></td>
+            <td><span class="env-val">Configure Build Variables</span></td>
+            <td>Имя ветки для git clone (master→main для openwrt)</td>
+          </tr>
+          <tr>
+            <td><code class="env-key">TARGET_RELEASE</code></td>
+            <td><span class="env-val">Configure Build Variables</span></td>
+            <td>Путь релиза (snapshots / releases/25.12.1 / etc.)</td>
+          </tr>
+          <tr>
+            <td><code class="env-key">AUTO_COMMIT_HASH</code></td>
+            <td><span class="env-val">Configure Build Variables</span></td>
+            <td>SHA коммита тега (или ручной из inputs)</td>
+          </tr>
+          <tr>
+            <td><code class="env-key">KERNEL_PATH</code></td>
+            <td><span class="env-val">./config/conf/{target}</span></td>
+            <td>Путь платформы для поиска kernel hash (напр. rockchip/armv8)</td>
+          </tr>
+          <tr>
+            <td><code class="env-key">TARGET_NAME</code></td>
+            <td><span class="env-val">./config/conf/{target}</span></td>
+            <td>Имя устройства для именования артефакта</td>
+          </tr>
+          <tr>
+            <td><code class="env-key">DEVICE_CONFIG_COMMANDS</code></td>
+            <td><span class="env-val">./config/conf/{target}</span></td>
+            <td>Shell-команды настройки .config под конкретное устройство</td>
+          </tr>
+          <tr>
+            <td><code class="env-key">FILE_DATE</code></td>
+            <td><span class="env-val">после Compile</span></td>
+            <td>Метка времени сборки <code>_YYYYMMDDHHMM</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ──────────────────────────────────────────── -->
+  <!-- 11. АРТЕФАКТЫ -->
+  <!-- ──────────────────────────────────────────── -->
+  <section id="artifacts">
+    <div class="section-header">
+      <div class="section-num">11</div>
+      <div class="section-title">Артефакты и именование</div>
+      <div class="section-sub">upload-artifact@v7 · retention 10 дней</div>
+    </div>
+
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:16px;">
+      <p style="color:var(--muted);font-size:11px;margin-bottom:8px;">Шаблон имени артефакта:</p>
+      <pre style="margin:0;">{<span class="v">source</span>}_{<span class="v">branch</span>}_{<span class="v">variant</span>}_{<span class="v">target</span>}_{<span class="v">YYYYMMDDHHMM</span>}</pre>
+      <p style="color:var(--muted);font-size:11px;margin-top:10px;">Примеры:</p>
+      <pre style="margin:0;"><span class="s">openwrt_openwrt-25.12_minimal_nanopi-r6s_202503191245</span>
+<span class="s">immortalwrt_openwrt-25.12_passwall_rb5009_202503191312</span>
+<span class="s">openwrt_master_podkop_rb5009_202503191400</span></pre>
+    </div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr><th>Что содержится в артефакте</th><th>Путь</th><th>Примечание</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Образы прошивки (.img, .bin, .itb и др.)</td>
+            <td><code>bin/targets/{platform}/{device}/</code></td>
+            <td>Основные файлы прошивки</td>
+          </tr>
+          <tr>
+            <td>kmod-пакеты (*.ipk / *.apk)</td>
+            <td><code>bin/targets/{platform}/{device}/kmods/</code></td>
+            <td>Модули ядра с совпадающим хешем</td>
+          </tr>
+          <tr>
+            <td>Пользовательские пакеты</td>
+            <td><code>bin/packages/</code></td>
+            <td>Все собранные .ipk / .apk</td>
+          </tr>
+          <tr>
+            <td>Bootloader файлы</td>
+            <td><code>bin/u-boot-files/</code></td>
+            <td>idbloader.img, u-boot.itb, *.fip (если найдены)</td>
+          </tr>
+          <tr>
+            <td>Лог сборки (только при ошибке)</td>
+            <td><code>bin/build_failure.log</code></td>
+            <td>Полный verbose лог однопоточной компиляции</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ──────────────────────────────────────────── -->
+  <!-- 12. БЫСТРАЯ ШПАРГАЛКА -->
+  <!-- ──────────────────────────────────────────── -->
+  <section id="matrix-quick">
+    <div class="section-header">
+      <div class="section-num">12</div>
+      <div class="section-title">Быстрая шпаргалка</div>
+      <div class="section-sub">типичные сценарии запуска</div>
+    </div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Сценарий</th>
+            <th>target</th>
+            <th>source</th>
+            <th>branch</th>
+            <th>variant</th>
+            <th>AGH</th>
+            <th>SB</th>
+            <th>Результат</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Стандартная комбо-сборка (три прошивки)</td>
+            <td><code>combo</code></td>
+            <td>openwrt</td>
+            <td>openwrt-25.12</td>
+            <td><em>игнорируется</em></td>
+            <td>false</td>
+            <td>no</td>
+            <td>3 job: r6s/minimal + rb5009/clear + rb5009/switch</td>
+          </tr>
+          <tr>
+            <td>R6S с podkop + свежий sing-box LTS</td>
+            <td><code>nanopi-r6s</code></td>
+            <td>openwrt</td>
+            <td>openwrt-25.12</td>
+            <td>podkop</td>
+            <td>false</td>
+            <td>1.12.x</td>
+            <td>1 job, podkop feed + sing-box бинарник 1.12.x</td>
+          </tr>
+          <tr>
+            <td>RB5009 passwall (xray, без shadowsocks)</td>
+            <td><code>rb5009</code></td>
+            <td>openwrt</td>
+            <td>openwrt-25.12</td>
+            <td>passwall</td>
+            <td>true</td>
+            <td>no</td>
+            <td>1 job, passwall2 feed, xray-core, без sing-box бинарника</td>
+          </tr>
+          <tr>
+            <td>Чистый свитч для RB5009 (без прокси)</td>
+            <td><code>rb5009</code></td>
+            <td>openwrt</td>
+            <td>openwrt-25.12</td>
+            <td>switch</td>
+            <td>false</td>
+            <td>no</td>
+            <td>1 job, минимальный конфиг только для свитча</td>
+          </tr>
+          <tr>
+            <td>Оба устройства с v2raya (ImmortalWrt)</td>
+            <td><code>all</code></td>
+            <td>immortalwrt</td>
+            <td>openwrt-25.12</td>
+            <td>v2raya</td>
+            <td>false</td>
+            <td>no</td>
+            <td>2 job: r6s/v2raya + rb5009/v2raya на ImmortalWrt</td>
+          </tr>
+          <tr>
+            <td>Исключить sssd из сборки</td>
+            <td>любой</td>
+            <td>любой</td>
+            <td>любой</td>
+            <td>любой</td>
+            <td>—</td>
+            <td>—</td>
+            <td>exclude_keywords = <code>sssd</code> (все пакеты с этим словом =y → отключаются)</td>
+          </tr>
+          <tr>
+            <td>Точная воспроизводимая сборка</td>
+            <td>любой</td>
+            <td>openwrt</td>
+            <td>openwrt-25.12</td>
+            <td>любой</td>
+            <td>—</td>
+            <td>—</td>
+            <td>commit_hash = <code>abc123...</code> → checkout именно этого коммита</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout warn">
+      <strong>⚠ Известная ошибка в коде</strong>
+      Шаг "Delete workflow runs" содержит <code>if[ -z "$RUN_IDS" ]</code> (нет пробела между <code>if</code> и <code>[</code>).
+      Это синтаксическая ошибка bash. Шаг упадёт с ошибкой, но т.к. он идёт после Upload, прошивка уже загружена.
+      Исправление: заменить на <code>if [ -z "$RUN_IDS" ]</code>.
+    </div>
+
+    <div class="callout ok">
+      <strong>✓ Нативная совместимость кmod</strong>
+      Если kernel hash получен успешно (раздел 8), собранные kmod-пакеты совместимы с официальными репозиториями OpenWrt.
+      Это означает, что <code>opkg update &amp;&amp; opkg install kmod-*</code> будет работать без конфликтов.
+    </div>
+  </section>
+
+</main>
+
+<script>
+  // Highlight active nav item on scroll
+  const sections = document.querySelectorAll('section[id]');
+  const links = document.querySelectorAll('#sidebar a');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const active = document.querySelector(`#sidebar a[href="#${e.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { threshold: 0.3, rootMargin: '-60px 0px -60% 0px' });
+  sections.forEach(s => observer.observe(s));
+</script>
+
+</body>
+</html>
