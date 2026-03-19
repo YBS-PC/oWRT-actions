@@ -337,10 +337,14 @@ jobs:
                      if [ "${{ inputs.source }}" == "immortalwrt" ]; then
                         VAR_TARGET_RELEASE="releases/25.12-SNAPSHOT"
                      else
-                        VAR_TARGET_RELEASE="releases/25.12.0"
+                        VAR_TARGET_RELEASE="releases/25.12.1"
                      fi
                 elif [[ "$INPUT_BRANCH" == *"24.10"* ]]; then
-                     VAR_TARGET_RELEASE="releases/24.10.5"
+                     if [ "${{ inputs.source }}" == "immortalwrt" ]; then
+                        VAR_TARGET_RELEASE="releases/24.10.5"
+                     else
+                        VAR_TARGET_RELEASE="releases/24.10.6"
+                     fi
                 fi
             fi
         fi
