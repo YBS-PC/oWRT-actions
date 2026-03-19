@@ -1530,13 +1530,6 @@
       </table>
     </div>
 
-    <div class="callout warn">
-      <strong>⚠ Известная ошибка в коде</strong>
-      Шаг "Delete workflow runs" содержит <code>if[ -z "$RUN_IDS" ]</code> (нет пробела между <code>if</code> и <code>[</code>).
-      Это синтаксическая ошибка bash. Шаг упадёт с ошибкой, но т.к. он идёт после Upload, прошивка уже загружена.
-      Исправление: заменить на <code>if [ -z "$RUN_IDS" ]</code>.
-    </div>
-
     <div class="callout ok">
       <strong>✓ Нативная совместимость кmod</strong>
       Если kernel hash получен успешно (раздел 8), собранные kmod-пакеты совместимы с официальными репозиториями OpenWrt.
