@@ -265,14 +265,26 @@ option eqdisc_opts 'nat dual-srchost diffserv4 nowash'
 
 ## Быстрая проверка после прошивки
 # Лог выполнения
+```
 cat /root/setup_log.txt
+```
 # Что реально применилось в nftables
+```
 nft list ruleset | grep -A5 youtubeUnblock
+```
 # Порт dnsmasq (должен быть 54 если AGH установлен)
+```
 uci get dhcp.@dnsmasq[0].port
+```
 # Hostname
+```
 uci get system.@system[0].hostname
+```
 # BBR
+```
 sysctl net.ipv4.tcp_congestion_control
+```
 # kmods в репозиториях
+```
 cat /etc/apk/repositories.d/distfeeds.list
+```
