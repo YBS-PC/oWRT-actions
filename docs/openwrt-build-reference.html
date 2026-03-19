@@ -1387,7 +1387,7 @@
             <td><b>Настройка youtubeUnblock</b></td>
             <td><span class="badge b-green">Всегда</span> (если пакет установлен)</td>
             <td>
-              Создаёт пустые ipset-ы: <code>dpi_ips</code>, <code>no_dpi_ips</code>, <code>dpi_guest_ips</code>.<br>
+              Создаёт пустые ipset-ы, если их нет: <code>dpi_ips</code>, <code>no_dpi_ips</code>, <code>dpi_guest_ips</code>.<br>
               Патчит <code>ruleset.uc</code>: добавляет ct-packets threshold для offloading.<br>
               Пишет <code>/usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft</code> с правилами postrouting (queue 537, bypass).
             </td>
