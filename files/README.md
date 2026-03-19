@@ -264,7 +264,6 @@ option eqdisc_opts 'nat dual-srchost diffserv4 nowash'
 | `/etc/passwd` | если AGH есть и записи нет | строка пользователя adguardhome |
 
 ## Быстрая проверка после прошивки
-``sh
 # Лог выполнения
 cat /root/setup_log.txt
 # Что реально применилось в nftables
@@ -277,4 +276,3 @@ uci get system.@system[0].hostname
 sysctl net.ipv4.tcp_congestion_control
 # kmods в репозиториях
 cat /etc/apk/repositories.d/distfeeds.list
-``
