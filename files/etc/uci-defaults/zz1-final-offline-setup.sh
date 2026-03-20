@@ -276,7 +276,7 @@ EOF
 	echo "Создание файла правил $NFT_RULE_FILE..."
 	cat > "$NFT_RULE_FILE" << EOF
 chain bypass_homeproxy_mark {
-	type filter hook prerouting priority mangle; policy accept;
+	type filter hook prerouting priority mangle - 1; policy accept;
 	ip daddr @bypass_homeproxy_ips meta mark set 0x00000064 counter
 }
 EOF
