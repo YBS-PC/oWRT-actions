@@ -270,6 +270,18 @@ EOF
 	SB_version=$(/usr/bin/sing-box version 2>/dev/null | grep -oP -m 1 'v?\K[\d.]+')
 	echo -e "\e[37mУстановленная версия sing-box: $SB_version\e[0m"
 
+	# ГЕНЕРАЦИЯ ФАЙЛА ПРАВИЛ (ЦЕПОЧКИ)
+	NFT_RULE_FILE="/etc/nftables.d/bypass_homeproxy_ips.nft"
+	if [ ! -f "$NFT_RULE_FILE" ]; then
+	echo "Создание файла правил $NFT_RULE_FILE..."
+	cat > "$NFT_RULE_FILE" << EOF
+chain bypass_homeproxy_mark {
+	type filter hook prerouting priority mangle; policy accept;
+	ip daddr @bypass_homeproxy_ips meta mark set 0x00000064 counter
+}
+EOF
+	fi
+
 else
     echo -e "Пакет homeproxy не найден. Настройка пропущена."
 fi
