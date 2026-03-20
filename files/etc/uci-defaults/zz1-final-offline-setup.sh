@@ -314,7 +314,7 @@ echo -e "Настройка youtubeUnblock..."
 echo -e "Проверка и создание необходимых IPSet'ов..."
 # Список всех ipset'ов, которые используются в правилах ниже.
 # Если добавишь новое правило с новым ipset'ом, просто добавь его имя сюда.
-REQUIRED_IPSETS="dpi_ips no_dpi_ips dpi_guest_ips"
+REQUIRED_IPSETS="dpi_ips no_dpi_ips dpi_guest_ips bypass_homeproxy_ips"
 FIREWALL_CONFIG_CHANGED=0
 for ipset_name in $REQUIRED_IPSETS; do
     # Ищем ipset с таким именем в конфиге firewall.
