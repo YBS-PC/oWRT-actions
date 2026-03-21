@@ -277,7 +277,7 @@ EOF
 	cat > "$NFT_RULE_FILE" << EOF
 chain bypass_homeproxy_mark {
 	type filter hook prerouting priority mangle - 1; policy accept;
-	ip daddr @bypass_homeproxy_ips meta mark set 0x00000064 counter
+	ip daddr @bypass_ips meta mark set 0x00000064 counter
 }
 EOF
 	fi
@@ -326,7 +326,7 @@ echo -e "Настройка youtubeUnblock..."
 echo -e "Проверка и создание необходимых IPSet'ов..."
 # Список всех ipset'ов, которые используются в правилах ниже.
 # Если добавишь новое правило с новым ipset'ом, просто добавь его имя сюда.
-REQUIRED_IPSETS="dpi_ips no_dpi_ips dpi_guest_ips bypass_homeproxy_ips"
+REQUIRED_IPSETS="dpi_ips bypass_ips"
 FIREWALL_CONFIG_CHANGED=0
 for ipset_name in $REQUIRED_IPSETS; do
     # Ищем ipset с таким именем в конфиге firewall.
@@ -372,8 +372,8 @@ add chain inet fw4 youtubeUnblock { type filter hook postrouting priority mangle
 # Exclusion of the guest network by tag (traffic will bypass the queue)
 add rule inet fw4 youtubeUnblock meta mark 0x00000042 counter return
 
-# If the destination IP is in the no_dpi_ips list, we exit the chain.
-add rule inet fw4 youtubeUnblock ip daddr @no_dpi_ips counter return
+# If the destination IP is in the bypass_ips list, we exit the chain.
+add rule inet fw4 youtubeUnblock ip daddr @bypass_ips counter return
 
 # DPI through youtubeUnblock
 add rule inet fw4 youtubeUnblock ip daddr @dpi_ips tcp dport 443 ct original packets < 20 counter queue num 537 bypass
@@ -384,17 +384,6 @@ insert rule inet fw4 output mark and 0x8000 == 0x8000 counter accept
 EOF
 )
 
-# Настройка правила nftables для пометки трафика гостевой сети
-YTB_NFT_GUEST_MARK_FILE="/etc/nftables.d/guest_mark.nft"
-
-YTB_NFT_GUEST_MARK_CONTENT=$(cat << "EOF"
-chain guest_mark {
-	type filter hook prerouting priority mangle; policy accept;
-	iifname "br-guest" ip saddr != @dpi_guest_ips meta mark set 0x00000042
-}
-EOF
-)
-
 # Проверяем, установлен ли youtubeUnblock. 
 if [ -x "/usr/bin/youtubeUnblock" ]; then
 	echo -e "Служба youtubeUnblock установлена. Применяем конфигурацию..."
@@ -402,8 +391,6 @@ if [ -x "/usr/bin/youtubeUnblock" ]; then
 	/etc/init.d/youtubeUnblock disable
 	echo "$YTB_NFT_FILE_CONTENT" > "$YTB_NFT_FILE"
 	chmod 0644 "$YTB_NFT_FILE"
-	#-#echo "$YTB_NFT_GUEST_MARK_CONTENT" > "$YTB_NFT_GUEST_MARK_FILE"
-	#-#chmod 0644 "$YTB_NFT_GUEST_MARK_FILE"
 	/etc/init.d/youtubeUnblock enable
 	echo -e "youtubeUnblock настроен и включен."
 else
