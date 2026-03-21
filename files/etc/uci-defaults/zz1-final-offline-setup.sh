@@ -338,7 +338,7 @@ for ipset_name in $REQUIRED_IPSETS; do
         handle=$(uci add firewall ipset)
         # 2. Устанавливаем параметры для этой новой секции
         uci set firewall."$handle".name="$ipset_name"
-        uci set firewall."$handle".match="net"
+        uci set firewall."$handle".match="dest_net"
         uci set firewall."$handle".family="ipv4" # или "ipv6", если нужно. Для DPI обычно ipv4.
         # Устанавливаем флаг, что конфиг был изменен
         FIREWALL_CONFIG_CHANGED=1
