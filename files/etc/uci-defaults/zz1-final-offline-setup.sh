@@ -440,21 +440,6 @@ if [ -x "/usr/bin/AdGuardHome" ] && [ -f "/etc/config/adguardhome" ]; then
         commit adguardhome
 EOF
 
-    # Патч init-скрипта (Handling Jail vs Classic)
-    if grep -q "procd_add_jail" /etc/init.d/adguardhome; then
-        echo ">>> [Jail] Patching init script..."
-        if ! grep -q 'local log_file' /etc/init.d/adguardhome; then
-            sed -i "/local verbose=0/a ${TAB_CHAR}local log_file='/var/AdGuardHome.log'" /etc/init.d/adguardhome
-            sed -i 's/--logfile syslog/--logfile "$log_file"/' /etc/init.d/adguardhome
-        fi
-    else
-        echo ">>> [Classic] Patching old-style init script..."
-        if ! grep -q 'config_get LOG_FILE' /etc/init.d/adguardhome; then
-            sed -i "/config_get PID_FILE/a ${TAB_CHAR}config_get LOG_FILE config logfile '/var/AdGuardHome.log'" /etc/init.d/adguardhome
-            sed -i 's/--pidfile "\$PID_FILE"/--pidfile "\$PID_FILE" --logfile "\$LOG_FILE"/' /etc/init.d/adguardhome
-        fi
-    fi
-
     # Меню для перехода к AdGuardHome в LuCI
     cat << 'EOF' > /usr/lib/lua/luci/controller/adguardhome_net.lua
 module("luci.controller.adguardhome_net", package.seeall)
