@@ -463,7 +463,8 @@ EOF
     uci delete dhcp.@dnsmasq[0].server
     uci commit dhcp
 
-    /etc/init.d/adguardhome enable
+    sed -i 's|--logfile syslog|--logfile /var/AdGuardHome.log|' /etc/init.d/adguardhome
+	/etc/init.d/adguardhome enable
     /etc/init.d/adguardhome start
     echo -e "AdGuardHome успешно настроен и запущен."
 else
