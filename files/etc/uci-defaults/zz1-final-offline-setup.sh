@@ -11,7 +11,7 @@ log_info()  { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] $*"; }
 log_ok()    { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [OK]   $*"; }
 log_err()   { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERR]  $*"; }
 
-# Обёртка для выполнения команды с логированием
+# Обёртка выполнения команды
 run_cmd() {
     desc="$1"; shift
     log_info "$desc"
@@ -25,7 +25,7 @@ run_cmd() {
     fi
 }
 
-# Версия для команд, где ошибка ожидаема и не критична
+# Только для команд, где ожидаемый "провал" не является ошибкой (uci -q delete и т.п.)
 run_cmd_ign() {
     desc="$1"; shift
     log_info "$desc (ignoring errors)"
@@ -33,10 +33,10 @@ run_cmd_ign() {
     log_ok "$desc"
 }
 
-# ========== начало основного скрипта ==========
+# ========== НАЧАЛО СКРИПТА ==========
 
 # Не включаем set -x, чтобы не дублировать структурированный лог
-# set -x   # при необходимости можно раскомментировать для отладки
+# set -x   # раскомментировать при отладке
 
 SETUP_LOGFILE="/root/setup_log.txt"
 exec > >(tee -a "$SETUP_LOGFILE") 2>&1
@@ -56,9 +56,9 @@ NAME_VALUE=$(grep '^NAME=' /etc/os-release | cut -d'=' -f2 | tr -d '"')
 log_ok "NAME_VALUE=$NAME_VALUE"
 
 case "$NAME_VALUE" in
-    "OpenWrt")  ROUTER_NAME="oWRT" ;;
-    "ImmortalWrt") ROUTER_NAME="iWRT" ;;
-    *) ROUTER_NAME="WRT" ;;
+    "OpenWrt")      ROUTER_NAME="oWRT" ;;
+    "ImmortalWrt")  ROUTER_NAME="iWRT" ;;
+    *)              ROUTER_NAME="WRT"  ;;
 esac
 log_ok "ROUTER_NAME=$ROUTER_NAME"
 
@@ -70,12 +70,12 @@ log_ok "MODEL_FULL=$MODEL_FULL"
 
 ROUTER_MODEL=$(echo $MODEL_FULL | awk '{print $NF}')
 ROUTER_MODEL_NAME=$(case "$ROUTER_MODEL" in
-    "GL-MT2500") echo "Brume2" ;;
-    "R5S") echo "R5S" ;;
-    "R6S") echo "R6S" ;;
-    "GL-AXT1800") echo "SLATEX" ;;
-    "RB5009") echo "RB5009" ;;
-    *) echo "$MY_ROUTER" ;;
+    "GL-MT2500")    echo "Brume2" ;;
+    "R5S")          echo "R5S" ;;
+    "R6S")          echo "R6S" ;;
+    "GL-AXT1800")   echo "SLATEX" ;;
+    "RB5009")       echo "RB5009" ;;
+    *)              echo "$MY_ROUTER" ;;
 esac)
 log_ok "ROUTER_MODEL_NAME=$ROUTER_MODEL_NAME"
 
@@ -84,7 +84,14 @@ TAB_CHAR=$(printf '\t')
 CURRENT_VARIANT=$(cat /etc/build_variant 2>/dev/null | head -n 1)
 log_ok "Build Variant: ${CURRENT_VARIANT:-unknown}"
 
+# --- БЛОК ЗАЩИТЫ ОТ ПОВТОРНОГО ЗАПУСКА ---
 LOCK_FILE="/root/.setup_completed"
+#if [ -f "$LOCK_FILE" ]; then
+#if [ -f "$LOCK_FILE" ] && { [ "$CURRENT_VARIANT" = "clear" ] || [ "$CURRENT_VARIANT" = "crystal_clear" ]; }; then
+#    echo "Скрипт уже был выполнен ранее."
+#    exit 0
+#fi
+# --- БЛОК ЗАЩИТЫ ОТ ПОВТОРНОГО ЗАПУСКА ---
 
 # ====================================================================
 #      НАСТРОЙКИ
@@ -149,13 +156,13 @@ if [ -f "$DISTFEEDS_FILE" ]; then
     fi
 fi
 
-# Создание customfeeds
+# Создание customfeeds с проверкой
 cat << 'EOF' > "$CUSTOMFEEDS_FILE"
 # add your custom package feeds here
 #
 # http://www.example.com/path/to/files/packages.adb
 EOF
-log_ok "$CUSTOMFEEDS_FILE создан"
+_RC=$?; [ $_RC -eq 0 ] && log_ok "$CUSTOMFEEDS_FILE создан" || log_err "Ошибка создания $CUSTOMFEEDS_FILE (exit: $_RC)"
 
 # Установка локальных пакетов
 if [ -f /root/apps/sing-box.tar.gz ]; then
@@ -206,8 +213,8 @@ E_O_F
 fi
 uci -q commit firewall
 EOF
+    _RC=$?; [ $_RC -eq 0 ] && log_ok "Скрипт-помощник homeproxy создан" || log_err "Ошибка создания $HELPER_SCRIPT_PATH (exit: $_RC)"
     chmod +x "$HELPER_SCRIPT_PATH"
-    log_ok "Скрипт-помощник homeproxy создан"
 
     HOMEPROXY_INIT="/etc/init.d/homeproxy"
     HELPER_CALL="${TAB_CHAR}. ${HELPER_SCRIPT_PATH}"
@@ -230,7 +237,7 @@ chain bypass_homeproxy_mark {
 	ip daddr @bypass_ips meta mark set 0x00000064 counter
 }
 EOF
-        log_ok "Файл bypass_homeproxy_ips.nft создан"
+        _RC=$?; [ $_RC -eq 0 ] && log_ok "Файл bypass_homeproxy_ips.nft создан" || log_err "Ошибка создания $NFT_RULE_FILE (exit: $_RC)"
     fi
 fi
 
@@ -249,7 +256,7 @@ if [ ! -f "$LOCK_FILE" ] && [ "$CURRENT_VARIANT" = "passwall" ] && [ -f "/etc/in
         set passwall2.@global[0].enabled='1'
         commit passwall2
 EOF
-    log_ok "Конфигурация passwall2 обновлена"
+    _RC=$?; [ $_RC -eq 0 ] && log_ok "Конфигурация passwall2 обновлена" || log_err "Ошибка uci batch passwall2 (exit: $_RC)"
 
     run_cmd "Включение passwall2" /etc/init.d/passwall2 enable
 fi
@@ -274,14 +281,28 @@ if [ -x "/usr/bin/youtubeUnblock" ]; then
     run_cmd "Отключение youtubeUnblock" /etc/init.d/youtubeUnblock disable
     cat << "EOF" > /usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft
 #!/usr/sbin/nft -f
+# This file will be applied automatically for nftables <table> <chain> position <number> <condition> <action>
+
+# Drop (reject) UDP to dest port 443 to DPI IPs
 add rule inet fw4 prerouting ip daddr @dpi_ips udp dport 443 reject with icmp port-unreachable
+
+# DPI through youtubeUnblock
 add chain inet fw4 youtubeUnblock { type filter hook postrouting priority mangle - 1; policy accept; }
+
+# Exclusion of the guest network by tag (traffic will bypass the queue)
 add rule inet fw4 youtubeUnblock meta mark 0x00000042 counter return
+
+# If the destination IP is in the bypass_ips list, we exit the chain.
 add rule inet fw4 youtubeUnblock ip daddr @bypass_ips counter return
+
+# DPI through youtubeUnblock
 add rule inet fw4 youtubeUnblock ip daddr @dpi_ips tcp dport 443 ct original packets < 20 counter queue num 537 bypass
 add rule inet fw4 youtubeUnblock ip daddr @dpi_ips meta l4proto udp ct original packets < 9 counter queue num 537 bypass
+
+# Skipping traffic with the label 0x8000
 insert rule inet fw4 output mark and 0x8000 == 0x8000 counter accept
 EOF
+    _RC=$?; [ $_RC -eq 0 ] && log_ok "Файл youtubeUnblock.nft записан" || log_err "Ошибка записи правил (exit: $_RC)"
     chmod 0644 /usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft
     run_cmd "Включение youtubeUnblock" /etc/init.d/youtubeUnblock enable
 else
@@ -319,7 +340,7 @@ if [ -x "/usr/bin/AdGuardHome" ] && [ -f "/etc/config/adguardhome" ]; then
         set adguardhome.config.group='root'
         commit adguardhome
 EOF
-    log_ok "UCI adguardhome применён"
+    _RC=$?; [ $_RC -eq 0 ] && log_ok "UCI adguardhome применён" || log_err "Ошибка uci batch AdGuardHome (exit: $_RC)"
 
     cat << 'EOF' > /usr/lib/lua/luci/controller/adguardhome_net.lua
 module("luci.controller.adguardhome_net", package.seeall)
@@ -336,7 +357,7 @@ function redirectToAdGuardHome()
 	]], "javascript:history.back()", redirect_url, redirect_url))
 end
 EOF
-    log_ok "Контроллер LuCI создан"
+    _RC=$?; [ $_RC -eq 0 ] && log_ok "Контроллер LuCI создан" || log_err "Ошибка создания контроллера (exit: $_RC)"
 
     run_cmd "Смена порта dnsmasq" uci set dhcp.@dnsmasq[0].port="54"
     run_cmd_ign "Удаление серверов dnsmasq" uci delete dhcp.@dnsmasq[0].server
@@ -349,7 +370,7 @@ else
     log_info "AdGuardHome не найден"
 fi
 
-# SQM
+# SQM (исправленный патч)
 if [ -f "/usr/lib/sqm/run.sh" ]; then
     log_info "Настройка SQM"
     mkdir -p /opt
@@ -358,10 +379,10 @@ if [ -f "/usr/lib/sqm/run.sh" ]; then
 option iqdisc_opts 'nat dual-dsthost diffserv4 nowash'
 option eqdisc_opts 'nat dual-srchost diffserv4 nowash'
 EOF
-    log_ok "Конфиг SQM создан"
+    _RC=$?; [ $_RC -eq 0 ] && log_ok "Конфиг SQM создан" || log_err "Ошибка создания $CUSTOM_CONF (exit: $_RC)"
 
     if ! grep -q "sqm_custom.conf" /usr/lib/sqm/run.sh; then
-        sed -i '/export EQDISC_OPTS/r /tmp/sqm_loader.txt' /usr/lib/sqm/run.sh << 'EOF'
+        cat <<'EOF' > /tmp/sqm_loader.txt
 
     # --- Load Custom Config (/opt/sqm_custom.conf) ---
     if [ -f "/opt/sqm_custom.conf" ]; then
@@ -371,7 +392,11 @@ EOF
         [ -n "$cust_e" ] && export EQDISC_OPTS="$cust_e"
     fi
 EOF
-        log_ok "run.sh пропатчен"
+        sed -i '/export EQDISC_OPTS/r /tmp/sqm_loader.txt' /usr/lib/sqm/run.sh
+        _RC=$?; rm /tmp/sqm_loader.txt
+        [ $_RC -eq 0 ] && log_ok "run.sh пропатчен" || log_err "Ошибка патча run.sh (exit: $_RC)"
+    else
+        log_ok "run.sh уже пропатчен"
     fi
 
     SQM_ENABLED=$(uci -q get sqm.@queue[0].enabled)
@@ -402,7 +427,7 @@ if ! grep -q "LuCI Bootstrap: Custom Fullwidth CSS" /www/luci-static/bootstrap/c
 	}
 }
 EOF
-    log_ok "CSS обновлён"
+    _RC=$?; [ $_RC -eq 0 ] && log_ok "CSS обновлён" || log_err "Ошибка добавления CSS (exit: $_RC)"
 fi
 
 # FullCone NAT
@@ -414,7 +439,8 @@ fi
 # TCP BBR
 if [ -f "/lib/modules/$(uname -r)/tcp_bbr.ko" ] || grep -q bbr /proc/sys/net/ipv4/tcp_available_congestion_control; then
     sed -i '/# TCP BBR/d; /net\.core\.default_qdisc.*fq/d; /net\.ipv4\.tcp_congestion_control.*bbr/d' /etc/sysctl.conf
-    echo -e "\n# TCP BBR\nnet.core.default_qdisc = fq_codel\nnet.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.conf
+    sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' /etc/sysctl.conf
+	echo -e "\n# TCP BBR\nnet.core.default_qdisc = fq_codel\nnet.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.conf
     log_ok "TCP BBR включён"
 fi
 
@@ -522,7 +548,7 @@ sed -i "s/File Manager/Файловый менеджер/" /usr/share/luci/menu.
 
 touch "$LOCK_FILE"
 
-# Перед запуском фоновой перезагрузки — синхронизировать буферы лога
+# Гарантированная запись лога перед уходом в фон
 sync
 log_info "Отложенная перезагрузка через 120 секунд (процесс в фоне)"
 (sleep 120; sync; reboot) &
