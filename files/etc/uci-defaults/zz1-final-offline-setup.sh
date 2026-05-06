@@ -405,6 +405,8 @@ EOF
     else
         /etc/init.d/sqm disable 2>/dev/null
     fi
+else
+    log_info "SQM не установлен"
 fi
 
 # Очистка временных файлов конфигурации
