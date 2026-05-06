@@ -39,6 +39,7 @@ run_cmd_ign() {
 # set -x   # раскомментировать при отладке
 
 SETUP_LOGFILE="/root/setup_log.txt"
+: > "$SETUP_LOGFILE"
 exec > >(tee -a "$SETUP_LOGFILE") 2>&1
 log_info "Запуск zz1-final-offline-setup.sh"
 
