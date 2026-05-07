@@ -264,7 +264,7 @@ fi
 
 # IPSet для youtubeUnblock
 FIREWALL_CONFIG_CHANGED=0
-for ipset_name in dpi_ips bypass_ips; do
+for ipset_name in dpi_ips bypass_ips bypass_local; do
     if ! uci show firewall | grep -q "\.name='$ipset_name'"; then
         handle=$(uci add firewall ipset)
         uci set firewall."$handle".name="$ipset_name"
