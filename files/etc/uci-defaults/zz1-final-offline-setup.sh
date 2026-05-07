@@ -293,8 +293,9 @@ add chain inet fw4 youtubeUnblock { type filter hook postrouting priority mangle
 # Exclusion of the guest network by tag (traffic will bypass the queue)
 add rule inet fw4 youtubeUnblock meta mark 0x00000042 counter return
 
-# If the destination IP is in the bypass_ips list, we exit the chain.
+# If the destination IP is in the bypass_ips list or source IP in the bypass_local list, we exit the chain.
 add rule inet fw4 youtubeUnblock ip daddr @bypass_ips counter return
+add rule inet fw4 youtubeUnblock ip saddr @bypass_local counter return
 
 # DPI through youtubeUnblock
 add rule inet fw4 youtubeUnblock ip daddr @dpi_ips tcp dport 443 ct original packets < 20 counter queue num 537 bypass
