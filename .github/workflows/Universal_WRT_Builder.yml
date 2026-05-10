@@ -68,6 +68,7 @@ on:
           - 'no'
           - 'latest'
           - '1.12.x'
+          - 'extended'
       
       exclude_keywords:
         description: 'Exclude Packages (Space separated keywords)'
@@ -234,6 +235,19 @@ jobs:
             # Из тега v1.12.24 формируем имя файла: sing-box-1.12.24-linux-arm64.tar.gz
             SB_VER="${SB_TAG#v}"
             SB_URL="https://github.com/SagerNet/sing-box/releases/download/${SB_TAG}/sing-box-${SB_VER}-linux-arm64.tar.gz"
+        elif [ "$SB_VERSION_CHOICE" == "extended" ]; then
+            SB_TAG=$(curl -s "https://api.github.com/repos/shtorm-7/sing-box-extended/releases?per_page=30" | jq -r '[.[] | select(.prerelease == false) | select(.tag_name | test("rc|beta|alpha") | not) | .tag_name] | first')
+            if [ -z "$SB_TAG" ] || [ "$SB_TAG" == "null" ]; then
+                echo ">>> WARNING: Could not find any stable sing-box-extended release. Skipping."
+                echo ">>> Sing-box from OpenWrt feed will be used instead."
+                exit 0
+            fi
+            SB_URL=$(curl -s "https://api.github.com/repos/shtorm-7/sing-box-extended/releases/tags/${SB_TAG}" | jq -r '.assets[] | select(.name | test("linux-arm64\\.tar\\.gz$")) | .browser_download_url' | head -n 1)
+            if [ -z "$SB_URL" ] || [ "$SB_URL" == "null" ]; then
+                echo ">>> WARNING: Asset linux-arm64.tar.gz not found in release $SB_TAG. Skipping."
+                echo ">>> Sing-box from OpenWrt feed will be used instead."
+                exit 0
+            fi
         fi
         echo ">>> Downloading sing-box ($SB_VERSION_CHOICE) from: $SB_URL"
         curl -L -o sb.tar.gz "$SB_URL"
