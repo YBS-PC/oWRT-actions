@@ -225,7 +225,7 @@ jobs:
         elif [ "$SB_VERSION_CHOICE" == "1.12.x" ]; then
             # Последний стабильный релиз из ветки 1.12.x
             # Фильтр: не pre-release + тег начинается с v1.12.
-            SB_TAG=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases | jq -r '[.[] | select(.prerelease == false) | select(.tag_name | startswith("v1.12."))] | first | .tag_name')
+            SB_TAG=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases?per_page=100&page=1 | jq -r '[.[] | select(.prerelease == false) | select(.tag_name | startswith("v1.12."))] | first | .tag_name')
             if [ -z "$SB_TAG" ] || [ "$SB_TAG" == "null" ]; then
                 echo ">>> WARNING: Could not find any stable 1.12.x release. Skipping."
                 echo ">>> Sing-box from OpenWrt feed will be used instead."
