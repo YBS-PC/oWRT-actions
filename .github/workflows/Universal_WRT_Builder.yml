@@ -259,7 +259,13 @@ jobs:
         fi
         tar -xzf sb.tar.gz
         mkdir -p ./files/usr/bin
-        cp sing-box-*/sing-box ./files/usr/bin/ && chmod 755 ./files/usr/bin/sing-box
+        # cp sing-box-*/sing-box ./files/usr/bin/ && chmod 755 ./files/usr/bin/sing-box
+        SB_BINARY_PATH=$(find . -type f -name sing-box | head -n 1)
+        if [ -z "$SB_BINARY_PATH" ]; then
+            echo ">>> WARNING: sing-box binary not found in archive. Skipping."
+            exit 0
+        fi
+        mv -f "$SB_BINARY_PATH" ./files/usr/bin/sing-box && chmod 755 ./files/usr/bin/sing-box
         rm -rf sb.tar.gz sing-box-*
         echo "=========================================="
         echo "       [SING-BOX DOWNLOAD SUMMARY]        "
