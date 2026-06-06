@@ -415,25 +415,6 @@ fi
 find /etc/config/ -type f \( -name '*-opkg' -o -name '*apk-new' \) -delete 2>/dev/null
 log_info "Временные файлы удалены"
 
-# Широкий CSS
-if ! grep -q "LuCI Bootstrap: Custom Fullwidth CSS" /www/luci-static/bootstrap/cascade.css; then
-    cat << 'EOF' >> /www/luci-static/bootstrap/cascade.css
-
-/* LuCI Bootstrap: Custom Fullwidth CSS */
-@media only screen and (max-width: 1199px), (hover: none) and (pointer: coarse) {
-	#maincontent, .container, .main-content, .wrapper {
-		width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important;
-	}
-}
-@media only screen and (min-width: 1200px) and (hover: hover) {
-	#maincontent, .container, .main-content, .wrapper {
-		width: 50% !important; max-width: 50% !important; margin: 0 auto !important; padding: 0 !important;
-	}
-}
-EOF
-    _RC=$?; [ $_RC -eq 0 ] && log_ok "CSS обновлён" || log_err "Ошибка добавления CSS (exit: $_RC)"
-fi
-
 # FullCone NAT
 if [ -f "/lib/modules/$(uname -r)/nft_fullcone.ko" ] || lsmod | grep -q nft_fullcone; then
     run_cmd "Включение FullCone NAT" uci set firewall.@defaults[0].fullcone='1'
