@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Universal WRT Builder — справочник</title>
+<style>
+  :root{
+    --bg:#0a0d16; --bg2:#0b0f19; --panel:#0e1420; --panel2:#101725;
+    --row:#0d121e; --row-alt:#101623; --row-hover:#141c2c;
+    --border:#1a2233; --border-soft:#151c2b;
+    --text:#c2cad9; --head:#f2f5fb; --muted:#6b7486; --muted2:#828c9f;
+    --accent:#6b78ff; --accent-soft:#2a3170;
+    --green:#4ade80; --red:#ef5360; --amber:#ecb846;
+    --mono:ui-monospace,"JetBrains Mono","SFMono-Regular",Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+  body{
+    margin:0; background:
+      radial-gradient(1100px 520px at 78% -8%, #131a2e 0%, rgba(19,26,46,0) 60%),
+      var(--bg);
+    color:var(--text); font-family:var(--sans);
+    font-size:15px; line-height:1.62; -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit}
+  ::selection{background:var(--accent-soft);color:#fff}
+
+  /* top nav */
+  .nav{
+    position:sticky; top:0; z-index:20;
+    display:flex; align-items:center; gap:22px; flex-wrap:wrap;
+    padding:13px clamp(18px,4vw,52px);
+    background:rgba(9,12,20,.82); backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--border-soft);
+  }
+  .nav .brand{font-family:var(--mono); font-weight:700; color:var(--head); letter-spacing:.02em; font-size:13.5px}
+  .nav .brand b{color:var(--accent)}
+  .nav .links{display:flex; gap:18px; flex-wrap:wrap; margin-left:auto; font-family:var(--mono); font-size:12.5px}
+  .nav .links a{color:var(--muted2); text-decoration:none; padding:3px 2px; border-bottom:1px solid transparent; transition:color .15s,border-color .15s}
+  .nav .links a:hover,.nav .links a:focus-visible{color:var(--head); border-color:var(--accent)}
+
+  .wrap{max-width:1200px; margin:0 auto; padding:0 clamp(18px,4vw,52px)}
+
+  /* hero */
+  .hero{padding:66px 0 30px}
+  .eyebrow{font-family:var(--mono); font-size:12px; letter-spacing:.34em; text-transform:uppercase; color:var(--accent); margin:0 0 16px}
+  h1{font-size:clamp(30px,5.4vw,52px); line-height:1.04; margin:0; color:var(--head); font-weight:800; letter-spacing:-.02em}
+  h1 .mono{font-family:var(--mono); font-weight:700}
+  .lede{max-width:760px; margin:20px 0 0; color:var(--muted2); font-size:16.5px}
+  .chips{display:flex; flex-wrap:wrap; gap:8px; margin-top:24px}
+  .chip{font-family:var(--mono); font-size:11.5px; color:var(--text); background:var(--panel); border:1px solid var(--border); border-radius:6px; padding:5px 10px}
+  .chip b{color:var(--accent)}
+
+  /* sections */
+  section{padding:46px 0 8px; border-top:1px solid var(--border-soft); margin-top:34px}
+  .sec-head{display:flex; align-items:baseline; gap:16px; margin-bottom:8px}
+  .sec-num{font-family:var(--mono); color:var(--accent); font-weight:700; font-size:15px}
+  h2{font-size:clamp(20px,3vw,27px); margin:0; color:var(--head); font-weight:700; letter-spacing:-.01em}
+  .sec-sub{color:var(--muted2); max-width:840px; margin:6px 0 26px; font-size:14.5px}
+  .sec-sub code,.cell code,p code,td code,li code{font-family:var(--mono); font-size:.86em; color:#aeb6ff; background:rgba(107,120,255,.09); padding:1px 6px; border-radius:5px}
+
+  /* card / table shells */
+  .card{background:linear-gradient(180deg,var(--panel) 0%,var(--bg2) 100%); border:1px solid var(--border); border-radius:14px; overflow:hidden}
+  .scroll{overflow-x:auto}
+  table{border-collapse:collapse; width:100%; font-size:13.5px}
+  thead th{font-family:var(--mono); font-weight:600; text-align:left; color:var(--muted2); font-size:11.5px; letter-spacing:.04em; text-transform:lowercase; padding:15px 16px; border-bottom:1px solid var(--border); white-space:nowrap; background:var(--panel2)}
+  tbody td{padding:13px 16px; border-bottom:1px solid var(--border-soft); vertical-align:top}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover{background:var(--row-hover)}
+  .feat{font-family:var(--mono); color:var(--head); font-size:13px; white-space:nowrap}
+  .feat .dim{color:var(--muted); font-family:var(--sans); font-size:11.5px; margin-left:6px}
+
+  /* params table */
+  .pt th:nth-child(1){width:21%}
+  .pt th:nth-child(3){width:14%}
+  .pt .key{font-family:var(--mono); color:var(--head)}
+  .pt .key small{display:block; color:var(--muted); font-weight:400; font-size:11px; margin-top:3px}
+  .opts{display:flex; flex-wrap:wrap; gap:5px}
+  .opt{font-family:var(--mono); font-size:11px; padding:2px 7px; border-radius:5px; background:#0c1626; border:1px solid var(--border); color:var(--text)}
+  .opt.def{border-color:var(--accent-soft); color:#c3c9ff; background:rgba(107,120,255,.08)}
+  .pt td p{margin:0; color:var(--text)}
+
+  /* matrix */
+  .legend{display:flex; flex-wrap:wrap; gap:22px; margin:0 0 18px; font-size:13px; color:var(--muted2)}
+  .legend span{display:inline-flex; align-items:center; gap:8px}
+  .mk{font-family:var(--mono); font-weight:700; width:1.1em; text-align:center; display:inline-block}
+  .yes{color:var(--green)} .no{color:var(--red)} .cond{color:var(--amber)} .na{color:#3c4555}
+  .matrix th:first-child,.matrix td:first-child{position:sticky; left:0; background:var(--panel2); z-index:1}
+  .matrix tbody td:first-child{background:var(--bg2)}
+  .matrix tbody tr:hover td:first-child{background:var(--row-hover)}
+  .matrix td:not(:first-child){text-align:center; font-family:var(--mono)}
+  .matrix th:not(:first-child){text-align:center}
+  .matrix .sep td{background:#0a111d; border-bottom:1px solid var(--border)}
+  .matrix .sep td:first-child{background:#0a111d; color:var(--accent); font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase}
+
+  /* steps */
+  .steps{counter-reset:step; list-style:none; margin:0; padding:0; display:grid; gap:12px}
+  .steps li{position:relative; counter-increment:step; padding:15px 18px 15px 60px; background:var(--panel); border:1px solid var(--border); border-radius:11px}
+  .steps li::before{content:counter(step,decimal-leading-zero); position:absolute; left:16px; top:14px; font-family:var(--mono); font-size:12px; font-weight:700; color:var(--accent); background:rgba(107,120,255,.1); border:1px solid var(--accent-soft); border-radius:7px; width:30px; height:26px; display:flex; align-items:center; justify-content:center}
+  .steps li b{color:var(--head); font-weight:600}
+  .steps li.tag-hp{border-color:#2c3a2e}
+  .steps li.tag-hp::before{color:var(--green); border-color:#2c4a33; background:rgba(74,222,128,.08)}
+  .steps .badge{font-family:var(--mono); font-size:10.5px; color:var(--green); border:1px solid #2c4a33; border-radius:4px; padding:1px 6px; margin-right:6px; vertical-align:1px}
+
+  /* callout */
+  .note{display:flex; gap:14px; padding:16px 18px; border-radius:11px; border:1px solid var(--border); background:var(--panel); margin:20px 0 0}
+  .note.warn{border-color:#4a3a2a; background:linear-gradient(180deg,rgba(236,184,70,.06),transparent)}
+  .note .ic{font-family:var(--mono); font-weight:700; color:var(--amber); flex:0 0 auto; font-size:16px; line-height:1.5}
+  .note p{margin:0; font-size:13.8px}
+  .note b{color:var(--head)}
+
+  /* result grid */
+  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(232px,1fr)); gap:13px; margin-top:6px}
+  .svc{background:var(--panel); border:1px solid var(--border); border-radius:11px; padding:16px}
+  .svc h4{margin:0 0 4px; font-size:14px; color:var(--head)}
+  .svc .port{font-family:var(--mono); font-size:12px; color:var(--accent); display:block; margin-bottom:7px}
+  .svc p{margin:0; font-size:13px; color:var(--muted2)}
+
+  footer{padding:46px 0 70px; color:var(--muted); font-size:12.5px; border-top:1px solid var(--border-soft); margin-top:40px}
+  footer code{font-family:var(--mono); color:var(--muted2)}
+
+  a.anchor{color:var(--accent); text-decoration:none}
+  a.anchor:hover{text-decoration:underline}
+
+  @media (max-width:640px){
+    .hero{padding:44px 0 18px}
+    .nav .links{gap:13px}
+    .steps li{padding-left:54px}
+  }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <span class="brand"><b>WRT</b> Builder · справочник</span>
+  <span class="links">
+    <a href="#params">параметры</a>
+    <a href="#pipeline">сборка</a>
+    <a href="#variants">варианты</a>
+    <a href="#firstboot">первый старт</a>
+  </span>
+</nav>
+
+<div class="wrap">
+
+  <header class="hero">
+    <p class="eyebrow">Справочник прошивки</p>
+    <h1>Universal <span class="mono">WRT</span> Builder</h1>
+    <p class="lede">Конвейер GitHub Actions, который собирает прошивку OpenWrt / ImmortalWrt под несколько устройств в выбранном «варианте» начинки, и скрипт <code>zz1-final-offline-setup.sh</code>, который доводит роутер до рабочего состояния на первом старте. Эта страница объясняет, что задаётся при запуске, что происходит во время сборки, чем отличаются варианты и что получается после прошивки.</p>
+    <div class="chips">
+      <span class="chip"><b>2</b> исходника · openwrt / immortalwrt</span>
+      <span class="chip"><b>7</b> устройств</span>
+      <span class="chip"><b>10</b> вариантов</span>
+      <span class="chip">apk · 25.12 / master &nbsp;|&nbsp; opkg · 24.10</span>
+    </div>
+  </header>
+
+  <!-- 01 PARAMS -->
+  <section id="params">
+    <div class="sec-head"><span class="sec-num">01</span><h2>Параметры запуска</h2></div>
+    <p class="sec-sub">Поля формы <code>workflow_dispatch</code>, которые ты задаёшь при ручном запуске сборки. Они определяют, что и как собирать; дальше эти значения проходят через все шаги пайплайна и попадают в скрипт первого старта.</p>
+
+    <div class="card scroll">
+      <table class="pt">
+        <thead><tr><th>Поле</th><th>Значения</th><th>По&nbsp;умолчанию</th><th>Что делает</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="key">Target Device <small>target</small></td>
+            <td><div class="opts"><span class="opt def">combo</span><span class="opt">rb5009</span><span class="opt">nanopi-r6s</span><span class="opt">nanopi-r5s</span><span class="opt">slateax</span><span class="opt">ax59u</span><span class="opt">brume2</span><span class="opt">all</span></div></td>
+            <td><span class="opt def">combo</span></td>
+            <td><p>Какое устройство (или набор) собирать. <code>combo</code> — три фиксированные сборки сразу; <code>all</code> — только nanopi-r6s + rb5009; одиночное значение — одно устройство. Из него же берётся архитектура пакетов.</p></td>
+          </tr>
+          <tr>
+            <td class="key">Source Code <small>source</small></td>
+            <td><div class="opts"><span class="opt def">openwrt</span><span class="opt">immortalwrt</span></div></td>
+            <td><span class="opt def">openwrt</span></td>
+            <td><p>Из какого дерева исходников собирать. От выбора зависят драйверы (например, вариант <code>r8125</code> для NanoPi) и доступность FullCone NAT — он есть только в ImmortalWrt.</p></td>
+          </tr>
+          <tr>
+            <td class="key">Branch <small>branch</small></td>
+            <td><div class="opts"><span class="opt def">openwrt-25.12</span><span class="opt">openwrt-24.10</span><span class="opt">master</span></div></td>
+            <td><span class="opt def">openwrt-25.12</span></td>
+            <td><p>Ветка/релиз. <code>25.12</code> и <code>master</code> — пакетный менеджер <b>apk</b>; <code>24.10</code> — <b>opkg/ipk</b>. На стабильных ветках сборка чекаутится на коммит тега релиза.</p></td>
+          </tr>
+          <tr>
+            <td class="key">Build Variant <small>variant</small></td>
+            <td><div class="opts"><span class="opt def">standard</span><span class="opt">minimal</span><span class="opt">clear</span><span class="opt">switch</span><span class="opt">crystal_clear</span><span class="opt">podkop</span><span class="opt">passwall</span><span class="opt">v2raya</span><span class="opt">xray</span><span class="opt">hp_hiddify</span></div></td>
+            <td><span class="opt def">standard</span></td>
+            <td><p>Что включается в прошивку и какой прокси-стек используется. Полная матрица — в разделе <a class="anchor" href="#variants">03</a>.</p></td>
+          </tr>
+          <tr>
+            <td class="key">Download latest AdGuardHome <small>download_binaries_agh</small></td>
+            <td><div class="opts"><span class="opt">да</span><span class="opt def">нет</span></div></td>
+            <td><span class="opt def">нет</span></td>
+            <td><p>Класть ли в образ свежий бинарь AdGuardHome. Игнорируется для вариантов <code>clear</code>, <code>crystal_clear</code>, <code>switch</code> — там AGH не нужен.</p></td>
+          </tr>
+          <tr>
+            <td class="key">Download Sing-Box binary <small>download_binaries_sb</small></td>
+            <td><div class="opts"><span class="opt def">no</span><span class="opt">latest</span><span class="opt">1.12.x</span><span class="opt">extended</span></div></td>
+            <td><span class="opt def">no</span></td>
+            <td><p>Класть ли бинарь sing-box и какой ветки. Пропускается для <code>clear</code>/<code>crystal_clear</code>/<code>switch</code> и для прокси-вариантов с другим ядром: <code>passwall</code>, <code>v2raya</code>, <code>xray</code>, <code>hp_hiddify</code>.</p></td>
+          </tr>
+          <tr>
+            <td class="key">Exclude Packages <small>exclude_keywords</small></td>
+            <td><div class="opts"><span class="opt">строка · через пробел</span></div></td>
+            <td><span class="opt">(пусто)</span></td>
+            <td><p>Грубый фильтр: перед <code>make defconfig</code> удаляет из <code>.config</code> все строки <code>CONFIG_PACKAGE_*&lt;keyword&gt;*=y</code> по каждому ключевому слову. Способ вручную выкинуть лишние пакеты.</p></td>
+          </tr>
+          <tr>
+            <td class="key">Target Commit Hash <small>commit_hash</small></td>
+            <td><div class="opts"><span class="opt">хеш коммита</span></div></td>
+            <td><span class="opt">(пусто)</span></td>
+            <td><p>Необязательный. Если задан — чекаут на конкретный коммит исходников вместо HEAD ветки/тега. Для воспроизводимых сборок.</p></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note warn">
+      <span class="ic">◆</span>
+      <p><b>combo и all — особый случай.</b> Вариант <code>combo</code> игнорирует выбранный Build Variant: матрица жёстко зашита как nanopi-r6s/<code>minimal</code>, rb5009/<code>clear</code>, rb5009/<code>switch</code>. Вариант <code>all</code> собирает только <code>nanopi-r6s</code> и <code>rb5009</code> (с выбранным вариантом), но <b>не</b> r5s/slateax/ax59u/brume2 — эти устройства можно собрать только поодиночке.</p>
+    </div>
+
+    <div class="card scroll" style="margin-top:18px">
+      <table class="pt">
+        <thead><tr><th>Устройство</th><th>Арх. пакетов</th><th>Таргет ядра</th><th>Заметки</th></tr></thead>
+        <tbody>
+          <tr><td class="feat">rb5009</td><td><code>aarch64_cortex-a72</code></td><td><code>mvebu/cortexa72</code></td><td><p>MikroTik RB5009, rootfs 256 МБ</p></td></tr>
+          <tr><td class="feat">nanopi-r6s</td><td><code>aarch64_generic</code></td><td><code>rockchip/armv8</code></td><td><p>FriendlyElec, rootfs 512 МБ</p></td></tr>
+          <tr><td class="feat">nanopi-r5s</td><td><code>aarch64_generic</code></td><td><code>rockchip/armv8</code></td><td><p>Драйвер r8125 (RSS на OpenWrt)</p></td></tr>
+          <tr><td class="feat">slateax</td><td><code>aarch64_cortex-a53</code></td><td><code>qualcommax/ipq60xx</code></td><td><p>GL.iNet AXT1800, добавляется fancontrol</p></td></tr>
+          <tr><td class="feat">ax59u · brume2 <span class="dim">конфиги в репозитории</span></td><td><code>—</code></td><td><code>—</code></td><td><p>Есть в списке и в логике part1/part3/zz1; их <code>config/conf/*</code> в предоставленных файлах не показаны.</p></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 02 PIPELINE -->
+  <section id="pipeline">
+    <div class="sec-head"><span class="sec-num">02</span><h2>Конвейер сборки</h2></div>
+    <p class="sec-sub">Что делает <code>Universal_WRT_Builder.yml</code> по шагам. Сначала job <code>setup</code> строит матрицу из выбранного target/variant, затем job <code>build</code> на раннере <code>ubuntu-22.04</code> прогоняет сборку для каждой пары «устройство × вариант».</p>
+    <ol class="steps">
+      <li><b>Матрица сборки.</b> Из target/variant формируется список пар: <code>combo</code> → три фикс-сборки, <code>all</code> → r6s+rb5009, одиночный → одна пара.</li>
+      <li><b>Подготовка раннера.</b> Освобождение места на диске, checkout репозитория со скриптами.</li>
+      <li><b>Права на <code>files/</code>.</b> Делаются исполняемыми скрипты в <code>files/etc/uci-defaults</code> и <code>files/usr/bin</code> (попадут в образ).</li>
+      <li><b>Скачивание AdGuardHome</b> — если включён флаг и вариант это допускает. Бинарь кладётся в <code>files/</code>.</li>
+      <li><b>Скачивание sing-box</b> — если выбрано не <code>no</code> и вариант это допускает.</li>
+      <li class="tag-hp"><span class="badge">hp_hiddify</span><b>Скачивание пакетов hiddify.</b> Только для <code>hp_hiddify</code>: готовые подписанные пакеты движок hiddify-core + luci-app + RU i18n + ключ кладутся в <code>files/root/apps/</code>.</li>
+      <li><b>Переменные сборки.</b> Вычисляются URL репозитория, ветка, источник/коммит; тег релиза ищется через GitHub API (с фолбэками); подгружается конфиг устройства <code>config/conf/&lt;target&gt;</code>.</li>
+      <li><b>Зависимости (apt).</b> Установка тулчейна сборки. Из-за <code>python2.7</code> раннер закреплён на <code>ubuntu-22.04</code>.</li>
+      <li><b>Клон исходников</b> и checkout на нужный коммит/тег OpenWrt/ImmortalWrt.</li>
+      <li><b>Патчи.</b> Применяются кастомные патчи из каталога <code>patches/</code>.</li>
+      <li><b>Update Feeds &amp; Config.</b> Главный шаг: P1 → <code>feeds update</code> → P2 → <code>feeds install</code> → копирование <code>WRT.config</code> в <code>.config</code> → команды устройства → P3 → правки под вариант → P4 → удаление по Exclude-словам → <code>make defconfig</code>.</li>
+      <li><b>Kernel Hash.</b> Хеш ядра подменяется на официальный, чтобы на роутер можно было ставить готовые kmod из репозиториев.</li>
+      <li><b>Компиляция.</b> Многопоточная; при сбое — повтор в один поток с сохранением <code>build.log</code>.</li>
+      <li><b>Bootloader-файлы.</b> Глубокий поиск и сохранение <code>idbloader.img</code>/<code>u-boot.itb</code>/<code>.fip</code> для прошивки загрузчика.</li>
+      <li><b>Артефакт.</b> Образ загружается (<code>upload-artifact@v7</code>), старые прогоны workflow подчищаются.</li>
+    </ol>
+  </section>
+
+  <!-- 03 VARIANTS -->
+  <section id="variants">
+    <div class="sec-head"><span class="sec-num">03</span><h2>Варианты сборки</h2></div>
+    <p class="sec-sub">Вариант определяет, какие пакеты включаются, какой прокси-стек используется и насколько «минимальна» прошивка. Логика применяется в <code>WRT-part3.sh</code> и в YML на шаге <em>Update Feeds &amp; Config</em>.</p>
+
+    <div class="legend">
+      <span><span class="mk yes">✓</span> Включено</span>
+      <span><span class="mk no">✗</span> Исключено / удалено</span>
+      <span><span class="mk cond">◆</span> Условно / по флагу</span>
+      <span><span class="mk na">—</span> Не применимо</span>
+    </div>
+
+    <div class="card scroll">
+      <table class="matrix">
+        <thead><tr>
+          <th>Фича / пакет</th>
+          <th>standard</th><th>minimal</th><th>clear</th><th>crystal_clear</th><th>switch</th>
+          <th>podkop</th><th>passwall</th><th>v2raya</th><th>xray</th><th>hp_hiddify</th>
+        </tr></thead>
+        <tbody>
+          <tr class="sep"><td>Прокси-ядро и DNS</td><td colspan="10"></td></tr>
+          <tr><td class="feat">AdGuardHome</td>                 <td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td class="feat">sing-box <span class="dim">(full)</span></td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td></tr>
+          <tr><td class="feat">sing-box-tiny <span class="dim">(только slateax/ax59u)</span></td><td class="cond">◆</td><td class="cond">◆</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="cond">◆</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td></tr>
+          <tr><td class="feat">luci-app-homeproxy</td>          <td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td></tr>
+          <tr><td class="feat">hiddify-core + luci-app-homeproxy-hiddify <span class="dim">(готовыми пакетами)</span></td><td class="na">—</td><td class="na">—</td><td class="na">—</td><td class="na">—</td><td class="na">—</td><td class="na">—</td><td class="na">—</td><td class="na">—</td><td class="na">—</td><td class="yes">✓</td></tr>
+          <tr><td class="feat">youtubeUnblock</td>              <td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+
+          <tr class="sep"><td>Сеть и оптимизации</td><td colspan="10"></td></tr>
+          <tr><td class="feat">luci-app-sqm / sqm-scripts</td>  <td class="yes">✓</td><td class="no">✗</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td class="feat">TCP BBR + CAKE</td>              <td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td class="feat">internet-detector</td>           <td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+
+          <tr class="sep"><td>Базовые пакеты</td><td colspan="10"></td></tr>
+          <tr><td class="feat">coreutils <span class="dim">(все)</span></td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td class="feat">USB storage <span class="dim">(kmod-usb-storage*)</span></td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td class="feat">Crypto kmod <span class="dim">(aead, gcm, hmac…)</span></td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td class="feat">zz1-final-offline-setup.sh</td>  <td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+
+          <tr class="sep"><td>Альтернативные прокси-стеки</td><td colspan="10"></td></tr>
+          <tr><td class="feat">Passwall2 <span class="dim">(luci-app-passwall2)</span></td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td></tr>
+          <tr><td class="feat">xray-core</td>                   <td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td></tr>
+          <tr><td class="feat">v2rayA + luci-app-v2raya</td>    <td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td></tr>
+          <tr><td class="feat">luci-app-xray</td>               <td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="no">✗</td></tr>
+          <tr><td class="feat">podkop + luci-app-podkop</td>    <td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td></tr>
+
+          <tr class="sep"><td>Поведение и флаги</td><td colspan="10"></td></tr>
+          <tr><td class="feat">Режим L2-коммутатора <span class="dim">(first boot)</span></td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td></tr>
+          <tr><td class="feat">youtubeUnblock обновляется в part2</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td class="feat">AGH бинарник скачивается <span class="dim">(при флаге)</span></td><td class="cond">◆</td><td class="cond">◆</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="cond">◆</td><td class="cond">◆</td><td class="cond">◆</td><td class="cond">◆</td><td class="cond">◆</td></tr>
+          <tr><td class="feat">sing-box бинарник скачивается <span class="dim">(при флаге)</span></td><td class="cond">◆</td><td class="cond">◆</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="cond">◆</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <span class="ic" style="color:var(--accent)">i</span>
+      <p>Колонка <b>hp_hiddify</b> — опциональный вариант: стоковый homeproxy и sing-box убираются, а движок hiddify-core с веб-интерфейсом и RU-локализацией ставятся <b>готовыми подписанными пакетами на первом старте</b> (см. раздел 04). Различие <code>clear</code> и <code>crystal_clear</code>: <code>crystal_clear</code> вдобавок удаляет сам <code>zz1</code> — это «чистая болванка» без первичной настройки. <code>switch</code> делит bloat-список с <code>crystal_clear</code>, но оставляет <code>zz1</code>, который переводит устройство в L2-мост.</p>
+    </div>
+  </section>
+
+  <!-- 04 FIRST BOOT -->
+  <section id="firstboot">
+    <div class="sec-head"><span class="sec-num">04</span><h2>Первый старт после прошивки</h2></div>
+    <p class="sec-sub">Скрипт <code>zz1-final-offline-setup.sh</code> лежит в <code>/etc/uci-defaults/</code> и выполняется один раз при первой загрузке роутера. Весь ход пишется в <code>/root/setup_log.txt</code>. Многие шаги выполняются с учётом выбранного варианта.</p>
+    <ol class="steps">
+      <li><b>Инициализация.</b> Логирование, определение версии ядра, архитектуры, модели роутера и текущего варианта сборки.</li>
+      <li><b>База.</b> Часовой пояс (Europe/Moscow), очистка строки FullCone, сохранение system.</li>
+      <li><b>Пакетный менеджер.</b> Определение apk/opkg, чистка репозиториев, добавление репозитория kmods (по версии ядра) и customfeeds.</li>
+      <li><b>speedtest.</b> Распаковка и установка бинаря в <code>/usr/bin</code>.</li>
+      <li class="tag-hp"><span class="badge">hp_hiddify</span><b>Установка пакетов hiddify.</b> Офлайн-установка движка + luci-app + i18n из <code>/root/apps/</code>; при наличии стоковой строки — <code>dns_hijacked=1</code> (DNS остаётся за AGH); служба homeproxy выключается до ручной настройки.</li>
+      <li><b>homeproxy</b> (стоковые варианты на sing-box): форсится <code>dns_hijacked=1</code>, создаётся firewall-хелпер, патчится init, добавляется bypass-чейн nftables.</li>
+      <li><b>Прокси под вариант.</b> Настройка passwall2 / xray / v2rayA / podkop — в зависимости от выбранного варианта.</li>
+      <li><b>youtubeUnblock.</b> Запись правил nftables с ipset-байпасами, очередь 537, метка гостевой сети; START=99.</li>
+      <li><b>internet-detector / owut.</b> internet-detector выключается, owut настраивается.</li>
+      <li><b>AdGuardHome.</b> dnsmasq переезжает на порт 54, AGH занимает 53, создаётся LuCI-редирект на <code>:8080</code>, служба запускается.</li>
+      <li><b>SQM и BBR.</b> Если SQM установлен — настраивается CAKE; включается TCP BBR.</li>
+      <li><b>FullCone NAT</b> — только на ImmortalWrt и только при наличии модуля (на OpenWrt тихо пропускается).</li>
+      <li><b>Время и идентичность.</b> Синхронизация RTC/NTP, обновление баннера, установка hostname и commonname.</li>
+      <li class="tag-hp" style="border-color:#2a3556"><span class="badge" style="color:#9aa6ff;border-color:#2a3556">switch</span><b>Режим L2-коммутатора.</b> Только для <code>switch</code>: все порты собираются в <code>br-lan</code>, DHCP-клиент, firewall-зоны и WAN отключаются.</li>
+      <li><b>Перезагрузка.</b> Отложенный ребут через 120 секунд в фоне — чтобы применить sysctl, AGH и остальное.</li>
+    </ol>
+
+    <h3 style="color:var(--head);font-size:16px;margin:32px 0 12px;font-weight:600">Что получаешь на роутере (вариант standard/minimal)</h3>
+    <div class="grid">
+      <div class="svc"><h4>LuCI</h4><span class="port">http://192.168.x.1 · :80</span><p>Веб-интерфейс роутера.</p></div>
+      <div class="svc"><h4>AdGuardHome</h4><span class="port">DNS :53 · web :8080</span><p>Резолвер и фильтрация; доступ через редирект из LuCI.</p></div>
+      <div class="svc"><h4>dnsmasq</h4><span class="port">:54</span><p>Уведён с 53-го порта, работает под AGH.</p></div>
+      <div class="svc"><h4>Прокси-UI</h4><span class="port">homeproxy / passwall2 / v2rayA / xray / podkop</span><p>По выбранному варианту. В <code>hp_hiddify</code> — homeproxy на hiddify-core, выключен до настройки.</p></div>
+      <div class="svc"><h4>youtubeUnblock</h4><span class="port">nftables · queue 537</span><p>DPI-байпас с ipset-исключениями и меткой гостевой сети.</p></div>
+      <div class="svc"><h4>Оптимизации</h4><span class="port">TCP BBR · CAKE (если SQM)</span><p>Включены на первом старте; применяются после авто-ребута через ~2 мин.</p></div>
+    </div>
+  </section>
+
+  <footer>
+    Справочник сгенерирован по файлам проекта <code>Universal_WRT_Builder.yml</code>, <code>zz1-final-offline-setup.sh</code> и <code>WRT-part3.sh</code>. Матрица вариантов отражает логику сборки; крайние случаи (например, SQM на <code>clear</code>) стоит сверять с <code>WRT.config</code>, если они критичны.
+  </footer>
+
+</div>
+</body>
+</html>
