@@ -335,7 +335,7 @@
       <li><b>homeproxy</b> (стоковые варианты на sing-box): форсится <code>dns_hijacked=1</code>, создаётся firewall-хелпер, патчится init, добавляется bypass-чейн nftables.</li>
       <li><b>Прокси под вариант.</b> Настройка passwall2 / xray / v2rayA / podkop — в зависимости от выбранного варианта.</li>
       <li><b>youtubeUnblock.</b> Запись правил nftables с ipset-байпасами, очередь 537, метка гостевой сети; START=99.</li>
-      <li><b>internet-detector / owut.</b> internet-detector выключается, owut настраивается.</li>
+      <li><b>internet-detector / owut.</b> internet-detector выключается (чтобы не висел службой, а активировался при открытии страницы luci), owut настраивается.</li>
       <li><b>AdGuardHome.</b> dnsmasq переезжает на порт 54, AGH занимает 53, создаётся LuCI-редирект на <code>:8080</code>, служба запускается.</li>
       <li><b>SQM и BBR.</b> Если SQM установлен — настраивается CAKE; включается TCP BBR.</li>
       <li><b>FullCone NAT</b> — только на ImmortalWrt и только при наличии модуля (на OpenWrt тихо пропускается).</li>
