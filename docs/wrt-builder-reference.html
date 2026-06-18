@@ -187,7 +187,7 @@
           </tr>
           <tr>
             <td class="key">Build Variant <small>variant</small></td>
-            <td><div class="opts"><span class="opt def">standard</span><span class="opt">minimal</span><span class="opt">clear</span><span class="opt">switch</span><span class="opt">crystal_clear</span><span class="opt">podkop</span><span class="opt">passwall</span><span class="opt">v2raya</span><span class="opt">xray</span><span class="opt">hp_hiddify</span></div></td>
+            <td><div class="opts"><span class="opt def">standard</span><span class="opt">minimal</span><span class="opt">clear</span><span class="opt">switch</span><span class="opt">crystal_clear</span><span class="opt">podkop</span><span class="opt">passwall</span><span class="opt">v2raya</span><span class="opt">xray</span><span class="opt">hp_hiddify (пока не добавлен)</span></div></td>
             <td><span class="opt def">standard</span></td>
             <td><p>Что включается в прошивку и какой прокси-стек используется. Полная матрица — в разделе <a class="anchor" href="#variants">03</a>.</p></td>
           </tr>
@@ -201,7 +201,7 @@
             <td class="key">Download Sing-Box binary <small>download_binaries_sb</small></td>
             <td><div class="opts"><span class="opt def">no</span><span class="opt">latest</span><span class="opt">1.12.x</span><span class="opt">extended</span></div></td>
             <td><span class="opt def">no</span></td>
-            <td><p>Класть ли бинарь sing-box и какой ветки. Пропускается для <code>clear</code>/<code>crystal_clear</code>/<code>switch</code> и для прокси-вариантов с другим ядром: <code>passwall</code>, <code>v2raya</code>, <code>xray</code>, <code>hp_hiddify</code>.</p></td>
+            <td><p>Класть ли бинарь sing-box и какой ветки. Пропускается для <code>clear</code>/<code>crystal_clear</code>/<code>switch</code> и для прокси-вариантов с другим ядром: <code>passwall</code>, <code>v2raya</code>, <code>xray</code>, <code>hp_hiddify (пока не добавлен)</code>.</p></td>
           </tr>
           <tr>
             <td class="key">Exclude Packages <small>exclude_keywords</small></td>
@@ -248,7 +248,7 @@
       <li><b>Права на <code>files/</code>.</b> Делаются исполняемыми скрипты в <code>files/etc/uci-defaults</code> и <code>files/usr/bin</code> (попадут в образ).</li>
       <li><b>Скачивание AdGuardHome</b> — если включён флаг и вариант это допускает. Бинарь кладётся в <code>files/</code>.</li>
       <li><b>Скачивание sing-box</b> — если выбрано не <code>no</code> и вариант это допускает.</li>
-      <li class="tag-hp"><span class="badge">hp_hiddify</span><b>Скачивание пакетов hiddify.</b> Только для <code>hp_hiddify</code>: готовые подписанные пакеты движок hiddify-core + luci-app + RU i18n + ключ кладутся в <code>files/root/apps/</code>.</li>
+      <li class="tag-hp"><span class="badge">hp_hiddify</span><b>Пока не добавлен. Скачивание пакетов hiddify.</b> Только для <code>hp_hiddify</code>: готовые подписанные пакеты движок hiddify-core + luci-app + RU i18n + ключ кладутся в <code>files/root/apps/</code>.</li>
       <li><b>Переменные сборки.</b> Вычисляются URL репозитория, ветка, источник/коммит; тег релиза ищется через GitHub API (с фолбэками); подгружается конфиг устройства <code>config/conf/&lt;target&gt;</code>.</li>
       <li><b>Зависимости (apt).</b> Установка тулчейна сборки. Из-за <code>python2.7</code> раннер закреплён на <code>ubuntu-22.04</code>.</li>
       <li><b>Клон исходников</b> и checkout на нужный коммит/тег OpenWrt/ImmortalWrt.</li>
@@ -278,7 +278,7 @@
         <thead><tr>
           <th>Фича / пакет</th>
           <th>standard</th><th>minimal</th><th>clear</th><th>crystal_clear</th><th>switch</th>
-          <th>podkop</th><th>passwall</th><th>v2raya</th><th>xray</th><th>hp_hiddify</th>
+          <th>podkop</th><th>passwall</th><th>v2raya</th><th>xray</th><th>hp_hiddify (пока не добавлен)</th>
         </tr></thead>
         <tbody>
           <tr class="sep"><td>Прокси-ядро и DNS</td><td colspan="10"></td></tr>
@@ -318,7 +318,7 @@
 
     <div class="note">
       <span class="ic" style="color:var(--accent)">i</span>
-      <p>Колонка <b>hp_hiddify</b> — опциональный вариант: стоковый homeproxy и sing-box убираются, а движок hiddify-core с веб-интерфейсом и RU-локализацией ставятся <b>готовыми подписанными пакетами на первом старте</b> (см. раздел 04). Различие <code>clear</code> и <code>crystal_clear</code>: <code>crystal_clear</code> вдобавок удаляет сам <code>zz1</code> — это «чистая болванка» без первичной настройки. <code>switch</code> делит bloat-список с <code>crystal_clear</code>, но оставляет <code>zz1</code>, который переводит устройство в L2-мост.</p>
+      <p>Колонка <b>hp_hiddify</b> — опциональный вариант (пока не добавлен): стоковый homeproxy и sing-box убираются, а движок hiddify-core с веб-интерфейсом и RU-локализацией ставятся <b>готовыми подписанными пакетами на первом старте</b> (см. раздел 04). Различие <code>clear</code> и <code>crystal_clear</code>: <code>crystal_clear</code> вдобавок удаляет сам <code>zz1</code> — это «чистая болванка» без первичной настройки. <code>switch</code> делит bloat-список с <code>crystal_clear</code>, но оставляет <code>zz1</code>, который переводит устройство в L2-мост.</p>
     </div>
   </section>
 
@@ -331,7 +331,7 @@
       <li><b>База.</b> Часовой пояс (Europe/Moscow), очистка строки FullCone, сохранение system.</li>
       <li><b>Пакетный менеджер.</b> Определение apk/opkg, чистка репозиториев, добавление репозитория kmods (по версии ядра) и customfeeds.</li>
       <li><b>speedtest.</b> Распаковка и установка бинаря в <code>/usr/bin</code>.</li>
-      <li class="tag-hp"><span class="badge">hp_hiddify</span><b>Установка пакетов hiddify.</b> Офлайн-установка движка + luci-app + i18n из <code>/root/apps/</code>; при наличии стоковой строки — <code>dns_hijacked=1</code> (DNS остаётся за AGH); служба homeproxy выключается до ручной настройки.</li>
+      <li class="tag-hp"><span class="badge">hp_hiddify</span><b>Пока не добавлен. Установка пакетов hiddify.</b> Офлайн-установка движка + luci-app + i18n из <code>/root/apps/</code>; при наличии стоковой строки — <code>dns_hijacked=1</code> (DNS остаётся за AGH); служба homeproxy выключается до ручной настройки.</li>
       <li><b>homeproxy</b> (стоковые варианты на sing-box): форсится <code>dns_hijacked=1</code>, создаётся firewall-хелпер, патчится init, добавляется bypass-чейн nftables.</li>
       <li><b>Прокси под вариант.</b> Настройка passwall2 / xray / v2rayA / podkop — в зависимости от выбранного варианта.</li>
       <li><b>youtubeUnblock.</b> Запись правил nftables с ipset-байпасами, очередь 537, метка гостевой сети; START=99.</li>
@@ -349,7 +349,7 @@
       <div class="svc"><h4>LuCI</h4><span class="port">http://192.168.x.1 · :80</span><p>Веб-интерфейс роутера.</p></div>
       <div class="svc"><h4>AdGuardHome</h4><span class="port">DNS :53 · web :8080</span><p>Резолвер и фильтрация; доступ через редирект из LuCI.</p></div>
       <div class="svc"><h4>dnsmasq</h4><span class="port">:54</span><p>Уведён с 53-го порта, работает под AGH.</p></div>
-      <div class="svc"><h4>Прокси-UI</h4><span class="port">homeproxy / passwall2 / v2rayA / xray / podkop</span><p>По выбранному варианту. В <code>hp_hiddify</code> — homeproxy на hiddify-core, выключен до настройки.</p></div>
+      <div class="svc"><h4>Прокси-UI</h4><span class="port">homeproxy / passwall2 / v2rayA / xray / podkop</span><p>По выбранному варианту. В <code>hp_hiddify</code> — homeproxy на hiddify-core, выключен до настройки (пока не добавлен).</p></div>
       <div class="svc"><h4>youtubeUnblock</h4><span class="port">nftables · queue 537</span><p>DPI-байпас с ipset-исключениями и меткой гостевой сети.</p></div>
       <div class="svc"><h4>Оптимизации</h4><span class="port">TCP BBR · CAKE (если SQM)</span><p>Включены на первом старте; применяются после авто-ребута через ~2 мин.</p></div>
     </div>
