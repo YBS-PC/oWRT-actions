@@ -199,7 +199,19 @@ jobs:
         AGH_URL="https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_arm64.tar.gz"
         echo ">>> Downloading AdGuardHome from: $AGH_URL"
         curl -L -o AGH.tar.gz "$AGH_URL"
-        tar -xzf AGH.tar.gz
+        # Проверка целостности: пустой/битый архив -> graceful skip (как у sing-box).
+        # AGH всё равно соберётся из пакета (CONFIG_PACKAGE_adguardhome=y в WRT.config).
+        if [ ! -s AGH.tar.gz ]; then
+            echo ">>> WARNING: AdGuardHome download is empty or missing. Skipping."
+            echo ">>> AdGuardHome from OpenWrt feed/package will be used instead."
+            rm -f AGH.tar.gz
+            exit 0
+        fi
+        if ! tar -xzf AGH.tar.gz; then
+            echo ">>> WARNING: AdGuardHome archive is corrupt (tar failed). Skipping."
+            rm -f AGH.tar.gz
+            exit 0
+        fi
         mkdir -p ./files/usr/bin
         cp ./AdGuardHome/AdGuardHome ./files/usr/bin/ && chmod 755 ./files/usr/bin/AdGuardHome
         rm -rf AGH.tar.gz AdGuardHome
@@ -572,6 +584,10 @@ jobs:
         ./scripts/feeds install -a
         
         [ -e $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE ./.config
+        # Нормализация DOS-переводов строк: WRT.config сохранён в CRLF, а .config
+        # дальше дополняется LF-строками (device-конфиги, part3) -> убираем \r у базы,
+        # чтобы не было mix CRLF/LF и проблем в kconfig/grep с якорем $.
+        [ -f ./.config ] && sed -i 's/\r$//' ./.config
         [ -e $GITHUB_WORKSPACE/files ] && cp -r $GITHUB_WORKSPACE/files ./
         
         eval "$DEVICE_CONFIG_COMMANDS"
@@ -837,13 +853,20 @@ jobs:
     
     - name: Generate Date
       id: get_date
+      # always(): нужно, чтобы при падении Compile имя артефакта не теряло дату.
+      if: ${{ always() }}
       run: echo "date=$(date +'%Y.%m.%d-%H%M')" >> $GITHUB_OUTPUT
     
     - name: Upload
+      # always(): при падении Compile шаг копирует build.log в bin/build_failure.log;
+      # без always() Upload (по умолчанию success()) пропускался и лог не загружался.
+      if: ${{ always() }}
       uses: actions/upload-artifact@v7
       with:
         name: ${{ inputs.source }}_${{ inputs.branch }}_${{ matrix.variant }}_${{ matrix.target }}_${{ steps.get_date.outputs.date }}
         path: openwrt/bin
+        # На ранней ошибке (до создания bin/) не валим джоб красным "no files".
+        if-no-files-found: warn
         retention-days: 10
 
     - name: Delete workflow runs
@@ -856,9 +879,12 @@ jobs:
       run: |
         echo ">>> Deleting workflow runs older than 10 days..."
         
-        # 1. Вычисляем дату "10 дней назад" в правильном формате ISO 8601
-        CUTOFF_DATE=$(date -d "10 days ago" -Iseconds)
-        echo ">>> Cutoff date: $CUTOFF_DATE"
+        # 1. Вычисляем дату "10 дней назад" в UTC с суффиксом Z.
+        # ВАЖНО: GitHub createdAt всегда в UTC ('...Z'), а jq ниже сравнивает СТРОКИ.
+        # При TZ=Europe/Moscow обычный 'date -Iseconds' даёт '+03:00' -> строковое
+        # сравнение с 'Z'-датами врёт в окне ±3ч вокруг границы. Поэтому форсим UTC+Z.
+        CUTOFF_DATE=$(date -u -d "10 days ago" +"%Y-%m-%dT%H:%M:%SZ")
+        echo ">>> Cutoff date (UTC): $CUTOFF_DATE"
         
         # 2. Получаем список запусков и фильтруем через jq те, что старше CUTOFF_DATE
         RUN_IDS=$(gh run list --limit 100 --json databaseId,createdAt --jq ".[] | select(.createdAt < \"$CUTOFF_DATE\") | .databaseId")
