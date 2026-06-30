@@ -211,14 +211,44 @@ jobs:
     - name: Download Sing-box
       # Sing-box не качаем для чистых сборок И для сборок со своими прокси-ядрами
       if: inputs.download_binaries_sb != 'no' && matrix.variant != 'switch' && matrix.variant != 'clear' && matrix.variant != 'crystal_clear' && matrix.variant != 'passwall' && matrix.variant != 'v2raya' && matrix.variant != 'xray'
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
+        # Хелпер: запрос к GitHub API с авторизацией + двойной проверкой ответа.
+        # Устраняет ошибку "parse error: Invalid numeric literal" (не-JSON в jq) И
+        # случай, когда GitHub отдаёт ВАЛИДНЫЙ JSON-объект ошибки {"message":"rate limit"}
+        # с кодом 403/401/404 — такой объект проходит jq empty, но валит .[] на форме.
+        # Проверка HTTP-кода ловит оба случая независимо от формы тела.
+        gh_api() {
+            local url="$1"
+            local resp http_code body
+            # -w дописывает HTTP-код последней строкой; затем отделяем его от тела.
+            resp=$(curl -sS -w $'\n%{http_code}' -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/vnd.github+json" "$url")
+            http_code=$(printf '%s' "$resp" | tail -n1)
+            body=$(printf '%s' "$resp" | sed '$d')
+            if [ "$http_code" != "200" ]; then
+                echo ">>> WARNING: GitHub API HTTP $http_code for: $url" >&2
+                echo ">>> Body (first 300 chars): $(printf '%s' "$body" | head -c 300)" >&2
+                echo ""
+                return 1
+            fi
+            if ! printf '%s' "$body" | jq empty >/dev/null 2>&1; then
+                echo ">>> WARNING: GitHub API returned non-JSON (HTTP 200) for: $url" >&2
+                echo ">>> Body (first 300 chars): $(printf '%s' "$body" | head -c 300)" >&2
+                echo ""
+                return 1
+            fi
+            printf '%s' "$body"
+        }
+
         SB_VERSION_CHOICE="${{ inputs.download_binaries_sb }}"
         SB_TAG=""
         SB_URL=""
         if [ "$SB_VERSION_CHOICE" == "latest" ]; then
             # Последний стабильный релиз (любая ветка), /releases/latest всегда non-prerelease
-            SB_URL=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest | grep "browser_download_url.*linux-arm64.tar.gz" | cut -d '"' -f 4 | head -n 1)
-            if [ -z "$SB_URL" ]; then
+            SB_JSON=$(gh_api "https://api.github.com/repos/SagerNet/sing-box/releases/latest") || true
+            SB_URL=$(echo "$SB_JSON" | jq -r '.assets[]? | select(.name | test("linux-arm64\\.tar\\.gz$")) | .browser_download_url' | head -n 1)
+            if [ -z "$SB_URL" ] || [ "$SB_URL" == "null" ]; then
                 echo ">>> WARNING: Could not get latest sing-box URL from GitHub API. Skipping."
                 echo ">>> Sing-box from OpenWrt feed will be used instead."
                 exit 0
@@ -226,7 +256,8 @@ jobs:
         elif [ "$SB_VERSION_CHOICE" == "1.12.x" ]; then
             # Последний стабильный релиз из ветки 1.12.x
             # Фильтр: не pre-release + тег начинается с v1.12.
-            SB_TAG=$(curl -s "https://api.github.com/repos/SagerNet/sing-box/releases?per_page=100&page=1" | jq -r '[.[] | select(.prerelease == false) | select(.tag_name | startswith("v1.12."))] | first | .tag_name')
+            SB_JSON=$(gh_api "https://api.github.com/repos/SagerNet/sing-box/releases?per_page=100&page=1") || true
+            SB_TAG=$(echo "$SB_JSON" | jq -r '[.[] | select(.prerelease == false) | select(.tag_name | startswith("v1.12."))] | first | .tag_name')
             if [ -z "$SB_TAG" ] || [ "$SB_TAG" == "null" ]; then
                 echo ">>> WARNING: Could not find any stable 1.12.x release. Skipping."
                 echo ">>> Sing-box from OpenWrt feed will be used instead."
@@ -236,13 +267,15 @@ jobs:
             SB_VER="${SB_TAG#v}"
             SB_URL="https://github.com/SagerNet/sing-box/releases/download/${SB_TAG}/sing-box-${SB_VER}-linux-arm64.tar.gz"
         elif [ "$SB_VERSION_CHOICE" == "extended" ]; then
-            SB_TAG=$(curl -s "https://api.github.com/repos/shtorm-7/sing-box-extended/releases?per_page=30" | jq -r '[.[] | select(.prerelease == false) | select(.tag_name | test("rc|beta|alpha") | not) | .tag_name] | first')
+            SB_JSON=$(gh_api "https://api.github.com/repos/shtorm-7/sing-box-extended/releases?per_page=30") || true
+            SB_TAG=$(echo "$SB_JSON" | jq -r '[.[] | select(.prerelease == false) | select(.tag_name | test("rc|beta|alpha") | not) | .tag_name] | first')
             if [ -z "$SB_TAG" ] || [ "$SB_TAG" == "null" ]; then
                 echo ">>> WARNING: Could not find any stable sing-box-extended release. Skipping."
                 echo ">>> Sing-box from OpenWrt feed will be used instead."
                 exit 0
             fi
-            SB_URL=$(curl -s "https://api.github.com/repos/shtorm-7/sing-box-extended/releases/tags/${SB_TAG}" | jq -r '.assets[] | select(.name | test("linux-arm64\\.tar\\.gz$")) | .browser_download_url' | head -n 1)
+            SB_REL_JSON=$(gh_api "https://api.github.com/repos/shtorm-7/sing-box-extended/releases/tags/${SB_TAG}") || true
+            SB_URL=$(echo "$SB_REL_JSON" | jq -r '.assets[] | select(.name | test("linux-arm64\\.tar\\.gz$")) | .browser_download_url' | head -n 1)
             if [ -z "$SB_URL" ] || [ "$SB_URL" == "null" ]; then
                 echo ">>> WARNING: Asset linux-arm64.tar.gz not found in release $SB_TAG. Skipping."
                 echo ">>> Sing-box from OpenWrt feed will be used instead."
@@ -319,9 +352,19 @@ jobs:
                 echo ">>> Searching for latest tag starting with '$TAG_PREFIX' in $API_REPO..."
                 
                 # Магия jq: фильтруем теги по префиксу и берем первый (самый свежий)
-                TAG_JSON=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-                    "https://api.github.com/repos/$API_REPO/tags" | \
-                    jq --arg prefix "$TAG_PREFIX" '[.[] | select(.name | startswith($prefix))] | first')
+                TAGS_RESP=$(curl -sS -w $'\n%{http_code}' -H "Authorization: Bearer $GITHUB_TOKEN" \
+                    -H "Accept: application/vnd.github+json" \
+                    "https://api.github.com/repos/$API_REPO/tags")
+                TAGS_CODE=$(printf '%s' "$TAGS_RESP" | tail -n1)
+                TAGS_BODY=$(printf '%s' "$TAGS_RESP" | sed '$d')
+
+                if [ "$TAGS_CODE" != "200" ] || ! printf '%s' "$TAGS_BODY" | jq empty >/dev/null 2>&1; then
+                    echo ">>> WARNING: GitHub API bad response (HTTP $TAGS_CODE, rate limit / network?)." >&2
+                    echo ">>> Body (first 300 chars): $(printf '%s' "$TAGS_BODY" | head -c 300)" >&2
+                    TAG_JSON="null"
+                else
+                    TAG_JSON=$(printf '%s' "$TAGS_BODY" | jq --arg prefix "$TAG_PREFIX" '[.[] | select(.name | startswith($prefix))] | first')
+                fi
                 
                 if [ "$TAG_JSON" != "null" ] && [ -n "$TAG_JSON" ]; then
                     TAG_NAME=$(echo "$TAG_JSON" | jq -r '.name')
