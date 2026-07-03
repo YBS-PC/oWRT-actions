@@ -23,6 +23,11 @@ echo -e "\nsrc-git internetdetector https://github.com/gSpotx2f/luci-app-interne
 # =========================================================
 
 # =========================================================
+echo -e "\nsrc-git bandix https://github.com/timsaya/openwrt-bandix.git" >> feeds.conf.default
+echo -e "\nsrc-git luciappbandix https://github.com/timsaya/luci-app-bandix.git" >> feeds.conf.default
+# =========================================================
+
+# =========================================================
 # УСЛОВНЫЙ БЛОК: Добавление репозиториев
 # =========================================================
 if [ "$CURRENT_MATRIX_TARGET" == "slateax" ]; then
