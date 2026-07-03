@@ -25,6 +25,9 @@ echo -e "\nsrc-git internetdetector https://github.com/gSpotx2f/luci-app-interne
 # =========================================================
 echo -e "\nsrc-git bandix https://github.com/timsaya/openwrt-bandix.git" >> feeds.conf.default
 echo -e "\nsrc-git luciappbandix https://github.com/timsaya/luci-app-bandix.git" >> feeds.conf.default
+#
+echo -e "\nsrc-git bandixplus https://github.com/timsaya/openwrt-bandix-plus.git" >> feeds.conf.default
+echo -e "\nsrc-git luciappbandixplus https://github.com/timsaya/luci-app-bandix-plus.git" >> feeds.conf.default
 # =========================================================
 
 # =========================================================
