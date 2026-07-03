@@ -195,6 +195,7 @@ CRYSTAL_CLEAR_BLOAT=(
 "luci-app-youtubeUnblock"
 "avahi-nodbus-daemon"
 "libavahi-nodbus-support"
+"bandix"
 ## 2. ВСЕ COREUTILS (заменяются busybox)
 "coreutils-base64"
 "coreutils-cat"
