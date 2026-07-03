@@ -416,9 +416,9 @@ if [ "$VARIANT" == "clear" ]; then
         echo "# CONFIG_PACKAGE_luci-i18n-${PKG}-ru is not set" >> ./.config
         echo "# CONFIG_PACKAGE_${PKG} is not set" >> ./.config
     done
-    echo "CONFIG_PACKAGE_bandix-plus=y" >> ./.config
-    echo "CONFIG_PACKAGE_luci-app-bandix-plus=y" >> ./.config
-    echo "CONFIG_PACKAGE_luci-i18n-bandix-plus-ru=y" >> ./.config
+    # echo "CONFIG_PACKAGE_bandix-plus=y" >> ./.config
+    # echo "CONFIG_PACKAGE_luci-app-bandix-plus=y" >> ./.config
+    # echo "CONFIG_PACKAGE_luci-i18n-bandix-plus-ru=y" >> ./.config
     sed -i '/CONFIG_PACKAGE_kmod-tcp-bbr=y/d' ./.config
     sed -i '/CONFIG_TCP_CONG_BBR=y/d' ./.config
     echo "# BBR disabled for clear build"
