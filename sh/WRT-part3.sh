@@ -163,6 +163,7 @@ fi
 
 # =========================================================
 # ЦЕНТРАЛИЗОВАННАЯ ОЧИСТКА (Варианты minimal, switch, clear и crystal_clear)
+# И добавление индивидуальных пакетов
 # =========================================================
 
 MINIMAL_BLOAT=(
@@ -181,6 +182,7 @@ CLEAR_BLOAT=(
 "luci-app-youtubeUnblock"
 "avahi-nodbus-daemon"
 "libavahi-nodbus-support"
+"bandix"
 )
 
 CRYSTAL_CLEAR_BLOAT=(
@@ -402,6 +404,7 @@ fi
 if [ "$VARIANT" == "clear" ]; then
     echo ">>> [Variant: $VARIANT] Performing aggressive cleanup..."
     # Удаляем тяжелые бинарники, которые скачались в YML
+    # И добавляем индивидуальные
     # Они вообще не скачиватся согласно условию в yml
     rm -f "./files/usr/bin/sing-box"
     rm -f "./files/usr/bin/AdGuardHome"
@@ -413,6 +416,9 @@ if [ "$VARIANT" == "clear" ]; then
         echo "# CONFIG_PACKAGE_luci-i18n-${PKG}-ru is not set" >> ./.config
         echo "# CONFIG_PACKAGE_${PKG} is not set" >> ./.config
     done
+    echo "CONFIG_PACKAGE_bandix-plus=y" >> ./.config
+    echo "CONFIG_PACKAGE_luci-app-bandix-plus=y" >> ./.config
+    echo "CONFIG_PACKAGE_luci-i18n-bandix-plus-ru=y" >> ./.config
     sed -i '/CONFIG_PACKAGE_kmod-tcp-bbr=y/d' ./.config
     sed -i '/CONFIG_TCP_CONG_BBR=y/d' ./.config
     echo "# BBR disabled for clear build"
