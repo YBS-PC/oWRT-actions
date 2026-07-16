@@ -490,10 +490,10 @@ fi
 # =========================================================
 # СИНХРОНИЗАЦИЯ ВРЕМЕНИ И БАННЕР
 # =========================================================
-date "+%Y-%m-%d %H:%M:%S"
 if command -v hwclock >/dev/null 2>&1; then
     run_cmd "Синхронизация RTC" hwclock -s -u
 fi
+
 if ping -c 1 -W 1 8.8.8.8 >/dev/null 2>&1; then
     log_info "Интернет есть, принудительная NTP синхронизация"
     /etc/init.d/sysntpd stop 2>/dev/null
@@ -504,7 +504,6 @@ else
     /etc/init.d/sysntpd restart 2>/dev/null
 	log_info "Пинг 8.8.8.8 пока не доступен"
 fi
-date "+%Y-%m-%d %H:%M:%S"
 
 sleep 2
 
