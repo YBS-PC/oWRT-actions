@@ -410,15 +410,15 @@ jobs:
             if [ -z "$VAR_TARGET_RELEASE" ]; then
                 if [[ "$INPUT_BRANCH" == *"25.12"* ]]; then
                      if [ "${{ inputs.source }}" == "immortalwrt" ]; then
-                        VAR_TARGET_RELEASE="releases/25.12.0"
+                        VAR_TARGET_RELEASE="releases/25.12.1"
                      else
-                        VAR_TARGET_RELEASE="releases/25.12.4"
+                        VAR_TARGET_RELEASE="releases/25.12.5"
                      fi
                 elif [[ "$INPUT_BRANCH" == *"24.10"* ]]; then
                      if [ "${{ inputs.source }}" == "immortalwrt" ]; then
                         VAR_TARGET_RELEASE="releases/24.10.6"
                      else
-                        VAR_TARGET_RELEASE="releases/24.10.7"
+                        VAR_TARGET_RELEASE="releases/24.10.8"
                      fi
                 fi
             fi
