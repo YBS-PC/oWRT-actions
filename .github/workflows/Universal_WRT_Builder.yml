@@ -49,6 +49,7 @@ on:
           - switch
           - crystal_clear
           - podkop
+          - forkop
           - passwall
           - v2raya
           - xray
@@ -564,6 +565,8 @@ jobs:
             echo -e "\nsrc-git luciappxray https://github.com/yichya/luci-app-xray.git" >> feeds.conf.default
         elif [ "$VARIANT" == "podkop" ]; then
             echo -e "\nsrc-git podkop https://github.com/itdoginfo/podkop.git;main" >> feeds.conf.default
+        elif [ "$VARIANT" == "forkop" ]; then
+            echo -e "\nsrc-git forkop https://github.com/ushan0v/forkop.git;main" >> feeds.conf.default
         fi
 
         # --- ЗАМЕНА ЗЕРКАЛ (FIX 503 ERROR) Меняем git.openwrt.org на github.com---
@@ -617,7 +620,7 @@ jobs:
             sed -i '/sing-box/Id' ./.config
         fi
         
-        if [[ "$VARIANT" == "podkop" ]]; then
+        if [[ "$VARIANT" == "podkop" || "$VARIANT" == "forkop" ]]; then
             echo ">>> Removing HomeProxy for $VARIANT compatibility..."
             sed -i '/homeproxy/d' ./.config
         fi
@@ -667,6 +670,11 @@ jobs:
             echo 'CONFIG_PACKAGE_podkop=y' >> ./.config
             echo 'CONFIG_PACKAGE_luci-app-podkop=y' >> ./.config
             echo 'CONFIG_PACKAGE_luci-i18n-podkop-ru=y' >> ./.config
+
+        elif [ "$VARIANT" == "forkop" ]; then
+            echo 'CONFIG_PACKAGE_forkop=y' >> ./.config
+            echo 'CONFIG_PACKAGE_luci-app-forkop=y' >> ./.config
+            echo 'CONFIG_PACKAGE_luci-i18n-forkop-ru=y' >> ./.config
         
         fi
         
@@ -705,7 +713,7 @@ jobs:
         echo "Variant selected: $VARIANT"
         echo "Checking key packages in .config:"
         # Проверяем наличие ключевых пакетов для уверенности
-        grep -E "CONFIG_PACKAGE_(luci-app-homeproxy|sing-box|luci-app-passwall2|luci-app-v2raya|xray-core|luci-app-podkop)=" .config || echo "None found"
+        grep -E "CONFIG_PACKAGE_(luci-app-homeproxy|sing-box|luci-app-passwall2|luci-app-v2raya|xray-core|luci-app-podkop|luci-app-forkop)=" .config || echo "None found"
         echo "=========================================="
 
     - name: Kernel Hash
