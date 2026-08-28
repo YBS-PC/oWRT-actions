@@ -533,6 +533,23 @@ uci commit uhttpd
 
 sed -i "s/File Manager/Файловый менеджер/" /usr/share/luci/menu.d/luci-app-filemanager.json
 
+# --- Фикс mtime из будущего (иначе sysfixtime отбросит часы вперёд при загрузке) ---
+CUR_YEAR=$(date +%Y)
+if [ "$CUR_YEAR" -ge 2025 ] && [ "$CUR_YEAR" -le 2050 ]; then
+    NOW=$(date +%s)
+    FUTURE=$(find /etc -type f | while read -r f; do
+        [ "$(date -r "$f" +%s)" -gt "$NOW" ] && echo "$f"
+    done)
+    if [ -n "$FUTURE" ]; then
+        echo "$FUTURE" | xargs touch
+        log_ok "Исправлено mtime в будущем: $(echo "$FUTURE" | wc -l) файлов"
+    else
+        log_ok "Файлов с mtime в будущем нет"
+    fi
+else
+    log_err "Часы не синхронизированы ($CUR_YEAR) — фикс mtime пропущен"
+fi
+
 touch "$LOCK_FILE"
 
 # Гарантированная запись лога перед уходом в фон
