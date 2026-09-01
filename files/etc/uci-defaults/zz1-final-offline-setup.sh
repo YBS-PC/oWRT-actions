@@ -190,7 +190,7 @@ if [ -f /root/apps/sing-box ]; then
 fi
 
 if [ -f /root/apps/AdGuardHome ]; then
-    run_cmd "Остановка AdGuardHome" /etc/init.d/AdGuardHome stop
+    run_cmd "Остановка AdGuardHome" /etc/init.d/adguardhome stop
     run_cmd "Копирование AdGuardHome" cp /root/apps/AdGuardHome /usr/bin/AdGuardHome
     run_cmd "Права AdGuardHome" chmod +x /usr/bin/AdGuardHome
     rm /root/apps/AdGuardHome
