@@ -181,6 +181,28 @@ if [ -f /root/apps/speedtest.tar.gz ]; then
     run_cmd "Права speedtest" chmod +x /usr/bin/speedtest
 fi
 
+# Установка неархивированных локальных пакетов
+if [ -f /root/apps/sing-box ]; then
+    run_cmd "Остановка sing-box" /etc/init.d/sing-box stop
+    run_cmd "Копирование sing-box" cp /root/apps/sing-box /usr/bin/sing-box
+    run_cmd "Права sing-box" chmod +x /usr/bin/sing-box
+    rm /root/apps/sing-box
+fi
+
+if [ -f /root/apps/AdGuardHome ]; then
+    run_cmd "Остановка AdGuardHome" /etc/init.d/AdGuardHome stop
+    run_cmd "Копирование AdGuardHome" cp /root/apps/AdGuardHome /usr/bin/AdGuardHome
+    run_cmd "Права AdGuardHome" chmod +x /usr/bin/AdGuardHome
+    rm /root/apps/AdGuardHome
+fi
+
+if [ -f /root/apps/speedtest ]; then
+    run_cmd "Остановка speedtest" /etc/init.d/speedtest stop
+    run_cmd "Копирование speedtest" cp /root/apps/speedtest /usr/bin/speedtest
+    run_cmd "Права speedtest" chmod +x /usr/bin/speedtest
+    rm /root/apps/speedtest
+fi
+
 # homeproxy
 if [ -f "/etc/init.d/homeproxy" ]; then
     log_info "Настройка homeproxy"
