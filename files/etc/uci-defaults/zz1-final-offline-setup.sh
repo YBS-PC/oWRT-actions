@@ -596,8 +596,13 @@ else
     log_info "hostname/commonname не трогаем (maintenance)"
 fi
 
-sed -i "s/File Manager/Файловый менеджер/" /usr/share/luci/menu.d/luci-app-filemanager.json
-patch_check /usr/share/luci/menu.d/luci-app-filemanager.json 'Файловый менеджер' "filemanager menu"
+FM_MENU="/usr/share/luci/menu.d/luci-app-filemanager.json"
+if [ -f "$FM_MENU" ]; then
+    sed -i "s/File Manager/Файловый менеджер/" "$FM_MENU"
+    patch_check "$FM_MENU" 'Файловый менеджер' "filemanager menu"
+else
+    log_info "luci-app-filemanager не установлен, меню не правим"
+fi
 
 # --- Фикс mtime из будущего (иначе sysfixtime отбросит часы вперёд при загрузке) ---
 # Область /etc выбрана верно: sysfixtime сканирует ровно её.
