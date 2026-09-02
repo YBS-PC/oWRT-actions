@@ -33,15 +33,36 @@ run_cmd_ign() {
     log_ok "$desc"
 }
 
+# Проверка, что sed-патч по чужому (пакетному) файлу реально лёг.
+# sed возвращает 0 даже когда ничего не совпало, поэтому run_cmd тут слеп.
+patch_check() {   # <файл> <строка-после-правки> <описание>
+    if grep -qF -- "$2" "$1" 2>/dev/null; then
+        log_ok "$3: патч на месте"
+    else
+        log_err "$3: ПАТЧ НЕ ПРИМЕНЁН — якорь изменился в $1"
+    fi
+}
+
 # ========== НАЧАЛО СКРИПТА ==========
 
 # Не включаем set -x, чтобы не дублировать структурированный лог
 # set -x   # раскомментировать при отладке
 
-SETUP_LOGFILE="/root/setup_log.txt"
+# --- РЕЖИМ РАБОТЫ ---------------------------------------------------------
+# firstboot   — запуск из /etc/uci-defaults на первой загрузке после прошивки
+# maintenance — ручной запуск сохранённой копии после apk upgrade
+# Признак — тот же lock-файл, что и раньше; на первой загрузке его нет.
+LOCK_FILE="/root/.setup_completed"
+if [ -f "$LOCK_FILE" ]; then
+    MODE="maintenance"
+    SETUP_LOGFILE="/root/setup_log_maintenance.txt"
+else
+    MODE="firstboot"
+    SETUP_LOGFILE="/root/setup_log.txt"
+fi
 : > "$SETUP_LOGFILE"
 exec > >(tee -a "$SETUP_LOGFILE") 2>&1
-log_info "Запуск zz1-final-offline-setup.sh"
+log_info "Запуск zz1-final-offline-setup.sh (режим: $MODE)"
 
 # -----------------------------
 #      ПЕРЕМЕННЫЕ СИСТЕМЫ
@@ -86,7 +107,7 @@ CURRENT_VARIANT=$(cat /etc/build_variant 2>/dev/null | head -n 1)
 log_ok "Build Variant: ${CURRENT_VARIANT:-unknown}"
 
 # --- БЛОК ЗАЩИТЫ ОТ ПОВТОРНОГО ЗАПУСКА ---
-LOCK_FILE="/root/.setup_completed"
+# LOCK_FILE определён выше, вместе с MODE
 #if [ -f "$LOCK_FILE" ]; then
 #if [ -f "$LOCK_FILE" ] && { [ "$CURRENT_VARIANT" = "clear" ] || [ "$CURRENT_VARIANT" = "crystal_clear" ]; }; then
 #    echo "Скрипт уже был выполнен ранее."
@@ -129,7 +150,9 @@ else
 fi
 
 if [ -f "$DISTFEEDS_FILE" ]; then
-    cp "$DISTFEEDS_FILE" "${DISTFEEDS_FILE}.bak"
+    # Бэкап делаем один раз: на повторном прогоне в .bak лёг бы уже
+    # отфильтрованный файл и оригинал был бы потерян навсегда.
+    [ -f "${DISTFEEDS_FILE}.bak" ] || cp "$DISTFEEDS_FILE" "${DISTFEEDS_FILE}.bak"
     FILTERED_CONTENT=$(grep -E "targets|packages/${ARCH_VERSION}/(base|luci|packages|routing|telephony|video)" "$DISTFEEDS_FILE")
     if [ -n "$FILTERED_CONTENT" ]; then
         echo "$FILTERED_CONTENT" > "$DISTFEEDS_FILE"
@@ -148,6 +171,9 @@ if [ -f "$DISTFEEDS_FILE" ]; then
             if [ -n "$BASE_REPO_URL" ]; then
                 TARGET_BASE=$(echo "$BASE_REPO_URL" | sed 's|/packages/packages\.adb||')
                 KMODS_URL="${TARGET_BASE}/kmods/${K_MODS_DIR}/packages.adb"
+                # Строки kmods содержат /targets/ и переживают фильтр выше,
+                # поэтому после смены ядра старые хеши копятся. Сносим их.
+                sed -i '\|/kmods/|d' "$DISTFEEDS_FILE"
                 if ! grep -q "$KMODS_URL" "$DISTFEEDS_FILE"; then
                     echo "$KMODS_URL" >> "$DISTFEEDS_FILE"
                     log_ok "Репозиторий kmods добавлен"
@@ -157,13 +183,17 @@ if [ -f "$DISTFEEDS_FILE" ]; then
     fi
 fi
 
-# Создание customfeeds с проверкой
+# Создание customfeeds с проверкой (только firstboot — иначе затрёт добавленные фиды)
+if [ "$MODE" = "firstboot" ]; then
 cat << 'EOF' > "$CUSTOMFEEDS_FILE"
 # add your custom package feeds here
 #
 # http://www.example.com/path/to/files/packages.adb
 EOF
 _RC=$?; [ $_RC -eq 0 ] && log_ok "$CUSTOMFEEDS_FILE создан" || log_err "Ошибка создания $CUSTOMFEEDS_FILE (exit: $_RC)"
+else
+    log_info "$CUSTOMFEEDS_FILE не трогаем (maintenance)"
+fi
 
 # Установка локальных пакетов
 if [ -f /root/apps/sing-box.tar.gz ]; then
@@ -183,14 +213,14 @@ fi
 
 # Установка неархивированных локальных пакетов
 if [ -f /root/apps/sing-box ]; then
-    run_cmd "Остановка sing-box" /etc/init.d/sing-box stop
+    [ -x /etc/init.d/sing-box ] && run_cmd "Остановка sing-box" /etc/init.d/sing-box stop
     run_cmd "Копирование sing-box" cp /root/apps/sing-box /usr/bin/sing-box
     run_cmd "Права sing-box" chmod +x /usr/bin/sing-box
     rm /root/apps/sing-box
 fi
 
 if [ -f /root/apps/AdGuardHome ]; then
-    run_cmd "Остановка AdGuardHome" [ -x /etc/init.d/adguardhome ] && /etc/init.d/adguardhome stop
+    [ -x /etc/init.d/adguardhome ] && run_cmd "Остановка AdGuardHome" /etc/init.d/adguardhome stop
     run_cmd "Копирование AdGuardHome" cp /root/apps/AdGuardHome /usr/bin/AdGuardHome
     run_cmd "Права AdGuardHome" chmod +x /usr/bin/AdGuardHome
     rm /root/apps/AdGuardHome
@@ -206,6 +236,7 @@ fi
 if [ -f "/etc/init.d/homeproxy" ]; then
     log_info "Настройка homeproxy"
     run_cmd "Отключение dns_hijacked" sed -i "s/const dns_hijacked = uci\.get('dhcp', '@dnsmasq\[0\]', 'dns_redirect') || '0'/const dns_hijacked = '1'/" /etc/homeproxy/scripts/firewall_post.ut
+    patch_check /etc/homeproxy/scripts/firewall_post.ut "const dns_hijacked = '1'" "firewall_post.ut"
     run_cmd "Отключение homeproxy" /etc/init.d/homeproxy disable
 
     HELPER_SCRIPT_PATH="/etc/homeproxy/scripts/update_firewall_rules.sh"
@@ -245,6 +276,7 @@ EOF
         sed -i "/stop_service() {/a \\$HELPER_CALL" "$HOMEPROXY_INIT"
         log_ok "Init homeproxy пропатчен"
     fi
+    patch_check "$HOMEPROXY_INIT" "$HELPER_SCRIPT_PATH" "homeproxy init"
 
     . "$HELPER_SCRIPT_PATH"
     run_cmd "Включение homeproxy" /etc/init.d/homeproxy enable
@@ -297,6 +329,7 @@ done
 [ "$FIREWALL_CONFIG_CHANGED" = 1 ] && uci commit firewall && log_ok "Firewall сохранён"
 
 run_cmd "Правка ruleset.uc" sed -i 's/meta l4proto { tcp, udp } flow offload @ft;/meta l4proto { tcp, udp } ct original packets ge 30 flow offload @ft;/' /usr/share/firewall4/templates/ruleset.uc
+patch_check /usr/share/firewall4/templates/ruleset.uc 'ct original packets ge 30 flow offload @ft' "ruleset.uc"
 
 if [ -x "/usr/bin/youtubeUnblock" ]; then
     run_cmd "Остановка youtubeUnblock" /etc/init.d/youtubeUnblock stop
@@ -387,6 +420,7 @@ EOF
     run_cmd "Сохранение dhcp" uci commit dhcp
 
     run_cmd "Настройка лога adguardhome" sed -i 's|--logfile syslog|--logfile /var/AdGuardHome.log|' /etc/init.d/adguardhome
+    patch_check /etc/init.d/adguardhome '--logfile /var/AdGuardHome.log' "adguardhome init"
     run_cmd "Включение adguardhome" /etc/init.d/adguardhome enable
     run_cmd "Запуск adguardhome" /etc/init.d/adguardhome start
 else
@@ -398,11 +432,15 @@ if [ -f "/usr/lib/sqm/run.sh" ]; then
     log_info "Настройка SQM"
     mkdir -p /opt
     CUSTOM_CONF="/opt/sqm_custom.conf"
+    if [ -f "$CUSTOM_CONF" ]; then
+        log_ok "$CUSTOM_CONF уже существует, ручной тюнинг сохранён"
+    else
     cat > "$CUSTOM_CONF" <<EOF
 option iqdisc_opts 'nat dual-dsthost diffserv4 nowash'
 option eqdisc_opts 'nat dual-srchost diffserv4 nowash'
 EOF
     _RC=$?; [ $_RC -eq 0 ] && log_ok "Конфиг SQM создан" || log_err "Ошибка создания $CUSTOM_CONF (exit: $_RC)"
+    fi
 
     if ! grep -q "sqm_custom.conf" /usr/lib/sqm/run.sh; then
         cat <<'EOF' > /tmp/sqm_loader.txt
@@ -421,6 +459,7 @@ EOF
     else
         log_ok "run.sh уже пропатчен"
     fi
+    patch_check /usr/lib/sqm/run.sh 'sqm_custom.conf' "sqm run.sh"
 
     SQM_ENABLED=$(uci -q get sqm.@queue[0].enabled)
     if [ "$SQM_ENABLED" = "1" ]; then
@@ -515,7 +554,7 @@ if command -v hwclock >/dev/null 2>&1; then
     run_cmd "Синхронизация RTC" hwclock -s -u
 fi
 
-if ping -c 1 -W 3 77.88.8.8 >/dev/null 2>&1; then
+if ping -c 1 -W 1 8.8.8.8 >/dev/null 2>&1; then
     log_info "Интернет есть, принудительная NTP синхронизация"
     /etc/init.d/sysntpd stop 2>/dev/null
     ntpd -q -n -p ru.pool.ntp.org 2>/dev/null && log_ok "NTP синхронизировано" || log_err "Ошибка ntpd"
@@ -528,7 +567,7 @@ fi
 
 sleep 2
 
-cp /etc/banner /etc/banner.bak
+[ -f /etc/banner.bak ] || cp /etc/banner /etc/banner.bak
 sed -i 's/W I R E L E S S/N E T W O R K/g' /etc/banner
 sed -i "/Build Variant:/d; /Kernel Version:/d" /etc/banner
 
@@ -546,21 +585,28 @@ echo " Kernel Version: $KERNEL_VERSION" >> /etc/banner
 echo " Build Variant: $CURRENT_VARIANT ($DATE_STR)" >> /etc/banner
 log_ok "Баннер обновлён"
 
-# Имя хоста
-run_cmd "Установка hostname" uci set system.@system[0].hostname="$HOSTNAME_PATTERN"
-run_cmd "Сохранение system" uci commit system
-run_cmd "Установка commonname" uci set uhttpd.defaults.commonname="$HOSTNAME_PATTERN"
-uci commit uhttpd
+# Имя хоста — только на первой загрузке, чтобы ручной прогон не сбрасывал
+# переименованный роутер обратно в шаблон
+if [ "$MODE" = "firstboot" ]; then
+    run_cmd "Установка hostname" uci set system.@system[0].hostname="$HOSTNAME_PATTERN"
+    run_cmd "Сохранение system" uci commit system
+    run_cmd "Установка commonname" uci set uhttpd.defaults.commonname="$HOSTNAME_PATTERN"
+    uci commit uhttpd
+else
+    log_info "hostname/commonname не трогаем (maintenance)"
+fi
 
 sed -i "s/File Manager/Файловый менеджер/" /usr/share/luci/menu.d/luci-app-filemanager.json
+patch_check /usr/share/luci/menu.d/luci-app-filemanager.json 'Файловый менеджер' "filemanager menu"
 
 # --- Фикс mtime из будущего (иначе sysfixtime отбросит часы вперёд при загрузке) ---
+# Область /etc выбрана верно: sysfixtime сканирует ровно её.
 CUR_YEAR=$(date +%Y)
 if [ "$CUR_YEAR" -ge 2025 ] && [ "$CUR_YEAR" -le 2050 ]; then
-    NOW=$(date +%s)
-    FUTURE=$(find /etc -type f | while read -r f; do
-        [ "$(date -r "$f" +%s)" -gt "$NOW" ] && echo "$f"
-    done)
+    MTIME_REF="/tmp/.zz1_mtime_ref"
+    touch "$MTIME_REF"
+    FUTURE=$(find /etc -type f -newer "$MTIME_REF")
+    rm -f "$MTIME_REF"
     if [ -n "$FUTURE" ]; then
         echo "$FUTURE" | xargs touch
         log_ok "Исправлено mtime в будущем: $(echo "$FUTURE" | wc -l) файлов"
@@ -568,7 +614,7 @@ if [ "$CUR_YEAR" -ge 2025 ] && [ "$CUR_YEAR" -le 2050 ]; then
         log_ok "Файлов с mtime в будущем нет"
     fi
 else
-    log_err "Часы не синхронизированы ($CUR_YEAR) — фикс mtime пропущен"
+    log_info "Часы не синхронизированы ($CUR_YEAR) — фикс mtime пропущен"
 fi
 
 touch "$LOCK_FILE"
