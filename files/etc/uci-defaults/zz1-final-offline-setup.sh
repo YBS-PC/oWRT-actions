@@ -557,12 +557,23 @@ fi
 if ping -c 1 -W 1 8.8.8.8 >/dev/null 2>&1; then
     log_info "Интернет есть, принудительная NTP синхронизация"
     /etc/init.d/sysntpd stop 2>/dev/null
-    ntpd -q -n -p ru.pool.ntp.org 2>/dev/null && log_ok "NTP синхронизировано" || log_err "Ошибка ntpd"
+    # IP-литералы, а не имя: AdGuardHome перезапущен секундой раньше
+    # и ещё не слушает :53, DNS у роутера в этот момент недоступен
+    if ntpd -q -n -p 162.159.200.123 -p 162.159.200.1 -p 216.239.35.0 2>/dev/null; then
+        log_ok "NTP синхронизировано"; NTP_OK=1
+    else
+        log_err "Ошибка ntpd"; NTP_OK=0
+    fi
     /etc/init.d/sysntpd start 2>/dev/null
-    hwclock -w -u 2>/dev/null && log_ok "RTC обновлён"
+    CUR_YEAR=$(date +%Y)
+    if [ "$NTP_OK" = "1" ] || { [ "$CUR_YEAR" -ge 2025 ] && [ "$CUR_YEAR" -le 2050 ]; }; then
+        hwclock -w -u 2>/dev/null && log_ok "RTC обновлён"
+    else
+        log_info "Часы недостоверны ($CUR_YEAR) — RTC не перезаписываем"
+    fi
 else
     /etc/init.d/sysntpd restart 2>/dev/null
-	log_info "Пинг 8.8.8.8 пока не доступен"
+    log_info "Пинг 8.8.8.8 пока не доступен"
 fi
 
 sleep 2
