@@ -190,14 +190,13 @@ if [ -f /root/apps/sing-box ]; then
 fi
 
 if [ -f /root/apps/AdGuardHome ]; then
-    run_cmd "Остановка AdGuardHome" /etc/init.d/adguardhome stop
+    run_cmd "Остановка AdGuardHome" [ -x /etc/init.d/adguardhome ] && /etc/init.d/adguardhome stop
     run_cmd "Копирование AdGuardHome" cp /root/apps/AdGuardHome /usr/bin/AdGuardHome
     run_cmd "Права AdGuardHome" chmod +x /usr/bin/AdGuardHome
     rm /root/apps/AdGuardHome
 fi
 
 if [ -f /root/apps/speedtest ]; then
-    run_cmd "Остановка speedtest" /etc/init.d/speedtest stop
     run_cmd "Копирование speedtest" cp /root/apps/speedtest /usr/bin/speedtest
     run_cmd "Права speedtest" chmod +x /usr/bin/speedtest
     rm /root/apps/speedtest
@@ -516,7 +515,7 @@ if command -v hwclock >/dev/null 2>&1; then
     run_cmd "Синхронизация RTC" hwclock -s -u
 fi
 
-if ping -c 1 -W 1 8.8.8.8 >/dev/null 2>&1; then
+if ping -c 1 -W 3 77.88.8.8 >/dev/null 2>&1; then
     log_info "Интернет есть, принудительная NTP синхронизация"
     /etc/init.d/sysntpd stop 2>/dev/null
     ntpd -q -n -p ru.pool.ntp.org 2>/dev/null && log_ok "NTP синхронизировано" || log_err "Ошибка ntpd"
