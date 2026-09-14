@@ -238,17 +238,87 @@ if [ -f "/etc/init.d/homeproxy" ]; then
     run_cmd "Отключение dns_hijacked" sed -i "s/const dns_hijacked = uci\.get('dhcp', '@dnsmasq\[0\]', 'dns_redirect') || '0'/const dns_hijacked = '1'/" /etc/homeproxy/scripts/firewall_post.ut
     patch_check /etc/homeproxy/scripts/firewall_post.ut "const dns_hijacked = '1'" "firewall_post.ut"
 
-    # Clash API (панель YACD). В luci-app-homeproxy опции нет, генератор
-    # пишет в experimental только cache_file — дописываем clash_api сами.
-    # external_ui добавляем ТОЛЬКО если статика реально лежит на диске:
-    # с пустым каталогом sing-box полезет качать её с GitHub при каждом старте.
+    # --- Clash API + панель YACD -----------------------------------------
+    # В luci-app-homeproxy опции нет: генератор пишет в experimental только
+    # cache_file, дописываем clash_api сами.
+    # Каталог /opt/yacd НИКОГДА не должен быть пустым: при пустом каталоге
+    # sing-box на каждом старте лезет качать панель с GitHub через дефолтный
+    # outbound. Поэтому кладём заглушку сразу, а настоящую панель догружает
+    # cron, когда появится интернет. Первая загрузка не тормозит.
+    if [ ! -f /opt/yacd/index.html ]; then
+        mkdir -p /opt/yacd
+        cat << 'Y_STUB_EOF' > /opt/yacd/index.html
+<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8">
+<title>YACD</title><meta http-equiv="refresh" content="60"></head>
+<body style="font-family:sans-serif;padding:2em">
+<h2>YACD ещё не установлена</h2>
+<p>Панель догружается автоматически, как только появится интернет.
+Проверка раз в 10 минут, страница обновится сама.</p>
+</body></html>
+Y_STUB_EOF
+        touch /opt/yacd/.stub
+        log_ok "Заглушка /opt/yacd создана"
+    fi
+
+    if [ -f /opt/yacd/.stub ]; then
+    cat << 'Y_INST_EOF' > /usr/bin/yacd-install.sh
+#!/bin/sh
+# Догружает YACD в /opt/yacd, когда появится интернет.
+# Снимает себя из cron после успеха. Вызывается из /etc/crontabs/root.
+CRON_FILE="/etc/crontabs/root"
+URL="https://github.com/MetaCubeX/Yacd-meta/archive/refs/heads/gh-pages.zip"
+TMP_ZIP="/tmp/yacd.zip"
+TMP_DIR="/tmp/yacd-unpack"
+
+unhook() {
+    sed -i '/yacd-install/d' "$CRON_FILE" 2>/dev/null
+    /etc/init.d/cron reload 2>/dev/null
+    rm -f /usr/bin/yacd-install.sh
+}
+cleanup() { rm -rf "$TMP_ZIP" "$TMP_DIR" /opt/yacd.new; }
+trap cleanup EXIT
+
+# Настоящая панель уже стоит (метки заглушки нет) - больше делать нечего
+if [ -f /opt/yacd/index.html ] && [ ! -f /opt/yacd/.stub ]; then
+    unhook
+    exit 0
+fi
+
+curl -fsSL --max-time 120 -o "$TMP_ZIP" "$URL" || exit 1
+mkdir -p "$TMP_DIR"
+unzip -qo "$TMP_ZIP" -d "$TMP_DIR" || exit 1
+
+SRC_DIR=$(find "$TMP_DIR" -mindepth 1 -maxdepth 1 -type d | head -n1)
+[ -n "$SRC_DIR" ] && [ -f "$SRC_DIR/index.html" ] || exit 1
+
+rm -rf /opt/yacd.new
+mkdir -p /opt/yacd.new
+cp -r "$SRC_DIR"/. /opt/yacd.new/
+[ -f /opt/yacd.new/index.html ] || exit 1
+
+rm -rf /opt/yacd
+mv /opt/yacd.new /opt/yacd
+logger -t yacd-install "YACD установлена в /opt/yacd"
+unhook
+exit 0
+Y_INST_EOF
+    chmod +x /usr/bin/yacd-install.sh
+    log_ok "Установщик YACD создан"
+
+    CRON_FILE="/etc/crontabs/root"
+    mkdir -p /etc/crontabs && touch "$CRON_FILE"
+    if ! grep -q 'yacd-install' "$CRON_FILE"; then
+        echo '*/10 * * * * /usr/bin/yacd-install.sh >/dev/null 2>&1' >> "$CRON_FILE"
+        log_ok "Задание cron для догрузки YACD добавлено"
+    fi
+    run_cmd_ign "Включение cron" /etc/init.d/cron enable
+    fi
+
+    grep -q '^/opt/yacd$' /etc/sysupgrade.conf 2>/dev/null || echo '/opt/yacd' >> /etc/sysupgrade.conf
+
     GEN_UC="/etc/homeproxy/scripts/generate_client.uc"
     if [ -f "$GEN_UC" ]; then
-        if [ -f /opt/yacd/index.html ]; then
-            CLASH_API="clash_api: { external_controller: '0.0.0.0:9090', external_ui: '/opt/yacd' },"
-        else
-            CLASH_API="clash_api: { external_controller: '0.0.0.0:9090' },"
-        fi
+        CLASH_API="clash_api: { external_controller: '0.0.0.0:9090', external_ui: '/opt/yacd' },"
         if ! grep -qF "$CLASH_API" "$GEN_UC"; then
             sed -i '/clash_api:/d' "$GEN_UC"
             sed -i "s|^\tconfig.experimental = {|\tconfig.experimental = {\n\t\t${CLASH_API}|" "$GEN_UC"
