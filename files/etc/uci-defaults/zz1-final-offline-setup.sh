@@ -9,7 +9,8 @@
 # Функции логирования (без local для POSIX-совместимости)
 log_info()  { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] $*"; }
 log_ok()    { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [OK]   $*"; }
-log_err()   { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERR]  $*"; }
+ERROR_COUNT=0
+log_err()   { ERROR_COUNT=$((ERROR_COUNT+1)); echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERR]  $*"; }
 
 # Обёртка выполнения команды
 run_cmd() {
@@ -196,19 +197,27 @@ else
 fi
 
 # Установка локальных пакетов
+# Архив удаляем только после успешной установки: иначе падение tar
+# оставило бы и без бинарника, и без исходного архива.
 if [ -f /root/apps/sing-box.tar.gz ]; then
-    run_cmd "Остановка sing-box" /etc/init.d/sing-box stop
-    run_cmd "Распаковка sing-box" tar -xzf /root/apps/sing-box.tar.gz -C /tmp/
-    rm /root/apps/sing-box.tar.gz
-    run_cmd "Копирование sing-box" cp /tmp/sing-box /usr/bin/sing-box
-    run_cmd "Права sing-box" chmod +x /usr/bin/sing-box
+    [ -x /etc/init.d/sing-box ] && run_cmd "Остановка sing-box" /etc/init.d/sing-box stop
+    if run_cmd "Распаковка sing-box" tar -xzf /root/apps/sing-box.tar.gz -C /tmp/ \
+       && run_cmd "Копирование sing-box" cp /tmp/sing-box /usr/bin/sing-box; then
+        run_cmd "Права sing-box" chmod +x /usr/bin/sing-box
+        rm -f /root/apps/sing-box.tar.gz /tmp/sing-box
+    else
+        log_err "sing-box не установлен, архив сохранён"
+    fi
 fi
 
 if [ -f /root/apps/speedtest.tar.gz ]; then
-    run_cmd "Распаковка speedtest" tar -xzf /root/apps/speedtest.tar.gz -C /tmp/
-    rm /root/apps/speedtest.tar.gz
-    run_cmd "Копирование speedtest" cp /tmp/speedtest /usr/bin/speedtest
-    run_cmd "Права speedtest" chmod +x /usr/bin/speedtest
+    if run_cmd "Распаковка speedtest" tar -xzf /root/apps/speedtest.tar.gz -C /tmp/ \
+       && run_cmd "Копирование speedtest" cp /tmp/speedtest /usr/bin/speedtest; then
+        run_cmd "Права speedtest" chmod +x /usr/bin/speedtest
+        rm -f /root/apps/speedtest.tar.gz /tmp/speedtest
+    else
+        log_err "speedtest не установлен, архив сохранён"
+    fi
 fi
 
 # Установка неархивированных локальных пакетов
@@ -275,7 +284,7 @@ unhook() {
     /etc/init.d/cron reload 2>/dev/null
     rm -f /usr/bin/yacd-install.sh
 }
-cleanup() { rm -rf "$TMP_ZIP" "$TMP_DIR" /opt/yacd.new; }
+cleanup() { rm -rf "$TMP_ZIP" "$TMP_DIR" /opt/yacd.new /opt/yacd.old; }
 trap cleanup EXIT
 
 # Настоящая панель уже стоит (метки заглушки нет) - больше делать нечего
@@ -296,8 +305,9 @@ mkdir -p /opt/yacd.new
 cp -r "$SRC_DIR"/. /opt/yacd.new/
 [ -f /opt/yacd.new/index.html ] || exit 1
 
-rm -rf /opt/yacd
+mv /opt/yacd /opt/yacd.old 2>/dev/null
 mv /opt/yacd.new /opt/yacd
+rm -rf /opt/yacd.old
 logger -t yacd-install "YACD установлена в /opt/yacd"
 unhook
 exit 0
@@ -562,7 +572,8 @@ else
 fi
 
 # Очистка временных файлов конфигурации
-find /etc/config/ -type f \( -name '*-opkg' -o -name '*apk-new' \) -delete 2>/dev/null
+# -delete есть только в GNU find; в варианте switch findutils вырезан part3
+find /etc/config/ -type f \( -name '*-opkg' -o -name '*apk-new' \) -exec rm -f {} + 2>/dev/null
 log_info "Временные файлы удалены"
 
 # FullCone NAT
@@ -575,7 +586,7 @@ fi
 if [ -f "/lib/modules/$(uname -r)/tcp_bbr.ko" ] || grep -q bbr /proc/sys/net/ipv4/tcp_available_congestion_control; then
     sed -i '/# TCP BBR/d; /net\.core\.default_qdisc.*fq/d; /net\.ipv4\.tcp_congestion_control.*bbr/d' /etc/sysctl.conf
     sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' /etc/sysctl.conf
-	echo -e "\n# TCP BBR\nnet.core.default_qdisc = fq_codel\nnet.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.conf
+    echo -e "\n# TCP BBR\nnet.core.default_qdisc = fq_codel\nnet.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.conf
     log_ok "TCP BBR включён"
 fi
 
@@ -730,6 +741,5 @@ sync
 log_info "Отложенная перезагрузка через 120 секунд (процесс в фоне)"
 (sleep 120; sync; reboot) &
 
-ERROR_COUNT=$(grep -c '\[ERR\]' "$SETUP_LOGFILE")
 log_info "Настройка завершена. Количество ошибок в логе: $ERROR_COUNT"
 exit 0
