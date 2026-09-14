@@ -337,6 +337,30 @@ Y_INST_EOF
         patch_check "$GEN_UC" 'clash_api' "generate_client.uc (Clash API)"
     fi
 
+    # Пункт меню LuCI -> YACD. Адрес берётся из SERVER_ADDR, то есть из того,
+    # по которому открыт сам LuCI. hostname/port в query-параметрах избавляют
+    # от ручного добавления бэкенда: по умолчанию YACD предлагает 127.0.0.1,
+    # а это адрес браузера, а не роутера.
+    if [ -d /usr/lib/lua/luci/controller ]; then
+        cat << 'EOF' > /usr/lib/lua/luci/controller/yacd.lua
+module("luci.controller.yacd", package.seeall)
+function index()
+	entry({"admin", "network", "yacd"}, call("redirectToYACD"), _("YACD"), 41)
+end
+function redirectToYACD()
+	local router_ip = luci.http.getenv("SERVER_ADDR")
+	local redirect_url = "http://" .. router_ip .. ":9090/ui/?hostname=" .. router_ip .. "&port=9090#/home"
+	luci.http.prepare_content("text/html")
+	luci.http.write(string.format([[
+		<script>window.location='%s'; window.open('%s', '_blank');</script>
+		<a href="%s" target="_blank">Click here if redirect fails</a>
+	]], "javascript:history.back()", redirect_url, redirect_url))
+end
+EOF
+        _RC=$?; [ $_RC -eq 0 ] && log_ok "Контроллер LuCI для YACD создан" || log_err "Ошибка создания контроллера YACD (exit: $_RC)"
+        rm -f /tmp/luci-indexcache* /tmp/luci-modulecache/* 2>/dev/null
+    fi
+
     run_cmd "Отключение homeproxy" /etc/init.d/homeproxy disable
 
     HELPER_SCRIPT_PATH="/etc/homeproxy/scripts/update_firewall_rules.sh"
