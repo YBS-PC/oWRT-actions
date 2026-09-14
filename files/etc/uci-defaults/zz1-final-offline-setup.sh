@@ -348,13 +348,11 @@ function index()
 	entry({"admin", "network", "yacd"}, call("redirectToYACD"), _("YACD"), 41)
 end
 function redirectToYACD()
+	-- Серверный 302, а не window.open: всплывающее окно блокируется
+	-- браузерами (в частности Chrome на iOS), если открывается не по
+	-- касанию пользователя. Фрагмент #/home Location-заголовок сохраняет.
 	local router_ip = luci.http.getenv("SERVER_ADDR")
-	local redirect_url = "http://" .. router_ip .. ":9090/ui/?hostname=" .. router_ip .. "&port=9090#/home"
-	luci.http.prepare_content("text/html")
-	luci.http.write(string.format([[
-		<script>window.location='%s'; window.open('%s', '_blank');</script>
-		<a href="%s" target="_blank">Click here if redirect fails</a>
-	]], "javascript:history.back()", redirect_url, redirect_url))
+	luci.http.redirect("http://" .. router_ip .. ":9090/ui/?hostname=" .. router_ip .. "&port=9090#/home")
 end
 EOF
         _RC=$?; [ $_RC -eq 0 ] && log_ok "Контроллер LuCI для YACD создан" || log_err "Ошибка создания контроллера YACD (exit: $_RC)"
@@ -524,17 +522,16 @@ EOF
 
     cat << 'EOF' > /usr/lib/lua/luci/controller/adguardhome_net.lua
 module("luci.controller.adguardhome_net", package.seeall)
+
 function index()
 	entry({"admin", "network", "adguardhome"}, call("redirectToAdGuardHome"), _("AdGuardHome"), 40)
 end
+
 function redirectToAdGuardHome()
+	-- Серверный 302 вместо window.open: всплывающее окно блокируется
+	-- браузером, если открывается не по касанию пользователя.
 	local router_ip = luci.http.getenv("SERVER_ADDR")
-	local redirect_url = "http://" .. router_ip .. ":8080"
-	luci.http.prepare_content("text/html")
-	luci.http.write(string.format([[
-		<script>window.location='%s'; window.open('%s', '_blank');</script>
-		<a href="%s" target="_blank">Click here if redirect fails</a>
-	]], "javascript:history.back()", redirect_url, redirect_url))
+	luci.http.redirect("http://" .. router_ip .. ":8080")
 end
 EOF
     _RC=$?; [ $_RC -eq 0 ] && log_ok "Контроллер LuCI создан" || log_err "Ошибка создания контроллера (exit: $_RC)"
