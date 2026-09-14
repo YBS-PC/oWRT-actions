@@ -237,6 +237,26 @@ if [ -f "/etc/init.d/homeproxy" ]; then
     log_info "Настройка homeproxy"
     run_cmd "Отключение dns_hijacked" sed -i "s/const dns_hijacked = uci\.get('dhcp', '@dnsmasq\[0\]', 'dns_redirect') || '0'/const dns_hijacked = '1'/" /etc/homeproxy/scripts/firewall_post.ut
     patch_check /etc/homeproxy/scripts/firewall_post.ut "const dns_hijacked = '1'" "firewall_post.ut"
+
+    # Clash API (панель YACD). В luci-app-homeproxy опции нет, генератор
+    # пишет в experimental только cache_file — дописываем clash_api сами.
+    # external_ui добавляем ТОЛЬКО если статика реально лежит на диске:
+    # с пустым каталогом sing-box полезет качать её с GitHub при каждом старте.
+    GEN_UC="/etc/homeproxy/scripts/generate_client.uc"
+    if [ -f "$GEN_UC" ]; then
+        if [ -f /opt/yacd/index.html ]; then
+            CLASH_API="clash_api: { external_controller: '0.0.0.0:9090', external_ui: '/opt/yacd' },"
+        else
+            CLASH_API="clash_api: { external_controller: '0.0.0.0:9090' },"
+        fi
+        if ! grep -qF "$CLASH_API" "$GEN_UC"; then
+            sed -i '/clash_api:/d' "$GEN_UC"
+            sed -i "s|^\tconfig.experimental = {|\tconfig.experimental = {\n\t\t${CLASH_API}|" "$GEN_UC"
+            log_ok "Clash API добавлен в generate_client.uc"
+        fi
+        patch_check "$GEN_UC" 'clash_api' "generate_client.uc (Clash API)"
+    fi
+
     run_cmd "Отключение homeproxy" /etc/init.d/homeproxy disable
 
     HELPER_SCRIPT_PATH="/etc/homeproxy/scripts/update_firewall_rules.sh"
