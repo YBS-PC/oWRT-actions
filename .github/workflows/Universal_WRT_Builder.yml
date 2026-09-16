@@ -411,7 +411,7 @@ jobs:
             if [ -z "$VAR_TARGET_RELEASE" ]; then
                 if [[ "$INPUT_BRANCH" == *"25.12"* ]]; then
                      if [ "${{ inputs.source }}" == "immortalwrt" ]; then
-                        VAR_TARGET_RELEASE="releases/25.12.1"
+                        VAR_TARGET_RELEASE="releases/25.12.2"
                      else
                         VAR_TARGET_RELEASE="releases/25.12.5"
                      fi
