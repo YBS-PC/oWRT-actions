@@ -411,8 +411,10 @@ if [ "$VARIANT" == "forkop" ]; then
         echo "# CONFIG_PACKAGE_luci-i18n-${PKG}-ru is not set" >> ./.config
         echo "# CONFIG_PACKAGE_${PKG} is not set" >> ./.config
     done
-    sed -i '/CONFIG_PACKAGE_youtubeUnblock=y/d' ./.config
-    sed -i '/CONFIG_PACKAGE_luci-app-youtubeUnblock=y/d' ./.config
+    sed -i '/youtubeUnblock/Id' ./.config
+    echo "# CONFIG_PACKAGE_youtubeUnblock is not set" >> ./.config
+    echo "# CONFIG_PACKAGE_luci-app-youtubeUnblock is not set" >> ./.config
+    echo "# CONFIG_PACKAGE_luci-i18n-youtubeUnblock-ru is not set" >> ./.config
 fi
 
 # --- ЛОГИКА ДЛЯ ВАРИАНТА 'clear' ---
