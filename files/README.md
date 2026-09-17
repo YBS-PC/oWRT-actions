@@ -121,7 +121,7 @@ sed -i '/# TCP BBR/d; /net\.core\.default_qdisc/d; /net\.ipv4\.tcp_congestion_co
 - В конец добавляется:
 ```
  Kernel Version: 6.12.74
- Build Variant: minimal (2026-03-19)
+ Build Variant: homeproxy (2026-03-19)
 ```
 
 **Чтобы откатить:**
