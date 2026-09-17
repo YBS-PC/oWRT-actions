@@ -580,6 +580,32 @@ EOF
 
     run_cmd "Настройка лога adguardhome" sed -i 's|--logfile syslog|--logfile /var/AdGuardHome.log|' /etc/init.d/adguardhome
     patch_check /etc/init.d/adguardhome '--logfile /var/AdGuardHome.log' "adguardhome init"
+    # --- Upstream DNS в AGH yaml ------------------------------------------
+    # Зависит от варианта сборки:
+    #   homeproxy  → 127.0.0.1:5333 (DNS-порт sing-box homeproxy)
+    #   forkop     → 127.0.0.42:53  (DNS inbound forkop sing-box)
+    # Правим yaml напрямую: AGH хранит upstream только там, не в UCI.
+    # AGH должен быть остановлен в этот момент (выше есть stop).
+    AGH_YAML="/etc/adguardhome/adguardhome.yaml"
+    if [ -f "$AGH_YAML" ]; then
+        if [ "$CURRENT_VARIANT" = "forkop" ]; then
+            # forkop: убираем ссылку на homeproxy sing-box, ставим forkop sing-box
+            sed -i 's|127\.0\.0\.1:5333|127.0.0.42:53|g' "$AGH_YAML"
+            # forkop управляет dnsmasq сам через dont_touch_dhcp,
+            # но нам нужно чтобы он не трогал: выставляем флаг
+            uci -q set forkop.settings.dont_touch_dhcp='1' 2>/dev/null                 && uci commit forkop 2>/dev/null                 && log_ok "forkop: dont_touch_dhcp=1 (AGH остаётся хозяином на :53)"
+            log_ok "AGH upstream → forkop sing-box (127.0.0.42:53)"
+        else
+            # homeproxy (и все остальные варианты с AGH): homeproxy sing-box DNS
+            sed -i 's|127\.0\.0\.42:53|127.0.0.1:5333|g' "$AGH_YAML"
+            log_ok "AGH upstream → homeproxy sing-box (127.0.0.1:5333)"
+        fi
+        _AGH_EXPECTED="$( [ "$CURRENT_VARIANT" = "forkop" ] && echo '127.0.0.42:53' || echo '127.0.0.1:5333' )"
+        patch_check "$AGH_YAML" "$_AGH_EXPECTED" "adguardhome.yaml upstream DNS"
+    else
+        log_info "AGH yaml не найден ($AGH_YAML) — upstream DNS не настроен автоматически"
+    fi
+
     run_cmd "Включение adguardhome" /etc/init.d/adguardhome enable
     run_cmd "Запуск adguardhome" /etc/init.d/adguardhome start
 else
