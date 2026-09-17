@@ -402,8 +402,6 @@ EOF
 
     . "$HELPER_SCRIPT_PATH"
     run_cmd "Включение homeproxy" /etc/init.d/homeproxy enable
-    SB_version=$(/usr/bin/sing-box version 2>/dev/null | grep -oP -m 1 'v?\K[\d.]+')
-    log_ok "Версия sing-box: $SB_version"
 
     NFT_RULE_FILE="/etc/nftables.d/bypass_homeproxy_ips.nft"
     if [ ! -f "$NFT_RULE_FILE" ]; then
@@ -437,17 +435,57 @@ EOF
     run_cmd "Включение passwall2" /etc/init.d/passwall2 enable
 fi
 
-# IPSet для youtubeUnblock
+# Версия sing-box — вне вариантных блоков: бинарник ставится и в podkop,
+# forkop, passwall, где homeproxy нет.
+if [ -x /usr/bin/sing-box ]; then
+    SB_version=$(/usr/bin/sing-box version 2>/dev/null | grep -oP -m 1 'v?\K[\d.]+')
+    [ -n "$SB_version" ] && log_ok "Версия sing-box: $SB_version" || log_info "sing-box есть, версию определить не удалось"
+else
+    log_info "sing-box не установлен"
+fi
+
+# --- Наборы адресов fw4 -------------------------------------------------------
+# Создаются ВСЕГДА, независимо от варианта сборки. Причина: файлы в
+# /etc/nftables.d/ переживают sysupgrade, и ссылка на несуществующий набор
+# роняет весь fw4 reload. Пустой набор безопаснее отсутствующего.
+#   dpi_ips      — youtubeUnblock: reject UDP/443 и очередь TCP/443
+#                  (наполняет ip-lists-downloader.sh)
+#   bypass_ips   — обход homeproxy по метке 0x64 (RU-трафик мимо VPN)
+#                  И обход очереди youtubeUnblock (наполняет bypass_ips.sh)
+#   bypass_local — обход очереди youtubeUnblock по адресу ИСТОЧНИКА, отсюда
+#                  match=src_net, а не dest_net
+# loadfile обязателен: без него набор создаётся пустым и файлы из
+# /etc/luci-uploads/ не читаются никогда — обход молча не работает.
+mkdir -p /etc/luci-uploads
 FIREWALL_CONFIG_CHANGED=0
-for ipset_name in dpi_ips bypass_ips bypass_local; do
-    if ! uci show firewall | grep -q "\.name='$ipset_name'"; then
-        handle=$(uci add firewall ipset)
-        uci set firewall."$handle".name="$ipset_name"
-        uci set firewall."$handle".match="dest_net"
-        uci set firewall."$handle".family="ipv4"
+
+add_fw_ipset() {   # <имя> <match> <loadfile|-> <комментарий>
+    local _name="$1" _match="$2" _file="$3" _cmt="$4" _sec _h
+    # fw4 читает loadfile при каждом reload; пустой файл безопаснее отсутствующего
+    [ "$_file" != "-" ] && [ ! -f "$_file" ] && : > "$_file"
+    # cut по точкам даёт id секции и для анонимной (@ipset[0]), и для именованной
+    _sec=$(uci show firewall | grep -F ".name='${_name}'" | head -n 1 | cut -d. -f2)
+    if [ -z "$_sec" ]; then
+        _h=$(uci add firewall ipset)
+        uci set firewall."$_h".name="$_name"
+        uci set firewall."$_h".match="$_match"
+        uci set firewall."$_h".family="ipv4"
+        uci set firewall."$_h".comment="$_cmt"
+        [ "$_file" != "-" ] && uci set firewall."$_h".loadfile="$_file"
         FIREWALL_CONFIG_CHANGED=1
+        log_ok "ipset $_name создан"
+    elif [ "$_file" != "-" ] && [ -z "$(uci -q get "firewall.${_sec}.loadfile")" ]; then
+        # секция осталась от старой версии скрипта — дополняем, не пересоздаём
+        uci set firewall."$_sec".loadfile="$_file"
+        FIREWALL_CONFIG_CHANGED=1
+        log_ok "ipset $_name: добавлен loadfile"
     fi
-done
+}
+
+add_fw_ipset dpi_ips      dest_net /etc/luci-uploads/dpi_ip_list.txt "youtubeUnblock"
+add_fw_ipset bypass_ips   dest_net /etc/luci-uploads/bypass_ips.txt  "Bypass HomeProxy and youtubeUnblock"
+add_fw_ipset bypass_local src_net  -                                 "Bypass youtubeUnblock"
+
 [ "$FIREWALL_CONFIG_CHANGED" = 1 ] && uci commit firewall && log_ok "Firewall сохранён"
 
 run_cmd "Правка ruleset.uc" sed -i 's/meta l4proto { tcp, udp } flow offload @ft;/meta l4proto { tcp, udp } ct original packets ge 30 flow offload @ft;/' /usr/share/firewall4/templates/ruleset.uc
