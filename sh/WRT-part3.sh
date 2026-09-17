@@ -147,8 +147,8 @@ echo 'CONFIG_BUSYBOX_DEFAULT_ASH_BUILTIN_TEST=y' >> ./.config
 echo 'CONFIG_BUSYBOX_DEFAULT_FEATURE_FAST_TOP=y' >> ./.config
 echo 'CONFIG_BUSYBOX_DEFAULT_FEATURE_USE_INITTAB=y' >> ./.config
 echo ">>> [Heavy packages] Тяжелые пакеты отключены."
-        # Для standard и minimal ставим Tiny версию sing-box.
-        if [[ "$VARIANT" == "standard" || "$VARIANT" == "minimal" || "$VARIANT" == "podkop" || "$VARIANT" == "forkop" ]]; then
+        # Для сборок с homeproxy и podkop/forkop ставим Tiny версию sing-box.
+        if [[ "$VARIANT" == "homeproxy_sqm" || "$VARIANT" == "homeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "forkop" ]]; then
             echo ">>> [Heavy packages] Sing-box Tiny for $VARIANT compatibility..."
             sed -i '/sing-box/Id' ./.config
             echo '# CONFIG_PACKAGE_sing-box is not set' >> ./.config
@@ -162,11 +162,12 @@ echo ">>> [Heavy packages] Тяжелые пакеты отключены."
 fi
 
 # =========================================================
-# ЦЕНТРАЛИЗОВАННАЯ ОЧИСТКА (Варианты minimal, switch, clear и crystal_clear)
+# ЦЕНТРАЛИЗОВАННАЯ ОЧИСТКА (Варианты homeproxy, switch, clear и crystal_clear)
 # И добавление индивидуальных пакетов
 # =========================================================
 
-MINIMAL_BLOAT=(
+# Пакеты SQM. Вырезаются в homeproxy, podkop и forkop; в homeproxy_sqm остаются.
+SQM_BLOAT=(
 "sqm"
 "sqm-scripts"
 "luci-app-sqm"
@@ -376,16 +377,11 @@ SWITCH_BLOAT=(
 "${CRYSTAL_CLEAR_BLOAT[@]}"
 )
 
-FORKOP_BLOAT=(
-"${MINIMAL_BLOAT[@]}"
-"youtubeUnblock"
-)
-
-# --- ЛОГИКА ДЛЯ ВАРИАНТА 'minimal' ---
-if [ "$VARIANT" == "minimal" ]; then
+# --- ЛОГИКА ДЛЯ ВАРИАНТА 'homeproxy' (homeproxy_sqm обработки не требует) ---
+if [ "$VARIANT" == "homeproxy" ]; then
     echo ">>> [Variant: $VARIANT] Performing cleanup..."
     # Вычищаем пакеты из конфига
-    for PKG in "${MINIMAL_BLOAT[@]}"; do
+    for PKG in "${SQM_BLOAT[@]}"; do
         sed -i "/${PKG}/Id" ./.config
         echo "# CONFIG_PACKAGE_luci-app-${PKG} is not set" >> ./.config
         echo "# CONFIG_PACKAGE_luci-i18n-${PKG}-ru is not set" >> ./.config
@@ -397,7 +393,7 @@ fi
 if [ "$VARIANT" == "podkop" ]; then
     echo ">>> [Variant: $VARIANT] Performing cleanup..."
     # Вычищаем пакеты из конфига
-    for PKG in "${MINIMAL_BLOAT[@]}"; do
+    for PKG in "${SQM_BLOAT[@]}"; do
         sed -i "/${PKG}/Id" ./.config
         echo "# CONFIG_PACKAGE_luci-app-${PKG} is not set" >> ./.config
         echo "# CONFIG_PACKAGE_luci-i18n-${PKG}-ru is not set" >> ./.config
@@ -409,16 +405,14 @@ fi
 if [ "$VARIANT" == "forkop" ]; then
     echo ">>> [Variant: $VARIANT] Performing cleanup..."
     # Вычищаем пакеты из конфига
-    for PKG in "${MINIMAL_BLOAT[@]}"; do
+    for PKG in "${SQM_BLOAT[@]}"; do
         sed -i "/${PKG}/Id" ./.config
         echo "# CONFIG_PACKAGE_luci-app-${PKG} is not set" >> ./.config
         echo "# CONFIG_PACKAGE_luci-i18n-${PKG}-ru is not set" >> ./.config
         echo "# CONFIG_PACKAGE_${PKG} is not set" >> ./.config
     done
-    sed -i '/youtubeUnblock/Id' ./.config
-    echo "# CONFIG_PACKAGE_youtubeUnblock is not set" >> ./.config
-    echo "# CONFIG_PACKAGE_luci-app-youtubeUnblock is not set" >> ./.config
-    echo "# CONFIG_PACKAGE_luci-i18n-youtubeUnblock-ru is not set" >> ./.config
+    sed -i '/CONFIG_PACKAGE_youtubeUnblock=y/d' ./.config
+    sed -i '/CONFIG_PACKAGE_luci-app-youtubeUnblock=y/d' ./.config
 fi
 
 # --- ЛОГИКА ДЛЯ ВАРИАНТА 'clear' ---
