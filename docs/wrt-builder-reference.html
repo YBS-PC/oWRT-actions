@@ -187,8 +187,8 @@
           </tr>
           <tr>
             <td class="key">Build Variant <small>variant</small></td>
-            <td><div class="opts"><span class="opt def">standard</span><span class="opt">minimal</span><span class="opt">clear</span><span class="opt">switch</span><span class="opt">crystal_clear</span><span class="opt">podkop (forkop)</span><span class="opt">passwall</span><span class="opt">v2raya</span><span class="opt">xray</span></div></td>
-            <td><span class="opt def">standard</span></td>
+            <td><div class="opts"><span class="opt def">homeproxy</span><span class="opt">homeproxy_sqm</span><span class="opt">clear</span><span class="opt">switch</span><span class="opt">crystal_clear</span><span class="opt">podkop</span><span class="opt">forkop</span><span class="opt">passwall</span><span class="opt">v2raya</span><span class="opt">xray</span></div></td>
+            <td><span class="opt def">homeproxy</span></td>
             <td><p>Что включается в прошивку и какой прокси-стек используется. Полная матрица — в разделе <a class="anchor" href="#variants">03</a>.</p></td>
           </tr>
           <tr>
@@ -221,7 +221,7 @@
 
     <div class="note warn">
       <span class="ic">◆</span>
-      <p><b>combo и all — особый случай.</b> Вариант <code>combo</code> игнорирует выбранный Build Variant: матрица жёстко зашита как nanopi-r6s/<code>minimal</code>, rb5009/<code>clear</code>, rb5009/<code>switch</code>. Вариант <code>all</code> собирает только <code>nanopi-r6s</code> и <code>rb5009</code> (с выбранным вариантом), но <b>не</b> r5s/slateax/ax59u/brume2 — эти устройства можно собрать только поодиночке.</p>
+      <p><b>combo и all — особый случай.</b> Вариант <code>combo</code> игнорирует выбранный Build Variant: матрица жёстко зашита как nanopi-r6s/<code>homeproxy</code>, rb5009/<code>clear</code>, rb5009/<code>switch</code>. Вариант <code>all</code> собирает только <code>nanopi-r6s</code> и <code>rb5009</code> (с выбранным вариантом), но <b>не</b> r5s/slateax/ax59u/brume2 — эти устройства можно собрать только поодиночке.</p>
     </div>
 
     <div class="card scroll" style="margin-top:18px">
@@ -276,40 +276,42 @@
       <table class="matrix">
         <thead><tr>
           <th>Фича / пакет</th>
-          <th>standard</th><th>minimal</th><th>clear</th><th>crystal_clear</th><th>switch</th>
-          <th>podkop (forkop)</th><th>passwall</th><th>v2raya</th><th>xray</th>
+          <th>homeproxy</th><th>homeproxy_sqm</th><th>clear</th><th>crystal_clear</th><th>switch</th>
+          <th>podkop</th><th>forkop</th><th>passwall</th><th>v2raya</th><th>xray</th>
         </tr></thead>
         <tbody>
           <tr class="sep"><td>Прокси-ядро и DNS</td><td colspan="10"></td></tr>
-          <tr><td class="feat">AdGuardHome</td>                 <td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
-          <tr><td class="feat">sing-box <span class="dim">(full)</span></td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td></tr>
-          <tr><td class="feat">sing-box-tiny <span class="dim">(только slateax/ax59u)</span></td><td class="cond">◆</td><td class="cond">◆</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="cond">◆</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td></tr>
-          <tr><td class="feat">luci-app-homeproxy</td>          <td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td></tr>
-          <tr><td class="feat">youtubeUnblock</td>              <td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td class="feat">AdGuardHome</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td class="feat">sing-box <span class="dim">пакет</span></td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td></tr>
+          <tr><td class="feat">sing-box-tiny <span class="dim">только slateax/ax59u</span></td><td class="cond">◆</td><td class="cond">◆</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="cond">◆</td><td class="cond">◆</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td></tr>
+          <tr><td class="feat">luci-app-homeproxy</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td></tr>
+          <tr><td class="feat">youtubeUnblock</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
 
           <tr class="sep"><td>Сеть и оптимизации</td><td colspan="10"></td></tr>
-          <tr><td class="feat">luci-app-sqm / sqm-scripts</td>  <td class="yes">✓</td><td class="no">✗</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
-          <tr><td class="feat">TCP BBR + CAKE</td>              <td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
-          <tr><td class="feat">internet-detector</td>           <td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td class="feat">luci-app-sqm / sqm-scripts</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td class="feat">TCP BBR + CAKE</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td class="feat">internet-detector</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
 
           <tr class="sep"><td>Базовые пакеты</td><td colspan="10"></td></tr>
-          <tr><td class="feat">coreutils <span class="dim">(все)</span></td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
-          <tr><td class="feat">USB storage <span class="dim">(kmod-usb-storage*)</span></td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
-          <tr><td class="feat">Crypto kmod <span class="dim">(aead, gcm, hmac…)</span></td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
-          <tr><td class="feat">zz1-final-offline-setup.sh</td>  <td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td class="feat">coreutils <span class="dim">все</span></td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td class="feat">findutils <span class="dim">GNU find/xargs</span></td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td class="feat">USB storage <span class="dim">kmod-usb-storage*</span></td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td class="feat">Crypto kmod <span class="dim">aead, gcm, hmac…</span></td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td class="feat">zz1-final-offline-setup.sh</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
 
           <tr class="sep"><td>Альтернативные прокси-стеки</td><td colspan="10"></td></tr>
-          <tr><td class="feat">Passwall2 <span class="dim">(luci-app-passwall2)</span></td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td></tr>
-          <tr><td class="feat">xray-core</td>                   <td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td></tr>
-          <tr><td class="feat">v2rayA + luci-app-v2raya</td>    <td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td></tr>
-          <tr><td class="feat">luci-app-xray</td>               <td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="no">✗</td></tr>
-          <tr><td class="feat">podkop (forkop) + luci-app-podkop (forkop)</td>    <td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td></tr>
+          <tr><td class="feat">luci-app-passwall2</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td></tr>
+          <tr><td class="feat">v2rayA + luci-app-v2raya</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="no">✗</td></tr>
+          <tr><td class="feat">luci-app-xray</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td></tr>
+          <tr><td class="feat">xray-core</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td class="feat">podkop + luci-app-podkop</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td></tr>
+          <tr><td class="feat">forkop + luci-app-forkop</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td></tr>
 
           <tr class="sep"><td>Поведение и флаги</td><td colspan="10"></td></tr>
-          <tr><td class="feat">Режим L2-коммутатора <span class="dim">(first boot)</span></td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td></tr>
-          <tr><td class="feat">youtubeUnblock обновляется в part2</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
-          <tr><td class="feat">AGH бинарник скачивается <span class="dim">(при флаге)</span></td><td class="cond">◆</td><td class="cond">◆</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="cond">◆</td><td class="cond">◆</td><td class="cond">◆</td><td class="cond">◆</td><td class="cond">◆</td></tr>
-          <tr><td class="feat">sing-box бинарник скачивается <span class="dim">(при флаге)</span></td><td class="cond">◆</td><td class="cond">◆</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="cond">◆</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td></tr>
+          <tr><td class="feat">Режим L2-коммутатора <span class="dim">first boot</span></td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td></tr>
+          <tr><td class="feat">youtubeUnblock обновляется в part2</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td class="feat">AGH бинарник скачивается <span class="dim">при флаге</span></td><td class="cond">◆</td><td class="cond">◆</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="cond">◆</td><td class="cond">◆</td><td class="cond">◆</td><td class="cond">◆</td><td class="cond">◆</td></tr>
+          <tr><td class="feat">sing-box бинарник скачивается <span class="dim">при флаге</span></td><td class="cond">◆</td><td class="cond">◆</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="cond">◆</td><td class="cond">◆</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td></tr>
         </tbody>
       </table>
     </div>
@@ -341,12 +343,12 @@
       <li><b>Перезагрузка.</b> Отложенный ребут через 120 секунд в фоне — чтобы применить sysctl, AGH и остальное.</li>
     </ol>
 
-    <h3 style="color:var(--head);font-size:16px;margin:32px 0 12px;font-weight:600">Что получаешь на роутере (вариант standard/minimal)</h3>
+    <h3 style="color:var(--head);font-size:16px;margin:32px 0 12px;font-weight:600">Что получаешь на роутере (вариант homeproxy / homeproxy_sqm)</h3>
     <div class="grid">
       <div class="svc"><h4>LuCI</h4><span class="port">http://192.168.x.1 · :80</span><p>Веб-интерфейс роутера.</p></div>
       <div class="svc"><h4>AdGuardHome</h4><span class="port">DNS :53 · web :8080</span><p>Резолвер и фильтрация; доступ через редирект из LuCI.</p></div>
       <div class="svc"><h4>dnsmasq</h4><span class="port">:54</span><p>Уведён с 53-го порта, работает под AGH.</p></div>
-      <div class="svc"><h4>Прокси-UI</h4><span class="port">homeproxy / passwall2 / v2rayA / xray / podkop (forkop)</span><p>По выбранному варианту.</p></div>
+      <div class="svc"><h4>Прокси-UI</h4><span class="port">homeproxy / passwall2 / v2rayA / xray / podkop / forkop</span><p>По выбранному варианту.</p></div>
       <div class="svc"><h4>youtubeUnblock</h4><span class="port">nftables · queue 537</span><p>DPI-байпас с ipset-исключениями и меткой гостевой сети.</p></div>
       <div class="svc"><h4>Оптимизации</h4><span class="port">TCP BBR · CAKE (если SQM)</span><p>Включены на первом старте; применяются после авто-ребута через ~2 мин.</p></div>
     </div>
