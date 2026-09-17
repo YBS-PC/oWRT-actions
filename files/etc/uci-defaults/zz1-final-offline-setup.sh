@@ -593,7 +593,9 @@ EOF
             sed -i 's|127\.0\.0\.1:5333|127.0.0.42:53|g' "$AGH_YAML"
             # forkop управляет dnsmasq сам через dont_touch_dhcp,
             # но нам нужно чтобы он не трогал: выставляем флаг
-            uci -q set forkop.settings.dont_touch_dhcp='1' 2>/dev/null                 && uci commit forkop 2>/dev/null                 && log_ok "forkop: dont_touch_dhcp=1 (AGH остаётся хозяином на :53)"
+            uci -q set forkop.settings.dont_touch_dhcp='1' 2>/dev/null \
+                && uci commit forkop 2>/dev/null \
+                && log_ok "forkop: dont_touch_dhcp=1 (AGH остаётся хозяином на :53)"
             log_ok "AGH upstream → forkop sing-box (127.0.0.42:53)"
         else
             # homeproxy (и все остальные варианты с AGH): homeproxy sing-box DNS
