@@ -29,7 +29,7 @@ echo -e "\nsrc-git luciappbandix https://github.com/timsaya/luci-app-bandix.git"
 echo -e "\nsrc-git bandixplus https://github.com/timsaya/openwrt-bandix-plus.git" >> feeds.conf.default
 echo -e "\nsrc-git luciappbandixplus https://github.com/timsaya/luci-app-bandix-plus.git" >> feeds.conf.default
 # =========================================================
-
+echo -e "\nsrc-git proton2025 https://github.com/ChesterGoodiny/luci-theme-proton2025.git" >> feeds.conf.default
 # =========================================================
 # УСЛОВНЫЙ БЛОК: Добавление репозиториев
 # =========================================================
