@@ -27,7 +27,11 @@ echo ">>>>>>>>> WRT-part3 start. Использование: до make defconfig
 mkdir -p ./package/luci-app-log-viewer
 
 # Клонируем общие пакеты
+echo ">>> Клонируем тему luci-app-log-viewer..."
 git clone -b master https://github.com/gSpotx2f/luci-app-log.git ./package/luci-app-log-viewer/
+
+echo ">>> Клонируем тему Proton2025..."
+git clone --depth=1 https://github.com/ChesterGoodiny/luci-theme-proton2025.git ./package/luci-theme-proton2025/
 
 # =========================================================
 # УСЛОВНАЯ УСТАНОВКА facinstall
