@@ -111,7 +111,7 @@ env:
 
 jobs:
   setup:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner_os }}
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
