@@ -889,8 +889,7 @@ jobs:
             }
         fi
         
-        echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
-        
+       
         echo "=========================================="
         echo "       [COMPILE SUMMARY]                  "
         echo "=========================================="
