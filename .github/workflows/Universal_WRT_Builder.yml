@@ -187,7 +187,7 @@ jobs:
         df -h
 
     - name: Checkout
-      uses: actions/checkout@main
+      uses: actions/checkout@v7
 
     - name: Set permissions
       run: |
@@ -464,9 +464,9 @@ jobs:
         # raw.githubusercontent: внешний файл могут переименовать или удалить.
         # Файл выбирается по раннеру — в 24.04 исчезли libncurses5-dev,
         # libncursesw5, libncursesw5-dev, mkisofs и python2.7.
-        DEPENDS_FILE="$GITHUB_WORKSPACE/depends-ubuntu-2204"
-        if [ "${{ inputs.runner_os }}" = "ubuntu-24.04" ]; then
-            DEPENDS_FILE="$GITHUB_WORKSPACE/depends-ubuntu-2404"
+        DEPENDS_FILE="$GITHUB_WORKSPACE/depends-ubuntu-2404"
+        if [ "${{ inputs.runner_os }}" = "ubuntu-22.04" ]; then
+            DEPENDS_FILE="$GITHUB_WORKSPACE/depends-ubuntu-2204"
         fi
 
         if [ ! -f "$DEPENDS_FILE" ]; then
@@ -923,4 +923,3 @@ jobs:
             gh run delete "$ID" || echo "Failed to delete $ID (maybe currently running)"
           done
         fi
-        
