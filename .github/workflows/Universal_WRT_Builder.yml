@@ -54,6 +54,15 @@ on:
           - v2raya
           - xray
 
+      runner_os:
+        description: 'Runner image (22.04 выводится из эксплуатации, полностью отключат 17.04.2027)'
+        required: true
+        default: 'ubuntu-22.04'
+        type: choice
+        options:
+          - ubuntu-22.04
+          - ubuntu-24.04
+
       download_binaries_agh:
         description: 'Download latest AdGuardHome'
         required: true
@@ -139,7 +148,7 @@ jobs:
 
   build:
     needs: setup
-    runs-on: ubuntu-22.04
+    runs-on: ${{ inputs.runner_os }}
     permissions:
       contents: write
       actions: write
@@ -451,22 +460,28 @@ jobs:
     - name: Init Env
       env: { DEBIAN_FRONTEND: noninteractive }
       run: |
+        # Список зависимостей берём из своего репозитория, а не с чужого
+        # raw.githubusercontent: внешний файл могут переименовать или удалить.
+        # Файл выбирается по раннеру — в 24.04 исчезли libncurses5-dev,
+        # libncursesw5, libncursesw5-dev, mkisofs и python2.7.
+        DEPENDS_FILE="$GITHUB_WORKSPACE/depends-ubuntu-2204"
+        if [ "${{ inputs.runner_os }}" = "ubuntu-24.04" ]; then
+            DEPENDS_FILE="$GITHUB_WORKSPACE/depends-ubuntu-2404"
+        fi
+
+        if [ ! -f "$DEPENDS_FILE" ]; then
+            echo "::error::Не найден файл зависимостей $DEPENDS_FILE"
+            exit 1
+        fi
+
+        echo ">>> Раннер: ${{ inputs.runner_os }}"
+        echo ">>> Файл зависимостей: $(basename "$DEPENDS_FILE") ($(wc -l < "$DEPENDS_FILE") пакетов)"
+
         # Обновляем базу пакетов
         sudo -E apt-get -qq update
-        
-        # Устанавливаем полный список зависимостей
-        sudo -E apt-get -qq install \
-          $(curl -fsSL https://raw.githubusercontent.com/Gzxhwq/OpenWrt-Actions/main/depends-ubuntu-2204) \
-          ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
-          bzip2 ccache cmake cpio curl device-tree-compiler ecj fastjar flex gawk gettext \
-          gcc-multilib g++-multilib git gperf haveged help2man intltool lib32gcc-s1 \
-          libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev \
-          libmpfr-dev libncurses5-dev libncursesw5 libncursesw5-dev libreadline-dev \
-          libssl-dev libtool lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full \
-          patch pkgconf python2.7 python3 python3-pip python3-ply python3-docutils \
-          qemu-utils re2c rsync scons squashfs-tools subversion swig texinfo uglifyjs \
-          upx-ucl unzip vim wget xmlto xxd zlib1g-dev scdoc \
-          aria2 jq rename libfuse-dev python3-setuptools python3-pyelftools
+
+        # Устанавливаем зависимости
+        sudo -E apt-get -qq install $(tr '\n' ' ' < "$DEPENDS_FILE")
         
         # Настройка времени и рабочей директории
         sudo timedatectl set-timezone "$TZ"
@@ -475,7 +490,8 @@ jobs:
         echo "=========================================="
         echo "       [ENV INIT SUMMARY]                 "
         echo "=========================================="
-        echo "All dependencies installed manually."
+        echo "Runner         : ${{ inputs.runner_os }}"
+        echo "Depends file   : $(basename "$DEPENDS_FILE")"
         echo "Workdir: /workdir"
         date
         echo "=========================================="
@@ -907,3 +923,4 @@ jobs:
             gh run delete "$ID" || echo "Failed to delete $ID (maybe currently running)"
           done
         fi
+        
