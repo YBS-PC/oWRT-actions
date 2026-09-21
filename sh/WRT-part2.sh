@@ -8,6 +8,76 @@ echo ">>>>>>>>> WRT-part2 start. Использование: после feeds up
 # =========================================================
 
 # --------------------------------------------------------------------------
+# Версии пакетов, собираемых из git
+#
+# Makefile'ы forkop и luci-theme-proton2025 читают версию из окружения:
+#   forkop/Makefile       FORKOP_VERSION  -> без неё PKG_VERSION=0.0.0
+#   proton2025/Makefile   PROTON_VERSION  -> без неё зашитый дефолт 1.4.0
+#
+# Тег тянем через git ls-remote: не требует ни токена, ни клона. Фолбэк —
+# GitHub API (с токеном, если он проброшен в шаг). part2 вызывается из yml
+# как подпроцесс, поэтому export не доживает до шага компиляции — пишем
+# в $GITHUB_ENV.
+# --------------------------------------------------------------------------
+
+# resolve_latest_tag <git-url> -> печатает x.y.z либо ничего
+resolve_latest_tag() {
+    local _repo="$1" _api _ver _auth=()
+
+    # Основной путь: ls-remote. sed срезает refs/tags/ и ведущую v,
+    # grep отбрасывает нечисловые теги (nightly, 1.4.1-rc1) — Makefile
+    # forkop падает с $(error), если версия не в формате x.y.z.
+    _ver=$(git ls-remote --tags --refs "$_repo" 2>/dev/null \
+        | awk '{print $2}' | sed 's|refs/tags/||; s|^v||' \
+        | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
+
+    if [ -z "$_ver" ]; then
+        _api=$(echo "$_repo" | sed 's|https://github.com/||; s|\.git$||')
+        [ -n "$GITHUB_TOKEN" ] && _auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
+        _ver=$(curl -sL --max-time 15 "${_auth[@]}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${_api}/tags" 2>/dev/null \
+            | grep -m1 '"name"' | sed 's/.*: "\(.*\)",/\1/; s/^v//' \
+            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$')
+    fi
+
+    [ -n "$_ver" ] && printf '%s\n' "$_ver"
+}
+
+# export_build_var <ИМЯ> <значение> — в текущий процесс и в шаги workflow
+export_build_var() {
+    export "$1=$2"
+    [ -n "$GITHUB_ENV" ] && echo "$1=$2" >> "$GITHUB_ENV"
+}
+
+echo "=================================================="
+echo "Определение версий пакетов из git"
+echo "=================================================="
+
+if [[ "$VARIANT" == "forkop" ]]; then
+    FORKOP_VER=$(resolve_latest_tag "https://github.com/Gavr1024/forkop-mod.git")
+    if [ -n "$FORKOP_VER" ]; then
+        export_build_var FORKOP_VERSION "$FORKOP_VER"
+        echo "✓ forkop: $FORKOP_VER"
+    else
+        # Makefile распознаёт dev и уходит в PKG_VERSION=0.0.0 без ошибки
+        export_build_var FORKOP_VERSION "dev"
+        echo "⚠ forkop: тег не определён, ставлю dev (PKG_VERSION=0.0.0)"
+    fi
+else
+    echo ">>> Variant '$VARIANT': forkop не собирается, версия не нужна."
+fi
+
+PROTON_VER=$(resolve_latest_tag "https://github.com/ChesterGoodiny/luci-theme-proton2025.git")
+if [ -n "$PROTON_VER" ]; then
+    export_build_var PROTON_VERSION "$PROTON_VER"
+    echo "✓ luci-theme-proton2025: $PROTON_VER"
+else
+    # Переменную НЕ задаём: сработает PROTON_VERSION?= из Makefile темы
+    echo "⚠ luci-theme-proton2025: тег не определён, останется дефолт из Makefile."
+fi
+
+# --------------------------------------------------------------------------
 # Обновление youtubeUnblock
 # --------------------------------------------------------------------------
 
