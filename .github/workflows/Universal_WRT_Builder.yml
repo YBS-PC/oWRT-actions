@@ -447,14 +447,64 @@ jobs:
         echo "${DEVICE_CONFIG_COMMANDS}" >> $GITHUB_ENV
         echo "EOF" >> $GITHUB_ENV
         
+        # --- Сводка ---------------------------------------------------------
+        # Показываем И выбор пользователя, И то, что реально применилось:
+        # в режиме combo матрица задана жёстко и inputs.variant игнорируется,
+        # а загрузка бинарников отключается самим вариантом.
+        SUM_MODE="${{ inputs.target }}"
+        SUM_IN_VARIANT="${{ inputs.variant }}"
+        SUM_VARIANT="${{ matrix.variant }}"
+        SUM_EXCLUDE="${{ inputs.exclude_keywords }}"
+
+        if [ "$SUM_MODE" = "combo" ] && [ "$SUM_IN_VARIANT" != "$SUM_VARIANT" ]; then
+            SUM_VARIANT_NOTE="  (выбор '$SUM_IN_VARIANT' игнорируется: режим combo)"
+        else
+            SUM_VARIANT_NOTE=""
+        fi
+
+        case "$SUM_VARIANT" in
+            switch|clear|crystal_clear) SUM_NO_BIN=1 ;;
+            *)                          SUM_NO_BIN=0 ;;
+        esac
+
+        if [ "$SUM_NO_BIN" = "1" ]; then
+            SUM_AGH="пропуск (вариант $SUM_VARIANT)"
+        elif [ "${{ inputs.download_binaries_agh }}" = "true" ]; then
+            SUM_AGH="да"
+        else
+            SUM_AGH="нет (не запрошено)"
+        fi
+
+        case "$SUM_VARIANT" in
+            switch|clear|crystal_clear|passwall|v2raya|xray) SUM_SB="пропуск (вариант $SUM_VARIANT)" ;;
+            *)
+                if [ "${{ inputs.download_binaries_sb }}" = "no" ]; then
+                    SUM_SB="нет (не запрошено)"
+                else
+                    SUM_SB="${{ inputs.download_binaries_sb }}"
+                fi
+                ;;
+        esac
+
         echo "=========================================="
-        echo "       [VARIABLES SUMMARY]                "
+        echo "       [BUILD SUMMARY]                    "
         echo "=========================================="
+        echo "Режим          : $SUM_MODE"
+        echo "Устройство     : ${{ matrix.target }}  ($TARGET_NAME)"
+        echo "Вариант        : $SUM_VARIANT$SUM_VARIANT_NOTE"
+        echo "Раннер         : ${{ inputs.runner_os }}"
+        echo "------------------------------------------"
         echo "Source         : ${{ inputs.source }}"
         echo "Branch Input   : $INPUT_BRANCH"
         echo "Real Branch    : $VAR_BRANCH"
         echo "Target Release : $VAR_TARGET_RELEASE"
-        echo "Target Commit  : $VAR_COMMIT_HASH"
+        echo "Target Commit  : ${VAR_COMMIT_HASH:-HEAD ветки}"
+        echo "------------------------------------------"
+        echo "AdGuardHome    : $SUM_AGH"
+        echo "Sing-box       : $SUM_SB"
+        echo "Exclude        : ${SUM_EXCLUDE:-(нет)}"
+        echo "Device config  : ./config/conf/${{ matrix.target }}"
+        echo "Kernel path    : $KERNEL_PATH"
         echo "=========================================="
 
     - name: Init Env
