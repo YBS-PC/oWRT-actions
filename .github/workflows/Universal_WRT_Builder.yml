@@ -76,8 +76,10 @@ on:
         default: 'no'
         options:
           - 'no'
-          - 'latest'
           - '1.12.x'
+          - '1.13.x'
+          - '1.14.x'
+          - 'latest'
           - 'extended'
       
       exclude_keywords:
@@ -286,6 +288,32 @@ jobs:
                 exit 0
             fi
             # Из тега v1.12.24 формируем имя файла: sing-box-1.12.24-linux-arm64.tar.gz
+            SB_VER="${SB_TAG#v}"
+            SB_URL="https://github.com/SagerNet/sing-box/releases/download/${SB_TAG}/sing-box-${SB_VER}-linux-arm64.tar.gz"
+        elif [ "$SB_VERSION_CHOICE" == "1.13.x" ]; then
+            # Последний стабильный релиз из ветки 1.13.x
+            # Фильтр: не pre-release + тег начинается с v1.13.
+            SB_JSON=$(gh_api "https://api.github.com/repos/SagerNet/sing-box/releases?per_page=100&page=1") || true
+            SB_TAG=$(echo "$SB_JSON" | jq -r '[.[] | select(.prerelease == false) | select(.tag_name | startswith("v1.13."))] | first | .tag_name')
+            if [ -z "$SB_TAG" ] || [ "$SB_TAG" == "null" ]; then
+                echo ">>> WARNING: Could not find any stable 1.13.x release. Skipping."
+                echo ">>> Sing-box from OpenWrt feed will be used instead."
+                exit 0
+            fi
+            # Из тега v1.13.123 формируем имя файла: sing-box-1.13.123-linux-arm64.tar.gz
+            SB_VER="${SB_TAG#v}"
+            SB_URL="https://github.com/SagerNet/sing-box/releases/download/${SB_TAG}/sing-box-${SB_VER}-linux-arm64.tar.gz"
+        elif [ "$SB_VERSION_CHOICE" == "1.14.x" ]; then
+            # Последний стабильный релиз из ветки 1.14.x
+            # Фильтр: не pre-release + тег начинается с v1.14.
+            SB_JSON=$(gh_api "https://api.github.com/repos/SagerNet/sing-box/releases?per_page=100&page=1") || true
+            SB_TAG=$(echo "$SB_JSON" | jq -r '[.[] | select(.prerelease == false) | select(.tag_name | startswith("v1.14."))] | first | .tag_name')
+            if [ -z "$SB_TAG" ] || [ "$SB_TAG" == "null" ]; then
+                echo ">>> WARNING: Could not find any stable 1.14.x release. Skipping."
+                echo ">>> Sing-box from OpenWrt feed will be used instead."
+                exit 0
+            fi
+            # Из тега v1.14.123 формируем имя файла: sing-box-1.14.123-linux-arm64.tar.gz
             SB_VER="${SB_TAG#v}"
             SB_URL="https://github.com/SagerNet/sing-box/releases/download/${SB_TAG}/sing-box-${SB_VER}-linux-arm64.tar.gz"
         elif [ "$SB_VERSION_CHOICE" == "extended" ]; then
