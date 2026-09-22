@@ -55,7 +55,7 @@ on:
           - xray
 
       runner_os:
-        description: 'Runner image (22.04 выводится из эксплуатации, полностью отключат 17.04.2027)'
+        description: 'Runner image (22.04 устаревает)'
         required: true
         default: 'ubuntu-24.04'
         type: choice
