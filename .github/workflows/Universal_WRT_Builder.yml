@@ -268,55 +268,43 @@ jobs:
         SB_VERSION_CHOICE="${{ inputs.download_binaries_sb }}"
         SB_TAG=""
         SB_URL=""
-        if [ "$SB_VERSION_CHOICE" == "latest" ]; then
-            # Последний стабильный релиз (любая ветка), /releases/latest всегда non-prerelease
-            SB_JSON=$(gh_api "https://api.github.com/repos/SagerNet/sing-box/releases/latest") || true
-            SB_URL=$(echo "$SB_JSON" | jq -r '.assets[]? | select(.name | test("linux-arm64\\.tar\\.gz$")) | .browser_download_url' | head -n 1)
-            if [ -z "$SB_URL" ] || [ "$SB_URL" == "null" ]; then
-                echo ">>> WARNING: Could not get latest sing-box URL from GitHub API. Skipping."
+        SB_REPO="SagerNet/sing-box"
+
+        # Последний стабильный тег SagerNet/sing-box через git ls-remote.
+        # Раньше тег искали в первой странице API (releases?per_page=100),
+        # отсортированной по ДАТЕ: альфы новых веток выходят каждую неделю и
+        # выдавливают старую ветку на вторую страницу — фильтр возвращал пусто,
+        # шаг молча завершался, а в прошивку уезжал sing-box из фида.
+        # ls-remote: без пагинации и лимитов API, сортировка по ВЕРСИИ.
+        # $1 — ветка ("1.12"); пусто — любая ветка.
+        sb_latest_tag() {
+            local branch="$1" pattern
+            if [ -n "$branch" ]; then
+                pattern="^v${branch//./\\.}\\.[0-9]+$"
+            else
+                pattern='^v[0-9]+\.[0-9]+\.[0-9]+$'
+            fi
+            git ls-remote --tags --refs "https://github.com/${SB_REPO}.git" 2>/dev/null \
+                | awk '{print $2}' | sed 's|refs/tags/||' \
+                | grep -E "$pattern" | sort -V | tail -n1
+        }
+
+        if [ "$SB_VERSION_CHOICE" == "latest" ] || [[ "$SB_VERSION_CHOICE" =~ ^[0-9]+\.[0-9]+\.x$ ]]; then
+            # latest — последний стабильный вообще; X.Y.x — последний стабильный в ветке
+            if [ "$SB_VERSION_CHOICE" == "latest" ]; then
+                SB_TAG=$(sb_latest_tag "")
+            else
+                SB_TAG=$(sb_latest_tag "${SB_VERSION_CHOICE%.x}")
+            fi
+            if [ -z "$SB_TAG" ]; then
+                echo ">>> WARNING: Could not find any stable $SB_VERSION_CHOICE release. Skipping."
                 echo ">>> Sing-box from OpenWrt feed will be used instead."
                 exit 0
             fi
-        elif [ "$SB_VERSION_CHOICE" == "1.12.x" ]; then
-            # Последний стабильный релиз из ветки 1.12.x
-            # Фильтр: не pre-release + тег начинается с v1.12.
-            SB_JSON=$(gh_api "https://api.github.com/repos/SagerNet/sing-box/releases?per_page=100&page=1") || true
-            SB_TAG=$(echo "$SB_JSON" | jq -r '[.[] | select(.prerelease == false) | select(.tag_name | startswith("v1.12."))] | first | .tag_name')
-            if [ -z "$SB_TAG" ] || [ "$SB_TAG" == "null" ]; then
-                echo ">>> WARNING: Could not find any stable 1.12.x release. Skipping."
-                echo ">>> Sing-box from OpenWrt feed will be used instead."
-                exit 0
-            fi
-            # Из тега v1.12.24 формируем имя файла: sing-box-1.12.24-linux-arm64.tar.gz
-            SB_VER="${SB_TAG#v}"
-            SB_URL="https://github.com/SagerNet/sing-box/releases/download/${SB_TAG}/sing-box-${SB_VER}-linux-arm64.tar.gz"
-        elif [ "$SB_VERSION_CHOICE" == "1.13.x" ]; then
-            # Последний стабильный релиз из ветки 1.13.x
-            # Фильтр: не pre-release + тег начинается с v1.13.
-            SB_JSON=$(gh_api "https://api.github.com/repos/SagerNet/sing-box/releases?per_page=100&page=1") || true
-            SB_TAG=$(echo "$SB_JSON" | jq -r '[.[] | select(.prerelease == false) | select(.tag_name | startswith("v1.13."))] | first | .tag_name')
-            if [ -z "$SB_TAG" ] || [ "$SB_TAG" == "null" ]; then
-                echo ">>> WARNING: Could not find any stable 1.13.x release. Skipping."
-                echo ">>> Sing-box from OpenWrt feed will be used instead."
-                exit 0
-            fi
-            # Из тега v1.13.123 формируем имя файла: sing-box-1.13.123-linux-arm64.tar.gz
-            SB_VER="${SB_TAG#v}"
-            SB_URL="https://github.com/SagerNet/sing-box/releases/download/${SB_TAG}/sing-box-${SB_VER}-linux-arm64.tar.gz"
-        elif [ "$SB_VERSION_CHOICE" == "1.14.x" ]; then
-            # Последний стабильный релиз из ветки 1.14.x
-            # Фильтр: не pre-release + тег начинается с v1.14.
-            SB_JSON=$(gh_api "https://api.github.com/repos/SagerNet/sing-box/releases?per_page=100&page=1") || true
-            SB_TAG=$(echo "$SB_JSON" | jq -r '[.[] | select(.prerelease == false) | select(.tag_name | startswith("v1.14."))] | first | .tag_name')
-            if [ -z "$SB_TAG" ] || [ "$SB_TAG" == "null" ]; then
-                echo ">>> WARNING: Could not find any stable 1.14.x release. Skipping."
-                echo ">>> Sing-box from OpenWrt feed will be used instead."
-                exit 0
-            fi
-            # Из тега v1.14.123 формируем имя файла: sing-box-1.14.123-linux-arm64.tar.gz
-            SB_VER="${SB_TAG#v}"
-            SB_URL="https://github.com/SagerNet/sing-box/releases/download/${SB_TAG}/sing-box-${SB_VER}-linux-arm64.tar.gz"
+            # Из тега v1.12.25 формируем имя файла: sing-box-1.12.25-linux-arm64.tar.gz
+            SB_URL="https://github.com/${SB_REPO}/releases/download/${SB_TAG}/sing-box-${SB_TAG#v}-linux-arm64.tar.gz"
         elif [ "$SB_VERSION_CHOICE" == "extended" ]; then
+            SB_REPO="shtorm-7/sing-box-extended"
             SB_JSON=$(gh_api "https://api.github.com/repos/shtorm-7/sing-box-extended/releases?per_page=30") || true
             SB_TAG=$(echo "$SB_JSON" | jq -r '[.[] | select(.prerelease == false) | select(.tag_name | test("rc|beta|alpha") | not) | .tag_name] | first')
             if [ -z "$SB_TAG" ] || [ "$SB_TAG" == "null" ]; then
@@ -331,11 +319,15 @@ jobs:
                 echo ">>> Sing-box from OpenWrt feed will be used instead."
                 exit 0
             fi
+        else
+            echo "::error::Неизвестный выбор версии sing-box: '$SB_VERSION_CHOICE'"
+            exit 1
         fi
         echo ">>> Downloading sing-box ($SB_VERSION_CHOICE) from: $SB_URL"
-        curl -L -o sb.tar.gz "$SB_URL"
-        if [ ! -s sb.tar.gz ]; then
-            echo ">>> WARNING: Downloaded file is empty or missing. Skipping."
+        # -f: при 404 GitHub отдаёт HTML-страницу; без -f она сохранялась как
+        # непустой sb.tar.gz, проходила проверку -s и роняла шаг уже на tar.
+        if ! curl -fL --retry 3 -o sb.tar.gz "$SB_URL" || [ ! -s sb.tar.gz ]; then
+            echo ">>> WARNING: Download failed or file is empty. Skipping."
             echo ">>> Sing-box from OpenWrt feed will be used instead."
             rm -f sb.tar.gz
             exit 0
@@ -350,11 +342,15 @@ jobs:
         fi
         mv -f "$SB_BINARY_PATH" ./files/usr/bin/sing-box && chmod 755 ./files/usr/bin/sing-box
         rm -rf sb.tar.gz sing-box-*
+        # Для шага «Check sing-box compatibility»: какой именно бинарник в files/
+        echo "SB_DOWNLOADED_TAG=$SB_TAG" >> $GITHUB_ENV
+        echo "SB_DOWNLOADED_REPO=$SB_REPO" >> $GITHUB_ENV
         echo "=========================================="
         echo "       [SING-BOX DOWNLOAD SUMMARY]        "
         echo "=========================================="
         echo "Version choice : $SB_VERSION_CHOICE"
-        echo "Downloaded tag : ${SB_TAG:-latest}"
+        echo "Repository     : $SB_REPO"
+        echo "Downloaded tag : $SB_TAG"
         echo "Files in destination:"
         ls -lh ./files/usr/bin/
         echo "=========================================="
@@ -810,6 +806,119 @@ jobs:
         # Проверяем наличие ключевых пакетов для уверенности
         grep -E "CONFIG_PACKAGE_(luci-app-homeproxy|sing-box|luci-app-passwall2|luci-app-v2raya|xray-core|luci-app-podkop|luci-app-forkop)=" .config || echo "None found"
         echo "=========================================="
+
+    - name: Check sing-box compatibility (homeproxy)
+      # Проверяем ФАКТИЧЕСКУЮ совместимость, а не номер версии: генератор
+      # homeproxy, который едет в прошивку, против sing-box, который едет в
+      # прошивку (скачанный либо из фида). Номер версии нигде не зашит: если
+      # immortalwrt обновит генератор под новые sing-box, проверка сама начнёт
+      # пропускать — править yml не придётся. И наоборот: если новый sing-box
+      # удалит ещё какое-то поле, которое пишет генератор, сборка упадёт здесь.
+      # Шаг стоит ДО компиляции: падение здесь экономит ~1.5 часа и не даёт
+      # собрать прошивку, в которой прокси не стартует.
+      if: matrix.variant == 'homeproxy' || matrix.variant == 'homeproxy_sqm'
+      run: |
+        cd openwrt
+
+        # --- 1. Генератор homeproxy, который попадёт в прошивку ---
+        # Сначала клон из part3 (package/), затем встроенный в фид ImmortalWrt LuCI.
+        GEN=""
+        for base in package feeds; do
+            GEN=$(find "$base" -path '*luci-app-homeproxy/root/etc/homeproxy/scripts/generate_client.uc' 2>/dev/null | head -n 1)
+            [ -n "$GEN" ] && break
+        done
+        if [ -z "$GEN" ]; then
+            echo "::warning title=Проверка sing-box пропущена::Генератор homeproxy не найден в package/ и feeds/"
+            exit 0
+        fi
+
+        # --- 2. Версия sing-box, которая попадёт в прошивку ---
+        # files/usr/bin/sing-box перекрывает пакетный бинарник. part3 может его
+        # удалить (slateax/ax59u → sing-box-tiny), поэтому смотрим на файл, а не
+        # только на переменную из шага загрузки.
+        if [ -f files/usr/bin/sing-box ] && [ -n "$SB_DOWNLOADED_TAG" ]; then
+            SB_SRC="загружен: ${SB_DOWNLOADED_REPO} ${SB_DOWNLOADED_TAG}"
+            SB_VER="${SB_DOWNLOADED_TAG#v}"
+            SB_VER="${SB_VER%%-*}"        # v1.14.1-extended-2.7.2 → 1.14.1
+        else
+            FEED_MK=$(find feeds -path '*/net/sing-box/Makefile' 2>/dev/null | head -n 1)
+            SB_VER=$(grep -m1 '^PKG_VERSION' "$FEED_MK" 2>/dev/null | cut -d= -f2 | tr -d ' ')
+            SB_SRC="пакет из фида: ${FEED_MK:-не найден}"
+        fi
+        if [ -z "$SB_VER" ]; then
+            echo "::warning title=Проверка sing-box пропущена::Не удалось определить версию sing-box в прошивке"
+            exit 0
+        fi
+
+        # --- 3. sing-box той же версии под архитектуру раннера ---
+        # Бинарник для роутера (arm64) на раннере не запустить, берём amd64
+        # той же версии: разбор конфига у них одинаковый.
+        PROBE_DIR=$(mktemp -d)
+        PROBE_URL="https://github.com/SagerNet/sing-box/releases/download/v${SB_VER}/sing-box-${SB_VER}-linux-amd64.tar.gz"
+        if ! curl -fsSL --retry 3 -o "$PROBE_DIR/sb.tgz" "$PROBE_URL"; then
+            echo "::warning title=Проверка sing-box пропущена::Не удалось скачать sing-box ${SB_VER} (amd64): $PROBE_URL"
+            exit 0
+        fi
+        tar -xzf "$PROBE_DIR/sb.tgz" -C "$PROBE_DIR"
+        SB_BIN=$(find "$PROBE_DIR" -type f -name sing-box | head -n 1)
+
+        # --- 4. Пробный конфиг из того, что РЕАЛЬНО пишет генератор ---
+        # Каждый маркер — возможность, которую sing-box объявлял устаревшей.
+        # Новый маркер добавляется одной строкой grep и одной веткой в jq.
+        has() { grep -Eq -- "$1" "$GEN" && echo 1 || echo 0; }
+        M_SNIFF=$(has '^[[:space:]]*sniff(_override_destination)?:')  # legacy inbound fields (удалены в 1.13)
+        M_BLOCK=$(has "type: 'block'")                                 # legacy special outbound
+        M_RDRC=$(has 'store_rdrc')                                     # cache_file.store_rdrc (устарел в 1.14)
+        M_INDEP=$(has 'independent_cache')                             # dns.independent_cache (устарел в 1.14)
+
+        jq -n --argjson s "$M_SNIFF" --argjson b "$M_BLOCK" --argjson r "$M_RDRC" --argjson i "$M_INDEP" '
+        {
+          log: {level: "warn"},
+          dns: ({servers: [{tag: "default-dns", type: "udp", server: "127.0.0.1"}], final: "default-dns"}
+                + (if $i == 1 then {independent_cache: true} else {} end)),
+          inbounds: [({type: "mixed", tag: "mixed-in", listen: "127.0.0.1", listen_port: 15330}
+                + (if $s == 1 then {sniff: true, sniff_override_destination: true} else {} end))],
+          outbounds: ([{type: "direct", tag: "direct-out"}]
+                + (if $b == 1 then [{type: "block", tag: "block-out"}] else [] end)),
+          route: {default_domain_resolver: {server: "default-dns"}, final: "direct-out"},
+          experimental: {cache_file: ({enabled: true, path: "/tmp/sb-probe-cache.db"}
+                + (if $r == 1 then {store_rdrc: true} else {} end))}
+        }' > "$PROBE_DIR/probe.json"
+
+        # --- 5. Вердикт самого sing-box ---
+        RC=0
+        "$SB_BIN" check -c "$PROBE_DIR/probe.json" > "$PROBE_DIR/out.txt" 2>&1 || RC=$?
+        OUT=$(sed 's/\x1b\[[0-9;]*m//g' "$PROBE_DIR/out.txt")
+
+        echo "=========================================="
+        echo "   [SING-BOX COMPATIBILITY CHECK]         "
+        echo "=========================================="
+        echo "Генератор      : $GEN"
+        echo "sing-box       : $SB_VER ($SB_SRC)"
+        echo "Маркеры        : sniff=$M_SNIFF block=$M_BLOCK store_rdrc=$M_RDRC independent_cache=$M_INDEP"
+        echo "------------------------------------------"
+        echo "${OUT:-(замечаний нет)}"
+        echo "=========================================="
+
+        # Предупреждения об устаревании — в аннотации: видно заранее,
+        # что сломается при переходе на следующую версию sing-box.
+        echo "$OUT" | grep 'WARN' | sed 's/^WARN\[[0-9]*\] //' | while IFS= read -r w; do
+            echo "::warning title=sing-box ${SB_VER}: устаревшее поле в homeproxy::$w"
+        done
+
+        rm -rf "$PROBE_DIR"
+
+        if [ "$RC" -ne 0 ]; then
+            FATAL_MSG=$(echo "$OUT" | grep -m1 'FATAL' | sed 's/^FATAL\[[0-9]*\] //; s/^decode config at [^:]*: //')
+            echo "::error title=homeproxy несовместим с sing-box ${SB_VER}::${FATAL_MSG}"
+            echo ""
+            echo ">>> Генератор homeproxy пишет поля, которые sing-box ${SB_VER} не принимает."
+            echo ">>> Прошивка собралась бы, но прокси на роутере не запустился бы."
+            echo ">>> Выбери download_binaries_sb с версией, которую проверка пропускает,"
+            echo ">>> либо дождись обновления homeproxy в immortalwrt."
+            exit 1
+        fi
+        echo ">>> OK: homeproxy совместим с sing-box ${SB_VER}"
 
     - name: Kernel Hash
       run: |
