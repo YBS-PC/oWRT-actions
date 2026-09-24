@@ -1103,3 +1103,104 @@ jobs:
             gh run delete "$ID" || echo "Failed to delete $ID (maybe currently running)"
           done
         fi
+
+  notify:
+    # Одно уведомление в Telegram после ВСЕЙ матрицы — со статусом каждой
+    # сборки. always(): сообщение нужно и при падении, и при отмене.
+    #
+    # Приватность:
+    #   * токен бота и chat_id хранятся ТОЛЬКО в Secrets репозитория, в yml
+    #     их нет; GitHub маскирует значения секретов в логах;
+    #   * ответ Telegram API в лог не выводится — в нём chat.id, имя и
+    #     username получателя; при ошибке печатается только код и описание;
+    #   * без секретов шаг тихо пропускается — запуск из форка не упадёт.
+    needs: [setup, build]
+    if: always()
+    runs-on: ${{ inputs.runner_os }}
+    permissions:
+      actions: read
+    steps:
+    - name: Telegram notification
+      env:
+        TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        REPO: ${{ github.repository }}
+        RUN_ID: ${{ github.run_id }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        MODE: ${{ inputs.target }}
+        SRC: ${{ inputs.source }}
+        BRANCH: ${{ inputs.branch }}
+        RUNNER: ${{ inputs.runner_os }}
+        SETUP_RESULT: ${{ needs.setup.result }}
+        BUILD_RESULT: ${{ needs.build.result }}
+      run: |
+        if [ -z "$TG_TOKEN" ] || [ -z "$TG_CHAT" ]; then
+          echo "::notice::Секреты TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID не заданы — уведомление пропущено."
+          exit 0
+        fi
+
+        # Экранирование для parse_mode=HTML
+        esc() { sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }
+
+        # needs.build.result — только общий итог матрицы. Статус и длительность
+        # каждой сборки берём из списка джобов текущего запуска.
+        # Сборки узнаются по имени: «... [вариант] - устройство (sb:...)».
+        JOBS=$(gh api "repos/$REPO/actions/runs/$RUN_ID/jobs?per_page=100" 2>/dev/null) || JOBS=""
+        LINES=$(printf '%s' "$JOBS" | jq -r '
+          .jobs[]? | select(.name | contains("] - ")) |
+          (if   .conclusion == "success"   then "✅"
+           elif .conclusion == "failure"   then "❌"
+           elif .conclusion == "cancelled" then "⏹"
+           elif .conclusion == "skipped"   then "⏭"
+           else "❔" end) as $icon |
+          (if .started_at and .completed_at
+             then (((.completed_at | fromdateiso8601) - (.started_at | fromdateiso8601)) / 60 | floor)
+             else 0 end) as $min |
+          "\($icon) \(.name | sub("^[^\\[]*"; "")) — \($min / 60 | floor)ч \($min % 60)м"
+        ' 2>/dev/null) || LINES=""
+        OK=$(printf '%s' "$JOBS" | jq '[.jobs[]? | select(.name | contains("] - ")) | select(.conclusion == "success")] | length' 2>/dev/null) || OK=""
+        ALL=$(printf '%s' "$JOBS" | jq '[.jobs[]? | select(.name | contains("] - "))] | length' 2>/dev/null) || ALL=""
+        # jq на пустом входе ничего не печатает — тогда строку счётчика не выводим
+        COUNT_LINE=""
+        if [ -n "$ALL" ] && [ "$ALL" != "0" ]; then
+          COUNT_LINE="Успешно: ${OK} из ${ALL}"
+        fi
+
+        if [ "$SETUP_RESULT" != "success" ]; then
+          HEAD="❌ Матрица не сформирована (setup: $SETUP_RESULT)"
+        else
+          case "$BUILD_RESULT" in
+            success)   HEAD="✅ Сборка завершена" ;;
+            failure)   HEAD="❌ Сборка с ошибками" ;;
+            cancelled) HEAD="⏹ Сборка отменена" ;;
+            *)         HEAD="❔ Сборка: $BUILD_RESULT" ;;
+          esac
+        fi
+
+        # Собираем построчно: пустые части не оставляют «дыр» в сообщении
+        {
+          printf '<b>%s</b>\n' "$(printf '%s' "$HEAD" | esc)"
+          printf '%s · %s · %s · %s\n' "$SRC" "$BRANCH" "$MODE" "$RUNNER" | esc
+          [ -n "$COUNT_LINE" ] && printf '%s\n' "$COUNT_LINE"
+          printf '\n%s\n\n' "$(printf '%s' "${LINES:-(список сборок недоступен)}" | esc)"
+          printf '<a href="%s">Открыть запуск</a>' "$RUN_URL"
+        } > /tmp/tg_text.txt
+        TEXT=$(cat /tmp/tg_text.txt)
+        rm -f /tmp/tg_text.txt
+
+        HTTP=$(curl -sS -o /tmp/tg.json -w '%{http_code}' --max-time 20 \
+          "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+          --data-urlencode "chat_id=${TG_CHAT}" \
+          --data-urlencode "text=${TEXT}" \
+          --data-urlencode "parse_mode=HTML" \
+          --data-urlencode "disable_web_page_preview=true" 2>/dev/null) || HTTP="000"
+
+        if [ "$HTTP" = "200" ]; then
+          echo ">>> Уведомление в Telegram отправлено."
+        else
+          # Только код и описание ошибки — без данных получателя из ответа.
+          # Шаг не валится: неотправленное уведомление не должно красить запуск.
+          echo "::warning::Telegram API ответил HTTP $HTTP: $(jq -r '.description // "нет ответа"' /tmp/tg.json 2>/dev/null)"
+        fi
+        rm -f /tmp/tg.json
