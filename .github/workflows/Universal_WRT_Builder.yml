@@ -475,7 +475,7 @@ jobs:
         SUM_EXCLUDE="${{ inputs.exclude_keywords }}"
 
         if [ "$SUM_MODE" = "combo" ] && [ "$SUM_IN_VARIANT" != "$SUM_VARIANT" ]; then
-            SUM_VARIANT_NOTE="  (выбор '$SUM_IN_VARIANT' игнорируется: режим combo)"
+            SUM_VARIANT_NOTE="  (выбор Build Variant игнорируется: режим combo)"
         else
             SUM_VARIANT_NOTE=""
         fi
