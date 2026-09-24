@@ -413,6 +413,32 @@ chain bypass_homeproxy_mark {
 EOF
         _RC=$?; [ $_RC -eq 0 ] && log_ok "Файл bypass_homeproxy_ips.nft создан" || log_err "Ошибка создания $NFT_RULE_FILE (exit: $_RC)"
     fi
+else
+    # /etc/nftables.d/ — conffiles пакета firewall4: каталог переживает
+    # sysupgrade с сохранением настроек. После перехода на вариант без
+    # homeproxy цепочка обхода работала бы вхолостую на каждом пакете —
+    # метку 0x64 читают только цепочки homeproxy.
+    # Набор @bypass_ips при этом остаётся (см. «Наборы адресов fw4» ниже).
+    if [ -f /etc/nftables.d/bypass_homeproxy_ips.nft ]; then
+        run_cmd "Удаление bypass_homeproxy_ips.nft (homeproxy не установлен)" \
+            rm -f /etc/nftables.d/bypass_homeproxy_ips.nft
+    fi
+
+    # Include-секции homeproxy в /etc/config/firewall тоже переживают
+    # sysupgrade. homeproxy_post создаёт uci-defaults пакета (luci-homeproxy),
+    # homeproxy_forward/_input — скрипт-помощник выше в режимах TUN/сервер.
+    # Без homeproxy их файлы в /var/run/homeproxy/ не появятся, и fw4 на каждом
+    # reload пишет «specifies unreachable path ..., ignoring section».
+    # При возврате на homeproxy его uci-defaults пересоздаст секцию сам.
+    _FW_INC_DEL=0
+    for _inc in homeproxy_post homeproxy_forward homeproxy_input; do
+        if uci -q get "firewall.$_inc" >/dev/null; then
+            uci -q delete "firewall.$_inc" && _FW_INC_DEL=1
+        fi
+    done
+    if [ "$_FW_INC_DEL" = "1" ]; then
+        run_cmd "Удаление include-секций homeproxy из firewall" uci commit firewall
+    fi
 fi
 
 # Passwall
@@ -523,6 +549,12 @@ EOF
     run_cmd "Включение youtubeUnblock" /etc/init.d/youtubeUnblock enable
 else
     log_info "youtubeUnblock не установлен"
+    # Файл пишет этот же скрипт; остаётся, если пакет удалили на живой системе.
+    # Очередь 537 без youtubeUnblock никто не слушает.
+    if [ -f /usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft ]; then
+        run_cmd "Удаление 537-youtubeUnblock.nft (youtubeUnblock не установлен)" \
+            rm -f /usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft
+    fi
 fi
 
 # internet-detector
@@ -612,6 +644,20 @@ EOF
     run_cmd "Запуск adguardhome" /etc/init.d/adguardhome start
 else
     log_info "AdGuardHome не найден"
+fi
+
+# forkop: NTP мимо прокси. Штатная опция вставляет «udp dport 123 return» в
+# цепочки mangle (клиенты) и mangle_output (сам роутер) таблицы ForkopTable.
+# Иначе NTP к адресам из списков прокси уходил бы в TPROXY — та же проблема,
+# что была с ntpd на homeproxy.
+if [ -f /etc/config/forkop ]; then
+    if [ "$(uci -q get forkop.settings.exclude_ntp)" = "1" ]; then
+        log_ok "forkop: exclude_ntp уже включён"
+    elif uci -q set forkop.settings.exclude_ntp='1' && uci commit forkop; then
+        log_ok "forkop: exclude_ntp=1 (NTP роутера и клиентов мимо прокси)"
+    else
+        log_err "forkop: не удалось выставить exclude_ntp"
+    fi
 fi
 
 # SQM (исправленный патч)
