@@ -470,11 +470,10 @@ jobs:
         # AGH/sing-box берутся из пресета, поля формы игнорируются; а для
         # clear/switch загрузка отключается самим вариантом.
         SUM_MODE="${{ inputs.target }}"
-        SUM_IN_VARIANT="${{ inputs.variant }}"
         SUM_VARIANT="${{ matrix.variant }}"
         SUM_EXCLUDE="${{ inputs.exclude_keywords }}"
 
-        if [ "$SUM_MODE" = "combo" ] && [ "$SUM_IN_VARIANT" != "$SUM_VARIANT" ]; then
+        if [ "$SUM_MODE" = "combo" ]; then
             SUM_VARIANT_NOTE="  (выбор Build Variant игнорируется: режим combo)"
         else
             SUM_VARIANT_NOTE=""
