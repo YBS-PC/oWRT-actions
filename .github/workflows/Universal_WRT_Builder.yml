@@ -38,7 +38,7 @@ on:
           - openwrt-25.12
       
       variant:
-        description: 'Build Variant'
+        description: 'Build Variant (в combo игнорируется)'
         required: true
         default: 'homeproxy'
         type: choice
