@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: 'Target Device'
+        description: 'Target Device (combo: R6S homeproxy+R6S forkop+RB5009 clear+RB5009 switch; AGH/sing-box задаёт сам)'
         required: true
         default: 'combo'
         type: choice
@@ -64,13 +64,13 @@ on:
           - ubuntu-24.04
 
       download_binaries_agh:
-        description: 'Download latest AdGuardHome'
+        description: 'Download latest AdGuardHome (в combo игнорируется)'
         required: true
         type: boolean
         default: false
 
       download_binaries_sb:
-        description: 'Download Sing-Box binary'
+        description: 'Download Sing-Box binary (в combo игнорируется)'
         required: true
         type: choice
         default: 'no'
@@ -121,9 +121,20 @@ jobs:
         run: |
           INPUT_TARGET="${{ inputs.target }}"
           INPUT_VARIANT="${{ inputs.variant }}"
+          INPUT_AGH="${{ inputs.download_binaries_agh }}"
+          INPUT_SB="${{ inputs.download_binaries_sb }}"
+
+          # Каждая сборка матрицы несёт СВОИ настройки загрузки бинарников:
+          #   agh — true/false (JSON-булево), sb — выбор версии sing-box.
+          # В combo они заданы здесь и не зависят от полей формы, поэтому
+          # один запуск собирает, например, homeproxy с 1.12.x и forkop с
+          # extended. Для clear/switch значения всё равно не применяются:
+          # шаги загрузки отключаются самим вариантом.
+          entry() { printf '{"target":"%s","variant":"%s","agh":%s,"sb":"%s"}' "$1" "$2" "$3" "$4"; }
+
           if [ "$INPUT_TARGET" == "combo" ]; then
             echo ">>> Generating COMBO matrix..."
-            json='{"include":[{"target":"nanopi-r6s","variant":"homeproxy"},{"target":"rb5009","variant":"clear"},{"target":"rb5009","variant":"switch"}]}'
+            json="{\"include\":[$(entry nanopi-r6s homeproxy true  1.12.x),$(entry nanopi-r6s forkop true extended),$(entry rb5009 clear false no),$(entry rb5009 switch false no)]}"
           else
             targets="nanopi-r6s rb5009"
             if [ "$INPUT_TARGET" == "all" ]; then
@@ -134,15 +145,23 @@ jobs:
             json_parts=""
             for t in $selected; do
               [ -n "$json_parts" ] && json_parts="$json_parts,"
-              json_parts="$json_parts{\"target\":\"$t\",\"variant\":\"$INPUT_VARIANT\"}"
+              json_parts="$json_parts$(entry "$t" "$INPUT_VARIANT" "$INPUT_AGH" "$INPUT_SB")"
             done
             json="{\"include\":[$json_parts]}"
+          fi
+
+          # Невалидный JSON уронил бы fromJson уже в джобе build с невнятной
+          # ошибкой — проверяем здесь.
+          if ! echo "$json" | jq -e . >/dev/null; then
+            echo "::error::Сгенерирована некорректная матрица: $json"
+            exit 1
           fi
           echo "=========================================="
           echo "       [SETUP SUMMARY]                    "
           echo "=========================================="
           echo "Mode: $INPUT_TARGET"
-          echo "Generated Matrix: $json"
+          echo "Generated Matrix:"
+          echo "$json" | jq -r '.include[] | "  \(.target) / \(.variant) / agh=\(.agh) / sb=\(.sb)"'
           echo "=========================================="
           echo "matrix<<EOF" >> $GITHUB_OUTPUT
           echo "$json" >> $GITHUB_OUTPUT
@@ -159,7 +178,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
     
-    name: ${{ inputs.source }} ${{ inputs.branch }} [${{ matrix.variant }}] - ${{ matrix.target }}
+    name: ${{ inputs.source }} ${{ inputs.branch }} [${{ matrix.variant }}] - ${{ matrix.target }} (sb:${{ matrix.sb }})
 
     steps:
     - name: Free up disk space
@@ -205,7 +224,7 @@ jobs:
 
     - name: Download AdGuardHome
       # Условие: выполнять только если вариант НЕ switch И НЕ clear и НЕ crystal_clear
-      if: inputs.download_binaries_agh && matrix.variant != 'switch' && matrix.variant != 'clear' && matrix.variant != 'crystal_clear'
+      if: matrix.agh && matrix.variant != 'switch' && matrix.variant != 'clear' && matrix.variant != 'crystal_clear'
       run: |
         # AdGuardHome
         AGH_URL="https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_arm64.tar.gz"
@@ -234,38 +253,9 @@ jobs:
         
     - name: Download Sing-box
       # Sing-box не качаем для чистых сборок И для сборок со своими прокси-ядрами
-      if: inputs.download_binaries_sb != 'no' && matrix.variant != 'switch' && matrix.variant != 'clear' && matrix.variant != 'crystal_clear' && matrix.variant != 'passwall' && matrix.variant != 'v2raya' && matrix.variant != 'xray'
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      if: matrix.sb != 'no' && matrix.variant != 'switch' && matrix.variant != 'clear' && matrix.variant != 'crystal_clear' && matrix.variant != 'passwall' && matrix.variant != 'v2raya' && matrix.variant != 'xray'
       run: |
-        # Хелпер: запрос к GitHub API с авторизацией + двойной проверкой ответа.
-        # Устраняет ошибку "parse error: Invalid numeric literal" (не-JSON в jq) И
-        # случай, когда GitHub отдаёт ВАЛИДНЫЙ JSON-объект ошибки {"message":"rate limit"}
-        # с кодом 403/401/404 — такой объект проходит jq empty, но валит .[] на форме.
-        # Проверка HTTP-кода ловит оба случая независимо от формы тела.
-        gh_api() {
-            local url="$1"
-            local resp http_code body
-            # -w дописывает HTTP-код последней строкой; затем отделяем его от тела.
-            resp=$(curl -sS -w $'\n%{http_code}' -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/vnd.github+json" "$url")
-            http_code=$(printf '%s' "$resp" | tail -n1)
-            body=$(printf '%s' "$resp" | sed '$d')
-            if [ "$http_code" != "200" ]; then
-                echo ">>> WARNING: GitHub API HTTP $http_code for: $url" >&2
-                echo ">>> Body (first 300 chars): $(printf '%s' "$body" | head -c 300)" >&2
-                echo ""
-                return 1
-            fi
-            if ! printf '%s' "$body" | jq empty >/dev/null 2>&1; then
-                echo ">>> WARNING: GitHub API returned non-JSON (HTTP 200) for: $url" >&2
-                echo ">>> Body (first 300 chars): $(printf '%s' "$body" | head -c 300)" >&2
-                echo ""
-                return 1
-            fi
-            printf '%s' "$body"
-        }
-
-        SB_VERSION_CHOICE="${{ inputs.download_binaries_sb }}"
+        SB_VERSION_CHOICE="${{ matrix.sb }}"
         SB_TAG=""
         SB_URL=""
         SB_REPO="SagerNet/sing-box"
@@ -304,21 +294,24 @@ jobs:
             # Из тега v1.12.25 формируем имя файла: sing-box-1.12.25-linux-arm64.tar.gz
             SB_URL="https://github.com/${SB_REPO}/releases/download/${SB_TAG}/sing-box-${SB_TAG#v}-linux-arm64.tar.gz"
         elif [ "$SB_VERSION_CHOICE" == "extended" ]; then
+            # Тоже через ls-remote, без API: от этой ветки зависит сборка
+            # forkop в combo, и сбой API (лимит, 401) молча подменил бы
+            # выбранный extended на sing-box из фида.
+            # Стабильные теги: v1.14.1-extended-2.7.2; rc/beta/alpha и
+            # служебный тег «version» отсекаются шаблоном.
             SB_REPO="shtorm-7/sing-box-extended"
-            SB_JSON=$(gh_api "https://api.github.com/repos/shtorm-7/sing-box-extended/releases?per_page=30") || true
-            SB_TAG=$(echo "$SB_JSON" | jq -r '[.[] | select(.prerelease == false) | select(.tag_name | test("rc|beta|alpha") | not) | .tag_name] | first')
-            if [ -z "$SB_TAG" ] || [ "$SB_TAG" == "null" ]; then
+            SB_TAG=$(git ls-remote --tags --refs "https://github.com/${SB_REPO}.git" 2>/dev/null \
+                | awk '{print $2}' | sed 's|refs/tags/||' \
+                | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-extended-[0-9]+\.[0-9]+\.[0-9]+$' \
+                | sort -V | tail -n1)
+            if [ -z "$SB_TAG" ]; then
                 echo ">>> WARNING: Could not find any stable sing-box-extended release. Skipping."
                 echo ">>> Sing-box from OpenWrt feed will be used instead."
                 exit 0
             fi
-            SB_REL_JSON=$(gh_api "https://api.github.com/repos/shtorm-7/sing-box-extended/releases/tags/${SB_TAG}") || true
-            SB_URL=$(echo "$SB_REL_JSON" | jq -r '.assets[] | select(.name | test("linux-arm64\\.tar\\.gz$")) | .browser_download_url' | head -n 1)
-            if [ -z "$SB_URL" ] || [ "$SB_URL" == "null" ]; then
-                echo ">>> WARNING: Asset linux-arm64.tar.gz not found in release $SB_TAG. Skipping."
-                echo ">>> Sing-box from OpenWrt feed will be used instead."
-                exit 0
-            fi
+            # Имя ассета по той же схеме, что у SagerNet:
+            # sing-box-1.14.1-extended-2.7.2-linux-arm64.tar.gz
+            SB_URL="https://github.com/${SB_REPO}/releases/download/${SB_TAG}/sing-box-${SB_TAG#v}-linux-arm64.tar.gz"
         else
             echo "::error::Неизвестный выбор версии sing-box: '$SB_VERSION_CHOICE'"
             exit 1
@@ -473,8 +466,9 @@ jobs:
         
         # --- Сводка ---------------------------------------------------------
         # Показываем И выбор пользователя, И то, что реально применилось:
-        # в режиме combo матрица задана жёстко и inputs.variant игнорируется,
-        # а загрузка бинарников отключается самим вариантом.
+        # в режиме combo матрица задана жёстко — вариант и настройки загрузки
+        # AGH/sing-box берутся из пресета, поля формы игнорируются; а для
+        # clear/switch загрузка отключается самим вариантом.
         SUM_MODE="${{ inputs.target }}"
         SUM_IN_VARIANT="${{ inputs.variant }}"
         SUM_VARIANT="${{ matrix.variant }}"
@@ -485,6 +479,8 @@ jobs:
         else
             SUM_VARIANT_NOTE=""
         fi
+        SUM_SRC_NOTE=""
+        [ "$SUM_MODE" = "combo" ] && SUM_SRC_NOTE="  (пресет combo)"
 
         case "$SUM_VARIANT" in
             switch|clear|crystal_clear) SUM_NO_BIN=1 ;;
@@ -493,19 +489,19 @@ jobs:
 
         if [ "$SUM_NO_BIN" = "1" ]; then
             SUM_AGH="пропуск (вариант $SUM_VARIANT)"
-        elif [ "${{ inputs.download_binaries_agh }}" = "true" ]; then
-            SUM_AGH="да"
+        elif [ "${{ matrix.agh }}" = "true" ]; then
+            SUM_AGH="да$SUM_SRC_NOTE"
         else
-            SUM_AGH="нет (не запрошено)"
+            SUM_AGH="нет (не запрошено)$SUM_SRC_NOTE"
         fi
 
         case "$SUM_VARIANT" in
             switch|clear|crystal_clear|passwall|v2raya|xray) SUM_SB="пропуск (вариант $SUM_VARIANT)" ;;
             *)
-                if [ "${{ inputs.download_binaries_sb }}" = "no" ]; then
-                    SUM_SB="нет (не запрошено)"
+                if [ "${{ matrix.sb }}" = "no" ]; then
+                    SUM_SB="нет (не запрошено)$SUM_SRC_NOTE"
                 else
-                    SUM_SB="${{ inputs.download_binaries_sb }}"
+                    SUM_SB="${{ matrix.sb }}$SUM_SRC_NOTE"
                 fi
                 ;;
         esac
