@@ -139,8 +139,16 @@ if command -v apk >/dev/null 2>&1; then
     fi
     DISTFEEDS_FILE="/etc/apk/repositories.d/distfeeds.list"
     CUSTOMFEEDS_FILE="/etc/apk/repositories.d/customfeeds.list"
-    for key in immortalwrt-snapshots.pem openwrt-snapshots.pem youtubeUnblock.pem public-key.pem; do
-        [ -f "/etc/apk/keys/$key" ] || cp "/root/apps/$key" "/etc/apk/keys/" 2>/dev/null
+    # Ключи подписи сторонних репозиториев: всё, что положено в
+    # files/root/apps/*.pem, ставится в /etc/apk/keys/. Нет файлов — нет шага.
+    for key in /root/apps/*.pem; do
+        [ -f "$key" ] || continue
+        key_name=$(basename "$key")
+        if [ -f "/etc/apk/keys/$key_name" ]; then
+            log_ok "Ключ $key_name уже установлен"
+        else
+            run_cmd "Установка ключа $key_name" cp "$key" /etc/apk/keys/
+        fi
     done
 elif command -v opkg >/dev/null 2>&1; then
     log_info "Пакетный менеджер OPKG"

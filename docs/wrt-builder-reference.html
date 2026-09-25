@@ -171,7 +171,7 @@
             <td class="key">Target Device <small>target</small></td>
             <td><div class="opts"><span class="opt def">combo</span><span class="opt">rb5009</span><span class="opt">nanopi-r6s</span><span class="opt">nanopi-r5s</span><span class="opt">slateax</span><span class="opt">ax59u</span><span class="opt">brume2</span><span class="opt">all</span></div></td>
             <td><span class="opt def">combo</span></td>
-            <td><p>Какое устройство (или набор) собирать. <code>combo</code> — три фиксированные сборки сразу; <code>all</code> — только nanopi-r6s + rb5009; одиночное значение — одно устройство. Из него же берётся архитектура пакетов.</p></td>
+            <td><p>Какое устройство (или набор) собирать. <code>combo</code> — три фиксированные сборки сразу; <code>all</code> — все шесть устройств; одиночное значение — одно устройство. Из него же берётся архитектура пакетов.</p></td>
           </tr>
           <tr>
             <td class="key">Source Code <small>source</small></td>
@@ -221,7 +221,7 @@
 
     <div class="note warn">
       <span class="ic">◆</span>
-      <p><b>combo и all — особый случай.</b> Вариант <code>combo</code> игнорирует выбранный Build Variant: матрица жёстко зашита как nanopi-r6s/<code>homeproxy</code>, rb5009/<code>clear</code>, rb5009/<code>switch</code>. Вариант <code>all</code> собирает только <code>nanopi-r6s</code> и <code>rb5009</code> (с выбранным вариантом), но <b>не</b> r5s/slateax/ax59u/brume2 — эти устройства можно собрать только поодиночке.</p>
+      <p><b>combo и all — особый случай.</b> Вариант <code>combo</code> игнорирует выбранный Build Variant: матрица жёстко зашита как nanopi-r6s/<code>homeproxy</code>, rb5009/<code>clear</code>, rb5009/<code>switch</code>. Вариант <code>all</code> собирает все шесть устройств (r6s, r5s, rb5009, slateax, ax59u, brume2) с выбранным вариантом.</p>
     </div>
 
     <div class="card scroll" style="margin-top:18px">
@@ -243,7 +243,7 @@
     <div class="sec-head"><span class="sec-num">02</span><h2>Конвейер сборки</h2></div>
     <p class="sec-sub">Что делает <code>Universal_WRT_Builder.yml</code> по шагам. Сначала job <code>setup</code> строит матрицу из выбранного target/variant, затем job <code>build</code> на раннере <code>ubuntu-22.04</code> прогоняет сборку для каждой пары «устройство × вариант».</p>
     <ol class="steps">
-      <li><b>Матрица сборки.</b> Из target/variant формируется список пар: <code>combo</code> → три фикс-сборки, <code>all</code> → r6s+rb5009, одиночный → одна пара.</li>
+      <li><b>Матрица сборки.</b> Из target/variant формируется список пар: <code>combo</code> → три фикс-сборки, <code>all</code> → все шесть устройств, одиночный → одна пара.</li>
       <li><b>Подготовка раннера.</b> Освобождение места на диске, checkout репозитория со скриптами.</li>
       <li><b>Права на <code>files/</code>.</b> Делаются исполняемыми скрипты в <code>files/etc/uci-defaults</code> и <code>files/usr/bin</code> (попадут в образ).</li>
       <li><b>Скачивание AdGuardHome</b> — если включён флаг и вариант это допускает. Бинарь кладётся в <code>files/</code>.</li>
@@ -252,11 +252,11 @@
       <li><b>Зависимости (apt).</b> Установка тулчейна сборки. Из-за <code>python2.7</code> раннер закреплён на <code>ubuntu-22.04</code>.</li>
       <li><b>Клон исходников</b> и checkout на нужный коммит/тег OpenWrt/ImmortalWrt.</li>
       <li><b>Патчи.</b> Применяются кастомные патчи из каталога <code>patches/</code>.</li>
-      <li><b>Update Feeds &amp; Config.</b> Главный шаг: P1 → <code>feeds update</code> → P2 → <code>feeds install</code> → копирование <code>WRT.config</code> в <code>.config</code> → команды устройства → P3 → правки под вариант → P4 → удаление по Exclude-словам → <code>make defconfig</code>.</li>
+      <li><b>Update Feeds &amp; Config.</b> Главный шаг: P1 → <code>feeds update</code> → P2 → <code>feeds install</code> → копирование <code>WRT.config</code> в <code>.config</code> → команды устройства → P3 → правки под вариант → удаление по Exclude-словам → <code>make defconfig</code>.</li>
       <li><b>Kernel Hash.</b> Хеш ядра подменяется на официальный, чтобы на роутер можно было ставить готовые kmod из репозиториев.</li>
       <li><b>Компиляция.</b> Многопоточная; при сбое — повтор в один поток с сохранением <code>build.log</code>.</li>
       <li><b>Bootloader-файлы.</b> Глубокий поиск и сохранение <code>idbloader.img</code>/<code>u-boot.itb</code>/<code>.fip</code> для прошивки загрузчика.</li>
-      <li><b>Артефакт.</b> Образ загружается (<code>upload-artifact@v7</code>), старые прогоны workflow подчищаются.</li>
+      <li><b>Артефакт.</b> Образ загружается (<code>upload-artifact@v7</code>). Старые прогоны workflow (старше 10 дней) подчищаются один раз за запуск, в джобе уведомления.</li>
     </ol>
   </section>
 

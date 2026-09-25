@@ -1,7 +1,6 @@
 # GL.iNet Slate AX (AXT1800) Configuration
 TARGET_NAME="GL.iNet Slate AX (AXT1800)"
 KERNEL_PATH="qualcommax/ipq60xx"
-RELEASE_TAG="Slate_GL-AXT1800"
 
 # Многострочная переменная с командами для .config
 DEVICE_CONFIG_COMMANDS=$(cat <<'EOF'

@@ -94,7 +94,6 @@ on:
         default: ''
 
 env:
-  FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: ./config/WRT.config
   # 1. Источники
   DIY_P1_SH: ./sh/WRT-part1.sh
@@ -102,11 +101,7 @@ env:
   DIY_P2_SH: ./sh/WRT-part2.sh
   # 3. Пакеты и настройка (после install)
   DIY_P3_SH: ./sh/WRT-part3.sh
-  # 4. Финальный тюнинг (пустой)
-  DIY_P4_SH: ./sh/WRT-part4.sh
-  
-  UPLOAD_BIN_DIR: true
-  UPLOAD_FIRMWARE: false
+
   TZ: Europe/Moscow
 
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -144,7 +139,8 @@ jobs:
             echo ">>> Generating COMBO matrix..."
             json="{\"include\":[$(entry nanopi-r6s homeproxy true  1.12.x),$(entry nanopi-r6s forkop true extended),$(entry rb5009 clear false no),$(entry rb5009 switch false no)]}"
           else
-            targets="nanopi-r6s rb5009"
+            # Все устройства из config/conf/ — при добавлении нового дописать сюда
+            targets="nanopi-r6s nanopi-r5s rb5009 slateax ax59u brume2"
             if [ "$INPUT_TARGET" == "all" ]; then
               selected=$targets
             else
@@ -180,7 +176,6 @@ jobs:
     runs-on: ${{ inputs.runner_os }}
     permissions:
       contents: write
-      actions: write
     
     strategy:
       fail-fast: false
@@ -233,15 +228,39 @@ jobs:
     - name: Download AdGuardHome
       # Условие: выполнять только если вариант НЕ switch И НЕ clear и НЕ crystal_clear
       if: matrix.agh && matrix.variant != 'switch' && matrix.variant != 'clear' && matrix.variant != 'crystal_clear'
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         # AdGuardHome
-        AGH_URL="https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_arm64.tar.gz"
-        echo ">>> Downloading AdGuardHome from: $AGH_URL"
-        curl -L -o AGH.tar.gz "$AGH_URL"
+        AGH_REPO="AdguardTeam/AdGuardHome"
+        AGH_ASSET="AdGuardHome_linux_arm64.tar.gz"
+        # Последний стабильный тег — через git ls-remote, как у sing-box: без
+        # лимитов API, сортировка по версии, бета-теги (v0.108.0-b.N) отсекаются.
+        # Архив и файл сумм качаем по этому тегу: две ссылки на «latest» могли
+        # бы попасть в разные релизы, если новый выйдет между запросами.
+        AGH_TAG=$(git ls-remote --tags --refs "https://github.com/${AGH_REPO}.git" 2>/dev/null \
+            | awk '{print $2}' | sed 's|refs/tags/||' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
+        if [ -z "$AGH_TAG" ]; then
+            echo ">>> WARNING: не удалось определить последний релиз AdGuardHome. Skipping."
+            echo ">>> AdGuardHome from OpenWrt feed/package will be used instead."
+            exit 0
+        fi
+        AGH_URL="https://github.com/${AGH_REPO}/releases/download/${AGH_TAG}/${AGH_ASSET}"
+        echo ">>> Downloading AdGuardHome ${AGH_TAG} from: $AGH_URL"
+        # -f: при 404 GitHub отдаёт HTML-страницу, без -f она сохранилась бы как архив
+        curl -fL --retry 3 -o AGH.tar.gz "$AGH_URL" || true
         # Проверка целостности: пустой/битый архив -> graceful skip (как у sing-box).
         # AGH всё равно соберётся из пакета (CONFIG_PACKAGE_adguardhome=y в WRT.config).
         if [ ! -s AGH.tar.gz ]; then
             echo ">>> WARNING: AdGuardHome download is empty or missing. Skipping."
+            echo ">>> AdGuardHome from OpenWrt feed/package will be used instead."
+            rm -f AGH.tar.gz
+            exit 0
+        fi
+        if ! bash ./sh/verify-sha256.sh AGH.tar.gz "$AGH_REPO" "$AGH_TAG" "$AGH_ASSET" \
+                "https://github.com/${AGH_REPO}/releases/download/${AGH_TAG}/checksums.txt"; then
+            echo ">>> WARNING: AdGuardHome checksum mismatch. Skipping."
             echo ">>> AdGuardHome from OpenWrt feed/package will be used instead."
             rm -f AGH.tar.gz
             exit 0
@@ -262,6 +281,8 @@ jobs:
     - name: Download Sing-box
       # Sing-box не качаем для чистых сборок И для сборок со своими прокси-ядрами
       if: matrix.sb != 'no' && matrix.variant != 'switch' && matrix.variant != 'clear' && matrix.variant != 'crystal_clear' && matrix.variant != 'passwall' && matrix.variant != 'v2raya' && matrix.variant != 'xray'
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         SB_VERSION_CHOICE="${{ matrix.sb }}"
         SB_TAG=""
@@ -333,6 +354,13 @@ jobs:
             rm -f sb.tar.gz
             exit 0
         fi
+        # Сумма из digest ассета в GitHub API (файлов сумм sing-box не публикует)
+        if ! bash ./sh/verify-sha256.sh sb.tar.gz "$SB_REPO" "$SB_TAG" "$(basename "$SB_URL")"; then
+            echo ">>> WARNING: sing-box checksum mismatch. Skipping."
+            echo ">>> Sing-box from OpenWrt feed will be used instead."
+            rm -f sb.tar.gz
+            exit 0
+        fi
         tar -xzf sb.tar.gz
         mkdir -p ./files/usr/bin
         # cp sing-box-*/sing-box ./files/usr/bin/ && chmod 755 ./files/usr/bin/sing-box
@@ -358,23 +386,30 @@ jobs:
 
     - name: Configure Build Variables
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Поля формы — через env, а не подстановкой ${{ }} в текст скрипта:
+        # иначе их содержимое исполнялось бы как shell-код.
+        MANUAL_COMMIT: ${{ inputs.commit_hash }}
+        EXCLUDE_INPUT: ${{ inputs.exclude_keywords }}
       run: |
-        # 1. Настройка URL репозитория и API для поиска тегов
+        # 1. URL репозитория исходников
         if [ "${{ inputs.source }}" == "immortalwrt" ]; then
           VAR_REPO_URL="https://github.com/immortalwrt/immortalwrt.git"
-          API_REPO="immortalwrt/immortalwrt"
         else
           VAR_REPO_URL="https://github.com/openwrt/openwrt.git"
-          # OpenWrt теги смотрим на GitHub, даже если клонируем с их сайта
-          API_REPO="openwrt/openwrt"
         fi
         echo "REPO_URL=$VAR_REPO_URL" >> $GITHUB_ENV
-        
+
+        # Хеш коммита из формы: только hex, иначе git checkout получил бы
+        # произвольную строку (ветку, опцию и т.п.)
+        if [ -n "$MANUAL_COMMIT" ] && ! [[ "$MANUAL_COMMIT" =~ ^[0-9a-fA-F]{7,40}$ ]]; then
+            echo "::error::Некорректный commit_hash: '$MANUAL_COMMIT' (нужно 7–40 hex-символов)"
+            exit 1
+        fi
+        MANUAL_COMMIT="${MANUAL_COMMIT,,}"
+
         # 2. Логика Ветки
         INPUT_BRANCH="${{ inputs.branch }}"
-        MANUAL_COMMIT="${{ inputs.commit_hash }}"
-        
+
         VAR_BRANCH="$INPUT_BRANCH"
         VAR_TARGET_RELEASE=""
         VAR_COMMIT_HASH="$MANUAL_COMMIT"
@@ -386,76 +421,73 @@ jobs:
             fi
             VAR_TARGET_RELEASE="snapshots"
             echo ">>> Master/Main branch selected. Using snapshots."
-            
-        else
-            # --- ЛОГИКА ДЛЯ СТАБИЛЬНЫХ ВЕТОК (АВТО-ПОИСК) ---
-            echo ">>> Stable branch selected: $INPUT_BRANCH"
-            
-            # Если хеш не задан вручную, ищем через API
-            if [ -z "$MANUAL_COMMIT" ]; then
-                # Формируем префикс тега (например: "openwrt-25.12" -> "v25.12")
-                TAG_PREFIX="v${INPUT_BRANCH#openwrt-}"
-                
-                echo ">>> Searching for latest tag starting with '$TAG_PREFIX' in $API_REPO..."
-                
-                # Магия jq: фильтруем теги по префиксу и берем первый (самый свежий)
-                TAGS_RESP=$(curl -sS -w $'\n%{http_code}' -H "Authorization: Bearer $GITHUB_TOKEN" \
-                    -H "Accept: application/vnd.github+json" \
-                    "https://api.github.com/repos/$API_REPO/tags")
-                TAGS_CODE=$(printf '%s' "$TAGS_RESP" | tail -n1)
-                TAGS_BODY=$(printf '%s' "$TAGS_RESP" | sed '$d')
 
-                if [ "$TAGS_CODE" != "200" ] || ! printf '%s' "$TAGS_BODY" | jq empty >/dev/null 2>&1; then
-                    echo ">>> WARNING: GitHub API bad response (HTTP $TAGS_CODE, rate limit / network?)." >&2
-                    echo ">>> Body (first 300 chars): $(printf '%s' "$TAGS_BODY" | head -c 300)" >&2
-                    TAG_JSON="null"
-                else
-                    TAG_JSON=$(printf '%s' "$TAGS_BODY" | jq --arg prefix "$TAG_PREFIX" '[.[] | select(.name | startswith($prefix))] | first')
-                fi
-                
-                if [ "$TAG_JSON" != "null" ] && [ -n "$TAG_JSON" ]; then
-                    TAG_NAME=$(echo "$TAG_JSON" | jq -r '.name')
-                    TAG_COMMIT=$(echo "$TAG_JSON" | jq -r '.commit.sha')
-                    
+        else
+            # --- ЛОГИКА ДЛЯ СТАБИЛЬНЫХ ВЕТОК ---
+            echo ">>> Stable branch selected: $INPUT_BRANCH"
+            BRANCH_VER="${INPUT_BRANCH#openwrt-}"          # openwrt-25.12 -> 25.12
+
+            # Теги через git ls-remote: без лимитов API и с сортировкой по
+            # ВЕРСИИ (API /tags не гарантирует порядок, v25.12.10 < v25.12.9
+            # при сравнении строк). Шаблон отсекает -rc и прочие пре-релизы.
+            # Аннотированный тег даёт две строки: сам тег и «тег^{}» — коммит,
+            # на который он указывает; нужен именно коммит.
+            TAGS_RAW=$(git ls-remote --tags "$VAR_REPO_URL" 2>/dev/null || true)
+            TAG_RE="^v${BRANCH_VER//./\\.}\\.[0-9]+$"
+            # tag_commit <тег> -> хеш коммита
+            tag_commit() {
+                local c
+                c=$(printf '%s\n' "$TAGS_RAW" | awk -v r="refs/tags/$1^{}" '$2 == r {print $1}')
+                [ -z "$c" ] && c=$(printf '%s\n' "$TAGS_RAW" | awk -v r="refs/tags/$1" '$2 == r {print $1}')
+                printf '%s' "$c"
+            }
+
+            if [ -z "$TAGS_RAW" ]; then
+                echo ">>> WARNING: git ls-remote не вернул теги (сеть?)."
+            elif [ -z "$MANUAL_COMMIT" ]; then
+                # Последний релиз ветки
+                TAG_NAME=$(printf '%s\n' "$TAGS_RAW" | awk '{print $2}' | grep -v '\^{}$' \
+                    | sed 's|refs/tags/||' | grep -E "$TAG_RE" | sort -V | tail -n1)
+                if [ -n "$TAG_NAME" ]; then
+                    VAR_COMMIT_HASH=$(tag_commit "$TAG_NAME")
+                    VAR_TARGET_RELEASE="releases/${TAG_NAME#v}"
                     echo ">>> FOUND TAG: $TAG_NAME"
-                    echo ">>> FOUND COMMIT: $TAG_COMMIT"
-                    
-                    VAR_COMMIT_HASH="$TAG_COMMIT"
-                    
-                    # Формируем путь релиза (удаляем 'v' из названия тега)
-                    CLEAN_VER="${TAG_NAME#v}"
-                    VAR_TARGET_RELEASE="releases/$CLEAN_VER"
-                    
-                    # Специфика ImmortalWrt: если папки релиза нет, используем SNAPSHOT
-                    if [ "${{ inputs.source }}" == "immortalwrt" ]; then
-                         HTTP_CODE=$(curl -o /dev/null -s -w "%{http_code}\n" "https://downloads.immortalwrt.org/$VAR_TARGET_RELEASE/targets/")
-                         if [ "$HTTP_CODE" != "200" ]; then
-                             echo ">>> Release folder not found on server. Using SNAPSHOT fallback."
-                             VAR_TARGET_RELEASE="releases/${INPUT_BRANCH#openwrt-}-SNAPSHOT"
-                         fi
-                    fi
+                    echo ">>> FOUND COMMIT: $VAR_COMMIT_HASH"
                 else
-                    echo ">>> WARNING: No tag found for $TAG_PREFIX. Using default fallback logic."
+                    echo ">>> WARNING: релизных тегов v${BRANCH_VER}.N не найдено."
                 fi
             else
-                echo ">>> Manual commit provided ($MANUAL_COMMIT). Skipping auto-search."
-            fi
-            
-            # ФОЛБЭК (Если API не нашел тег или произошла ошибка)
-            if [ -z "$VAR_TARGET_RELEASE" ]; then
-                if [[ "$INPUT_BRANCH" == *"25.12"* ]]; then
-                     if [ "${{ inputs.source }}" == "immortalwrt" ]; then
-                        VAR_TARGET_RELEASE="releases/25.12.2"
-                     else
-                        VAR_TARGET_RELEASE="releases/25.12.5"
-                     fi
-                elif [[ "$INPUT_BRANCH" == *"24.10"* ]]; then
-                     if [ "${{ inputs.source }}" == "immortalwrt" ]; then
-                        VAR_TARGET_RELEASE="releases/24.10.6"
-                     else
-                        VAR_TARGET_RELEASE="releases/24.10.8"
-                     fi
+                # Ручной коммит: если это релизный тег — берём kmods этого
+                # релиза, иначе ниже уйдём на SNAPSHOT ветки.
+                echo ">>> Manual commit provided ($MANUAL_COMMIT). Ищу релизный тег на нём..."
+                for t in $(printf '%s\n' "$TAGS_RAW" | awk '{print $2}' | grep -v '\^{}$' \
+                        | sed 's|refs/tags/||' | grep -E "$TAG_RE" | sort -V); do
+                    if [[ "$(tag_commit "$t")" == "$MANUAL_COMMIT"* ]]; then
+                        VAR_TARGET_RELEASE="releases/${t#v}"
+                        echo ">>> Коммит соответствует тегу $t"
+                    fi
+                done
+                if [ -z "$VAR_TARGET_RELEASE" ]; then
+                    echo ">>> Коммит не совпадает ни с одним релизным тегом."
                 fi
+            fi
+
+            # Специфика ImmortalWrt: если папки релиза на сервере ещё нет
+            if [ -n "$VAR_TARGET_RELEASE" ] && [ "${{ inputs.source }}" == "immortalwrt" ]; then
+                # || true: при недоступном сервере curl вернул бы ошибку и
+                # bash -e уронил бы шаг, а нужен переход на SNAPSHOT
+                HTTP_CODE=$(curl -o /dev/null -s --max-time 20 -w "%{http_code}" "https://downloads.immortalwrt.org/$VAR_TARGET_RELEASE/targets/" || true)
+                if [ "$HTTP_CODE" != "200" ]; then
+                    echo ">>> Release folder not found on server. Using SNAPSHOT fallback."
+                    VAR_TARGET_RELEASE=""
+                fi
+            fi
+
+            # ФОЛБЭК: SNAPSHOT ветки. Зашитые номера релизов (раньше тут были
+            # 25.12.5 / 24.10.8) устаревали и давали хеш ядра чужого релиза.
+            if [ -z "$VAR_TARGET_RELEASE" ]; then
+                VAR_TARGET_RELEASE="releases/${BRANCH_VER}-SNAPSHOT"
+                echo ">>> Fallback: $VAR_TARGET_RELEASE"
             fi
         fi
         
@@ -479,7 +511,7 @@ jobs:
         # clear/switch загрузка отключается самим вариантом.
         SUM_MODE="${{ inputs.target }}"
         SUM_VARIANT="${{ matrix.variant }}"
-        SUM_EXCLUDE="${{ inputs.exclude_keywords }}"
+        SUM_EXCLUDE="$EXCLUDE_INPUT"
 
         if [ "$SUM_MODE" = "combo" ]; then
             SUM_VARIANT_NOTE="  (выбор Build Variant игнорируется: режим combo)"
@@ -630,10 +662,11 @@ jobs:
         echo "=========================================="
 
     - name: Update Feeds & Config
+      env:
+        EXCLUDE_INPUT: ${{ inputs.exclude_keywords }}
       run: |
         cd openwrt
-        [ -e $GITHUB_WORKSPACE/$FEEDS_CONF ] && cp $GITHUB_WORKSPACE/$FEEDS_CONF ./feeds.conf.default
-        
+
         export VARIANT="${{ matrix.variant }}"
         export CURRENT_MATRIX_TARGET="${{ matrix.target }}"
         echo ">>> Выбран: Variant=$VARIANT, Target=$CURRENT_MATRIX_TARGET"
@@ -681,10 +714,6 @@ jobs:
         ./scripts/feeds install -a
         
         [ -e $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE ./.config
-        # Нормализация DOS-переводов строк: WRT.config сохранён в CRLF, а .config
-        # дальше дополняется LF-строками (device-конфиги, part3) -> убираем \r у базы,
-        # чтобы не было mix CRLF/LF и проблем в kconfig/grep с якорем $.
-        [ -f ./.config ] && sed -i 's/\r$//' ./.config
         [ -e $GITHUB_WORKSPACE/files ] && cp -r $GITHUB_WORKSPACE/files ./
         
         eval "$DEVICE_CONFIG_COMMANDS"
@@ -772,28 +801,30 @@ jobs:
         
         fi
         
-        # 4. Запуск Part 4 (Тюнинг перед defconfig)
-        if [ -f "$GITHUB_WORKSPACE/$DIY_P4_SH" ]; then
-            chmod +x $GITHUB_WORKSPACE/$DIY_P4_SH
-            $GITHUB_WORKSPACE/$DIY_P4_SH
-        else
-            echo ">>> P4 tweak script not found: $DIY_P4_SH"
-        fi
-
         # =======================================================
         # ЛОГИКА ИСКЛЮЧЕНИЯ ПАКЕТОВ (EXCLUDE KEYWORDS)
         # =======================================================
-        EXCLUDE_INPUT="${{ inputs.exclude_keywords }}"
+        # EXCLUDE_INPUT приходит через env шага. Слово ищется как ПОДСТРОКА
+        # имени пакета без учёта регистра (awk index, не регулярка), поэтому
+        # символы вроде . | / * в слове не ломают поиск.
         if [ -n "$EXCLUDE_INPUT" ]; then
             echo ">>> [EXCLUDE] Processing keywords: $EXCLUDE_INPUT"
-            for WORD in $EXCLUDE_INPUT; do
+            read -ra EXCLUDE_WORDS <<< "$EXCLUDE_INPUT"
+            for WORD in "${EXCLUDE_WORDS[@]}"; do
                 echo "   > Searching for enabled packages containing '$WORD'..."
-                # Ищем только включенные (=y) пакеты с этим словом
-                grep -i "^CONFIG_PACKAGE_.*${WORD}.*=y" .config | cut -d'=' -f1 | while read -r CONFIG_NAME; do
-                    echo "      - Disabling: $CONFIG_NAME"
-                    # Жестко отключаем пакет, чтобы он не собрался
-                    sed -i "s|^${CONFIG_NAME}=y|# ${CONFIG_NAME} is not set|" .config
-                done
+                # Только включенные (=y) пакеты; жестко отключаем, чтобы не собрались
+                awk -v w="$WORD" '
+                    BEGIN { w = tolower(w) }
+                    /^CONFIG_PACKAGE_[^=]*=y$/ {
+                        name = substr($0, 1, index($0, "=") - 1)
+                        if (index(tolower(substr(name, 16)), w)) {
+                            print "      - Disabling: " name > "/dev/stderr"
+                            print "# " name " is not set"
+                            next
+                        }
+                    }
+                    { print }
+                ' .config > .config.exclude && mv .config.exclude .config
             done
             echo ">>> [EXCLUDE] Done."
         fi
@@ -1082,36 +1113,6 @@ jobs:
         if-no-files-found: warn
         retention-days: 10
 
-    - name: Delete workflow runs
-      #uses: Mattraks/delete-workflow-runs@main
-      #with:
-        #retain_days: 10
-        #keep_minimum_runs: 6
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        echo ">>> Deleting workflow runs older than 10 days..."
-        
-        # 1. Вычисляем дату "10 дней назад" в UTC с суффиксом Z.
-        # ВАЖНО: GitHub createdAt всегда в UTC ('...Z'), а jq ниже сравнивает СТРОКИ.
-        # При TZ=Europe/Moscow обычный 'date -Iseconds' даёт '+03:00' -> строковое
-        # сравнение с 'Z'-датами врёт в окне ±3ч вокруг границы. Поэтому форсим UTC+Z.
-        CUTOFF_DATE=$(date -u -d "10 days ago" +"%Y-%m-%dT%H:%M:%SZ")
-        echo ">>> Cutoff date (UTC): $CUTOFF_DATE"
-        
-        # 2. Получаем список запусков и фильтруем через jq те, что старше CUTOFF_DATE
-        RUN_IDS=$(gh run list --limit 100 --json databaseId,createdAt --jq ".[] | select(.createdAt < \"$CUTOFF_DATE\") | .databaseId")
-        
-        # 3. Удаляем найденные запуски
-        if [ -z "$RUN_IDS" ]; then
-          echo ">>> No old runs found to delete."
-        else
-          for ID in $RUN_IDS; do
-            echo ">>> Deleting run ID: $ID"
-            gh run delete "$ID" || echo "Failed to delete $ID (maybe currently running)"
-          done
-        fi
-
   notify:
     # Одно уведомление в Telegram после ВСЕЙ матрицы — со статусом каждой
     # сборки. always(): сообщение нужно и при падении, и при отмене.
@@ -1126,7 +1127,8 @@ jobs:
     if: always()
     runs-on: ${{ inputs.runner_os }}
     permissions:
-      actions: read
+      # write — для удаления старых запусков (шаг ниже)
+      actions: write
     steps:
     - name: Telegram notification
       env:
@@ -1212,3 +1214,34 @@ jobs:
           echo "::warning::Telegram API ответил HTTP $HTTP: $(jq -r '.description // "нет ответа"' /tmp/tg.json 2>/dev/null)"
         fi
         rm -f /tmp/tg.json
+
+    - name: Delete workflow runs
+      # Один раз на запуск, а не в каждой сборке матрицы (раньше в combo
+      # шаг выполнялся 4 раза параллельно и дрался за одни и те же run'ы).
+      if: always()
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # checkout в этой джобе нет — репозиторий для gh задаём явно
+        GH_REPO: ${{ github.repository }}
+      run: |
+        echo ">>> Deleting workflow runs older than 10 days..."
+        
+        # 1. Вычисляем дату "10 дней назад" в UTC с суффиксом Z.
+        # ВАЖНО: GitHub createdAt всегда в UTC ('...Z'), а jq ниже сравнивает СТРОКИ.
+        # При TZ=Europe/Moscow обычный 'date -Iseconds' даёт '+03:00' -> строковое
+        # сравнение с 'Z'-датами врёт в окне ±3ч вокруг границы. Поэтому форсим UTC+Z.
+        CUTOFF_DATE=$(date -u -d "10 days ago" +"%Y-%m-%dT%H:%M:%SZ")
+        echo ">>> Cutoff date (UTC): $CUTOFF_DATE"
+        
+        # 2. Получаем список запусков и фильтруем через jq те, что старше CUTOFF_DATE
+        RUN_IDS=$(gh run list --limit 100 --json databaseId,createdAt --jq ".[] | select(.createdAt < \"$CUTOFF_DATE\") | .databaseId")
+        
+        # 3. Удаляем найденные запуски
+        if [ -z "$RUN_IDS" ]; then
+          echo ">>> No old runs found to delete."
+        else
+          for ID in $RUN_IDS; do
+            echo ">>> Deleting run ID: $ID"
+            gh run delete "$ID" || echo "Failed to delete $ID (maybe currently running)"
+          done
+        fi

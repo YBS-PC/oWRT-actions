@@ -381,40 +381,19 @@ SWITCH_BLOAT=(
 "${CRYSTAL_CLEAR_BLOAT[@]}"
 )
 
-# --- ЛОГИКА ДЛЯ ВАРИАНТА 'homeproxy' (homeproxy_sqm обработки не требует) ---
-if [ "$VARIANT" == "homeproxy" ]; then
+# --- ЛОГИКА ДЛЯ ВАРИАНТОВ 'homeproxy', 'podkop', 'forkop' (homeproxy_sqm обработки не требует) ---
+if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "forkop" ]]; then
     echo ">>> [Variant: $VARIANT] Performing cleanup..."
-    # Вычищаем пакеты из конфига
+    # Вычищаем пакеты из конфига. В SQM_BLOAT уже перечислены полные имена
+    # (luci-app-sqm, luci-i18n-sqm-ru), поэтому префиксы не добавляем.
     for PKG in "${SQM_BLOAT[@]}"; do
         sed -i "/${PKG}/Id" ./.config
-        echo "# CONFIG_PACKAGE_luci-app-${PKG} is not set" >> ./.config
-        echo "# CONFIG_PACKAGE_luci-i18n-${PKG}-ru is not set" >> ./.config
         echo "# CONFIG_PACKAGE_${PKG} is not set" >> ./.config
     done
 fi
 
-# --- ЛОГИКА ДЛЯ ВАРИАНТА 'podkop' ---
-if [ "$VARIANT" == "podkop" ]; then
-    echo ">>> [Variant: $VARIANT] Performing cleanup..."
-    # Вычищаем пакеты из конфига
-    for PKG in "${SQM_BLOAT[@]}"; do
-        sed -i "/${PKG}/Id" ./.config
-        echo "# CONFIG_PACKAGE_luci-app-${PKG} is not set" >> ./.config
-        echo "# CONFIG_PACKAGE_luci-i18n-${PKG}-ru is not set" >> ./.config
-        echo "# CONFIG_PACKAGE_${PKG} is not set" >> ./.config
-    done
-fi
-
-# --- ЛОГИКА ДЛЯ ВАРИАНТА 'forkop' ---
+# forkop дополнительно без youtubeUnblock
 if [ "$VARIANT" == "forkop" ]; then
-    echo ">>> [Variant: $VARIANT] Performing cleanup..."
-    # Вычищаем пакеты из конфига
-    for PKG in "${SQM_BLOAT[@]}"; do
-        sed -i "/${PKG}/Id" ./.config
-        echo "# CONFIG_PACKAGE_luci-app-${PKG} is not set" >> ./.config
-        echo "# CONFIG_PACKAGE_luci-i18n-${PKG}-ru is not set" >> ./.config
-        echo "# CONFIG_PACKAGE_${PKG} is not set" >> ./.config
-    done
     sed -i '/youtubeUnblock/Id' ./.config
     echo "# CONFIG_PACKAGE_youtubeUnblock is not set" >> ./.config
     echo "# CONFIG_PACKAGE_luci-app-youtubeUnblock is not set" >> ./.config
@@ -433,9 +412,16 @@ if [ "$VARIANT" == "clear" ]; then
     # Вычищаем пакеты из конфига
     for PKG in "${CLEAR_BLOAT[@]}"; do
         sed -i "/${PKG}/Id" ./.config
-        echo "# CONFIG_PACKAGE_luci-app-${PKG} is not set" >> ./.config
-        echo "# CONFIG_PACKAGE_luci-i18n-${PKG}-ru is not set" >> ./.config
         echo "# CONFIG_PACKAGE_${PKG} is not set" >> ./.config
+        # LuCI-обвязку достраиваем только для «голых» имён: для luci-app-homeproxy
+        # получилось бы luci-app-luci-app-homeproxy
+        case "$PKG" in
+            luci-*) ;;
+            *)
+                echo "# CONFIG_PACKAGE_luci-app-${PKG} is not set" >> ./.config
+                echo "# CONFIG_PACKAGE_luci-i18n-${PKG}-ru is not set" >> ./.config
+                ;;
+        esac
     done
     # echo "CONFIG_PACKAGE_bandix-plus=y" >> ./.config
     # echo "CONFIG_PACKAGE_luci-app-bandix-plus=y" >> ./.config

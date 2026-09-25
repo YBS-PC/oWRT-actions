@@ -1,7 +1,7 @@
-#!/bin/bash
+#!/bin/sh
 
 # загрузить скрипт
-#source /root/pkg_functions.sh
+# . /root/pkg_functions.sh   (лежит в прошивке: files/root/pkg_functions.sh)
 
 # Определение типа пакетного менеджера
 detect_package_manager() {

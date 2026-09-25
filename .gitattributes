@@ -1,0 +1,14 @@
+# Файлы, которые читают bash/kconfig на раннере и ash на роутере:
+# всегда LF, даже если правятся на Windows (CRLF ломает kconfig и шебанги).
+# text=auto: случайно положенный в files/ бинарник git распознает и не тронет.
+*.sh            text=auto eol=lf
+*.config        text=auto eol=lf
+config/conf/*   text=auto eol=lf
+files/**        text=auto eol=lf
+depends-ubuntu-* text=auto eol=lf
+
+# Бинарники — без преобразований
+*.tar.gz        binary
+*.png           binary
+*.jpg           binary
+*.pdf           binary
