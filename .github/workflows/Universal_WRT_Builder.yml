@@ -714,6 +714,11 @@ jobs:
         ./scripts/feeds install -a
         
         [ -e $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE ./.config
+        # Нормализация DOS-переводов строк: WRT.config может прийти в CRLF (загрузка
+        # через веб-интерфейс GitHub обходит .gitattributes), а .config дальше
+        # дополняется LF-строками (device-конфиги, part3) -> убираем \r у базы,
+        # чтобы не было mix CRLF/LF и проблем в kconfig/grep с якорем $.
+        [ -f ./.config ] && sed -i 's/\r$//' ./.config
         [ -e $GITHUB_WORKSPACE/files ] && cp -r $GITHUB_WORKSPACE/files ./
         
         eval "$DEVICE_CONFIG_COMMANDS"
