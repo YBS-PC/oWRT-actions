@@ -1,0 +1,68 @@
+Forkop 1.0.5 (ushan0v/forkop): grant LuCI read/write on /tmp/run paths.
+
+OpenWrt 25.12 ships rpcd 2026-07-19. Gavr1024/forkop-mod reports that with
+this rpcd-mod-file the /var/run/forkop/* grants no longer match
+(/var/run is a symlink to /tmp/run) and adds /tmp/run/forkop/*
+duplicates. Same change, backported; the old grants are kept.
+
+Apply with: patch -p1 -d feeds/forkop
+---
+diff --git a/luci-app-forkop/root/usr/share/rpcd/acl.d/luci-app-forkop.json b/luci-app-forkop/root/usr/share/rpcd/acl.d/luci-app-forkop.json
+index 40ca9ce..e41db16 100644
+--- a/luci-app-forkop/root/usr/share/rpcd/acl.d/luci-app-forkop.json
++++ b/luci-app-forkop/root/usr/share/rpcd/acl.d/luci-app-forkop.json
+@@ -9,18 +9,33 @@
+         "/var/run/forkop/section-cache/*": [
+           "read"
+         ],
++        "/tmp/run/forkop/section-cache/*": [
++          "read"
++        ],
+         "/var/run/forkop/component-actions/*": [
+           "read"
+         ],
++        "/tmp/run/forkop/component-actions/*": [
++          "read"
++        ],
+         "/var/run/forkop/ui-state/*": [
+           "read"
+         ],
++        "/tmp/run/forkop/ui-state/*": [
++          "read"
++        ],
+         "/var/run/forkop/ui-state/service-actions/*": [
+           "read"
+         ],
++        "/tmp/run/forkop/ui-state/service-actions/*": [
++          "read"
++        ],
+         "/var/run/forkop/ui-state/latency-actions/*": [
+           "read"
+         ],
++        "/tmp/run/forkop/ui-state/latency-actions/*": [
++          "read"
++        ],
+         "/usr/bin/forkop": [
+           "exec"
+         ]
+@@ -46,11 +61,20 @@
+         "/var/run/forkop/ui-state/*": [
+           "write"
+         ],
++        "/tmp/run/forkop/ui-state/*": [
++          "write"
++        ],
+         "/var/run/forkop/ui-state/service-actions/*": [
+           "write"
+         ],
++        "/tmp/run/forkop/ui-state/service-actions/*": [
++          "write"
++        ],
+         "/var/run/forkop/ui-state/latency-actions/*": [
+           "write"
++        ],
++        "/tmp/run/forkop/ui-state/latency-actions/*": [
++          "write"
+         ]
+       },
+       "uci": [
