@@ -259,12 +259,6 @@ cp /etc/banner.bak /etc/banner
 | `/opt/yacd/` | если homeproxy есть | панель YACD (или заглушка) |
 | `/etc/group`, `/etc/passwd` | если AGH есть и записи нет | пользователь и группа adguardhome |
 
-Также в прошивке лежит `/root/pkg_functions.sh` — универсальные функции для apk/opkg:
-```sh
-. /root/pkg_functions.sh
-pkg_help
-```
-
 ## Быстрая проверка после прошивки
 ### Лог выполнения
 ```

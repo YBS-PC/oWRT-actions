@@ -139,7 +139,14 @@ jobs:
             echo ">>> Generating COMBO matrix..."
             json="{\"include\":[$(entry nanopi-r6s homeproxy true  1.12.x),$(entry nanopi-r6s forkop true extended),$(entry rb5009 clear false no),$(entry rb5009 switch false no)]}"
           else
-            # Все устройства из config/conf/ — при добавлении нового дописать сюда
+            # Все устройства из config/conf/ — при добавлении нового дописать сюда.
+            # ВНИМАНИЕ: slateax и ax59u — «тонкие» устройства: part3 ставит им
+            # пакет sing-box-tiny из фида и удаляет скачанный бинарник, поэтому
+            # download_binaries_sb на них не влияет. Если генератор homeproxy
+            # несовместим с версией sing-box в фиде, в вариантах homeproxy*
+            # эти две сборки честно упадут на «Check sing-box compatibility»
+            # (до компиляции, остальные сборки матрицы продолжатся: fail-fast: false).
+            TINY_TARGETS="slateax ax59u"
             targets="nanopi-r6s nanopi-r5s rb5009 slateax ax59u brume2"
             if [ "$INPUT_TARGET" == "all" ]; then
               selected=$targets
@@ -167,6 +174,18 @@ jobs:
           echo "Generated Matrix:"
           echo "$json" | jq -r '.include[] | "  \(.target) / \(.variant) / agh=\(.agh) / sb=\(.sb)"'
           echo "=========================================="
+
+          # Заранее предупреждаем о сборках, чей sing-box не выбирается формой
+          case "$INPUT_VARIANT" in
+            homeproxy|homeproxy_sqm)
+              for t in ${TINY_TARGETS:-}; do
+                if echo "$json" | jq -e --arg t "$t" '.include[] | select(.target == $t)' >/dev/null; then
+                  echo "::warning title=${t}: sing-box из фида::На ${t} ставится sing-box-tiny из фида, выбор download_binaries_sb к нему не применяется. Если homeproxy несовместим с этой версией, сборка ${t} остановится на проверке совместимости до компиляции."
+                fi
+              done
+              ;;
+          esac
+
           echo "matrix<<EOF" >> $GITHUB_OUTPUT
           echo "$json" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
@@ -880,9 +899,17 @@ jobs:
             SB_VER="${SB_DOWNLOADED_TAG#v}"
             SB_VER="${SB_VER%%-*}"        # v1.14.1-extended-2.7.2 → 1.14.1
         else
+            # sing-box-tiny собирается из того же Makefile, версия общая
             FEED_MK=$(find feeds -path '*/net/sing-box/Makefile' 2>/dev/null | head -n 1)
             SB_VER=$(grep -m1 '^PKG_VERSION' "$FEED_MK" 2>/dev/null | cut -d= -f2 | tr -d ' ')
             SB_SRC="пакет из фида: ${FEED_MK:-не найден}"
+        fi
+        # Тонкие устройства (part3: slateax/ax59u) получают sing-box-tiny из
+        # фида; скачанный бинарник им не ставится, выбор формы не поможет
+        SB_TINY=0
+        if [ ! -f files/usr/bin/sing-box ] && grep -q '^CONFIG_PACKAGE_sing-box-tiny=y' .config; then
+            SB_TINY=1
+            SB_SRC="$SB_SRC, sing-box-tiny"
         fi
         if [ -z "$SB_VER" ]; then
             echo "::warning title=Проверка sing-box пропущена::Не удалось определить версию sing-box в прошивке"
@@ -953,8 +980,15 @@ jobs:
             echo ""
             echo ">>> Генератор homeproxy пишет поля, которые sing-box ${SB_VER} не принимает."
             echo ">>> Прошивка собралась бы, но прокси на роутере не запустился бы."
-            echo ">>> Выбери download_binaries_sb с версией, которую проверка пропускает,"
-            echo ">>> либо дождись обновления homeproxy в immortalwrt."
+            if [ "$SB_TINY" = "1" ]; then
+                echo ">>> ${{ matrix.target }} использует sing-box-tiny из фида: download_binaries_sb"
+                echo ">>> на него не влияет (part3 удаляет скачанный бинарник ради размера)."
+                echo ">>> Варианты: собрать это устройство в варианте без homeproxy либо"
+                echo ">>> дождаться обновления homeproxy в immortalwrt или sing-box в фиде."
+            else
+                echo ">>> Выбери download_binaries_sb с версией, которую проверка пропускает,"
+                echo ">>> либо дождись обновления homeproxy в immortalwrt."
+            fi
             exit 1
         fi
         echo ">>> OK: homeproxy совместим с sing-box ${SB_VER}"
