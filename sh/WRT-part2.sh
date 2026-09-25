@@ -78,6 +78,47 @@ else
 fi
 
 # --------------------------------------------------------------------------
+# Патчи фидов: patches/feeds/<имя фида>/*.patch
+#
+# Шаг "Apply custom patches" в yml работает ДО feeds update и берёт только
+# patches/*.patch (патчи к дереву openwrt). Патчи к фидам лежат в подпапках,
+# чтобы тот шаг их не трогал, и применяются здесь — после feeds update, до
+# feeds install. Имя подпапки = имя фида из feeds.conf (forkopmod, forkop).
+# Фид не загружен -> пропуск. Патч уже есть в исходниках -> пропуск.
+# Не применяется (автор изменил код) -> предупреждение в Actions, сборка идёт.
+# --------------------------------------------------------------------------
+
+apply_feed_patches() {
+    local _dir _feed _p _name
+
+    for _dir in "$GITHUB_WORKSPACE"/patches/feeds/*/; do
+        [ -d "$_dir" ] || continue
+        _feed=$(basename "$_dir")
+        if [ ! -d "feeds/$_feed" ]; then
+            echo ">>> Фид '$_feed' не загружен, патчи patches/feeds/$_feed пропущены."
+            continue
+        fi
+        for _p in "$_dir"*.patch; do
+            [ -f "$_p" ] || continue
+            _name=$(basename "$_p")
+            if patch -p1 -d "feeds/$_feed" -R -f -s --dry-run < "$_p" >/dev/null 2>&1; then
+                echo "✓ $_feed: $_name уже есть в исходниках, пропуск"
+            elif patch -p1 -d "feeds/$_feed" -f -s --dry-run < "$_p" >/dev/null 2>&1; then
+                patch -p1 -d "feeds/$_feed" -f -s < "$_p"
+                echo "✓ $_feed: применён $_name"
+            else
+                echo "::warning::$_feed: патч $_name не применяется (код фида изменился), пропущен"
+            fi
+        done
+    done
+}
+
+echo "=================================================="
+echo "Патчи фидов (patches/feeds/*)"
+echo "=================================================="
+apply_feed_patches
+
+# --------------------------------------------------------------------------
 # Обновление youtubeUnblock
 # --------------------------------------------------------------------------
 
