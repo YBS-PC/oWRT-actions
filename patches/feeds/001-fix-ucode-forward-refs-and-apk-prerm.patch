@@ -1,0 +1,529 @@
+Forkop-Mod 1.0.6 (Gavr1024/forkop-mod): fix ucode forward references and
+APK-incompatible prerm hook.
+
+- ucode resolves identifiers at compile time: a top-level function called
+  before its declaration fails at runtime with "left-hand side is not a
+  function". Most visible: config/connections.uc proxy_core() ->
+  routing_engine() broke sing-box config generation for every section
+  with an empty proxy_core. Functions are moved above their first caller.
+- Package/forkop/prerm was ucode; with CONFIG_USE_APK (OpenWrt 25.12)
+  package-pack.mk inlines it into the /bin/sh pre-deinstall script.
+  Rewritten in POSIX sh.
+
+Apply with: patch -p1 -d feeds/forkopmod
+---
+diff --git a/forkop/Makefile b/forkop/Makefile
+index 8218f63..e791c5c 100644
+--- a/forkop/Makefile
++++ b/forkop/Makefile
+@@ -39,13 +39,14 @@ endef
+ define Build/Compile
+ endef
+ 
++# Must stay POSIX sh: with CONFIG_USE_APK (OpenWrt 25.12+) the buildroot
++# inlines this body into the /bin/sh pre-deinstall script.
+ define Package/forkop/prerm
+-#!/usr/bin/ucode
+-
+-if (getenv("IPKG_INSTROOT") == null || getenv("IPKG_INSTROOT") == "")
+-	system("/usr/bin/forkop package_prerm " + (ARGV[0] || "") + " >/dev/null 2>&1");
++#!/bin/sh
+ 
+-exit(0);
++[ -n "$${IPKG_INSTROOT}" ] && exit 0
++/usr/bin/forkop package_prerm "$${1:-remove}" >/dev/null 2>&1 || true
++exit 0
+ endef
+ 
+ define Package/forkop/postinst
+diff --git a/forkop/files/usr/lib/components/action.uc b/forkop/files/usr/lib/components/action.uc
+index 6c2be17..e2c1e1d 100644
+--- a/forkop/files/usr/lib/components/action.uc
++++ b/forkop/files/usr/lib/components/action.uc
+@@ -1557,6 +1557,8 @@ function fail_package_sing_box_install(action, tiny, reason, current_version, la
+     action_fail("sing_box", action, prefix + " " + reason + " and previous sing-box variant could not be restored", current_version, latest_version);
+ }
+ 
++let install_sing_box_extended;
++
+ function install_sing_box_extended_package(action, requested_tag) {
+     init_tmp_dir() || action_fail("sing_box", action, "Failed to create temporary directory");
+     let current_version = sing_box_runtime_output("version", []);
+@@ -1638,7 +1640,7 @@ function install_sing_box_extended_package(action, requested_tag) {
+     action_success("sing_box", action, "sing-box-extended has been installed", new_version, latest_version, new_version == current_version ? 0 : 1, "latest", release.release_url);
+ }
+ 
+-function install_sing_box_extended(action, compressed, requested_tag) {
++install_sing_box_extended = function(action, compressed, requested_tag) {
+     if (!compressed) {
+         install_sing_box_extended_package(action, requested_tag);
+         return;
+@@ -1779,7 +1781,7 @@ function install_sing_box_extended(action, compressed, requested_tag) {
+     clear_version_caches();
+     updates_log("Installed " + label + " " + (new_version != "" ? new_version : "unknown"));
+     action_success("sing_box", action, label + " has been installed", new_version, latest_version, 1, "latest", release.release_url);
+-}
++};
+ 
+ function install_package_sing_box(action, tiny) {
+     let package_name = tiny ? "sing-box-tiny" : "sing-box";
+diff --git a/forkop/files/usr/lib/components/updates.uc b/forkop/files/usr/lib/components/updates.uc
+index 5083242..0c94c23 100644
+--- a/forkop/files/usr/lib/components/updates.uc
++++ b/forkop/files/usr/lib/components/updates.uc
+@@ -2477,6 +2477,10 @@ function write_list_update_timestamp(timestamp) {
+     write_file(LIST_UPDATE_STATE_FILE, as_string(timestamp) + "\n");
+ }
+ 
++function mark_pending_reload(reason) {
++    service_state_success([ "mark-pending-reload", PENDING_RELOAD_FILE, reason ]);
++}
++
+ function list_update() {
+     log_message("Starting lists update", "info");
+     if (!list_update_pid_begin())
+@@ -2586,23 +2590,6 @@ function xray_list_assets_ready() {
+     }
+ }
+ 
+-function list_update_if_missing() {
+-    if (!list_cache.persist_enabled()) {
+-        list_update();
+-        return;
+-    }
+-    if (settings_update_interval(uci_settings()) == "") {
+-        if (!engine.is_xray_primary() || xray_list_assets_ready()) {
+-            log_message("List auto-update is off; keeping flash cache on start", "info");
+-            exit(0);
+-        }
+-        log_message("Xray list assets are missing from cache; running lists update now", "info");
+-        list_update();
+-        return;
+-    }
+-    list_update_if_due();
+-}
+-
+ function list_update_if_due() {
+     let interval = settings_update_interval(uci_settings());
+     if (interval == "")
+@@ -2630,6 +2617,23 @@ function list_update_if_due() {
+     exit(1);
+ }
+ 
++function list_update_if_missing() {
++    if (!list_cache.persist_enabled()) {
++        list_update();
++        return;
++    }
++    if (settings_update_interval(uci_settings()) == "") {
++        if (!engine.is_xray_primary() || xray_list_assets_ready()) {
++            log_message("List auto-update is off; keeping flash cache on start", "info");
++            exit(0);
++        }
++        log_message("Xray list assets are missing from cache; running lists update now", "info");
++        list_update();
++        return;
++    }
++    list_update_if_due();
++}
++
+ function stop_list_update() {
+     let pid = trim(as_string(fs.readfile(LIST_UPDATE_PID_FILE) || ""));
+     if (pid != "" && runtime_pid_running(pid)) {
+@@ -2718,10 +2722,6 @@ function write_current_reload_state_clean() {
+     ]);
+ }
+ 
+-function mark_pending_reload(reason) {
+-    service_state_success([ "mark-pending-reload", PENDING_RELOAD_FILE, reason ]);
+-}
+-
+ function run_pending_reload_if_requested() {
+     service_state_success([ "run-pending-reload-if-requested", PENDING_RELOAD_FILE, SERVICE_INIT ]);
+ }
+diff --git a/forkop/files/usr/lib/config/connections.uc b/forkop/files/usr/lib/config/connections.uc
+index 873575c..15e2bcc 100644
+--- a/forkop/files/usr/lib/config/connections.uc
++++ b/forkop/files/usr/lib/config/connections.uc
+@@ -309,15 +309,6 @@ function action(section) {
+     return normalize_action(option(section, "action", ""));
+ }
+ 
+-function proxy_core(section) {
+-    let value = lc(as_string(option(section, "proxy_core", "")));
+-    if (value == "xray" || value == "xray-core")
+-        return "xray";
+-    if (value == "sing-box" || value == "singbox")
+-        return "sing-box";
+-    return routing_engine();
+-}
+-
+ function routing_engine() {
+     let value = "";
+     if (uci_core.available() && uci_core.exists(CONFIG_NAME + ".settings.routing_engine"))
+@@ -328,6 +319,15 @@ function routing_engine() {
+     return "sing-box";
+ }
+ 
++function proxy_core(section) {
++    let value = lc(as_string(option(section, "proxy_core", "")));
++    if (value == "xray" || value == "xray-core")
++        return "xray";
++    if (value == "sing-box" || value == "singbox")
++        return "sing-box";
++    return routing_engine();
++}
++
+ function is_xray_primary() {
+     return routing_engine() == "xray";
+ }
+diff --git a/forkop/files/usr/lib/config/validator.uc b/forkop/files/usr/lib/config/validator.uc
+index b724ca3..911f3fa 100644
+--- a/forkop/files/usr/lib/config/validator.uc
++++ b/forkop/files/usr/lib/config/validator.uc
+@@ -698,6 +698,12 @@ function mwan3_has_enabled_interface() {
+     return mwan3_has_enabled_interface_text(read_stdin());
+ }
+ 
++function uci_core() {
++    if (uci_core_module == null)
++        uci_core_module = require("core.uci");
++    return uci_core_module;
++}
++
+ function mwan3_has_enabled_interface_from_sections() {
+     for (let section in uci_core().section_objects("mwan3", "interface"))
+         if (option(section, "enabled", "0") == "1")
+@@ -774,12 +780,6 @@ function runtime_constants() {
+     return constants_module;
+ }
+ 
+-function uci_core() {
+-    if (uci_core_module == null)
+-        uci_core_module = require("core.uci");
+-    return uci_core_module;
+-}
+-
+ function fixture_section_list(type_name) {
+     let value = object_or_empty(fixture_uci_data)[type_name];
+     if (type(value) == "array")
+diff --git a/forkop/files/usr/lib/nft/apply.uc b/forkop/files/usr/lib/nft/apply.uc
+index c54761d..2c2e243 100644
+--- a/forkop/files/usr/lib/nft/apply.uc
++++ b/forkop/files/usr/lib/nft/apply.uc
+@@ -2018,11 +2018,6 @@ function apply_hostname_key(value) {
+     return value;
+ }
+ 
+-function apply_ip_from_lease_name(name) {
+-    let ips = apply_ips_from_lease_name(name);
+-    return length(ips) > 0 ? ips[0] : "";
+-}
+-
+ function apply_lease_paths() {
+     return [
+         "/tmp/dhcp.leases",
+@@ -2085,6 +2080,11 @@ function apply_ips_from_lease_name(name) {
+     return index.name_to_ips[wanted];
+ }
+ 
++function apply_ip_from_lease_name(name) {
++    let ips = apply_ips_from_lease_name(name);
++    return length(ips) > 0 ? ips[0] : "";
++}
++
+ function apply_expanded_source_values(value) {
+     value = trim(as_string(value));
+     let result = [];
+diff --git a/forkop/files/usr/lib/server/service.uc b/forkop/files/usr/lib/server/service.uc
+index b385110..c838ccd 100644
+--- a/forkop/files/usr/lib/server/service.uc
++++ b/forkop/files/usr/lib/server/service.uc
+@@ -847,6 +847,16 @@ function server_prepare_legacy_user_defaults(section, protocol) {
+         server_default_set_option(section, "vless_flow", extra);
+ }
+ 
++function safe_filename_string(value) {
++    value = as_string(value);
++    let result = [];
++    for (let i = 0; i < length(value); i++) {
++        let chr = substr(value, i, 1);
++        push(result, regex_matches(chr, "^[A-Za-z0-9_.-]$") ? chr : "_");
++    }
++    return join("", result);
++}
++
+ function server_prepare_tls_defaults(section, protocol, security) {
+     if (security != "tls")
+         return;
+@@ -885,16 +895,6 @@ function server_prepare_tls_defaults(section, protocol, security) {
+     }
+ }
+ 
+-function safe_filename_string(value) {
+-    value = as_string(value);
+-    let result = [];
+-    for (let i = 0; i < length(value); i++) {
+-        let chr = substr(value, i, 1);
+-        push(result, regex_matches(chr, "^[A-Za-z0-9_.-]$") ? chr : "_");
+-    }
+-    return join("", result);
+-}
+-
+ function prepare_server_defaults(section) {
+     let protocol = config_get(section, "protocol", "vless");
+     if (!(protocol == "shadowsocks" || protocol == "socks" || protocol == "vmess" || protocol == "vless" ||
+diff --git a/forkop/files/usr/lib/service/initd.uc b/forkop/files/usr/lib/service/initd.uc
+index 164a19c..8f14c84 100644
+--- a/forkop/files/usr/lib/service/initd.uc
++++ b/forkop/files/usr/lib/service/initd.uc
+@@ -181,6 +181,15 @@ function lock_dir_write_owner(lock_dir, owner_pid) {
+     return write_text_file(as_string(lock_dir) + "/pid", as_string(owner_pid) + "\n");
+ }
+ 
++function release_runtime_dir_lock(lock_dir) {
++    lock_dir = as_string(lock_dir);
++    if (lock_dir == "")
++        return;
++
++    command_success_from_args([ "rm", "-f", lock_dir + "/pid" ]);
++    command_success_from_args([ "rmdir", lock_dir ]);
++}
++
+ function acquire_runtime_dir_lock(lock_dir, owner_pid) {
+     lock_dir = as_string(lock_dir);
+     owner_pid = as_string(owner_pid);
+@@ -210,15 +219,6 @@ function acquire_runtime_dir_lock(lock_dir, owner_pid) {
+     return false;
+ }
+ 
+-function release_runtime_dir_lock(lock_dir) {
+-    lock_dir = as_string(lock_dir);
+-    if (lock_dir == "")
+-        return;
+-
+-    command_success_from_args([ "rm", "-f", lock_dir + "/pid" ]);
+-    command_success_from_args([ "rmdir", lock_dir ]);
+-}
+-
+ function mark_pending_reload(path, reason) {
+     path = as_string(path || PENDING_RELOAD_FILE);
+     reason = as_string(reason || "pending");
+@@ -398,6 +398,11 @@ function restore_dnsmasq_failsafe() {
+     return module_status(DNS_APPLY_UC, [ "failsafe-restore" ]);
+ }
+ 
++function owner_pid_value() {
++    let pid = trim(command_output_from_args([ "sh", "-c", "echo $PPID" ]));
++    return match(pid, /^[0-9]+$/) != null ? pid : "0";
++}
++
+ function begin_external_service_action(action, source, owner_pid) {
+     if (as_string(getenv("FORKOP_UI_ACTION_TRACKED") || "0") == "1")
+         return "";
+@@ -417,11 +422,6 @@ function finish_external_service_action(action, job_id, status) {
+     return module_status(UI_UC, [ "service-action-finish-after-command", action, job_id, as_string(status) ]);
+ }
+ 
+-function owner_pid_value() {
+-    let pid = trim(command_output_from_args([ "sh", "-c", "echo $PPID" ]));
+-    return match(pid, /^[0-9]+$/) != null ? pid : "0";
+-}
+-
+ function runtime_status_object() {
+     let data = command_output_from_args([ BIN_PATH, "get_status" ]);
+     try {
+diff --git a/forkop/files/usr/lib/service/state.uc b/forkop/files/usr/lib/service/state.uc
+index 614c373..01f274a 100644
+--- a/forkop/files/usr/lib/service/state.uc
++++ b/forkop/files/usr/lib/service/state.uc
+@@ -286,6 +286,15 @@ function lock_dir_write_owner(lock_dir, owner_pid) {
+     return write_text_file(as_string(lock_dir) + "/pid", as_string(owner_pid) + "\n");
+ }
+ 
++function release_runtime_dir_lock(lock_dir) {
++    lock_dir = as_string(lock_dir);
++    if (lock_dir == "")
++        return;
++
++    command_success_from_args([ "rm", "-f", lock_dir + "/pid" ]);
++    command_success_from_args([ "rmdir", lock_dir ]);
++}
++
+ function acquire_runtime_dir_lock(lock_dir, owner_pid) {
+     lock_dir = as_string(lock_dir);
+     owner_pid = as_string(owner_pid);
+@@ -330,15 +339,6 @@ function acquire_runtime_dir_lock_wait(lock_dir, owner_pid, timeout) {
+     return true;
+ }
+ 
+-function release_runtime_dir_lock(lock_dir) {
+-    lock_dir = as_string(lock_dir);
+-    if (lock_dir == "")
+-        return;
+-
+-    command_success_from_args([ "rm", "-f", lock_dir + "/pid" ]);
+-    command_success_from_args([ "rmdir", lock_dir ]);
+-}
+-
+ function write_reload_state(path, values) {
+     if (!ensure_parent_dir(path))
+         exit(1);
+diff --git a/forkop/files/usr/lib/service/ui.uc b/forkop/files/usr/lib/service/ui.uc
+index 4914d64..8bcfcc5 100644
+--- a/forkop/files/usr/lib/service/ui.uc
++++ b/forkop/files/usr/lib/service/ui.uc
+@@ -290,6 +290,22 @@ function print_service_status_text(running, enabled) {
+     print(service_status_text(running, enabled), "\n");
+ }
+ 
++function file_executable(path) {
++    let stat = fs.stat(as_string(path));
++    return stat != null && stat.mode != null && (int(stat.mode) & 73) != 0;
++}
++
++function xray_running() {
++    if (!file_executable(XRAY_BIN))
++        return false;
++    if (module_success(LIB_DIR + "/xray/runtime.uc", [ "running" ]))
++        return true;
++    return command_success_from_args([ "pidof", "xray" ]) ||
++        command_success_from_args([ "pgrep", "-x", "xray" ]) ||
++        command_success_from_args([ "pgrep", "-x", "Xray" ]) ||
++        command_success("pgrep -f '/usr/bin/xray'");
++}
++
+ function ui_state_json() {
+     let action_state = read_state_paths();
+     let forkop_running = arg_number(ARGV[1]);
+@@ -531,11 +547,6 @@ function active_service_action_value() {
+     return "";
+ }
+ 
+-function file_executable(path) {
+-    let stat = fs.stat(as_string(path));
+-    return stat != null && stat.mode != null && (int(stat.mode) & 73) != 0;
+-}
+-
+ function first_line(path) {
+     let data = fs.readfile(as_string(path));
+     if (data == null)
+@@ -820,6 +831,11 @@ function action_state_from_dirs() {
+     };
+ }
+ 
++function release_dir_lock(lock_dir) {
++    remove_file(as_string(lock_dir) + "/pid");
++    command_success_from_args([ "rmdir", lock_dir ]);
++}
++
+ function acquire_dir_lock(lock_dir) {
+     lock_dir = as_string(lock_dir);
+     let owner_pid = current_pid();
+@@ -855,11 +871,6 @@ function acquire_dir_lock(lock_dir) {
+     return false;
+ }
+ 
+-function release_dir_lock(lock_dir) {
+-    remove_file(as_string(lock_dir) + "/pid");
+-    command_success_from_args([ "rmdir", lock_dir ]);
+-}
+-
+ function service_enabled() {
+     return file_executable("/etc/rc.d/S99" + SERVICE_NAME);
+ }
+@@ -875,17 +886,6 @@ function sing_box_running() {
+     ]);
+ }
+ 
+-function xray_running() {
+-    if (!file_executable(XRAY_BIN))
+-        return false;
+-    if (module_success(LIB_DIR + "/xray/runtime.uc", [ "running" ]))
+-        return true;
+-    return command_success_from_args([ "pidof", "xray" ]) ||
+-        command_success_from_args([ "pgrep", "-x", "xray" ]) ||
+-        command_success_from_args([ "pgrep", "-x", "Xray" ]) ||
+-        command_success("pgrep -f '/usr/bin/xray'");
+-}
+-
+ function forkop_running() {
+     return module_success(LIB_DIR + "/service/state.uc", [
+         "forkop-stably-running",
+diff --git a/forkop/files/usr/lib/singbox/generator.uc b/forkop/files/usr/lib/singbox/generator.uc
+index 84d808e..f21c9bd 100644
+--- a/forkop/files/usr/lib/singbox/generator.uc
++++ b/forkop/files/usr/lib/singbox/generator.uc
+@@ -2949,11 +2949,6 @@ function ip_from_hosts_line(line, wanted) {
+     return "";
+ }
+ 
+-function ip_from_dhcp_lease_name(name) {
+-    let ips = ips_from_dhcp_lease_name(name);
+-    return length(ips) > 0 ? ips[0] : "";
+-}
+-
+ function lease_lookup_paths() {
+     return [
+         "/tmp/dhcp.leases",
+@@ -2965,16 +2960,6 @@ function lease_lookup_paths() {
+     ];
+ }
+ 
+-function append_unique_ip(result, seen, ip) {
+-    ip = trim(as_string(ip));
+-    if (ip == "" || seen[ip])
+-        return;
+-    if (is_valid_ip(ip) != true)
+-        return;
+-    seen[ip] = true;
+-    push(result, ip);
+-}
+-
+ function note_lease_pair(ip_to_name, name_to_ips, ip, name) {
+     ip = trim(as_string(ip));
+     name = hostname_key(name);
+@@ -3029,6 +3014,21 @@ function ips_from_dhcp_lease_name(name) {
+     return index.name_to_ips[wanted];
+ }
+ 
++function ip_from_dhcp_lease_name(name) {
++    let ips = ips_from_dhcp_lease_name(name);
++    return length(ips) > 0 ? ips[0] : "";
++}
++
++function append_unique_ip(result, seen, ip) {
++    ip = trim(as_string(ip));
++    if (ip == "" || seen[ip])
++        return;
++    if (is_valid_ip(ip) != true)
++        return;
++    seen[ip] = true;
++    push(result, ip);
++}
++
+ function expanded_ips_for_source_value(value) {
+     value = trim(as_string(value));
+     let result = [];
+@@ -3250,6 +3250,10 @@ function excluded_non_fakeip_rule(inbound, source) {
+     };
+ }
+ 
++function single_or_array(values) {
++    return length(values) == 1 ? values[0] : values;
++}
++
+ function add_global_routing_exclusions(config) {
+     let excluded = [];
+     try {
+@@ -3415,10 +3419,6 @@ function section_dns_server(section) {
+         : runtime_constants.FAKEIP_DNS_SERVER_TAG;
+ }
+ 
+-function single_or_array(values) {
+-    return length(values) == 1 ? values[0] : values;
+-}
+-
+ function copy_dns_matchers(matchers) {
+     let copy = {};
+     for (let key, value in matchers)
