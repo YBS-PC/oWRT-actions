@@ -137,7 +137,7 @@ jobs:
 
           if [ "$INPUT_TARGET" == "combo" ]; then
             echo ">>> Generating COMBO matrix..."
-            json="{\"include\":[$(entry nanopi-r6s homeproxy true  1.12.x),$(entry nanopi-r6s forkop true extended),$(entry rb5009 clear false no),$(entry rb5009 switch false no)]}"
+            json="{\"include\":[$(entry nanopi-r6s homeproxy true  1.12.x),$(entry nanopi-r6s homeproxy true latest),$(entry nanopi-r6s forkop true extended),$(entry rb5009 clear false no),$(entry rb5009 switch false no)]}"
           else
             # Все устройства из config/conf/ — при добавлении нового дописать сюда.
             # ВНИМАНИЕ: slateax и ax59u — «тонкие» устройства: part3 ставит им
@@ -944,6 +944,24 @@ jobs:
         M_RDRC=$(has 'store_rdrc')                                     # cache_file.store_rdrc (устарел в 1.14)
         M_INDEP=$(has 'independent_cache')                             # dns.independent_cache (устарел в 1.14)
 
+        # Генератор, который сам выбирает форму sniff по версии ядра
+        # (patches/packages/luci-app-homeproxy/004-*): legacy-поля пишутся
+        # только для sing-box < 1.13, иначе — правило action 'sniff'.
+        # Признаки проверяются все сразу: поля входящих подключений зависят от
+        # legacy_inbound_sniff, правило sniff есть, версия читается из ядра.
+        # Тогда для 1.13+ legacy-поля в пробу не попадают. Если патч не
+        # применился или его формат другой — остаётся строгая проверка выше.
+        SNIFF_MODE="статически"
+        if [ "$M_SNIFF" = "1" ] &&
+           grep -q 'sniff: legacy_inbound_sniff' "$GEN" &&
+           grep -q "action: 'sniff'" "$GEN" &&
+           grep -q "sing-box version" "$GEN"; then
+            case "$SB_VER" in
+                0.*|1.[0-9]|1.[0-9].*|1.1[0-2]|1.1[0-2].*) SNIFF_MODE="по версии: legacy-поля (sing-box < 1.13)" ;;
+                *) M_SNIFF=0; SNIFF_MODE="по версии: правило sniff (sing-box ≥ 1.13)" ;;
+            esac
+        fi
+
         jq -n --argjson s "$M_SNIFF" --argjson b "$M_BLOCK" --argjson r "$M_RDRC" --argjson i "$M_INDEP" '
         {
           log: {level: "warn"},
@@ -969,6 +987,7 @@ jobs:
         echo "Генератор      : $GEN"
         echo "sing-box       : $SB_VER ($SB_SRC)"
         echo "Маркеры        : sniff=$M_SNIFF block=$M_BLOCK store_rdrc=$M_RDRC independent_cache=$M_INDEP"
+        echo "sniff в генер. : $SNIFF_MODE"
         echo "------------------------------------------"
         echo "${OUT:-(замечаний нет)}"
         echo "=========================================="
