@@ -636,6 +636,14 @@ EOF
             uci -q set forkop.settings.dont_touch_dhcp='1' 2>/dev/null \
                 && uci commit forkop 2>/dev/null \
                 && log_ok "forkop: dont_touch_dhcp=1 (AGH остаётся хозяином на :53)"
+            # Аналог dns_hijacked='1' для homeproxy (патч 025): forkop не
+            # перехватывает DNS исключённых устройств и устройств из фильтров
+            # секций, поэтому AGH видит каждого клиента. Их трафик к FakeIP
+            # forkop всё равно направляет правильно (исключённые — напрямую).
+            # Без патча 025 опция ни на что не влияет.
+            uci -q set forkop.settings.intercept_device_dns='0' 2>/dev/null \
+                && uci commit forkop 2>/dev/null \
+                && log_ok "forkop: intercept_device_dns=0 (DNS всех клиентов идёт через AGH)"
             log_ok "AGH upstream → forkop sing-box (127.0.0.42:53)"
         else
             # homeproxy (и все остальные варианты с AGH): homeproxy sing-box DNS
