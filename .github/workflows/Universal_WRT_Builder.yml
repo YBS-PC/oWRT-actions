@@ -137,7 +137,7 @@ jobs:
 
           if [ "$INPUT_TARGET" == "combo" ]; then
             echo ">>> Generating COMBO matrix..."
-            json="{\"include\":[$(entry nanopi-r6s homeproxy true  1.12.x),$(entry nanopi-r6s forkop true extended),$(entry rb5009 clear false no),$(entry rb5009 switch false no)]}"
+            json="{\"include\":[$(entry nanopi-r6s homeproxy true 1.12.x),$(entry nanopi-r6s homeproxy true latest),$(entry nanopi-r6s forkop true extended),$(entry rb5009 clear false no),$(entry rb5009 switch false no)]}"
           else
             # Все устройства из config/conf/ — при добавлении нового дописать сюда.
             # ВНИМАНИЕ: slateax и ax59u — «тонкие» устройства: part3 ставит им
