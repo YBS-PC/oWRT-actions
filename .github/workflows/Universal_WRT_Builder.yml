@@ -1021,6 +1021,19 @@ jobs:
             esac
         fi
 
+        # То же для опций кэша DNS (patches/packages/luci-app-homeproxy/006-*):
+        # store_rdrc и independent_cache пишутся только для sing-box < 1.14,
+        # с 1.14 — store_dns. Тогда для 1.14+ их нет и в пробе.
+        CACHE_MODE="статически"
+        if grep -q 'independent_cache: legacy_dns_cache' "$GEN" &&
+           grep -q 'store_rdrc: legacy_dns_cache' "$GEN" &&
+           grep -q 'store_dns: modern_dns_cache' "$GEN"; then
+            case "$SB_VER" in
+                0.*|1.[0-9]|1.[0-9].*|1.1[0-3]|1.1[0-3].*) CACHE_MODE="по версии: store_rdrc/independent_cache (sing-box < 1.14)" ;;
+                *) M_RDRC=0; M_INDEP=0; CACHE_MODE="по версии: store_dns (sing-box ≥ 1.14)" ;;
+            esac
+        fi
+
         jq -n --argjson s "$M_SNIFF" --argjson b "$M_BLOCK" --argjson r "$M_RDRC" --argjson i "$M_INDEP" '
         {
           log: {level: "warn"},
@@ -1047,6 +1060,7 @@ jobs:
         echo "sing-box       : $SB_VER ($SB_SRC)"
         echo "Маркеры        : sniff=$M_SNIFF block=$M_BLOCK store_rdrc=$M_RDRC independent_cache=$M_INDEP"
         echo "sniff в генер. : $SNIFF_MODE"
+        echo "Кэш DNS в ген. : $CACHE_MODE"
         echo "------------------------------------------"
         echo "${OUT:-(замечаний нет)}"
         echo "=========================================="
@@ -1073,6 +1087,11 @@ jobs:
             else
                 echo ">>> Выбери download_binaries_sb с версией, которую проверка пропускает,"
                 echo ">>> либо дождись обновления homeproxy в immortalwrt."
+            fi
+            if [ "${{ matrix.patches }}" != "true" ]; then
+                echo ">>> Патчи для этой сборки отключены (patches=false). Поддержку"
+                echo ">>> sing-box 1.13+ даёт patches/packages/luci-app-homeproxy/004-*:"
+                echo ">>> включи патчи (apply_patches / поле patches в combo) или выбери 1.12.x."
             fi
             exit 1
         fi
@@ -1235,7 +1254,9 @@ jobs:
         # варианта с разным sing-box (например homeproxy 1.12.x и latest).
         # Без него имена совпадали бы (дата — до минуты), и второй артефакт
         # с тем же именем upload-artifact отверг бы.
-        name: ${{ inputs.source }}_${{ inputs.branch }}_${{ matrix.variant }}_${{ matrix.target }}_sb-${{ matrix.sb }}_${{ steps.get_date.outputs.date }}
+        # _nopatches — сборка с patches=false: иначе её имя совпало бы со
+        # сборкой того же устройства, варианта и sing-box с патчами.
+        name: ${{ inputs.source }}_${{ inputs.branch }}_${{ matrix.variant }}_${{ matrix.target }}_sb-${{ matrix.sb }}${{ matrix.patches == false && '_nopatches' || '' }}_${{ steps.get_date.outputs.date }}
         path: openwrt/bin
         # На ранней ошибке (до создания bin/) не валим джоб красным "no files".
         if-no-files-found: warn
