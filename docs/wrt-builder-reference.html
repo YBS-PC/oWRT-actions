@@ -313,7 +313,7 @@
 
     <div class="note">
       <span class="ic" style="color:var(--accent)">i</span>
-      <p><b>Где лежат патчи.</b> <code>patches/*.patch</code> — к дереву OpenWrt (путь в патче от корня <code>openwrt/</code>). <code>patches/feeds/forkop/</code> — 24 патча к оригиналу ushan0v/forkop (используется сейчас), <code>patches/feeds/forkopmod/</code> — к форку Gavr1024/forkop-mod (если переключить фид в YML). Имя подпапки должно совпадать с именем фида в <code>feeds.conf</code>. Подробности — в <code>patches/README.md</code>.</p>
+      <p><b>Где лежат патчи.</b> <code>patches/*.patch</code> — к дереву OpenWrt (путь в патче от корня <code>openwrt/</code>). <code>patches/feeds/forkop/</code> — 25 патчей к оригиналу ushan0v/forkop (используется сейчас), <code>patches/feeds/forkopmod/</code> — к форку Gavr1024/forkop-mod (если переключить фид в YML). Имя подпапки должно совпадать с именем фида в <code>feeds.conf</code>. Подробности — в <code>patches/README.md</code>.</p>
     </div>
   </section>
 
@@ -380,7 +380,7 @@
 
     <div class="note warn">
       <span class="ic">◆</span>
-      <p><b>forkop: что важно знать.</b> Пакеты <code>forkop</code>, <code>luci-app-forkop</code>, <code>luci-i18n-forkop-ru</code> собираются из оригинала <code>ushan0v/forkop</code> 1.0.5 с 24 патчами: 17 исправлений из открытых PR репозитория (авторы сохранены), исправления вызовов ucode до объявления, скрипта удаления для apk, совместимости с sing-box 1.14, зависания загрузки списков и показа доменов в LuCI, а также две настройки из forkop-mod в доработанном виде — «Исключить BitTorrent» и «Исключённые устройства» (по IP, подсети или MAC). Для ядра sing-box в образ собирается пакет из фида (25.12: 1.13.x), а скачанный бинарь (в combo — <code>extended</code> 1.14.x) кладётся через <code>files/</code> поверх него в <code>/usr/bin/sing-box</code>. Менеджер пакетов при этом считает установленной версию из фида, поэтому <code>apk upgrade</code> может вернуть её вместо extended — обновляйте sing-box через вкладку «Компоненты» forkop.</p>
+      <p><b>forkop: что важно знать.</b> Пакеты <code>forkop</code>, <code>luci-app-forkop</code>, <code>luci-i18n-forkop-ru</code> собираются из оригинала <code>ushan0v/forkop</code> 1.0.5 с 25 патчами: 17 исправлений из открытых PR репозитория (авторы сохранены), исправления вызовов ucode до объявления, скрипта удаления для apk, совместимости с sing-box 1.14, зависания загрузки списков и показа доменов в LuCI, а также две настройки из forkop-mod в доработанном виде — «Исключить BitTorrent» и «Исключённые устройства» (по IP, подсети или MAC) — и настройка «Перехватывать DNS устройств». <code>zz1-final-offline-setup.sh</code> выключает её (<code>intercept_device_dns=0</code>, аналог <code>dns_hijacked</code> для homeproxy): DNS всех клиентов идёт через AdGuard Home, и он видит каждое устройство, а трафик исключённых устройств к FakeIP forkop отправляет напрямую. Для ядра sing-box в образ собирается пакет из фида (25.12: 1.13.x), а скачанный бинарь (в combo — <code>extended</code> 1.14.x) кладётся через <code>files/</code> поверх него в <code>/usr/bin/sing-box</code>. Менеджер пакетов при этом считает установленной версию из фида, поэтому <code>apk upgrade</code> может вернуть её вместо extended — обновляйте sing-box через вкладку «Компоненты» forkop.</p>
     </div>
   </section>
 
@@ -398,7 +398,7 @@
       <li><b>Прокси под вариант.</b> passwall2 — базовые настройки на first boot; forkop — <code>exclude_ntp=1</code> (NTP мимо прокси). xray, v2rayA и podkop не настраиваются.</li>
       <li><b>youtubeUnblock.</b> Запись правил nftables с ipset-байпасами, очередь 537, метка гостевой сети; START=99.</li>
       <li><b>internet-detector / owut.</b> internet-detector выключается (чтобы не висел службой, а активировался при открытии страницы luci), owut настраивается.</li>
-      <li><b>AdGuardHome.</b> dnsmasq переезжает на порт 54, AGH занимает 53; upstream DNS — sing-box homeproxy (<code>127.0.0.1:5333</code>) или forkop (<code>127.0.0.42:53</code>, плюс <code>dont_touch_dhcp=1</code>); создаётся LuCI-редирект на <code>:8080</code>, служба запускается.</li>
+      <li><b>AdGuardHome.</b> dnsmasq переезжает на порт 54, AGH занимает 53; upstream DNS — sing-box homeproxy (<code>127.0.0.1:5333</code>) или forkop (<code>127.0.0.42:53</code>, плюс <code>dont_touch_dhcp=1</code> и <code>intercept_device_dns=0</code>); создаётся LuCI-редирект на <code>:8080</code>, служба запускается.</li>
       <li><b>SQM и BBR.</b> Если SQM установлен — настраивается CAKE; TCP BBR включается, если модуль есть в ядре.</li>
       <li><b>FullCone NAT</b> — только на ImmortalWrt и только при наличии модуля (на OpenWrt тихо пропускается).</li>
       <li><b>Время и идентичность.</b> Синхронизация RTC/NTP, исправление mtime из будущего, обновление баннера; hostname и commonname — только на first boot.</li>
@@ -425,14 +425,14 @@
       <span class="node">FakeIP / upstream<small>по правилам секций</small></span>
     </div>
     <div class="grid" style="margin-top:13px">
-      <div class="svc"><h4>forkop</h4><span class="port">LuCI → Services → Forkop</span><p>Панель, секции, «Компоненты» (sing-box / Xray). <code>dont_touch_dhcp=1</code>: dnsmasq не перенастраивается, DNS держит AGH.</p></div>
+      <div class="svc"><h4>forkop</h4><span class="port">LuCI → Services → Forkop</span><p>Панель, секции, «Компоненты» (sing-box / Xray). <code>dont_touch_dhcp=1</code>: dnsmasq не перенастраивается, DNS держит AGH. <code>intercept_device_dns=0</code>: DNS не перехватывается ни для одного устройства.</p></div>
       <div class="svc"><h4>dnsmasq</h4><span class="port">:54 · dnsmasq-full</span><p>DHCP и локальные имена; <code>-full</code> нужен для <code>nftset</code> в режиме Xray.</p></div>
       <div class="svc"><h4>NTP мимо прокси</h4><span class="port">exclude_ntp=1</span><p>Правило <code>udp dport 123 return</code> для клиентов и самого роутера.</p></div>
       <div class="svc"><h4>Проверка после прошивки</h4><span class="port">ssh</span><p><code>sing-box version</code> и <code>logread | grep forkop</code> — без «left-hand side is not a function».</p></div>
     </div>
     <div class="note">
       <span class="ic" style="color:var(--accent)">i</span>
-      <p>Обычные DNS-запросы приходят в forkop от AdGuardHome, то есть с адреса самого роутера. Для устройств из «Исключённых устройств» и секций с фильтром по устройству forkop перехватывает их DNS в nftables раньше AdGuardHome и видит адрес клиента, поэтому эти функции работают; фильтры AdGuardHome к таким запросам не применяются.</p>
+      <p>DNS-запросы всех клиентов идут сначала в AdGuardHome, и он видит каждое устройство: журнал, статистика и правила по клиентам работают. В forkop запросы приходят уже от AdGuardHome, с адреса самого роутера. Поэтому устройства из «Исключённых устройств» и секций с фильтром по устройству forkop различает не по DNS, а по трафику. Исключённые устройства тоже получают FakeIP для доменов из списков, но такие соединения forkop отправляет напрямую, мимо прокси. Перехват DNS по устройствам остаётся только для DNS-секций с фильтром по устройству: там forkop отвечает сам, минуя AdGuardHome.</p>
     </div>
   </section>
 
