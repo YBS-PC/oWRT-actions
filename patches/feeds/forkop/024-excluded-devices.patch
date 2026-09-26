@@ -3,7 +3,7 @@ From: Claude <noreply@anthropic.com>
 Date: Sat, 26 Sep 2026 07:11:17 +0000
 Subject: [PATCH] Add Excluded devices: full bypass by IP, subnet or MAC (#88)
 
-Requires: 020-sing-box-114-dns-http-client
+Requires: 017-pr106-byedpi-outbound-isolation 020-sing-box-114-dns-http-client 023-exclude-bittorrent
 
 Add "Excluded devices": full Forkop bypass by IP, subnet or MAC (#88)
 
