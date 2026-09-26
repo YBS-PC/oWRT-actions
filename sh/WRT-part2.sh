@@ -153,35 +153,42 @@ apply_feed_patches() {
             fi
         done
 
-        # Патч, правящий строки предыдущего (011 поверх 010), делает тот
-        # неузнаваемым: когда в исходниках есть оба, обратный прогон одного
-        # 010 уже не сходится, и 010 ложно считался бы непримененным — с
-        # FEED_PATCH_STRICT=1 это остановило бы сборку на исправном коде.
-        # Поэтому: не применённый патч, от которого зависит патч, найденный
-        # в исходниках или применённый, — тоже в исходниках. (Применённым
-        # зависимый быть не может: без предшественника его остановил бы
-        # Requires, значит, он найден в исходниках.)
-        local _f _q _dep _still=""
-        for _f in $_failed_names; do
-            _dep=""
+        # Повторная проверка непримененных. Патч, чьи строки потом правит
+        # другой патч (011 поверх 010, 024 рядом со строками 017 и 023),
+        # не узнаётся обратным прогоном, даже если он есть в исходниках.
+        # Для каждого непримененного (с конца) во временной копии фида
+        # откатываем более поздние патчи, найденные в исходниках или
+        # применённые, и проверяем его снова. Если сошлось — он тоже есть.
+        # Решение принимается по реальному содержимому кода, а не по
+        # строкам Requires, и ничего в самом фиде не меняется.
+        local _f _q _tmp _later _still="" _rev=""
+        for _f in $_failed_names; do _rev="$_f $_rev"; done
+        for _f in $_rev; do
+            _tmp=$(mktemp -d) || break
+            tar -C "feeds/$_feed" --exclude=.git -cf - . | tar -C "$_tmp" -xf -
+            _later=""
             for _p in "$_dir"*.patch; do
                 _q=$(basename "$_p" .patch)
-                case "$_ok" in *" $_q "*) ;; *) continue ;; esac
-                if sed -n '/^diff --git /q; s/\r$//; s/^Requires:[[:space:]]*//p' "$_p" | tr -s ' \t' '\n' | grep -qxF "$_f"; then
-                    _dep="$_q"; break
-                fi
+                [[ "$_q" > "$_f" ]] || continue
+                case "$_ok" in *" $_q "*) _later="$_q $_later" ;; esac
             done
-            if [ -n "$_dep" ]; then
-                echo "✓ $_feed: $_f уже есть в исходниках (его правит $_dep, найденный там же)"
-                _failed=$((_failed - 1)); _present=$((_present + 1))
+            for _q in $_later; do
+                sed 's/\r$//' "$_dir$_q.patch" | patch -p1 -d "$_tmp" -R -F 0 -f -s --no-backup-if-mismatch >/dev/null 2>&1 || break
+            done
+            if sed 's/\r$//' "$_dir$_f.patch" | patch -p1 -d "$_tmp" -R -F 0 -f -s --dry-run >/dev/null 2>&1; then
+                echo "✓ $_feed: $_f уже есть в исходниках (под изменениями более поздних патчей)"
+                _ok="$_ok$_f "; _failed=$((_failed - 1)); _present=$((_present + 1))
             else
-                _still="$_still $_f"
-                case "$_nomatch" in
-                *" $_f "*) echo "::warning::$_feed: $_f не применяется (код фида изменился или исправление уже внесено в другом виде), пропущен" ;;
-                esac
+                _still="$_f $_still"
             fi
+            rm -rf "$_tmp"
         done
-        _failed_names="$_still"
+        for _f in $_still; do
+            case "$_nomatch" in
+            *" $_f "*) echo "::warning::$_feed: $_f не применяется (код фида изменился или исправление уже внесено в другом виде), пропущен" ;;
+            esac
+        done
+        _failed_names=" $_still"
 
         rm -f "/tmp/feedpatch.$$.patch"
         echo ">>> $_feed: применено $_applied, уже было $_present, пропущено $_failed"
