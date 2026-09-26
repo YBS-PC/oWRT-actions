@@ -55,10 +55,14 @@ echo "Определение версий пакетов из git"
 echo "=================================================="
 
 if [[ "$VARIANT" == "forkop" ]]; then
-    FORKOP_VER=$(resolve_latest_tag "https://github.com/Gavr1024/forkop-mod.git")
+    # Версию берём из того репозитория, который реально подключён в
+    # feeds.conf: forkop (ushan0v) или forkopmod (Gavr1024).
+    FORKOP_REPO=$(awk '$1 == "src-git" && ($2 == "forkop" || $2 == "forkopmod") { print $3; exit }' feeds.conf.default 2>/dev/null | sed 's/[;^].*//')
+    [ -n "$FORKOP_REPO" ] || FORKOP_REPO="https://github.com/ushan0v/forkop.git"
+    FORKOP_VER=$(resolve_latest_tag "$FORKOP_REPO")
     if [ -n "$FORKOP_VER" ]; then
         export_build_var FORKOP_VERSION "$FORKOP_VER"
-        echo "✓ forkop: $FORKOP_VER"
+        echo "✓ forkop: $FORKOP_VER ($FORKOP_REPO)"
     else
         # Makefile распознаёт dev и уходит в PKG_VERSION=0.0.0 без ошибки
         export_build_var FORKOP_VERSION "dev"
@@ -84,12 +88,21 @@ fi
 # patches/*.patch (патчи к дереву openwrt). Патчи к фидам лежат в подпапках,
 # чтобы тот шаг их не трогал, и применяются здесь — после feeds update, до
 # feeds install. Имя подпапки = имя фида из feeds.conf (forkopmod, forkop).
-# Фид не загружен -> пропуск. Патч уже есть в исходниках -> пропуск.
-# Не применяется (автор изменил код) -> предупреждение в Actions, сборка идёт.
+#
+# Для каждого патча по порядку имён:
+#   - фид не загружен                  -> все патчи подпапки пропускаются;
+#   - патч уже есть в исходниках        -> пропуск (автор внёс то же самое);
+#   - в заголовке есть "Requires: <имя>", а тот патч не применён и не
+#     найден в исходниках               -> пропуск с предупреждением;
+#   - применяется без сдвига контекста  -> применяется (-F 0: без "нечёткого"
+#     поиска места, чтобы правка не попала не туда при изменённом коде);
+#   - иначе                             -> пропуск с предупреждением.
+# Каждый патч применяется целиком или не применяется вовсе.
+# FEED_PATCH_STRICT=1 — остановить сборку, если какой-то патч не применился.
 # --------------------------------------------------------------------------
 
 apply_feed_patches() {
-    local _dir _feed _p _name
+    local _dir _feed _p _name _req _missing _ok _applied _present _failed _failed_names
 
     for _dir in "$GITHUB_WORKSPACE"/patches/feeds/*/; do
         [ -d "$_dir" ] || continue
@@ -98,18 +111,49 @@ apply_feed_patches() {
             echo ">>> Фид '$_feed' не загружен, патчи patches/feeds/$_feed пропущены."
             continue
         fi
+
+        _ok=" "; _applied=0; _present=0; _failed=0; _failed_names=""
         for _p in "$_dir"*.patch; do
             [ -f "$_p" ] || continue
-            _name=$(basename "$_p")
-            if patch -p1 -d "feeds/$_feed" -R -f -s --dry-run < "$_p" >/dev/null 2>&1; then
+            _name=$(basename "$_p" .patch)
+
+            if patch -p1 -d "feeds/$_feed" -R -F 0 -f -s --dry-run < "$_p" >/dev/null 2>&1; then
                 echo "✓ $_feed: $_name уже есть в исходниках, пропуск"
-            elif patch -p1 -d "feeds/$_feed" -f -s --dry-run < "$_p" >/dev/null 2>&1; then
-                patch -p1 -d "feeds/$_feed" -f -s < "$_p"
+                _ok="$_ok$_name "; _present=$((_present + 1))
+                continue
+            fi
+
+            _missing=""
+            for _req in $(sed -n '/^diff --git /q; s/^Requires:[[:space:]]*//p' "$_p"); do
+                case "$_ok" in
+                *" $_req "*) ;;
+                *) _missing="$_missing $_req" ;;
+                esac
+            done
+            if [ -n "$_missing" ]; then
+                echo "::warning::$_feed: $_name пропущен — не применён нужный ему патч:$_missing"
+                _failed=$((_failed + 1)); _failed_names="$_failed_names $_name"
+                continue
+            fi
+
+            if patch -p1 -d "feeds/$_feed" -F 0 -f -s --dry-run < "$_p" >/dev/null 2>&1 &&
+                patch -p1 -d "feeds/$_feed" -F 0 -f -s --no-backup-if-mismatch < "$_p" >/dev/null; then
                 echo "✓ $_feed: применён $_name"
+                _ok="$_ok$_name "; _applied=$((_applied + 1))
             else
-                echo "::warning::$_feed: патч $_name не применяется (код фида изменился), пропущен"
+                echo "::warning::$_feed: $_name не применяется (код фида изменился или исправление уже внесено в другом виде), пропущен"
+                _failed=$((_failed + 1)); _failed_names="$_failed_names $_name"
             fi
         done
+
+        echo ">>> $_feed: применено $_applied, уже было $_present, пропущено $_failed"
+        if [ "$_failed" -gt 0 ]; then
+            echo "::warning title=Патчи фида $_feed::Не применены:$_failed_names"
+            if [ "${FEED_PATCH_STRICT:-0}" = "1" ]; then
+                echo "::error::FEED_PATCH_STRICT=1: сборка остановлена из-за непримененных патчей фида $_feed"
+                exit 1
+            fi
+        fi
     done
 }
 
