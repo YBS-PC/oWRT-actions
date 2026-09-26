@@ -1,0 +1,202 @@
+From bc9b5687b971894c0201d3bba40c209251a4525a Mon Sep 17 00:00:00 2001
+From: petrouspetr-pixel <280500603+petrouspetr-pixel@users.noreply.github.com>
+Date: Sat, 26 Sep 2026 07:11:15 +0000
+Subject: [PATCH] Skip IPv6 TPROXY setup when IPv6 is disabled (#91, PR #113)
+
+Skip IPv6 TPROXY setup when IPv6 is disabled
+---
+ forkop/files/usr/lib/nft/apply.uc |  24 +++++--
+ tests/ipv6_disabled_tproxy.sh     | 111 ++++++++++++++++++++++++++++++
+ 2 files changed, 131 insertions(+), 4 deletions(-)
+ create mode 100644 tests/ipv6_disabled_tproxy.sh
+
+diff --git a/forkop/files/usr/lib/nft/apply.uc b/forkop/files/usr/lib/nft/apply.uc
+index 0cb4e45..3298570 100644
+--- a/forkop/files/usr/lib/nft/apply.uc
++++ b/forkop/files/usr/lib/nft/apply.uc
+@@ -1295,6 +1295,13 @@ function ensure_rt_table_entry(path, table_id, table_name) {
+     return write_text_file(path, data + as_string(table_id) + " " + as_string(table_name) + "\n");
+ }
+ 
++function tproxy_ipv6_enabled() {
++    let all_disabled = trim(command_output_quiet_from_args([ "sysctl", "-n", "net.ipv6.conf.all.disable_ipv6" ]));
++    let lo_disabled = trim(command_output_quiet_from_args([ "sysctl", "-n", "net.ipv6.conf.lo.disable_ipv6" ]));
++
++    return all_disabled != "1" && lo_disabled != "1";
++}
++
+ function tproxy_route4_present(table) {
+     return has_local_default_route_text(command_output_quiet_from_args([ "ip", "route", "list", "table", table ]), 4);
+ }
+@@ -1304,7 +1311,8 @@ function tproxy_route6_present(table) {
+ }
+ 
+ function tproxy_route_present(table) {
+-    return tproxy_route4_present(table) && tproxy_route6_present(table);
++    return tproxy_route4_present(table) &&
++        (!tproxy_ipv6_enabled() || tproxy_route6_present(table));
+ }
+ 
+ function tproxy_marking_rule4_present(table, mark) {
+@@ -1316,7 +1324,8 @@ function tproxy_marking_rule6_present(table, mark) {
+ }
+ 
+ function tproxy_marking_rule_present(table, mark) {
+-    return tproxy_marking_rule4_present(table, mark) && tproxy_marking_rule6_present(table, mark);
++    return tproxy_marking_rule4_present(table, mark) &&
++        (!tproxy_ipv6_enabled() || tproxy_marking_rule6_present(table, mark));
+ }
+ 
+ function tproxy_route_rule_present(table, mark) {
+@@ -1325,6 +1334,7 @@ function tproxy_route_rule_present(table, mark) {
+ 
+ function ensure_tproxy_route_rule(table, mark, rt_tables_path) {
+     rt_tables_path = as_string(rt_tables_path || "/etc/iproute2/rt_tables");
++    let ipv6_enabled = tproxy_ipv6_enabled();
+ 
+     if (!ensure_rt_table_entry(rt_tables_path, "105", table)) {
+         log_fatal("Failed to update route table registry. Aborted.");
+@@ -1342,7 +1352,10 @@ function ensure_tproxy_route_rule(table, mark, rt_tables_path) {
+         log_debug("IPv4 TPROXY route already exists");
+     }
+ 
+-    if (!tproxy_route6_present(table)) {
++    if (!ipv6_enabled) {
++        log_debug("IPv6 is disabled; skipping IPv6 TPROXY route");
++    }
++    else if (!tproxy_route6_present(table)) {
+         log_debug("Added IPv6 TPROXY route");
+         if (!run_args([ "ip", "-6", "route", "add", "local", "::/0", "dev", "lo", "table", table ]) && !tproxy_route6_present(table)) {
+             log_fatal("Failed to add IPv6 route for tproxy. Aborted.");
+@@ -1364,7 +1377,10 @@ function ensure_tproxy_route_rule(table, mark, rt_tables_path) {
+         log_debug("IPv4 TPROXY marking rule already exists");
+     }
+ 
+-    if (!tproxy_marking_rule6_present(table, mark)) {
++    if (!ipv6_enabled) {
++        log_debug("IPv6 is disabled; skipping IPv6 TPROXY marking rule");
++    }
++    else if (!tproxy_marking_rule6_present(table, mark)) {
+         log_debug("Creating IPv6 TPROXY marking rule");
+         if (!run_args([ "ip", "-6", "rule", "add", "fwmark", as_string(mark) + "/" + as_string(mark), "table", table, "priority", "105" ]) && !tproxy_marking_rule6_present(table, mark)) {
+             log_fatal("Failed to create IPv6 marking rule. Aborted.");
+diff --git a/tests/ipv6_disabled_tproxy.sh b/tests/ipv6_disabled_tproxy.sh
+new file mode 100644
+index 0000000..860cfa4
+--- /dev/null
++++ b/tests/ipv6_disabled_tproxy.sh
+@@ -0,0 +1,111 @@
++#!/usr/bin/env bash
++set -euo pipefail
++
++ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
++FORKOP_LIB="$ROOT_DIR/forkop/files/usr/lib"
++NFT_RUNTIME="$ROOT_DIR/forkop/files/usr/lib/nft/apply.uc"
++WORK_DIR="$(mktemp -d)"
++IP_LOG="$WORK_DIR/ip.log"
++LOGGER_LOG="$WORK_DIR/logger.log"
++SYSCTL_LOG="$WORK_DIR/sysctl.log"
++
++nft_ucode() {
++  ucode -L "$FORKOP_LIB" "$NFT_RUNTIME" "$@"
++}
++
++cleanup() {
++  rm -rf "$WORK_DIR"
++}
++trap cleanup EXIT
++
++fail() {
++  printf 'FAIL: %s\n' "$1" >&2
++  printf 'ip log:\n' >&2
++  cat "$IP_LOG" >&2 2>/dev/null || true
++  printf 'logger log:\n' >&2
++  cat "$LOGGER_LOG" >&2 2>/dev/null || true
++  printf 'sysctl log:\n' >&2
++  cat "$SYSCTL_LOG" >&2 2>/dev/null || true
++  exit 1
++}
++
++assert_contains() {
++  local file="$1"
++  local expected="$2"
++  local label="$3"
++
++  grep -Fq "$expected" "$file" || fail "$label: expected '$expected'"
++}
++
++mkdir -p "$WORK_DIR/bin"
++
++cat >"$WORK_DIR/bin/ip" <<'IP'
++#!/usr/bin/env bash
++set -euo pipefail
++{
++  printf 'ip'
++  for arg in "$@"; do
++    printf '\t%s' "$arg"
++  done
++  printf '\n'
++} >> "${IP_LOG:?}"
++
++if [ "$#" -eq 4 ] && [ "$1" = "route" ] && [ "$2" = "list" ] && [ "$3" = "table" ]; then
++  printf '%s\n' "${IP_ROUTE_OUTPUT:-}"
++  exit 0
++fi
++
++if [ "$#" -eq 3 ] && [ "$1" = "-4" ] && [ "$2" = "rule" ] && [ "$3" = "list" ]; then
++  printf '%s\n' "${IP_RULE_OUTPUT:-}"
++  exit 0
++fi
++
++exit 0
++IP
++chmod 0755 "$WORK_DIR/bin/ip"
++
++cat >"$WORK_DIR/bin/sysctl" <<'SYSCTL'
++#!/usr/bin/env bash
++set -euo pipefail
++{
++  printf 'sysctl'
++  for arg in "$@"; do
++    printf '\t%s' "$arg"
++  done
++  printf '\n'
++} >> "${SYSCTL_LOG:?}"
++
++if [ "$#" -eq 2 ] && [ "$1" = "-n" ]; then
++  case "$2" in
++    net.ipv6.conf.all.disable_ipv6)
++      printf '%s\n' "${SYSCTL_IPV6_ALL_DISABLE:-0}"
++      exit 0
++      ;;
++    net.ipv6.conf.lo.disable_ipv6)
++      printf '%s\n' "${SYSCTL_IPV6_LO_DISABLE:-0}"
++      exit 0
++      ;;
++  esac
++fi
++
++exit 1
++SYSCTL
++chmod 0755 "$WORK_DIR/bin/sysctl"
++
++cat >"$WORK_DIR/bin/logger" <<'LOGGER'
++#!/usr/bin/env bash
++set -euo pipefail
++printf '%s\n' "$*" >> "${LOGGER_LOG:?}"
++LOGGER
++chmod 0755 "$WORK_DIR/bin/logger"
++
++export PATH="$WORK_DIR/bin:$PATH"
++export IP_LOG LOGGER_LOG SYSCTL_LOG
++
++rt_tables="$WORK_DIR/rt_tables"
++SYSCTL_IPV6_ALL_DISABLE=1 SYSCTL_IPV6_LO_DISABLE=1 \
++  IP_ROUTE_OUTPUT='' IP_RULE_OUTPUT='' \
++  nft_ucode ensure-tproxy-route-rule forkop 0x00100000 "$rt_tables"
++
++assert_contains "$IP_LOG" $'ip\troute\tadd\tlocal\t0.0.0.0/0\tdev\tlo\ttable\tforkop' "IPv4 TPROXY route"
++assert_contains "$IP_LOG" $'ip\t-4\trule\tadd\tfwmark\t0x00100000/0x00100000\ttable\tforkop\tpriority\t105' "IPv4 TPROXY rule"
+-- 
+2.43.0
+

@@ -1,0 +1,25 @@
+From 2aae204ca0c2c477ac68c640b09e1b0a697eca7f Mon Sep 17 00:00:00 2001
+From: petrouspetr-pixel <petrouspetr-pixel@users.noreply.github.com>
+Date: Sat, 26 Sep 2026 07:11:14 +0000
+Subject: [PATCH] Avoid hijacking non-DNS traffic on port 53 (#79, PR #83)
+
+Avoid hijacking non-DNS traffic on port 53
+---
+ forkop/files/usr/lib/singbox/route.uc | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/forkop/files/usr/lib/singbox/route.uc b/forkop/files/usr/lib/singbox/route.uc
+index e10341d..2ba66a0 100644
+--- a/forkop/files/usr/lib/singbox/route.uc
++++ b/forkop/files/usr/lib/singbox/route.uc
+@@ -27,7 +27,6 @@ function config(settings, runtime) {
+     let result = {
+         rules: [
+             { action: "sniff", inbound: sniff_inbounds },
+-            { action: "hijack-dns", port: 53 },
+             { action: "hijack-dns", protocol: "dns" }
+         ],
+         rule_set: [],
+-- 
+2.43.0
+

@@ -1,0 +1,300 @@
+From f3149ce7b15e889525f5df3dc72eff9ebad00ee4 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 26 Sep 2026 07:11:17 +0000
+Subject: [PATCH] sing-box 1.14: evaluate/respond DNS and explicit HTTP clients
+ (#98, #108)
+
+Requires: 007-pr103-sing-box-114-independent-cache
+
+sing-box 1.14: use evaluate/respond and explicit HTTP clients
+
+Forkop 1.0.5 does not start on sing-box 1.14 (#98, #108). The log only
+shows the first line of `sing-box check`, the independent_cache warning,
+but the actual fatal error is:
+
+  initialize dns router: validate dns rule[N]: sub rule[1]: Response
+  Match Fields (ip_cidr, ...) require match_response to be enabled
+
+It comes from the source-aware bypass DNS rule (a logical rule that
+routes to dnsmasq unless the answer is a nested FakeIP). 1.14 rejects
+address filters without match_response.
+
+When the running sing-box is >= 1.14 (version passed in by the
+independent_cache fix):
+- source-aware bypass: `evaluate` dnsmasq, then `respond` unless the
+  evaluated answer is in the FakeIP ranges; the A/AAAA fallback rule is
+  unchanged;
+- remote rule-sets: `download_detour` -> `http_client: { detour }`, and
+  declare `http_clients` + `route.default_http_client` because the
+  implicit default client is deprecated (both become fatal in 1.15).
+  The default client has no detour: a detour to the bare direct-out is
+  rejected at start.
+
+Older and unknown versions keep the previous config shape.
+
+Verified with the official sing-box 1.13.21 and 1.14.2 binaries: every
+config produced by the test suite passes `sing-box check`, and `run`
+reports no deprecation warnings. tests/sing_box_114_dns_http_client.sh
+covers both shapes and can call real binaries through
+FORKOP_TEST_SING_BOX_113/114.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01HEQfjBzS7Wos7AvTk18TDQ
+---
+ forkop/files/usr/lib/singbox/generator.uc |  83 ++++++++++---
+ tests/sing_box_114_dns_http_client.sh     | 135 ++++++++++++++++++++++
+ 2 files changed, 204 insertions(+), 14 deletions(-)
+ create mode 100755 tests/sing_box_114_dns_http_client.sh
+
+diff --git a/forkop/files/usr/lib/singbox/generator.uc b/forkop/files/usr/lib/singbox/generator.uc
+index eefd709..c0d648a 100644
+--- a/forkop/files/usr/lib/singbox/generator.uc
++++ b/forkop/files/usr/lib/singbox/generator.uc
+@@ -59,6 +59,39 @@ function sing_box_uses_legacy_independent_cache(value) {
+     return major < 1 || (major == 1 && minor < 14);
+ }
+ 
++// sing-box 1.14 replaced the legacy DNS address filter (`ip_cidr` without
++// `match_response`) and rule-set `download_detour`; see the 1.14.0
++// migration guide. Unknown versions keep the pre-1.14 config shape.
++function sing_box_uses_1_14_config() {
++    return !sing_box_uses_legacy_independent_cache(runtime_sing_box_version);
++}
++
++const RULESET_HTTP_CLIENT_TAG = "forkop-ruleset-http";
++
++function apply_ruleset_http_clients(config) {
++    if (!sing_box_uses_1_14_config())
++        return;
++
++    let has_remote = false;
++    for (let rule_set in array_or_empty(config.route && config.route.rule_set)) {
++        if (type(rule_set) != "object" || rule_set.type != "remote")
++            continue;
++        has_remote = true;
++        if (rule_set.download_detour != null) {
++            rule_set.http_client = { detour: rule_set.download_detour };
++            delete rule_set.download_detour;
++        }
++    }
++    if (!has_remote)
++        return;
++
++    // The implicit default client is deprecated in 1.14; declare a plain
++    // direct client explicitly (a detour to the bare direct-out outbound
++    // is rejected at start).
++    config.http_clients = [ { tag: RULESET_HTTP_CLIENT_TAG } ];
++    config.route.default_http_client = RULESET_HTTP_CLIENT_TAG;
++}
++
+ function parent_dir(path) {
+     path = as_string(path);
+     let slash = rindex(path, "/");
+@@ -2533,20 +2566,41 @@ function add_source_dns_matchers(rule, source_ip_cidr) {
+ }
+ 
+ function add_source_aware_bypass_dns_rules(config, matchers, rewrite_ttl) {
+-    push_dns_matcher_rule(config, {
+-        type: "logical",
+-        mode: "and",
+-        rules: [
+-            copy_dns_matchers(matchers),
+-            {
+-                ip_cidr: [ runtime_constants.FAKEIP_INET4_RANGE, runtime_constants.FAKEIP_INET6_RANGE ],
+-                invert: true
+-            }
+-        ],
+-        action: "route",
+-        server: runtime_constants.DNSMASQ_DNS_SERVER_TAG,
+-        rewrite_ttl
+-    });
++    let not_fakeip = {
++        ip_cidr: [ runtime_constants.FAKEIP_INET4_RANGE, runtime_constants.FAKEIP_INET6_RANGE ],
++        invert: true
++    };
++
++    if (sing_box_uses_1_14_config()) {
++        // 1.14 rejects address fields without match_response: ask dnsmasq
++        // first, then return its answer unless it is a nested FakeIP.
++        let evaluate = copy_dns_matchers(matchers);
++        evaluate.action = "evaluate";
++        evaluate.server = runtime_constants.DNSMASQ_DNS_SERVER_TAG;
++        evaluate.rewrite_ttl = rewrite_ttl;
++        push_dns_matcher_rule(config, evaluate);
++
++        not_fakeip.match_response = true;
++        push_dns_matcher_rule(config, {
++            type: "logical",
++            mode: "and",
++            rules: [ copy_dns_matchers(matchers), not_fakeip ],
++            action: "respond"
++        });
++    }
++    else {
++        push_dns_matcher_rule(config, {
++            type: "logical",
++            mode: "and",
++            rules: [
++                copy_dns_matchers(matchers),
++                not_fakeip
++            ],
++            action: "route",
++            server: runtime_constants.DNSMASQ_DNS_SERVER_TAG,
++            rewrite_ttl
++        });
++    }
+ 
+     let fallback = copy_dns_matchers(matchers);
+     fallback.action = "route";
+@@ -3092,6 +3146,7 @@ function generate_config(output_path, service_address, mwan3_active, supports_xh
+     for (let section in sections)
+         add_mixed_proxy_for_section(config, section, service_address);
+ 
++    apply_ruleset_http_clients(config);
+     assert_unique_outbound_tags(config);
+     strip_internal_fields(config);
+     if (!write_json_file(output_path, config)) {
+diff --git a/tests/sing_box_114_dns_http_client.sh b/tests/sing_box_114_dns_http_client.sh
+new file mode 100755
+index 0000000..b8adf78
+--- /dev/null
++++ b/tests/sing_box_114_dns_http_client.sh
+@@ -0,0 +1,135 @@
++#!/usr/bin/env bash
++set -eo pipefail
++
++ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
++FORKOP_LIB="$ROOT_DIR/forkop/files/usr/lib"
++GENERATOR="$FORKOP_LIB/singbox/generator.uc"
++WORK_DIR="$(mktemp -d)"
++
++cleanup() {
++  rm -rf "$WORK_DIR"
++}
++trap cleanup EXIT
++
++fail() {
++  printf 'FAIL: %s\n' "$1" >&2
++  exit 1
++}
++
++cat >"$WORK_DIR/fixture.json" <<'JSON'
++{
++  "settings": {
++    ".name": "settings",
++    ".type": "settings",
++    "config_path": "/tmp/sing-box/config.json",
++    "dns_server": "1.1.1.1",
++    "bootstrap_dns_server": "1.1.1.1",
++    "service_listen_address": "127.0.0.1",
++    "download_lists_via_proxy": "1",
++    "download_lists_via_proxy_section": "proxy"
++  },
++  "section": [
++    {
++      ".name": "proxy",
++      ".type": "section",
++      "enabled": "1",
++      "action": "outbound",
++      "outbound_json": "{\"type\":\"socks\",\"server\":\"127.0.0.1\",\"server_port\":1080,\"version\":\"5\"}",
++      "rule_set": [ "https://example.com/rules.srs" ]
++    },
++    {
++      ".name": "bypass",
++      ".type": "section",
++      "enabled": "1",
++      "action": "bypass",
++      "domain_suffix": [ "example.org" ],
++      "source_ip_cidr": [ "10.0.0.3/32" ]
++    }
++  ]
++}
++JSON
++
++generate_for_version() {
++  local version="$1"
++  local output="$2"
++  mkdir -p "$output.section-cache" "$output.rulesets"
++  ucode -L "$FORKOP_LIB" "$GENERATOR" generate-config-fixture \
++    "$WORK_DIR/fixture.json" "$output" "127.0.0.1" "0" "1" "" "$version"
++}
++
++check_config() {
++  ucode -e '
++let fs = require("fs");
++let config = json(fs.readfile(ARGV[0]));
++let modern = ARGV[1] == "1";
++let rules = config.dns.rules || [];
++
++function assert(condition, message) {
++    if (!condition)
++        die(message + "\n");
++}
++
++function uses_address_filter(rule) {
++    if (rule.ip_cidr != null && !rule.match_response)
++        return true;
++    for (let sub in rule.rules || [])
++        if (uses_address_filter(sub))
++            return true;
++    return false;
++}
++
++let evaluate = null, respond = null, legacy = null;
++for (let i = 0; i < length(rules); i++) {
++    let rule = rules[i];
++    if (rule.action == "evaluate" && rule.server == "dnsmasq-server")
++        evaluate = i;
++    if (rule.action == "respond")
++        respond = i;
++    if (rule.action == "route" && rule.server == "dnsmasq-server" && uses_address_filter(rule))
++        legacy = i;
++}
++
++let remote = null;
++for (let rule_set in config.route.rule_set || [])
++    if (rule_set.type == "remote")
++        remote = rule_set;
++assert(remote != null, "fixture must produce a remote rule-set");
++
++if (modern) {
++    assert(legacy == null, "1.14: legacy DNS address filter must not be generated");
++    assert(evaluate != null && respond != null && evaluate < respond, "1.14: source-aware bypass must evaluate dnsmasq, then respond");
++    let sub = rules[respond].rules[1];
++    assert(sub.match_response == true && sub.invert == true, "1.14: respond must skip nested FakeIP answers");
++    assert(remote.download_detour == null, "1.14: download_detour is deprecated");
++    assert(remote.http_client && remote.http_client.detour == "proxy-out", "1.14: rule-set download keeps the proxy detour");
++    assert(config.route.default_http_client == "forkop-ruleset-http", "1.14: explicit default HTTP client");
++    assert(length(config.http_clients) == 1 && config.http_clients[0].detour == null, "1.14: default HTTP client dials directly");
++}
++else {
++    assert(legacy != null && evaluate == null && respond == null, "pre-1.14: keep the logical ip_cidr rule");
++    assert(remote.download_detour == "proxy-out" && remote.http_client == null, "pre-1.14: keep download_detour");
++    assert(config.http_clients == null, "pre-1.14: no http_clients");
++}
++' "$1" "$2" || fail "$3"
++}
++
++generate_for_version "1.13.21" "$WORK_DIR/sb113.json"
++check_config "$WORK_DIR/sb113.json" 0 "sing-box 1.13 config shape"
++
++generate_for_version "1.14.2-extended-2.7.2" "$WORK_DIR/sb114.json"
++check_config "$WORK_DIR/sb114.json" 1 "sing-box 1.14 config shape"
++
++generate_for_version "" "$WORK_DIR/unknown.json"
++check_config "$WORK_DIR/unknown.json" 0 "unknown sing-box version keeps the legacy shape"
++
++# Optional: validate against real binaries when they are provided.
++for bin in ${FORKOP_TEST_SING_BOX_113:-} ${FORKOP_TEST_SING_BOX_114:-}; do
++  [ -x "$bin" ] || continue
++  case "$("$bin" version | head -n1)" in
++    *" 1.14."*) cfg="$WORK_DIR/sb114.json" ;;
++    *) cfg="$WORK_DIR/sb113.json" ;;
++  esac
++  "$bin" check -c "$cfg" || fail "sing-box check rejected $cfg ($bin)"
++done
++
++printf 'sing-box 1.14 DNS/http_client compatibility checks passed\n'
+-- 
+2.43.0
+

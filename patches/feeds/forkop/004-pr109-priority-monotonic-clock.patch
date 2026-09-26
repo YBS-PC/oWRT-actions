@@ -1,0 +1,58 @@
+From 20b2048fd9b7e0ad2eef22276b4a282dd6791291 Mon Sep 17 00:00:00 2001
+From: petrouspetr-pixel <280500603+petrouspetr-pixel@users.noreply.github.com>
+Date: Sat, 26 Sep 2026 07:11:15 +0000
+Subject: [PATCH] Use monotonic clock for Priority scheduling (#96, PR #109)
+
+Use monotonic clock for Priority scheduling
+---
+ forkop/files/usr/lib/singbox/priority.uc |  7 +++++--
+ tests/priority_failover.sh               | 10 ++++++++++
+ 2 files changed, 15 insertions(+), 2 deletions(-)
+
+diff --git a/forkop/files/usr/lib/singbox/priority.uc b/forkop/files/usr/lib/singbox/priority.uc
+index 673b12d..94fe94b 100644
+--- a/forkop/files/usr/lib/singbox/priority.uc
++++ b/forkop/files/usr/lib/singbox/priority.uc
+@@ -78,7 +78,8 @@ function log_message(message, level) {
+ }
+ 
+ function now_seconds() {
+-    return int(clock()[0]);
++    // Priority intervals must not depend on wall-clock/NTP adjustments.
++    return int(clock(true)[0]);
+ }
+ 
+ function duration_to_milliseconds(value, fallback_ms) {
+@@ -486,7 +487,9 @@ else if (mode == "select-fixture")
+     select_fixture(ARGV[1], ARGV[2], ARGV[3], ARGV[4], ARGV[5]);
+ else if (mode == "select-faster-fixture")
+     select_faster_fixture(ARGV[1], ARGV[2], ARGV[3], ARGV[4]);
++else if (mode == "now-seconds-fixture")
++    print(now_seconds(), "\n");
+ else {
+-    warn("Usage: singbox/priority.uc <start-runtime|stop-runtime|worker|select-fixture|select-faster-fixture>\n");
++    warn("Usage: singbox/priority.uc <start-runtime|stop-runtime|worker|select-fixture|select-faster-fixture|now-seconds-fixture>\n");
+     exit(1);
+ }
+diff --git a/tests/priority_failover.sh b/tests/priority_failover.sh
+index a042957..2d51dfb 100644
+--- a/tests/priority_failover.sh
++++ b/tests/priority_failover.sh
+@@ -664,4 +664,14 @@ same_level="$(ucode -L "$FORKOP_LIB" "$PRIORITY_UC" select-faster-fixture \
+ printf '%s\n' "$same_level" | grep -Fq '"tag": "b"' ||
+   fail "same-level switching should compare candidates with the active delay from the same pass"
+ 
++priority_now="$(ucode -L "$FORKOP_LIB" "$PRIORITY_UC" now-seconds-fixture)"
++monotonic_now="$(ucode -e 'print(clock(true)[0], "\n")')"
++case "$priority_now:$monotonic_now" in
++  *[!0-9:]*|'':*) fail "Priority monotonic clock fixture returned invalid data" ;;
++esac
++clock_delta=$((priority_now - monotonic_now))
++[ "$clock_delta" -lt 0 ] && clock_delta=$((-clock_delta))
++[ "$clock_delta" -le 2 ] ||
++  fail "Priority scheduling must use ucode CLOCK_MONOTONIC"
++
+ printf 'Priority failover checks passed\n'
+-- 
+2.43.0
+

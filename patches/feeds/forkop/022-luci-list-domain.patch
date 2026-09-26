@@ -1,0 +1,97 @@
+From e4e867912597f00dc746f44fa9048e59a3c1b680 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 26 Sep 2026 07:11:17 +0000
+Subject: [PATCH] LuCI: show domains stored as a UCI list (#116)
+
+LuCI: show domains stored as a UCI list (#116)
+
+loadCombinedDomainText() passed uci.get(..., "domain") to
+appendUniqueDomainTextValues(), which only accepts a string. A
+hand-written `list domain` therefore made the Domains textarea empty,
+although the generator used the entries.
+
+The generator treats list `domain` entries as exact-match `domain`
+rules (legacy_condition_values), so show them with the `full:` prefix;
+saving the field then writes the same semantics back as text.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01HEQfjBzS7Wos7AvTk18TDQ
+---
+ .../resources/view/forkop/section.js          |  9 +++-
+ tests/luci_domain_list_display.sh             | 41 +++++++++++++++++++
+ 2 files changed, 49 insertions(+), 1 deletion(-)
+ create mode 100755 tests/luci_domain_list_display.sh
+
+diff --git a/luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js b/luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js
+index 11d11d5..02514ed 100644
+--- a/luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js
++++ b/luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js
+@@ -5175,10 +5175,17 @@ function appendUniqueDomainTextValues(textValue, values) {
+ }
+ 
+ function loadCombinedDomainText(section_id) {
++  // `domain` is either the combined text (string) or, in hand-written
++  // configs, a UCI list of exact domains that the generator matches as
++  // `domain` rules; show those with the `full:` prefix (#116).
++  const domainValue = uci.get(UCI_PACKAGE, section_id, "domain");
+   const textValue =
+-    uci.get(UCI_PACKAGE, section_id, "domain") ||
++    (typeof domainValue === "string" && domainValue) ||
+     uci.get(UCI_PACKAGE, section_id, "domain_suffix_text");
+   const values = [
++    ...(Array.isArray(domainValue)
++      ? domainValuesWithPrefix(section_id, "domain", "full")
++      : []),
+     ...domainValuesWithPrefix(section_id, "domain_suffix", ""),
+     ...domainValuesWithPrefix(section_id, "domain_keyword", "keyword"),
+     ...domainValuesWithPrefix(section_id, "domain_regex", "regex"),
+diff --git a/tests/luci_domain_list_display.sh b/tests/luci_domain_list_display.sh
+new file mode 100755
+index 0000000..6f0b029
+--- /dev/null
++++ b/tests/luci_domain_list_display.sh
+@@ -0,0 +1,41 @@
++#!/usr/bin/env bash
++set -euo pipefail
++
++ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
++SECTION_JS="$ROOT_DIR/luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js"
++
++extract() {
++  sed -n "/^function $1(/,/^}/p" "$SECTION_JS"
++}
++
++SOURCE="$(for fn in normalizeOptionValues getConfigListValues domainValuesWithPrefix \
++  domainTextValuesWithPrefix uniqueDomainTextValues appendUniqueDomainTextValues \
++  loadCombinedDomainText; do extract "$fn"; done)" node <<'NODE'
++const store = {};
++const uci = { get: (pkg, sid, key) => (store[sid] || {})[key] };
++const main = {
++  parseValueList: (text) => `${text || ""}`.split(/[\s,]+/).map((v) => v.trim()).filter(Boolean),
++};
++const load = Function("uci", "main", "UCI_PACKAGE",
++  `${process.env.SOURCE}; return loadCombinedDomainText;`)(uci, main, "forkop");
++
++function lines(text) {
++  return `${text}`.split("\n").filter(Boolean);
++}
++
++store.list = { domain: ["example.com", "example.org"] };
++const listText = lines(load("list"));
++if (listText.join(",") !== "full:example.com,full:example.org")
++  throw new Error(`UCI list domains must be shown as full: entries (#116), got ${JSON.stringify(listText)}`);
++
++store.text = { domain: "example.com\nkeyword:video" };
++if (load("text") !== "example.com\nkeyword:video")
++  throw new Error("combined domain text must be shown unchanged");
++
++store.mixed = { domain: ["exact.example"], domain_suffix_text: "suffix.example" };
++const mixed = lines(load("mixed"));
++if (mixed.join(",") !== "suffix.example,full:exact.example")
++  throw new Error(`list domains must be appended to the legacy suffix text, got ${JSON.stringify(mixed)}`);
++NODE
++
++printf 'LuCI domain list display checks passed\n'
+-- 
+2.43.0
+

@@ -1,0 +1,201 @@
+From 48b8415f3d700f8132694b5ab7b5de8109f66679 Mon Sep 17 00:00:00 2001
+From: petrouspetr-pixel <280500603+petrouspetr-pixel@users.noreply.github.com>
+Date: Sat, 26 Sep 2026 07:11:15 +0000
+Subject: [PATCH] sing-box 1.14: drop independent_cache (#98, #108, PR #103)
+
+Handle DNS cache option for sing-box 1.14
+
+---
+
+Make sing-box 1.14 regression test JSON-spacing tolerant
+---
+ forkop/files/usr/lib/singbox/generator.uc | 30 ++++++++---
+ forkop/files/usr/lib/singbox/runtime.uc   |  3 +-
+ tests/sing_box_114_independent_cache.sh   | 63 +++++++++++++++++++++++
+ 3 files changed, 87 insertions(+), 9 deletions(-)
+ create mode 100644 tests/sing_box_114_independent_cache.sh
+
+diff --git a/forkop/files/usr/lib/singbox/generator.uc b/forkop/files/usr/lib/singbox/generator.uc
+index 7f20025..1c02242 100644
+--- a/forkop/files/usr/lib/singbox/generator.uc
++++ b/forkop/files/usr/lib/singbox/generator.uc
+@@ -21,6 +21,7 @@ let fixture_uci_data = null;
+ let runtime_settings_cache = null;
+ let runtime_ruleset_folder = runtime_constants.TMP_RULESET_FOLDER;
+ let runtime_supports_xhttp = true;
++let runtime_sing_box_version = "";
+ 
+ let as_string = common.as_string;
+ let read_json_file = common.read_json_file;
+@@ -48,6 +49,16 @@ let url_query_params = runtime_url.query_params;
+ 
+ const CONFIG_NAME = "forkop";
+ 
++function sing_box_uses_legacy_independent_cache(value) {
++    let matched = match(as_string(value), /^([0-9]+)[.]([0-9]+)/);
++    if (matched == null)
++        return true;
++
++    let major = int(matched[1], 10);
++    let minor = int(matched[2], 10);
++    return major < 1 || (major == 1 && minor < 14);
++}
++
+ function parent_dir(path) {
+     path = as_string(path);
+     let slash = rindex(path, "/");
+@@ -461,7 +472,7 @@ function base_config(settings, service_address, runtime_context) {
+     runtime_context.dns_health_inbounds = dns_config.sniff_inbounds;
+     runtime_context.default_domain_resolver = runtime_dns.default_domain_resolver(settings);
+ 
+-    return {
++    let result = {
+         log: {
+             disabled: false,
+             level: log_level,
+@@ -471,8 +482,7 @@ function base_config(settings, service_address, runtime_context) {
+             servers: dns_servers,
+             rules: dns_rules,
+             final: runtime_constants.DNS_SERVER_TAG,
+-            strategy: option(settings, "dns_strategy", "prefer_ipv4"),
+-            independent_cache: true
++            strategy: option(settings, "dns_strategy", "prefer_ipv4")
+         },
+         ntp: {},
+         certificate: {},
+@@ -493,6 +503,9 @@ function base_config(settings, service_address, runtime_context) {
+             clash_api: clash_api_config(settings, service_address)
+         }
+     };
++    if (sing_box_uses_legacy_independent_cache(runtime_sing_box_version))
++        result.dns.independent_cache = true;
++    return result;
+ }
+ 
+ function supported_subscription_outbound(outbound) {
+@@ -3011,10 +3024,11 @@ function add_server_routes(config, servers, sections) {
+     }
+ }
+ 
+-function generate_config(output_path, service_address, mwan3_active, supports_xhttp, deferred_sections) {
++function generate_config(output_path, service_address, mwan3_active, supports_xhttp, deferred_sections, sing_box_version) {
+     runtime_supports_xhttp = supports_xhttp == null || as_string(supports_xhttp) == ""
+         ? true
+         : cli_bool(supports_xhttp);
++    runtime_sing_box_version = as_string(sing_box_version || "");
+     let cursor = uci_cursor();
+     cursor.load(CONFIG_NAME);
+     runtime_settings_cache = object_or_empty(cursor.get_all(CONFIG_NAME, "settings"));
+@@ -3054,11 +3068,11 @@ function generate_config(output_path, service_address, mwan3_active, supports_xh
+     }
+ }
+ 
+-function generate_config_fixture(fixture_path, output_path, service_address, mwan3_active, supports_xhttp, deferred_sections) {
++function generate_config_fixture(fixture_path, output_path, service_address, mwan3_active, supports_xhttp, deferred_sections, sing_box_version) {
+     use_fixture_cursor(fixture_path);
+     runtime_subscription.set_section_cache_dir(output_path + ".section-cache");
+     runtime_ruleset_folder = output_path + ".rulesets";
+-    generate_config(output_path, service_address, mwan3_active, supports_xhttp, deferred_sections);
++    generate_config(output_path, service_address, mwan3_active, supports_xhttp, deferred_sections, sing_box_version);
+ }
+ 
+ function stdin_length() {
+@@ -3172,9 +3186,9 @@ function object_nonempty_stdin() {
+ let mode = ARGV[0] || "";
+ 
+ if (mode == "generate-config")
+-    generate_config(ARGV[1], ARGV[2], ARGV[3], ARGV[4], ARGV[5] || "");
++    generate_config(ARGV[1], ARGV[2], ARGV[3], ARGV[4], ARGV[5] || "", ARGV[6] || "");
+ else if (mode == "generate-config-fixture")
+-    generate_config_fixture(ARGV[1], ARGV[2], ARGV[3], ARGV[4], ARGV[5], ARGV[6] || "");
++    generate_config_fixture(ARGV[1], ARGV[2], ARGV[3], ARGV[4], ARGV[5], ARGV[6] || "", ARGV[7] || "");
+ else if (mode == "stdin-length")
+     stdin_length();
+ else if (mode == "stdin-contains")
+diff --git a/forkop/files/usr/lib/singbox/runtime.uc b/forkop/files/usr/lib/singbox/runtime.uc
+index a0bc235..04c45fc 100644
+--- a/forkop/files/usr/lib/singbox/runtime.uc
++++ b/forkop/files/usr/lib/singbox/runtime.uc
+@@ -803,7 +803,8 @@ function init_config(populate_nft, caches_prepared, no_refresh, prepared_deferre
+             service_listen_address_value(settings),
+             mwan3_active ? "1" : "0",
+             sing_box_is_extended(sing_box_version()) ? "1" : "0",
+-            deferred_sections
++            deferred_sections,
++            sing_box_version()
+         ]) + " >" + shell_quote(runtime_log) + " 2>&1"
+     );
+     if (generate_status != 0) {
+diff --git a/tests/sing_box_114_independent_cache.sh b/tests/sing_box_114_independent_cache.sh
+new file mode 100644
+index 0000000..3d05746
+--- /dev/null
++++ b/tests/sing_box_114_independent_cache.sh
+@@ -0,0 +1,63 @@
++#!/usr/bin/env bash
++set -eo pipefail
++
++ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
++FORKOP_LIB="$ROOT_DIR/forkop/files/usr/lib"
++GENERATOR="$FORKOP_LIB/singbox/generator.uc"
++WORK_DIR="$(mktemp -d)"
++
++cleanup() {
++  rm -rf "$WORK_DIR"
++}
++trap cleanup EXIT
++
++fail() {
++  printf 'FAIL: %s\n' "$1" >&2
++  exit 1
++}
++
++cat >"$WORK_DIR/fixture.json" <<'JSON'
++{
++  "settings": {
++    ".name": "settings",
++    ".type": "settings",
++    "config_path": "/tmp/sing-box/config.json",
++    "dns_server": "1.1.1.1",
++    "bootstrap_dns_server": "1.1.1.1",
++    "service_listen_address": "127.0.0.1"
++  },
++  "section": [
++    {
++      ".name": "proxy",
++      ".type": "section",
++      "enabled": "1",
++      "action": "outbound",
++      "outbound_json": "{\"type\":\"direct\"}",
++      "domain_suffix": [ "example.org" ]
++    }
++  ]
++}
++JSON
++
++generate_for_version() {
++  local version="$1"
++  local output="$2"
++  mkdir -p "$output.section-cache" "$output.rulesets"
++  ucode -L "$FORKOP_LIB" "$GENERATOR" generate-config-fixture \
++    "$WORK_DIR/fixture.json" "$output" "127.0.0.1" "0" "1" "" "$version"
++}
++
++generate_for_version "1.13.18-extended-2.6.5" "$WORK_DIR/sb113.json"
++grep -Eq '"independent_cache"[[:space:]]*:[[:space:]]*true' "$WORK_DIR/sb113.json" ||
++  fail "sing-box 1.13 must keep independent_cache for legacy semantics"
++
++generate_for_version "1.14.0-extended-2.7.0" "$WORK_DIR/sb114.json"
++if grep -Fq '"independent_cache"' "$WORK_DIR/sb114.json"; then
++  fail "sing-box 1.14 must not receive deprecated independent_cache"
++fi
++
++generate_for_version "" "$WORK_DIR/unknown.json"
++grep -Eq '"independent_cache"[[:space:]]*:[[:space:]]*true' "$WORK_DIR/unknown.json" ||
++  fail "unknown sing-box version must preserve legacy behavior"
++
++printf 'sing-box 1.14 independent_cache compatibility checks passed\n'
+\ No newline at end of file
+-- 
+2.43.0
+

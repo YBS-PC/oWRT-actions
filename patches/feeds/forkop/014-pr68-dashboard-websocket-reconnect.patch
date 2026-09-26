@@ -1,0 +1,392 @@
+From b5ad658cb752dccdac0c3cccb81c6463ffc2e60c Mon Sep 17 00:00:00 2001
+From: embogomolov <e.m.bogomolov@gmail.com>
+Date: Sat, 26 Sep 2026 07:11:16 +0000
+Subject: [PATCH] Reconnect dashboard WebSockets after reload (#65, PR #68)
+
+Reconnect dashboard WebSockets
+---
+ .../src/forkop/services/socket.service.ts     | 74 +++++++++++++++----
+ .../services/tests/socket.service.test.ts     | 45 ++++++++++-
+ .../luci-static/resources/view/forkop/main.js | 65 ++++++++++++----
+ 3 files changed, 150 insertions(+), 34 deletions(-)
+
+diff --git a/fe-app-forkop/src/forkop/services/socket.service.ts b/fe-app-forkop/src/forkop/services/socket.service.ts
+index e1766e2..020b9af 100644
+--- a/fe-app-forkop/src/forkop/services/socket.service.ts
++++ b/fe-app-forkop/src/forkop/services/socket.service.ts
+@@ -10,6 +10,8 @@ class SocketManager {
+   private listeners = new Map<string, Set<Listener>>();
+   private connected = new Map<string, boolean>();
+   private errorListeners = new Map<string, Set<ErrorListener>>();
++  private reconnectAttempts = new Map<string, number>();
++  private reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
+ 
+   private constructor() {}
+ 
+@@ -21,7 +23,16 @@ class SocketManager {
+   }
+ 
+   resetAll(): void {
+-    for (const [url, ws] of this.sockets.entries()) {
++    const sockets = [...this.sockets.entries()];
++    for (const timer of this.reconnectTimers.values()) clearTimeout(timer);
++    this.sockets.clear();
++    this.listeners.clear();
++    this.errorListeners.clear();
++    this.connected.clear();
++    this.reconnectAttempts.clear();
++    this.reconnectTimers.clear();
++
++    for (const [url, ws] of sockets) {
+       try {
+         if (
+           ws.readyState === WebSocket.OPEN ||
+@@ -38,10 +49,6 @@ class SocketManager {
+       }
+     }
+ 
+-    this.sockets.clear();
+-    this.listeners.clear();
+-    this.errorListeners.clear();
+-    this.connected.clear();
+     logger.info('[SOCKET]', 'All connections and state have been reset.');
+   }
+ 
+@@ -59,6 +66,7 @@ class SocketManager {
+         err,
+       );
+       this.triggerError(url, err instanceof Event ? err : String(err));
++      this.scheduleReconnect(url);
+       return;
+     }
+ 
+@@ -69,6 +77,7 @@ class SocketManager {
+ 
+     ws.addEventListener('open', () => {
+       this.connected.set(url, true);
++      this.reconnectAttempts.delete(url);
+       logger.info('[SOCKET]', 'Connected to', url);
+     });
+ 
+@@ -86,9 +95,12 @@ class SocketManager {
+     });
+ 
+     ws.addEventListener('close', () => {
++      if (this.sockets.get(url) !== ws) return;
++      this.sockets.delete(url);
+       this.connected.set(url, false);
+       logger.warn('[SOCKET]', `Disconnected: ${url}`);
+       this.triggerError(url, 'Connection closed');
++      this.scheduleReconnect(url);
+     });
+ 
+     ws.addEventListener('error', (err) => {
+@@ -105,14 +117,14 @@ class SocketManager {
+       this.errorListeners.get(url)?.add(onError);
+     }
+ 
+-    if (!this.sockets.has(url)) {
+-      this.connect(url);
+-    }
+-
+     if (!this.listeners.has(url)) {
+       this.listeners.set(url, new Set());
+     }
+     this.listeners.get(url)?.add(listener);
++
++    if (!this.sockets.has(url)) {
++      this.connect(url);
++    }
+   }
+ 
+   unsubscribe(url: string, listener: Listener, onError?: ErrorListener): void {
+@@ -120,6 +132,9 @@ class SocketManager {
+     if (onError) {
+       this.errorListeners.get(url)?.delete(onError);
+     }
++    if (this.listeners.get(url)?.size === 0) {
++      this.disconnect(url);
++    }
+   }
+ 
+   // eslint-disable-next-line
+@@ -135,13 +150,12 @@ class SocketManager {
+ 
+   disconnect(url: string): void {
+     const ws = this.sockets.get(url);
+-    if (ws) {
+-      ws.close();
+-      this.sockets.delete(url);
+-      this.listeners.delete(url);
+-      this.errorListeners.delete(url);
+-      this.connected.delete(url);
+-    }
++    this.clearReconnect(url);
++    this.sockets.delete(url);
++    this.listeners.delete(url);
++    this.errorListeners.delete(url);
++    this.connected.delete(url);
++    if (ws) ws.close();
+   }
+ 
+   disconnectAll(): void {
+@@ -162,6 +176,34 @@ class SocketManager {
+       }
+     }
+   }
++
++  private scheduleReconnect(url: string): void {
++    if (
++      this.reconnectTimers.has(url) ||
++      (this.listeners.get(url)?.size || 0) === 0
++    ) {
++      return;
++    }
++
++    const attempt = this.reconnectAttempts.get(url) || 0;
++    const delays = [1000, 2000, 5000];
++    const delay = delays[Math.min(attempt, delays.length - 1)];
++    this.reconnectAttempts.set(url, attempt + 1);
++    this.reconnectTimers.set(
++      url,
++      setTimeout(() => {
++        this.reconnectTimers.delete(url);
++        if ((this.listeners.get(url)?.size || 0) > 0) this.connect(url);
++      }, delay),
++    );
++  }
++
++  private clearReconnect(url: string): void {
++    const timer = this.reconnectTimers.get(url);
++    if (timer) clearTimeout(timer);
++    this.reconnectTimers.delete(url);
++    this.reconnectAttempts.delete(url);
++  }
+ }
+ 
+ export const socket = SocketManager.getInstance();
+diff --git a/fe-app-forkop/src/forkop/services/tests/socket.service.test.ts b/fe-app-forkop/src/forkop/services/tests/socket.service.test.ts
+index 3fa2119..b34d242 100644
+--- a/fe-app-forkop/src/forkop/services/tests/socket.service.test.ts
++++ b/fe-app-forkop/src/forkop/services/tests/socket.service.test.ts
+@@ -19,18 +19,21 @@ class FakeWebSocket {
+     this.listeners.set(type, listeners);
+   }
+ 
+-  emit(type: string) {
++  emit(type: string, event: Event = new Event(type)) {
+     for (const listener of this.listeners.get(type) || []) {
+-      listener(new Event(type));
++      listener(event);
+     }
+   }
+ 
+-  close() {}
++  close() {
++    this.emit('close');
++  }
+   send() {}
+ }
+ 
+ describe('socket service', () => {
+   beforeEach(() => {
++    vi.useFakeTimers();
+     socket.resetAll();
+     FakeWebSocket.instances = [];
+     vi.stubGlobal('WebSocket', FakeWebSocket);
+@@ -38,6 +41,7 @@ describe('socket service', () => {
+ 
+   afterEach(() => {
+     socket.resetAll();
++    vi.useRealTimers();
+     vi.unstubAllGlobals();
+   });
+ 
+@@ -49,4 +53,39 @@ describe('socket service', () => {
+ 
+     expect(onError).toHaveBeenCalledOnce();
+   });
++
++  it('reconnects after unexpected closure and preserves subscribers', () => {
++    const listener = vi.fn();
++
++    socket.subscribe('ws://router.test', listener);
++    FakeWebSocket.instances[0].emit('close');
++    vi.advanceTimersByTime(1000);
++
++    expect(FakeWebSocket.instances).toHaveLength(2);
++    FakeWebSocket.instances[1].emit('message', {
++      data: 'restored',
++    } as MessageEvent);
++    expect(listener).toHaveBeenCalledWith('restored');
++  });
++
++  it('uses 1, 2, then 5 second reconnect delays', () => {
++    socket.subscribe('ws://router.test', vi.fn());
++
++    FakeWebSocket.instances[0].emit('close');
++    vi.advanceTimersByTime(1000);
++    FakeWebSocket.instances[1].emit('close');
++    vi.advanceTimersByTime(2000);
++    FakeWebSocket.instances[2].emit('close');
++    vi.advanceTimersByTime(5000);
++
++    expect(FakeWebSocket.instances).toHaveLength(4);
++  });
++
++  it('does not reconnect after manual disconnect', () => {
++    socket.subscribe('ws://router.test', vi.fn());
++    socket.disconnect('ws://router.test');
++    vi.advanceTimersByTime(10000);
++
++    expect(FakeWebSocket.instances).toHaveLength(1);
++  });
+ });
+diff --git a/luci-app-forkop/htdocs/luci-static/resources/view/forkop/main.js b/luci-app-forkop/htdocs/luci-static/resources/view/forkop/main.js
+index f3a1eeb..a643766 100644
+--- a/luci-app-forkop/htdocs/luci-static/resources/view/forkop/main.js
++++ b/luci-app-forkop/htdocs/luci-static/resources/view/forkop/main.js
+@@ -5126,6 +5126,8 @@ var SocketManager = class _SocketManager {
+     this.listeners = /* @__PURE__ */ new Map();
+     this.connected = /* @__PURE__ */ new Map();
+     this.errorListeners = /* @__PURE__ */ new Map();
++    this.reconnectAttempts = /* @__PURE__ */ new Map();
++    this.reconnectTimers = /* @__PURE__ */ new Map();
+   }
+   static getInstance() {
+     if (!_SocketManager.instance) {
+@@ -5134,7 +5136,15 @@ var SocketManager = class _SocketManager {
+     return _SocketManager.instance;
+   }
+   resetAll() {
+-    for (const [url, ws] of this.sockets.entries()) {
++    const sockets = [...this.sockets.entries()];
++    for (const timer of this.reconnectTimers.values()) clearTimeout(timer);
++    this.sockets.clear();
++    this.listeners.clear();
++    this.errorListeners.clear();
++    this.connected.clear();
++    this.reconnectAttempts.clear();
++    this.reconnectTimers.clear();
++    for (const [url, ws] of sockets) {
+       try {
+         if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+           ws.close();
+@@ -5147,10 +5157,6 @@ var SocketManager = class _SocketManager {
+         );
+       }
+     }
+-    this.sockets.clear();
+-    this.listeners.clear();
+-    this.errorListeners.clear();
+-    this.connected.clear();
+     logger.info("[SOCKET]", "All connections and state have been reset.");
+   }
+   connect(url) {
+@@ -5165,6 +5171,7 @@ var SocketManager = class _SocketManager {
+         err
+       );
+       this.triggerError(url, err instanceof Event ? err : String(err));
++      this.scheduleReconnect(url);
+       return;
+     }
+     this.sockets.set(url, ws);
+@@ -5173,6 +5180,7 @@ var SocketManager = class _SocketManager {
+     if (!this.errorListeners.has(url)) this.errorListeners.set(url, /* @__PURE__ */ new Set());
+     ws.addEventListener("open", () => {
+       this.connected.set(url, true);
++      this.reconnectAttempts.delete(url);
+       logger.info("[SOCKET]", "Connected to", url);
+     });
+     ws.addEventListener("message", (event) => {
+@@ -5188,9 +5196,12 @@ var SocketManager = class _SocketManager {
+       }
+     });
+     ws.addEventListener("close", () => {
++      if (this.sockets.get(url) !== ws) return;
++      this.sockets.delete(url);
+       this.connected.set(url, false);
+       logger.warn("[SOCKET]", `Disconnected: ${url}`);
+       this.triggerError(url, "Connection closed");
++      this.scheduleReconnect(url);
+     });
+     ws.addEventListener("error", (err) => {
+       logger.error("[SOCKET]", `Socket error for ${url}:`, err);
+@@ -5204,19 +5215,22 @@ var SocketManager = class _SocketManager {
+     if (onError) {
+       this.errorListeners.get(url)?.add(onError);
+     }
+-    if (!this.sockets.has(url)) {
+-      this.connect(url);
+-    }
+     if (!this.listeners.has(url)) {
+       this.listeners.set(url, /* @__PURE__ */ new Set());
+     }
+     this.listeners.get(url)?.add(listener);
++    if (!this.sockets.has(url)) {
++      this.connect(url);
++    }
+   }
+   unsubscribe(url, listener, onError) {
+     this.listeners.get(url)?.delete(listener);
+     if (onError) {
+       this.errorListeners.get(url)?.delete(onError);
+     }
++    if (this.listeners.get(url)?.size === 0) {
++      this.disconnect(url);
++    }
+   }
+   // eslint-disable-next-line
+   send(url, data) {
+@@ -5230,13 +5244,12 @@ var SocketManager = class _SocketManager {
+   }
+   disconnect(url) {
+     const ws = this.sockets.get(url);
+-    if (ws) {
+-      ws.close();
+-      this.sockets.delete(url);
+-      this.listeners.delete(url);
+-      this.errorListeners.delete(url);
+-      this.connected.delete(url);
+-    }
++    this.clearReconnect(url);
++    this.sockets.delete(url);
++    this.listeners.delete(url);
++    this.errorListeners.delete(url);
++    this.connected.delete(url);
++    if (ws) ws.close();
+   }
+   disconnectAll() {
+     for (const url of this.sockets.keys()) {
+@@ -5255,6 +5268,28 @@ var SocketManager = class _SocketManager {
+       }
+     }
+   }
++  scheduleReconnect(url) {
++    if (this.reconnectTimers.has(url) || (this.listeners.get(url)?.size || 0) === 0) {
++      return;
++    }
++    const attempt = this.reconnectAttempts.get(url) || 0;
++    const delays = [1e3, 2e3, 5e3];
++    const delay = delays[Math.min(attempt, delays.length - 1)];
++    this.reconnectAttempts.set(url, attempt + 1);
++    this.reconnectTimers.set(
++      url,
++      setTimeout(() => {
++        this.reconnectTimers.delete(url);
++        if ((this.listeners.get(url)?.size || 0) > 0) this.connect(url);
++      }, delay)
++    );
++  }
++  clearReconnect(url) {
++    const timer = this.reconnectTimers.get(url);
++    if (timer) clearTimeout(timer);
++    this.reconnectTimers.delete(url);
++    this.reconnectAttempts.delete(url);
++  }
+ };
+ var socket = SocketManager.getInstance();
+ 
+-- 
+2.43.0
+

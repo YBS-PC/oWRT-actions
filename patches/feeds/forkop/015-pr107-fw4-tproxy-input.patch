@@ -1,0 +1,323 @@
+From e2f74776207b4708f1f4744c142c02a86323e667 Mon Sep 17 00:00:00 2001
+From: petrouspetr-pixel <280500603+petrouspetr-pixel@users.noreply.github.com>
+Date: Sat, 26 Sep 2026 07:11:16 +0000
+Subject: [PATCH] Allow TPROXY traffic through fw4 input (#84, PR #107)
+
+Allow Forkop TPROXY traffic through fw4 input
+
+---
+
+Fix firewall include cleanup call order
+
+---
+
+Provide firewall UCI state in package lifecycle test
+---
+ forkop/files/usr/lib/service/package.uc | 132 +++++++++++++++++++++++-
+ tests/firewall_tproxy_input.sh          |  94 +++++++++++++++++
+ tests/package_lifecycle.sh              |   5 +
+ 3 files changed, 228 insertions(+), 3 deletions(-)
+ create mode 100644 tests/firewall_tproxy_input.sh
+
+diff --git a/forkop/files/usr/lib/service/package.uc b/forkop/files/usr/lib/service/package.uc
+index 920eba7..beebbd6 100644
+--- a/forkop/files/usr/lib/service/package.uc
++++ b/forkop/files/usr/lib/service/package.uc
+@@ -2,6 +2,7 @@
+ 
+ let fs = require("fs");
+ let uci_core = require("core.uci");
++let constants = require("core.constants");
+ 
+ function as_string(value) {
+     return value == null ? "" : "" + value;
+@@ -23,6 +24,11 @@ const SING_BOX_CRONET = env("FORKOP_SING_BOX_CRONET", "/usr/lib/libcronet.so");
+ const SING_BOX_MANAGED_MARKER = env("SB_MANAGED_SERVICE_MARKER", "Forkop managed sing-box service for binary variants");
+ const PACKAGE_UPGRADE_STATE = env("FORKOP_PACKAGE_UPGRADE_STATE", "/tmp/forkop-package-was-running");
+ const PACKAGE_TEST_MODE = env("FORKOP_PACKAGE_TEST_MODE", "") != "";
++const FIREWALL_CONFIG = env("FORKOP_FIREWALL_CONFIG", "firewall");
++const FIREWALL_INCLUDE_SECTION = env("FORKOP_FIREWALL_INCLUDE_SECTION", "forkop_tproxy_input");
++const FIREWALL_INCLUDE_FILE = env("FORKOP_FIREWALL_INCLUDE_FILE", "/etc/forkop-input.nft");
++const FIREWALL_INIT = env("FORKOP_FIREWALL_INIT", "/etc/init.d/firewall");
++const NFT_FAKEIP_MARK = env("NFT_FAKEIP_MARK", constants.NFT_FAKEIP_MARK || "0x04000000");
+ 
+ function shell_quote(value) {
+     return "'" + replace(as_string(value), /'/g, "'\\''") + "'";
+@@ -48,11 +54,114 @@ function path_exists(path) {
+     return fs.stat(as_string(path)) != null;
+ }
+ 
++function valid_nft_mark(value) {
++    value = trim(as_string(value));
++    return match(value, /^(0x[0-9a-fA-F]+|[0-9]+)$/) != null;
++}
++
++function tproxy_firewall_rule_text() {
++    if (!valid_nft_mark(NFT_FAKEIP_MARK))
++        return "";
++
++    return "meta l4proto { tcp, udp } meta mark & " + NFT_FAKEIP_MARK +
++        " == " + NFT_FAKEIP_MARK +
++        " accept comment \"!forkop: Allow TPROXY-marked input\"\n";
++}
++
++function write_file_if_changed(path, content) {
++    let existing = fs.readfile(as_string(path));
++    if (existing != null && as_string(existing) == as_string(content))
++        return 0;
++    return fs.writefile(as_string(path), as_string(content)) != null ? 1 : -1;
++}
++
++function firewall_include_path() {
++    return FIREWALL_CONFIG + "." + FIREWALL_INCLUDE_SECTION;
++}
++
++function ensure_firewall_include_option(option_name, value) {
++    let path = firewall_include_path() + "." + option_name;
++    if (uci_core.get(path) == as_string(value))
++        return 0;
++    return uci_core.set(path, value) ? 1 : -1;
++}
++
++function reload_firewall() {
++    if (PACKAGE_TEST_MODE || !path_exists(FIREWALL_INIT))
++        return true;
++    return command_success_from_args([ FIREWALL_INIT, "reload" ]);
++}
++
++function ensure_tproxy_firewall_include() {
++    let rule = tproxy_firewall_rule_text();
++    if (rule == "" || !uci_core.available())
++        return false;
++
++    let changed = false;
++    let write_result = write_file_if_changed(FIREWALL_INCLUDE_FILE, rule);
++    if (write_result < 0)
++        return false;
++    if (write_result > 0)
++        changed = true;
++
++    let section_path = firewall_include_path();
++    let section = uci_core.get_all(FIREWALL_CONFIG, FIREWALL_INCLUDE_SECTION);
++    if (type(section) != "object" || as_string(section[".type"] || "") != "include") {
++        if (!uci_core.set_section(section_path, "include"))
++            return false;
++        changed = true;
++    }
++
++    for (let item in [
++        [ "type", "nftables" ],
++        [ "path", FIREWALL_INCLUDE_FILE ],
++        [ "position", "chain-pre" ],
++        [ "chain", "input" ]
++    ]) {
++        let result = ensure_firewall_include_option(item[0], item[1]);
++        if (result < 0)
++            return false;
++        if (result > 0)
++            changed = true;
++    }
++
++    if (!changed)
++        return true;
++    if (!uci_core.commit(FIREWALL_CONFIG))
++        return false;
++    return reload_firewall();
++}
++
+ function unlink_if_exists(path) {
+     if (path_exists(path))
+         fs.unlink(as_string(path));
+ }
+ 
++function remove_tproxy_firewall_include() {
++    let changed = false;
++    let section = uci_core.get_all(FIREWALL_CONFIG, FIREWALL_INCLUDE_SECTION);
++
++    if (type(section) == "object" &&
++        as_string(section[".type"] || "") == "include" &&
++        as_string(section.path || "") == FIREWALL_INCLUDE_FILE) {
++        if (!uci_core.delete(firewall_include_path()))
++            return false;
++        changed = true;
++    }
++
++    if (path_exists(FIREWALL_INCLUDE_FILE)) {
++        unlink_if_exists(FIREWALL_INCLUDE_FILE);
++        changed = true;
++    }
++
++    if (!changed)
++        return true;
++    if (uci_core.available() && !uci_core.commit(FIREWALL_CONFIG))
++        return false;
++    return reload_firewall();
++}
++
++
+ function remove_rt_tables_entry() {
+     let data = fs.readfile(RT_TABLES_PATH);
+     if (data == null)
+@@ -129,11 +238,22 @@ function prerm_cleanup(action) {
+         restore_dnsmasq_if_needed();
+         remove_managed_sing_box();
+     }
+-    return remove_rt_tables_entry();
++
++    let firewall_ok = true;
++    if (as_string(action) != "upgrade")
++        firewall_ok = remove_tproxy_firewall_include();
++
++    return remove_rt_tables_entry() && firewall_ok;
+ }
+ 
+ function postinst_restore() {
+-    if (env("IPKG_INSTROOT", "") != "" || !path_exists(PACKAGE_UPGRADE_STATE))
++    if (env("IPKG_INSTROOT", "") != "")
++        return true;
++
++    if (!ensure_tproxy_firewall_include())
++        return false;
++
++    if (!path_exists(PACKAGE_UPGRADE_STATE))
+         return true;
+ 
+     if (!command_success_from_args([ INIT_PATH, "start" ]))
+@@ -180,9 +300,15 @@ else if (mode == "postinst")
+     exit(postinst_restore() ? 0 : 1);
+ else if (mode == "remove-rt-tables-entry")
+     exit(remove_rt_tables_entry() ? 0 : 1);
++else if (mode == "ensure-tproxy-firewall")
++    exit(ensure_tproxy_firewall_include() ? 0 : 1);
++else if (mode == "remove-tproxy-firewall")
++    exit(remove_tproxy_firewall_include() ? 0 : 1);
++else if (mode == "tproxy-firewall-rule")
++    print(tproxy_firewall_rule_text());
+ else if (mode == "luci-postinst")
+     exit(luci_postinst() ? 0 : 1);
+ else {
+-    warn("Usage: service/package.uc <prerm|postinst|remove-rt-tables-entry|luci-postinst>\n");
++    warn("Usage: service/package.uc <prerm|postinst|remove-rt-tables-entry|ensure-tproxy-firewall|remove-tproxy-firewall|tproxy-firewall-rule|luci-postinst>\n");
+     exit(1);
+ }
+diff --git a/tests/firewall_tproxy_input.sh b/tests/firewall_tproxy_input.sh
+new file mode 100644
+index 0000000..c7a5d6d
+--- /dev/null
++++ b/tests/firewall_tproxy_input.sh
+@@ -0,0 +1,94 @@
++#!/usr/bin/env bash
++set -eo pipefail
++
++ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
++FORKOP_LIB="$ROOT_DIR/forkop/files/usr/lib"
++PACKAGE_UC="$FORKOP_LIB/service/package.uc"
++WORK_DIR="$(mktemp -d)"
++STATE_FILE="$WORK_DIR/uci.state"
++UCI_LOG="$WORK_DIR/uci.log"
++INCLUDE_FILE="$WORK_DIR/forkop-input.nft"
++
++cleanup() { rm -rf "$WORK_DIR"; }
++trap cleanup EXIT
++
++fail() {
++  printf 'FAIL: %s\n' "$1" >&2
++  exit 1
++}
++
++cat >"$STATE_FILE" <<'EOF'
++firewall.defaults=defaults
++EOF
++: >"$UCI_LOG"
++
++env \
++  FORKOP_LIB="$FORKOP_LIB" \
++  FORKOP_UCI_STATE_FILE="$STATE_FILE" \
++  FORKOP_UCI_LOG_FILE="$UCI_LOG" \
++  FORKOP_FIREWALL_INCLUDE_FILE="$INCLUDE_FILE" \
++  FORKOP_PACKAGE_TEST_MODE=1 \
++  NFT_FAKEIP_MARK=0x04000000 \
++  ucode -L "$FORKOP_LIB" "$PACKAGE_UC" ensure-tproxy-firewall
++
++grep -Fxq 'firewall.forkop_tproxy_input=include' "$STATE_FILE" ||
++  fail "named fw4 include section was not created"
++grep -Fxq 'firewall.forkop_tproxy_input.type=nftables' "$STATE_FILE" ||
++  fail "fw4 include type must be nftables"
++grep -Fxq "firewall.forkop_tproxy_input.path=$INCLUDE_FILE" "$STATE_FILE" ||
++  fail "fw4 include path mismatch"
++grep -Fxq 'firewall.forkop_tproxy_input.position=chain-pre' "$STATE_FILE" ||
++  fail "Forkop rule must run before regular fw4 input rules"
++grep -Fxq 'firewall.forkop_tproxy_input.chain=input' "$STATE_FILE" ||
++  fail "Forkop rule must be inserted in fw4 input chain"
++grep -Fxq 'commit firewall' "$UCI_LOG" ||
++  fail "firewall UCI changes were not committed"
++
++expected='meta l4proto { tcp, udp } meta mark & 0x04000000 == 0x04000000 accept comment "!forkop: Allow TPROXY-marked input"'
++[ "$(cat "$INCLUDE_FILE")" = "$expected" ] ||
++  fail "unexpected fw4 input rule"
++
++: >"$UCI_LOG"
++env \
++  FORKOP_LIB="$FORKOP_LIB" \
++  FORKOP_UCI_STATE_FILE="$STATE_FILE" \
++  FORKOP_UCI_LOG_FILE="$UCI_LOG" \
++  FORKOP_FIREWALL_INCLUDE_FILE="$INCLUDE_FILE" \
++  FORKOP_PACKAGE_TEST_MODE=1 \
++  NFT_FAKEIP_MARK=0x04000000 \
++  ucode -L "$FORKOP_LIB" "$PACKAGE_UC" ensure-tproxy-firewall
++
++[ ! -s "$UCI_LOG" ] ||
++  fail "idempotent firewall ensure must not commit unchanged UCI"
++
++if env \
++  FORKOP_LIB="$FORKOP_LIB" \
++  FORKOP_UCI_STATE_FILE="$STATE_FILE" \
++  FORKOP_FIREWALL_INCLUDE_FILE="$WORK_DIR/invalid.nft" \
++  FORKOP_PACKAGE_TEST_MODE=1 \
++  NFT_FAKEIP_MARK='0x04000000; drop' \
++  ucode -L "$FORKOP_LIB" "$PACKAGE_UC" ensure-tproxy-firewall >/dev/null 2>&1; then
++  fail "invalid nft mark must be rejected"
++fi
++[ ! -e "$WORK_DIR/invalid.nft" ] ||
++  fail "invalid mark must not create an nft file"
++
++: >"$UCI_LOG"
++env \
++  FORKOP_LIB="$FORKOP_LIB" \
++  FORKOP_UCI_STATE_FILE="$STATE_FILE" \
++  FORKOP_UCI_LOG_FILE="$UCI_LOG" \
++  FORKOP_FIREWALL_INCLUDE_FILE="$INCLUDE_FILE" \
++  FORKOP_PACKAGE_TEST_MODE=1 \
++  NFT_FAKEIP_MARK=0x04000000 \
++  ucode -L "$FORKOP_LIB" "$PACKAGE_UC" remove-tproxy-firewall
++
++if grep -Fq 'firewall.forkop_tproxy_input' "$STATE_FILE"; then
++  fail "managed fw4 include section survived removal"
++fi
++[ ! -e "$INCLUDE_FILE" ] ||
++  fail "managed nft include file survived removal"
++grep -Fxq 'commit firewall' "$UCI_LOG" ||
++  fail "firewall removal was not committed"
++
++printf 'fw4 TPROXY input integration checks passed\n'
+\ No newline at end of file
+diff --git a/tests/package_lifecycle.sh b/tests/package_lifecycle.sh
+index 99ff44a..672ff0c 100644
+--- a/tests/package_lifecycle.sh
++++ b/tests/package_lifecycle.sh
+@@ -170,7 +170,12 @@ FORKOP_RT_TABLES="$WORK_DIR/rt_tables_upgrade" \
+   ucode -L "$FORKOP_LIB" "$PACKAGE_UC" prerm upgrade
+ [ -f "$FORKOP_PACKAGE_UPGRADE_STATE" ] ||
+   fail "package pre-upgrade must remember a running service"
++cat >"$WORK_DIR/postinst-firewall.state" <<'EOF_UCI'
++firewall.defaults=defaults
++EOF_UCI
+ FORKOP_PACKAGE_TEST_MODE=1 \
++FORKOP_UCI_STATE_FILE="$WORK_DIR/postinst-firewall.state" \
++FORKOP_FIREWALL_INCLUDE_FILE="$WORK_DIR/forkop-input.nft" \
+ FORKOP_INIT="$WORK_DIR/upgrade-init" \
+ FORKOP_START_LOG="$WORK_DIR/upgrade-start.log" \
+   ucode -L "$FORKOP_LIB" "$PACKAGE_UC" postinst
+-- 
+2.43.0
+

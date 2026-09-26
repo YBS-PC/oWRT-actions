@@ -1,0 +1,472 @@
+From ee333298710d8d28826b4baadd7aca40df69713c Mon Sep 17 00:00:00 2001
+From: vaniax17 <bptopteam@proton.me>
+Date: Sat, 26 Sep 2026 07:11:16 +0000
+Subject: [PATCH] Apply section server exclusions to URLTest/Priority (#89, PR
+ #90)
+
+Apply section server exclusions to URLTest and Priority groups
+
+Servers excluded by the section-level filter were removed from the section
+selector only. URLTest and Priority groups were still built from the full
+candidate list, so an excluded server kept carrying traffic through the
+group the selector defaults to.
+
+The exclude half of the section filter now trims the candidate pool the
+groups are built from. The include half stays selector-only: it can be
+group based, and group membership is only known once the groups are built.
+
+---
+
+Format renderFlagEmojis with prettier
+
+The file has been drifting from `yarn format` output since it was added, so
+the Frontend CI formatting step fails on any pull request that touches
+fe-app-forkop. The workflow only runs on such pull requests, and every run so
+far has been queued behind fork approval, so the drift never surfaced.
+
+Reformat the file and rebuild the LuCI bundle from it. No behaviour change.
+---
+ fe-app-forkop/locales/calls.json              |   6 +-
+ fe-app-forkop/locales/forkop.pot              |   4 +-
+ fe-app-forkop/locales/forkop.ru.po            |   4 +-
+ .../dashboard/partials/renderFlagEmojis.ts    |   6 +-
+ forkop/files/usr/lib/singbox/generator.uc     |  31 ++-
+ .../luci-static/resources/view/forkop/main.js |   6 +-
+ .../resources/view/forkop/section.js          |   2 +-
+ luci-app-forkop/po/ru/forkop.po               |   4 +-
+ luci-app-forkop/po/templates/forkop.pot       |   4 +-
+ tests/luci_dynamiclist_layout.sh              |   2 +-
+ tests/section_filter_propagation.sh           | 225 ++++++++++++++++++
+ 11 files changed, 269 insertions(+), 25 deletions(-)
+ create mode 100755 tests/section_filter_propagation.sh
+
+diff --git a/fe-app-forkop/locales/calls.json b/fe-app-forkop/locales/calls.json
+index 6587b7d..40e1c06 100644
+--- a/fe-app-forkop/locales/calls.json
++++ b/fe-app-forkop/locales/calls.json
+@@ -1756,10 +1756,10 @@
+     ]
+   },
+   {
+-    "call": "Filter the servers that will be displayed on the dashboard.",
+-    "key": "Filter the servers that will be displayed on the dashboard.",
++    "call": "Filter the servers that will be displayed on the dashboard. Excluded servers are also removed from the URLTest and Priority groups of this section.",
++    "key": "Filter the servers that will be displayed on the dashboard. Excluded servers are also removed from the URLTest and Priority groups of this section.",
+     "places": [
+-      "../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:3142"
++      "../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:3164"
+     ]
+   },
+   {
+diff --git a/fe-app-forkop/locales/forkop.pot b/fe-app-forkop/locales/forkop.pot
+index 119059e..63f211a 100644
+--- a/fe-app-forkop/locales/forkop.pot
++++ b/fe-app-forkop/locales/forkop.pot
+@@ -1064,8 +1064,8 @@ msgstr ""
+ msgid "Fastest"
+ msgstr ""
+ 
+-#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:3142
+-msgid "Filter the servers that will be displayed on the dashboard."
++#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:3164
++msgid "Filter the servers that will be displayed on the dashboard. Excluded servers are also removed from the URLTest and Priority groups of this section."
+ msgstr ""
+ 
+ #: src/forkop/tabs/diagnostic/checks/runInboundsCheck.ts:136
+diff --git a/fe-app-forkop/locales/forkop.ru.po b/fe-app-forkop/locales/forkop.ru.po
+index 414a648..5b32e3e 100644
+--- a/fe-app-forkop/locales/forkop.ru.po
++++ b/fe-app-forkop/locales/forkop.ru.po
+@@ -725,8 +725,8 @@ msgstr "Интервал поиска более быстрого сервера
+ msgid "Fastest"
+ msgstr "Самый быстрый"
+ 
+-msgid "Filter the servers that will be displayed on the dashboard."
+-msgstr "Отфильтровать серверы, которые будут отображаться в дашборде."
++msgid "Filter the servers that will be displayed on the dashboard. Excluded servers are also removed from the URLTest and Priority groups of this section."
++msgstr "Отфильтровать серверы, которые будут отображаться в дашборде. Исключённые серверы также убираются из URLTest и Приоритет групп этой секции."
+ 
+ msgid "Firewall WAN port"
+ msgstr "Порт в firewall для WAN"
+diff --git a/fe-app-forkop/src/forkop/tabs/dashboard/partials/renderFlagEmojis.ts b/fe-app-forkop/src/forkop/tabs/dashboard/partials/renderFlagEmojis.ts
+index fb5652d..d2dcc6a 100644
+--- a/fe-app-forkop/src/forkop/tabs/dashboard/partials/renderFlagEmojis.ts
++++ b/fe-app-forkop/src/forkop/tabs/dashboard/partials/renderFlagEmojis.ts
+@@ -9,11 +9,7 @@ export function renderFlagEmojis(value: string): (HTMLElement | string)[] {
+     .filter(Boolean)
+     .map((part) =>
+       EXACT_FLAG_EMOJI_PATTERN.test(part)
+-        ? E(
+-            'span',
+-            { class: 'fkp_dashboard-page__flag-emoji' },
+-            part,
+-          )
++        ? E('span', { class: 'fkp_dashboard-page__flag-emoji' }, part)
+         : part,
+     );
+ }
+diff --git a/forkop/files/usr/lib/singbox/generator.uc b/forkop/files/usr/lib/singbox/generator.uc
+index 358b5b8..eefd709 100644
+--- a/forkop/files/usr/lib/singbox/generator.uc
++++ b/forkop/files/usr/lib/singbox/generator.uc
+@@ -1258,6 +1258,32 @@ function dashboard_filtered_outbounds(section, selector_tags, state, group_outbo
+     );
+ }
+ 
++// Section-level exclusions define the pool of servers the whole section may use: a server excluded
++// here must not stay reachable through an URLTest or Priority group either. Only the exclude half is
++// propagated - the include half may be group based, and group membership is only known once the
++// groups themselves are built.
++function section_pool_candidate_outbounds(section, urltest_candidate_tags, state) {
++    if (!filter_mode_uses_exclude(connections.dashboard_filter_mode(section)))
++        return urltest_candidate_tags;
++
++    return filter_candidate_outbounds(
++        "exclude",
++        urltest_candidate_tags,
++        object_or_empty(object_or_empty(state.outboundMetadata).names),
++        dashboard_country_metadata(section, state),
++        object_or_empty(state.outboundMetadata),
++        // include side is unused in "exclude" mode
++        [], [], [], false, [], [], [],
++        connections.dashboard_exclude_outbounds(section),
++        connections.dashboard_exclude_regex(section),
++        connections.dashboard_exclude_countries(section),
++        connections.dashboard_exclude_proxy_parameters(section),
++        connections.dashboard_exclude_protocols(section),
++        connections.dashboard_exclude_transports(section),
++        connections.dashboard_exclude_securities(section)
++    );
++}
++
+ function priority_levels_with_outbounds(group_id, urltest_candidate_tags, state) {
+     let result = [];
+     let assigned = {};
+@@ -1407,9 +1433,10 @@ function add_proxy_selector(config, section, selector_tags, urltest_candidate_ta
+     let urltest_tags = [];
+     let priority_tags = [];
+     let group_outbounds = {};
++    let group_candidate_tags = section_pool_candidate_outbounds(section, urltest_candidate_tags, state);
+ 
+     for (let urltest_id in connections.urltests(section)) {
+-        let urltest = add_urltest_outbound(config, section, urltest_id, urltest_candidate_tags, state);
++        let urltest = add_urltest_outbound(config, section, urltest_id, group_candidate_tags, state);
+         remember_dashboard_group_outbounds(
+             group_outbounds,
+             connections.urltest_display_name(section, urltest_id),
+@@ -1422,7 +1449,7 @@ function add_proxy_selector(config, section, selector_tags, urltest_candidate_ta
+     }
+ 
+     for (let group_id in connections.priority_groups(section)) {
+-        let priority = add_priority_group_outbound(config, section, group_id, urltest_candidate_tags, state);
++        let priority = add_priority_group_outbound(config, section, group_id, group_candidate_tags, state);
+         remember_dashboard_group_outbounds(
+             group_outbounds,
+             connections.priority_group_display_name(section, group_id),
+diff --git a/luci-app-forkop/htdocs/luci-static/resources/view/forkop/main.js b/luci-app-forkop/htdocs/luci-static/resources/view/forkop/main.js
+index 3832eb9..f3a1eeb 100644
+--- a/luci-app-forkop/htdocs/luci-static/resources/view/forkop/main.js
++++ b/luci-app-forkop/htdocs/luci-static/resources/view/forkop/main.js
+@@ -861,11 +861,7 @@ var FLAG_EMOJI_PATTERN = /([\u{1f1e6}-\u{1f1ff}]{2}|\u{1f3f4}[\u{e0061}-\u{e007a
+ var EXACT_FLAG_EMOJI_PATTERN = /^([\u{1f1e6}-\u{1f1ff}]{2}|\u{1f3f4}[\u{e0061}-\u{e007a}]+\u{e007f})$/u;
+ function renderFlagEmojis(value) {
+   return value.split(FLAG_EMOJI_PATTERN).filter(Boolean).map(
+-    (part) => EXACT_FLAG_EMOJI_PATTERN.test(part) ? E(
+-      "span",
+-      { class: "fkp_dashboard-page__flag-emoji" },
+-      part
+-    ) : part
++    (part) => EXACT_FLAG_EMOJI_PATTERN.test(part) ? E("span", { class: "fkp_dashboard-page__flag-emoji" }, part) : part
+   );
+ }
+ 
+diff --git a/luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js b/luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js
+index 103c47a..11d11d5 100644
+--- a/luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js
++++ b/luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js
+@@ -3161,7 +3161,7 @@ function addDashboardServerFilterOptions(section) {
+     form.ListValue,
+     "dashboard_filter_mode",
+     _("Servers on dashboard"),
+-    _("Filter the servers that will be displayed on the dashboard."),
++    _("Filter the servers that will be displayed on the dashboard. Excluded servers are also removed from the URLTest and Priority groups of this section."),
+   );
+   urlTestFilterModeChoices().forEach((choice) =>
+     o.value(choice.value, choice.label),
+diff --git a/luci-app-forkop/po/ru/forkop.po b/luci-app-forkop/po/ru/forkop.po
+index 414a648..5b32e3e 100644
+--- a/luci-app-forkop/po/ru/forkop.po
++++ b/luci-app-forkop/po/ru/forkop.po
+@@ -725,8 +725,8 @@ msgstr "Интервал поиска более быстрого сервера
+ msgid "Fastest"
+ msgstr "Самый быстрый"
+ 
+-msgid "Filter the servers that will be displayed on the dashboard."
+-msgstr "Отфильтровать серверы, которые будут отображаться в дашборде."
++msgid "Filter the servers that will be displayed on the dashboard. Excluded servers are also removed from the URLTest and Priority groups of this section."
++msgstr "Отфильтровать серверы, которые будут отображаться в дашборде. Исключённые серверы также убираются из URLTest и Приоритет групп этой секции."
+ 
+ msgid "Firewall WAN port"
+ msgstr "Порт в firewall для WAN"
+diff --git a/luci-app-forkop/po/templates/forkop.pot b/luci-app-forkop/po/templates/forkop.pot
+index 119059e..63f211a 100644
+--- a/luci-app-forkop/po/templates/forkop.pot
++++ b/luci-app-forkop/po/templates/forkop.pot
+@@ -1064,8 +1064,8 @@ msgstr ""
+ msgid "Fastest"
+ msgstr ""
+ 
+-#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:3142
+-msgid "Filter the servers that will be displayed on the dashboard."
++#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:3164
++msgid "Filter the servers that will be displayed on the dashboard. Excluded servers are also removed from the URLTest and Priority groups of this section."
+ msgstr ""
+ 
+ #: src/forkop/tabs/diagnostic/checks/runInboundsCheck.ts:136
+diff --git a/tests/luci_dynamiclist_layout.sh b/tests/luci_dynamiclist_layout.sh
+index 9cc28ff..cfc17aa 100644
+--- a/tests/luci_dynamiclist_layout.sh
++++ b/tests/luci_dynamiclist_layout.sh
+@@ -72,7 +72,7 @@ grep -Fq '"dashboard_filter_mode"' <<<"$dashboard_options" ||
+   fail "section settings must expose the dashboard server filter"
+ grep -Fq '_("Servers on dashboard")' <<<"$dashboard_options" ||
+   fail "dashboard server filter must use the requested section-level label"
+-grep -Fq '_("Filter the servers that will be displayed on the dashboard.")' <<<"$dashboard_options" ||
++grep -Fq '_("Filter the servers that will be displayed on the dashboard. Excluded servers are also removed from the URLTest and Priority groups of this section.")' <<<"$dashboard_options" ||
+   fail "dashboard server filter must use the requested description"
+ grep -Fq 'option.modalonly = true;' <<<"$dashboard_options" ||
+   fail "dashboard server filter options must stay inside the section modal"
+diff --git a/tests/section_filter_propagation.sh b/tests/section_filter_propagation.sh
+new file mode 100755
+index 0000000..3b8b431
+--- /dev/null
++++ b/tests/section_filter_propagation.sh
+@@ -0,0 +1,225 @@
++#!/usr/bin/env bash
++set -eo pipefail
++
++ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
++FORKOP_LIB="$ROOT_DIR/forkop/files/usr/lib"
++GENERATOR_UC="$FORKOP_LIB/singbox/generator.uc"
++VALIDATOR_UC="$FORKOP_LIB/config/validator.uc"
++WORK_DIR="$(mktemp -d)"
++
++cleanup() {
++  rm -rf "$WORK_DIR"
++}
++trap cleanup EXIT
++
++fail() {
++  printf 'FAIL: %s\n' "$1" >&2
++  exit 1
++}
++
++generate_config() {
++  local fixture="$1"
++  local output="$2"
++  mkdir -p "${output}.section-cache"
++  ucode -L "$FORKOP_LIB" "$GENERATOR_UC" generate-config-fixture \
++    "$fixture" "$output" "127.0.0.1"
++}
++
++validate_fixture() {
++  local fixture="$1"
++  FORKOP_LIB="$FORKOP_LIB" ucode -L "$FORKOP_LIB" "$VALIDATOR_UC" \
++    validate-runtime-fixture "$fixture" "{}"
++}
++
++servers='[
++  "{\"type\":\"vless\",\"tag\":\"🇳🇱 Amsterdam\",\"server\":\"nl.example\",\"server_port\":443,\"uuid\":\"00000000-0000-4000-8000-000000000001\",\"tls\":{\"enabled\":true}}",
++  "{\"type\":\"vless\",\"tag\":\"🇷🇺 Moscow\",\"server\":\"ru1.example\",\"server_port\":443,\"uuid\":\"00000000-0000-4000-8000-000000000002\",\"tls\":{\"enabled\":true}}",
++  "{\"type\":\"vless\",\"tag\":\"🇩🇪 Berlin\",\"server\":\"de.example\",\"server_port\":443,\"uuid\":\"00000000-0000-4000-8000-000000000003\",\"tls\":{\"enabled\":true}}",
++  "{\"type\":\"vless\",\"tag\":\"🇷🇺 Piter\",\"server\":\"ru2.example\",\"server_port\":443,\"uuid\":\"00000000-0000-4000-8000-000000000004\",\"tls\":{\"enabled\":true}}",
++  "{\"type\":\"vless\",\"tag\":\"Relay\",\"server\":\"relay.example\",\"server_port\":443,\"uuid\":\"00000000-0000-4000-8000-000000000005\",\"tls\":{\"enabled\":true}}"
++]'
++
++cat >"$WORK_DIR/exclude.json" <<JSON
++{
++  "settings": {
++    ".name": "settings",
++    ".type": "settings",
++    "dns_server": [ "77.88.8.8" ],
++    "bootstrap_dns_server": [ "77.88.8.8" ]
++  },
++  "section": [
++    {
++      ".name": "proxy",
++      ".type": "section",
++      "enabled": "1",
++      "action": "connection",
++      "outbound_jsons": $servers,
++      "dashboard_filter_mode": "exclude",
++      "dashboard_detect_server_country": "flag_emoji",
++      "dashboard_exclude_countries": [ "RU" ],
++      "dashboard_exclude_regex": [ "^Relay\$" ]
++    }
++  ],
++  "urltest": [
++    {
++      ".name": "ut_main",
++      ".type": "urltest",
++      "section": "proxy",
++      "name": "Main",
++      "filter_mode": "disabled"
++    },
++    {
++      ".name": "ut_nl",
++      ".type": "urltest",
++      "section": "proxy",
++      "name": "Only NL",
++      "filter_mode": "include",
++      "detect_server_country": "flag_emoji",
++      "include_countries": [ "NL" ]
++    }
++  ],
++  "priority_group": [
++    {
++      ".name": "pg_main",
++      ".type": "priority_group",
++      "section": "proxy",
++      "name": "Failover"
++    }
++  ],
++  "priority_level": [
++    {
++      ".name": "pl_main",
++      ".type": "priority_level",
++      "group": "pg_main",
++      "name": "Primary",
++      "order": "0",
++      "filter_mode": "include",
++      "include_outbounds": [ "🇷🇺 Moscow", "🇩🇪 Berlin" ]
++    }
++  ]
++}
++JSON
++
++cat >"$WORK_DIR/mixed.json" <<JSON
++{
++  "settings": {
++    ".name": "settings",
++    ".type": "settings",
++    "dns_server": [ "77.88.8.8" ],
++    "bootstrap_dns_server": [ "77.88.8.8" ]
++  },
++  "section": [
++    {
++      ".name": "proxy",
++      ".type": "section",
++      "enabled": "1",
++      "action": "connection",
++      "outbound_jsons": $servers,
++      "dashboard_filter_mode": "mixed",
++      "dashboard_detect_server_country": "flag_emoji",
++      "dashboard_include_countries": [ "NL" ],
++      "dashboard_exclude_countries": [ "RU" ]
++    }
++  ],
++  "urltest": [
++    {
++      ".name": "ut_main",
++      ".type": "urltest",
++      "section": "proxy",
++      "name": "Main",
++      "filter_mode": "disabled"
++    }
++  ]
++}
++JSON
++
++cat >"$WORK_DIR/groups.json" <<JSON
++{
++  "settings": {
++    ".name": "settings",
++    ".type": "settings",
++    "dns_server": [ "77.88.8.8" ],
++    "bootstrap_dns_server": [ "77.88.8.8" ]
++  },
++  "section": [
++    {
++      ".name": "proxy",
++      ".type": "section",
++      "enabled": "1",
++      "action": "connection",
++      "outbound_jsons": $servers,
++      "dashboard_filter_mode": "exclude",
++      "dashboard_exclude_groups": [ "Main" ]
++    }
++  ],
++  "urltest": [
++    {
++      ".name": "ut_main",
++      ".type": "urltest",
++      "section": "proxy",
++      "name": "Main",
++      "filter_mode": "disabled"
++    }
++  ]
++}
++JSON
++
++for fixture in exclude mixed groups; do
++  validate_fixture "$WORK_DIR/$fixture.json" >/dev/null ||
++    fail "$fixture fixture validation"
++  generate_config "$WORK_DIR/$fixture.json" "$WORK_DIR/$fixture-config.json"
++done
++
++ucode -e '
++let fs = require("fs");
++function fail(message) { die(message + "\n"); }
++function outbound_by_tag(config, tag) {
++    for (let outbound in config.outbounds || [])
++        if (outbound && outbound.tag == tag)
++            return outbound;
++    return null;
++}
++function assert_array(value, expected, label) {
++    value = value || [];
++    if (length(value) != length(expected))
++        fail(label + " length mismatch: " + sprintf("%J", value));
++    for (let i = 0; i < length(expected); i++)
++        if (value[i] != expected[i])
++            fail(label + " mismatch: " + sprintf("%J", value));
++}
++
++let exclude = json(fs.readfile(ARGV[0]));
++assert_array(outbound_by_tag(exclude, "proxy-urltest-ut_main-out").outbounds,
++    [ "🇳🇱 Amsterdam", "🇩🇪 Berlin" ],
++    "section exclusions must reach an unfiltered URLTest group");
++assert_array(outbound_by_tag(exclude, "proxy-urltest-ut_nl-out").outbounds,
++    [ "🇳🇱 Amsterdam" ],
++    "URLTest group filter still applies on top of section exclusions");
++assert_array(outbound_by_tag(exclude, "proxy-priority-pg_main-out").outbounds,
++    [ "🇩🇪 Berlin" ],
++    "section exclusions must reach Priority levels");
++assert_array(outbound_by_tag(exclude, "proxy-out").outbounds,
++    [ "🇳🇱 Amsterdam", "🇩🇪 Berlin", "proxy-urltest-ut_main-out",
++      "proxy-urltest-ut_nl-out", "proxy-priority-pg_main-out" ],
++    "section selector servers");
++
++let mixed = json(fs.readfile(ARGV[1]));
++assert_array(outbound_by_tag(mixed, "proxy-urltest-ut_main-out").outbounds,
++    [ "🇳🇱 Amsterdam", "🇩🇪 Berlin", "Relay" ],
++    "only the exclude half of a mixed section filter reaches groups");
++assert_array(outbound_by_tag(mixed, "proxy-out").outbounds,
++    [ "🇳🇱 Amsterdam", "proxy-urltest-ut_main-out" ],
++    "mixed section selector servers");
++
++let groups = json(fs.readfile(ARGV[2]));
++assert_array(outbound_by_tag(groups, "proxy-urltest-ut_main-out").outbounds,
++    [ "🇳🇱 Amsterdam", "🇷🇺 Moscow", "🇩🇪 Berlin", "🇷🇺 Piter", "Relay" ],
++    "group based exclusions stay selector only");
++assert_array(outbound_by_tag(groups, "proxy-out").outbounds,
++    [ "proxy-urltest-ut_main-out" ],
++    "group based exclusion selector servers");
++' "$WORK_DIR/exclude-config.json" "$WORK_DIR/mixed-config.json" \
++  "$WORK_DIR/groups-config.json" ||
++  fail "section filter propagation regression"
++
++printf 'section filter propagation checks passed\n'
+-- 
+2.43.0
+

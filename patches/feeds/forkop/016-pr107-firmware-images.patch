@@ -1,0 +1,149 @@
+From 7cfa3ef3e0279ea2e07aa3f5df41d963ac50f909 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 26 Sep 2026 07:11:16 +0000
+Subject: [PATCH] Install the fw4 TPROXY input include on firmware images too
+ (#84)
+
+Requires: 015-pr107-fw4-tproxy-input
+
+Install the fw4 TPROXY input include on firmware images too
+
+The fw4 include added for #84 was only created from package_postinst,
+which returns early when IPKG_INSTROOT is set. Packages baked into a
+firmware image (buildroot/ImageBuilder) therefore never got the rule,
+and guest zones with input=REJECT kept dropping TPROXY traffic.
+
+- Ship /etc/uci-defaults/60_forkop-firewall, which runs
+  `service/package.uc ensure-tproxy-firewall` on first boot (and after a
+  regular install via default_postinst). It is idempotent.
+- Do not fail the whole package install when the firewall reload
+  fails; log it and let the uci-defaults script retry.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01HEQfjBzS7Wos7AvTk18TDQ
+---
+ .github/workflows/shellcheck.yml                 | 1 +
+ build.sh                                         | 4 +++-
+ forkop/Makefile                                  | 3 +++
+ forkop/files/etc/uci-defaults/60_forkop-firewall | 6 ++++++
+ forkop/files/usr/bin/forkop                      | 1 +
+ forkop/files/usr/lib/service/package.uc          | 4 +++-
+ tests/shell_inventory.sh                         | 8 ++++++++
+ 7 files changed, 25 insertions(+), 2 deletions(-)
+ create mode 100644 forkop/files/etc/uci-defaults/60_forkop-firewall
+
+diff --git a/.github/workflows/shellcheck.yml b/.github/workflows/shellcheck.yml
+index 3cf08eb..82816c9 100644
+--- a/.github/workflows/shellcheck.yml
++++ b/.github/workflows/shellcheck.yml
+@@ -49,6 +49,7 @@ jobs:
+             find . -type f \
+               \( -name '*.sh' -o -path './build.sh' -o -path './install.sh' \
+                  -o -path './forkop/files/etc/init.d/*' \
++                 -o -path './forkop/files/etc/uci-defaults/*' \
+                  -o -path './luci-app-forkop/root/etc/uci-defaults/*' \) \
+               -print0
+           )
+diff --git a/build.sh b/build.sh
+index 144e8fc..a9849fa 100755
+--- a/build.sh
++++ b/build.sh
+@@ -170,6 +170,8 @@ build_backend_root() {
+   make_dir "$output_root/usr/lib/forkop"
+ 
+   install -m 0755 "$ROOT_DIR/forkop/files/etc/init.d/forkop" "$output_root/etc/init.d/forkop"
++  make_dir "$output_root/etc/uci-defaults"
++  install -m 0755 "$ROOT_DIR/forkop/files/etc/uci-defaults/60_forkop-firewall" "$output_root/etc/uci-defaults/60_forkop-firewall"
+   install -m 0644 "$ROOT_DIR/forkop/files/etc/config/forkop" "$output_root/etc/config/forkop"
+   install -m 0755 "$ROOT_DIR/forkop/files/usr/bin/forkop" "$output_root/usr/bin/forkop"
+   cp -a "$ROOT_DIR/forkop/files/usr/lib/." "$output_root/usr/lib/forkop/"
+@@ -178,7 +180,7 @@ build_backend_root() {
+     "$output_root/usr/lib/forkop/core/constants.uc"
+ 
+   normalize_package_root_modes "$output_root"
+-  chmod 0755 "$output_root/etc/init.d/forkop" "$output_root/usr/bin/forkop"
++  chmod 0755 "$output_root/etc/init.d/forkop" "$output_root/usr/bin/forkop" "$output_root/etc/uci-defaults/60_forkop-firewall"
+ }
+ 
+ build_app_root() {
+diff --git a/forkop/Makefile b/forkop/Makefile
+index 14c305b..3a885de 100644
+--- a/forkop/Makefile
++++ b/forkop/Makefile
+@@ -64,6 +64,9 @@ define Package/forkop/install
+ 	$(INSTALL_DIR) $(1)/etc/init.d
+ 	$(INSTALL_BIN) ./files/etc/init.d/forkop $(1)/etc/init.d/forkop
+ 
++	$(INSTALL_DIR) $(1)/etc/uci-defaults
++	$(INSTALL_BIN) ./files/etc/uci-defaults/60_forkop-firewall $(1)/etc/uci-defaults/60_forkop-firewall
++
+ 	$(INSTALL_DIR) $(1)/etc/config
+ 	$(INSTALL_CONF) ./files/etc/config/forkop $(1)/etc/config/forkop
+ 
+diff --git a/forkop/files/etc/uci-defaults/60_forkop-firewall b/forkop/files/etc/uci-defaults/60_forkop-firewall
+new file mode 100644
+index 0000000..2ba176b
+--- /dev/null
++++ b/forkop/files/etc/uci-defaults/60_forkop-firewall
+@@ -0,0 +1,6 @@
++#!/bin/sh
++# Allow TPROXY-marked input through the firewall (#84). package_postinst does this
++# on a live install; firmware images skip postinst and run this instead.
++
++/usr/bin/forkop package_firewall >/dev/null 2>&1 || true
++exit 0
+diff --git a/forkop/files/usr/bin/forkop b/forkop/files/usr/bin/forkop
+index b053c7d..3375805 100755
+--- a/forkop/files/usr/bin/forkop
++++ b/forkop/files/usr/bin/forkop
+@@ -193,6 +193,7 @@ function command_spec(command) {
+         validate_byedpi_strategy_json: [ "providers/byedpi/validator.uc", "validate-json", 1 ],
+         package_prerm: [ "service/package.uc", "prerm", 1 ],
+         package_postinst: [ "service/package.uc", "postinst", 0 ],
++        package_firewall: [ "service/package.uc", "ensure-tproxy-firewall", 0 ],
+         luci_postinst: [ "service/package.uc", "luci-postinst", 0 ]
+     };
+ 
+diff --git a/forkop/files/usr/lib/service/package.uc b/forkop/files/usr/lib/service/package.uc
+index beebbd6..351d284 100644
+--- a/forkop/files/usr/lib/service/package.uc
++++ b/forkop/files/usr/lib/service/package.uc
+@@ -250,8 +250,10 @@ function postinst_restore() {
+     if (env("IPKG_INSTROOT", "") != "")
+         return true;
+ 
++    // A firewall reload failure must not fail the package install; the
++    // include is retried by /etc/uci-defaults/60_forkop-firewall.
+     if (!ensure_tproxy_firewall_include())
+-        return false;
++        warn("forkop: could not install the fw4 TPROXY input include\n");
+ 
+     if (!path_exists(PACKAGE_UPGRADE_STATE))
+         return true;
+diff --git a/tests/shell_inventory.sh b/tests/shell_inventory.sh
+index cf12776..08f7747 100644
+--- a/tests/shell_inventory.sh
++++ b/tests/shell_inventory.sh
+@@ -44,6 +44,7 @@ shell_scripts="$(
+ expected_shell_scripts="$(
+   printf '%s\n' \
+     'luci-app-forkop/root/etc/uci-defaults/50_luci-forkop' \
++    'forkop/files/etc/uci-defaults/60_forkop-firewall' \
+     'forkop/files/etc/init.d/forkop' |
+     LC_ALL=C sort
+ )"
+@@ -87,4 +88,11 @@ if grep -n -E '(^|[^[:alnum:]_])(uci|rm|logger|rpcd|killall|jsonfilter|config_lo
+   fail "LuCI uci-defaults must not own cache, rpcd, logging, or UCI logic"
+ fi
+ 
++FORKOP_FIREWALL_DEFAULTS="$ROOT_DIR/forkop/files/etc/uci-defaults/60_forkop-firewall"
++grep -Fq '/usr/bin/forkop package_firewall' "$FORKOP_FIREWALL_DEFAULTS" ||
++  fail "backend uci-defaults must delegate firewall setup to ucode"
++if grep -n -E '(^|[^[:alnum:]_])(uci|nft|fw4|rm|logger|ucode)([[:space:]]|$)' "$FORKOP_FIREWALL_DEFAULTS" >/dev/null 2>&1; then
++  fail "backend uci-defaults must not own firewall or UCI logic"
++fi
++
+ printf 'shell inventory checks passed\n'
+-- 
+2.43.0
+

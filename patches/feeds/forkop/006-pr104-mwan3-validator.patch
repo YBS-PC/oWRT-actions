@@ -1,0 +1,91 @@
+From b7d6d5cc333c4ea7d4b2d73c2dda55d8c4687c1b Mon Sep 17 00:00:00 2001
+From: petrouspetr-pixel <280500603+petrouspetr-pixel@users.noreply.github.com>
+Date: Sat, 26 Sep 2026 07:11:15 +0000
+Subject: [PATCH] Fix mwan3 validation call (#115, PR #104)
+
+Avoid chained module call in mwan3 validation
+
+---
+
+Fix mwan3 validator helper call order
+---
+ forkop/files/usr/lib/config/validator.uc |  7 ++++-
+ tests/mwan3_validator_sections.sh        | 40 ++++++++++++++++++++++++
+ 2 files changed, 46 insertions(+), 1 deletion(-)
+ create mode 100644 tests/mwan3_validator_sections.sh
+
+diff --git a/forkop/files/usr/lib/config/validator.uc b/forkop/files/usr/lib/config/validator.uc
+index 6b4fbe2..4140937 100644
+--- a/forkop/files/usr/lib/config/validator.uc
++++ b/forkop/files/usr/lib/config/validator.uc
+@@ -662,7 +662,10 @@ function mwan3_has_enabled_interface() {
+ }
+ 
+ function mwan3_has_enabled_interface_from_sections() {
+-    for (let section in uci_core().section_objects("mwan3", "interface"))
++    if (uci_core_module == null)
++        uci_core_module = require("core.uci");
++    let core = uci_core_module;
++    for (let section in core.section_objects("mwan3", "interface"))
+         if (option(section, "enabled", "0") == "1")
+             return true;
+     return false;
+@@ -2142,6 +2145,8 @@ else if (mode == "dhcp-has-https-dns-proxy-options")
+     dhcp_has_https_dns_proxy_options_exit(ARGV[1]);
+ else if (mode == "mwan3-has-enabled-interface")
+     exit(mwan3_has_enabled_interface() ? 0 : 1);
++else if (mode == "mwan3-has-enabled-interface-from-sections")
++    exit(mwan3_has_enabled_interface_from_sections() ? 0 : 1);
+ else if (mode == "mwan3-is-active")
+     exit(mwan3_is_active() ? 0 : 1);
+ else if (mode == "check-requirements")
+diff --git a/tests/mwan3_validator_sections.sh b/tests/mwan3_validator_sections.sh
+new file mode 100644
+index 0000000..839da9f
+--- /dev/null
++++ b/tests/mwan3_validator_sections.sh
+@@ -0,0 +1,40 @@
++#!/usr/bin/env bash
++set -eo pipefail
++
++ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
++FORKOP_LIB="$ROOT_DIR/forkop/files/usr/lib"
++VALIDATOR="$FORKOP_LIB/config/validator.uc"
++WORK_DIR="$(mktemp -d)"
++
++cleanup() {
++  rm -rf "$WORK_DIR"
++}
++trap cleanup EXIT
++
++fail() {
++  printf 'FAIL: %s\n' "$1" >&2
++  exit 1
++}
++
++cat >"$WORK_DIR/enabled.state" <<'EOF'
++mwan3.wan=interface
++mwan3.wan.enabled=1
++mwan3.backup=interface
++mwan3.backup.enabled=0
++EOF
++
++FORKOP_UCI_STATE_FILE="$WORK_DIR/enabled.state" \
++  ucode -L "$FORKOP_LIB" "$VALIDATOR" mwan3-has-enabled-interface-from-sections ||
++  fail "enabled mwan3 interface must be detected through core.uci"
++
++cat >"$WORK_DIR/disabled.state" <<'EOF'
++mwan3.wan=interface
++mwan3.wan.enabled=0
++EOF
++
++if FORKOP_UCI_STATE_FILE="$WORK_DIR/disabled.state" \
++  ucode -L "$FORKOP_LIB" "$VALIDATOR" mwan3-has-enabled-interface-from-sections; then
++  fail "disabled mwan3 interfaces must not be reported as active"
++fi
++
++printf 'mwan3 validator section checks passed\n'
+\ No newline at end of file
+-- 
+2.43.0
+

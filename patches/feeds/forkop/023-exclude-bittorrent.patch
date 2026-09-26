@@ -1,0 +1,334 @@
+From ff47ce925972cbba2647180b0c094e7139a7a1ca Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 26 Sep 2026 07:11:17 +0000
+Subject: [PATCH] Add Exclude BitTorrent setting (#72)
+
+Add "Exclude BitTorrent" setting (#72)
+
+Adds settings.exclude_bittorrent (default off). When enabled, sniffed
+BitTorrent/DHT traffic is routed to bypass-out right after sniffing and
+before any section rule, so torrent clients keep working without being
+proxied. HTTP/HTTPS trackers still follow section rules.
+
+Ported from Gavr1024/forkop-mod, where the same sing-box rule is used.
+The option is part of the sing-box runtime signature, so toggling it
+regenerates the config. Checked with sing-box 1.12.25, 1.13.21 and
+1.14.2 (`sing-box check`).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01HEQfjBzS7Wos7AvTk18TDQ
+---
+ fe-app-forkop/locales/calls.json              | 14 ++++
+ fe-app-forkop/locales/forkop.pot              |  8 ++
+ fe-app-forkop/locales/forkop.ru.po            |  6 ++
+ forkop/files/etc/config/forkop                |  1 +
+ forkop/files/usr/lib/service/state.uc         |  1 +
+ forkop/files/usr/lib/singbox/route.uc         |  8 ++
+ .../resources/view/forkop/settings.js         | 11 +++
+ luci-app-forkop/po/ru/forkop.po               |  6 ++
+ luci-app-forkop/po/templates/forkop.pot       |  8 ++
+ tests/exclude_bittorrent.sh                   | 80 +++++++++++++++++++
+ tests/runtime_state_predicates.sh             |  3 +
+ 11 files changed, 146 insertions(+)
+ create mode 100755 tests/exclude_bittorrent.sh
+
+diff --git a/fe-app-forkop/locales/calls.json b/fe-app-forkop/locales/calls.json
+index 40e1c06..438c510 100644
+--- a/fe-app-forkop/locales/calls.json
++++ b/fe-app-forkop/locales/calls.json
+@@ -1048,6 +1048,20 @@
+       "../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:446"
+     ]
+   },
++  {
++    "call": "Exclude BitTorrent",
++    "key": "Exclude BitTorrent",
++    "places": [
++      "../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:456"
++    ]
++  },
++  {
++    "call": "Send BitTorrent and DHT traffic directly, bypassing Forkop. Trackers over HTTP/HTTPS may still follow section rules.",
++    "key": "Send BitTorrent and DHT traffic directly, bypassing Forkop. Trackers over HTTP/HTTPS may still follow section rules.",
++    "places": [
++      "../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:458"
++    ]
++  },
+   {
+     "call": "Disabling interception is incompatible with action=zapret2 because Forkop sends matched traffic through NFQUEUE.",
+     "key": "Disabling interception is incompatible with action=zapret2 because Forkop sends matched traffic through NFQUEUE.",
+diff --git a/fe-app-forkop/locales/forkop.pot b/fe-app-forkop/locales/forkop.pot
+index 63f211a..e98b7f9 100644
+--- a/fe-app-forkop/locales/forkop.pot
++++ b/fe-app-forkop/locales/forkop.pot
+@@ -933,6 +933,10 @@ msgstr ""
+ msgid "Enter the subscription URL"
+ msgstr ""
+ 
++#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:456
++msgid "Exclude BitTorrent"
++msgstr ""
++
+ #: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:2577
+ #: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:2787
+ #: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:3185
+@@ -2445,6 +2449,10 @@ msgstr ""
+ msgid "Selector and URLTest outbounds must contain a non-empty outbounds array"
+ msgstr ""
+ 
++#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:458
++msgid "Send BitTorrent and DHT traffic directly, bypassing Forkop. Trackers over HTTP/HTTPS may still follow section rules."
++msgstr ""
++
+ #: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/forkop.js:413
+ msgid "Server"
+ msgstr ""
+diff --git a/fe-app-forkop/locales/forkop.ru.po b/fe-app-forkop/locales/forkop.ru.po
+index 5b32e3e..0faded5 100644
+--- a/fe-app-forkop/locales/forkop.ru.po
++++ b/fe-app-forkop/locales/forkop.ru.po
+@@ -644,6 +644,9 @@ msgstr "HWID, который будет отправляться при запр
+ msgid "Enter the subscription URL"
+ msgstr "Введите URL подписки"
+ 
++msgid "Exclude BitTorrent"
++msgstr "Исключить BitTorrent"
++
+ msgid "Exclude by proxy parameters"
+ msgstr "Исключить по параметрам прокси"
+ 
+@@ -1694,6 +1697,9 @@ msgstr "Выбранная секция"
+ msgid "Selector and URLTest outbounds must contain a non-empty outbounds array"
+ msgstr "Selector и URLTest outbound должны содержать непустой массив outbounds"
+ 
++msgid "Send BitTorrent and DHT traffic directly, bypassing Forkop. Trackers over HTTP/HTTPS may still follow section rules."
++msgstr "Отправлять трафик BitTorrent и DHT напрямую, в обход Forkop. HTTP/HTTPS-трекеры могут по-прежнему идти по правилам секции."
++
+ msgid "Server"
+ msgstr "Сервер"
+ 
+diff --git a/forkop/files/etc/config/forkop b/forkop/files/etc/config/forkop
+index 96add39..ee7e13a 100644
+--- a/forkop/files/etc/config/forkop
++++ b/forkop/files/etc/config/forkop
+@@ -21,6 +21,7 @@ config settings 'settings'
+         #option badwan_reload_delay '2000'
+         option enable_yacd '0'
+         option disable_quic '0'
++        option exclude_bittorrent '0'
+         option list_update_enabled '1'
+         option update_interval '1d'
+         option component_update_check_enabled '1'
+diff --git a/forkop/files/usr/lib/service/state.uc b/forkop/files/usr/lib/service/state.uc
+index 7b21e1a..b962383 100644
+--- a/forkop/files/usr/lib/service/state.uc
++++ b/forkop/files/usr/lib/service/state.uc
+@@ -1401,6 +1401,7 @@ function sing_box_signature_body(settings, sections, servers, mwan3_active) {
+     body = signature_add_value(body, "settings.dns_rewrite_ttl", option(settings, "dns_rewrite_ttl", "60"));
+     body = signature_add_value(body, "settings.output_network_interface", option(settings, "output_network_interface", ""));
+     body = signature_add_value(body, "settings.disable_quic", bool_option_value(settings, "disable_quic", false));
++    body = signature_add_value(body, "settings.exclude_bittorrent", bool_option_value(settings, "exclude_bittorrent", false));
+     if (sing_box_signature_has_remote_ruleset_sources(sections))
+         body = signature_add_value(body, "settings.update_interval", settings_update_interval(settings));
+     body = signature_add_value(body, "settings.cache_path", option(settings, "cache_path", "/tmp/sing-box/cache.db"));
+diff --git a/forkop/files/usr/lib/singbox/route.uc b/forkop/files/usr/lib/singbox/route.uc
+index 2ba66a0..8c5f277 100644
+--- a/forkop/files/usr/lib/singbox/route.uc
++++ b/forkop/files/usr/lib/singbox/route.uc
+@@ -43,6 +43,14 @@ function config(settings, runtime) {
+     if (bool_option(settings, "disable_quic", false))
+         push(result.rules, { action: "reject", inbound: runtime_constants.TPROXY_INBOUND_TAG, protocol: "quic" });
+ 
++    // Sniffed BitTorrent/DHT goes direct before any section rule (#72).
++    if (bool_option(settings, "exclude_bittorrent", false))
++        push(result.rules, {
++            action: "route",
++            protocol: "bittorrent",
++            outbound: runtime_constants.BYPASS_OUTBOUND_TAG
++        });
++
+     return result;
+ }
+ 
+diff --git a/luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js b/luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js
+index 24587cd..7def687 100644
+--- a/luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js
++++ b/luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js
+@@ -450,6 +450,17 @@ function createSettingsContent(section, capabilities) {
+   o.default = "0";
+   o.rmempty = false;
+ 
++  o = section.option(
++    form.Flag,
++    "exclude_bittorrent",
++    _("Exclude BitTorrent"),
++    _(
++      "Send BitTorrent and DHT traffic directly, bypassing Forkop. Trackers over HTTP/HTTPS may still follow section rules.",
++    ),
++  );
++  o.default = "0";
++  o.rmempty = false;
++
+   o = section.option(
+     form.Flag,
+     "list_update_enabled",
+diff --git a/luci-app-forkop/po/ru/forkop.po b/luci-app-forkop/po/ru/forkop.po
+index 5b32e3e..0faded5 100644
+--- a/luci-app-forkop/po/ru/forkop.po
++++ b/luci-app-forkop/po/ru/forkop.po
+@@ -644,6 +644,9 @@ msgstr "HWID, который будет отправляться при запр
+ msgid "Enter the subscription URL"
+ msgstr "Введите URL подписки"
+ 
++msgid "Exclude BitTorrent"
++msgstr "Исключить BitTorrent"
++
+ msgid "Exclude by proxy parameters"
+ msgstr "Исключить по параметрам прокси"
+ 
+@@ -1694,6 +1697,9 @@ msgstr "Выбранная секция"
+ msgid "Selector and URLTest outbounds must contain a non-empty outbounds array"
+ msgstr "Selector и URLTest outbound должны содержать непустой массив outbounds"
+ 
++msgid "Send BitTorrent and DHT traffic directly, bypassing Forkop. Trackers over HTTP/HTTPS may still follow section rules."
++msgstr "Отправлять трафик BitTorrent и DHT напрямую, в обход Forkop. HTTP/HTTPS-трекеры могут по-прежнему идти по правилам секции."
++
+ msgid "Server"
+ msgstr "Сервер"
+ 
+diff --git a/luci-app-forkop/po/templates/forkop.pot b/luci-app-forkop/po/templates/forkop.pot
+index 63f211a..e98b7f9 100644
+--- a/luci-app-forkop/po/templates/forkop.pot
++++ b/luci-app-forkop/po/templates/forkop.pot
+@@ -933,6 +933,10 @@ msgstr ""
+ msgid "Enter the subscription URL"
+ msgstr ""
+ 
++#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:456
++msgid "Exclude BitTorrent"
++msgstr ""
++
+ #: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:2577
+ #: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:2787
+ #: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:3185
+@@ -2445,6 +2449,10 @@ msgstr ""
+ msgid "Selector and URLTest outbounds must contain a non-empty outbounds array"
+ msgstr ""
+ 
++#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:458
++msgid "Send BitTorrent and DHT traffic directly, bypassing Forkop. Trackers over HTTP/HTTPS may still follow section rules."
++msgstr ""
++
+ #: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/forkop.js:413
+ msgid "Server"
+ msgstr ""
+diff --git a/tests/exclude_bittorrent.sh b/tests/exclude_bittorrent.sh
+new file mode 100755
+index 0000000..e5bf731
+--- /dev/null
++++ b/tests/exclude_bittorrent.sh
+@@ -0,0 +1,80 @@
++#!/usr/bin/env bash
++set -eo pipefail
++
++ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
++FORKOP_LIB="$ROOT_DIR/forkop/files/usr/lib"
++GENERATOR="$FORKOP_LIB/singbox/generator.uc"
++WORK_DIR="$(mktemp -d)"
++
++cleanup() {
++  rm -rf "$WORK_DIR"
++}
++trap cleanup EXIT
++
++fail() {
++  printf 'FAIL: %s\n' "$1" >&2
++  exit 1
++}
++
++generate() {
++  local flag="$1" output="$2"
++  cat >"$WORK_DIR/fixture-$flag.json" <<JSON
++{
++  "settings": {
++    ".name": "settings",
++    ".type": "settings",
++    "config_path": "/tmp/sing-box/config.json",
++    "dns_server": "1.1.1.1",
++    "bootstrap_dns_server": "1.1.1.1",
++    "service_listen_address": "127.0.0.1",
++    "exclude_bittorrent": "$flag"
++  },
++  "section": [
++    {
++      ".name": "proxy",
++      ".type": "section",
++      "enabled": "1",
++      "action": "outbound",
++      "outbound_json": "{\"type\":\"socks\",\"server\":\"127.0.0.1\",\"server_port\":1080,\"version\":\"5\"}",
++      "domain_suffix": [ "example.org" ]
++    }
++  ]
++}
++JSON
++  mkdir -p "$output.section-cache" "$output.rulesets"
++  ucode -L "$FORKOP_LIB" "$GENERATOR" generate-config-fixture \
++    "$WORK_DIR/fixture-$flag.json" "$output" "127.0.0.1"
++}
++
++check() {
++  ucode -e '
++let config = json(require("fs").readfile(ARGV[0]));
++let rules = config.route.rules;
++let torrent = null, sniff = null, section = null;
++for (let i = 0; i < length(rules); i++) {
++    if (rules[i].action == "sniff") sniff = i;
++    if (rules[i].protocol == "bittorrent") torrent = i;
++    if (section == null && rules[i].outbound == "proxy-out") section = i;
++}
++if (ARGV[1] == "1") {
++    if (torrent == null || rules[torrent].outbound != "bypass-out")
++        die("BitTorrent must be routed to bypass-out\n");
++    if (!(sniff < torrent && torrent < section))
++        die("BitTorrent rule must follow sniffing and precede section rules\n");
++}
++else if (torrent != null)
++    die("BitTorrent rule must be absent when the option is off\n");
++' "$1" "$2"
++}
++
++generate 1 "$WORK_DIR/on.json"
++check "$WORK_DIR/on.json" 1 || fail "exclude_bittorrent=1"
++generate 0 "$WORK_DIR/off.json"
++check "$WORK_DIR/off.json" 0 || fail "exclude_bittorrent=0"
++
++for bin in ${FORKOP_TEST_SING_BOX_113:-} ${FORKOP_TEST_SING_BOX_114:-}; do
++  [ -x "$bin" ] || continue
++  "$bin" check -c "$WORK_DIR/on.json" || fail "sing-box check rejected the BitTorrent rule ($bin)"
++done
++
++printf 'BitTorrent exclusion checks passed\n'
+diff --git a/tests/runtime_state_predicates.sh b/tests/runtime_state_predicates.sh
+index 36d5820..3d1ba0a 100644
+--- a/tests/runtime_state_predicates.sh
++++ b/tests/runtime_state_predicates.sh
+@@ -419,6 +419,7 @@ cat >"$WORK_DIR/sing-box-signature.json" <<'JSON'
+     "dns_rewrite_ttl": "120",
+     "output_network_interface": "wan",
+     "disable_quic": "on",
++    "exclude_bittorrent": "1",
+     "list_update_enabled": "1",
+     "update_interval": "2h",
+     "cache_path": "/tmp/cache.db",
+@@ -582,6 +583,8 @@ prefer_ipv6
+ wan
+ [settings.disable_quic]
+ 1
++[settings.exclude_bittorrent]
++1
+ [settings.update_interval]
+ 2h
+ [settings.cache_path]
+-- 
+2.43.0
+

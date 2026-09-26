@@ -1,0 +1,46 @@
+From e4dfc69779ecb315924c290dc12bb49e35a54569 Mon Sep 17 00:00:00 2001
+From: petrouspetr-pixel <280500603+petrouspetr-pixel@users.noreply.github.com>
+Date: Sat, 26 Sep 2026 07:11:14 +0000
+Subject: [PATCH] Dashboard proxy latency timeout 10 s (#117, PR #119)
+
+fix: increase dashboard proxy latency timeout to 10 seconds
+---
+ forkop/files/usr/lib/service/ui.uc | 4 ++--
+ tests/ui_runtime_job.sh            | 6 ++++++
+ 2 files changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/forkop/files/usr/lib/service/ui.uc b/forkop/files/usr/lib/service/ui.uc
+index 08118a6..12792ca 100644
+--- a/forkop/files/usr/lib/service/ui.uc
++++ b/forkop/files/usr/lib/service/ui.uc
+@@ -1403,8 +1403,8 @@ function latency_clash_method(latency_type) {
+     if (latency_type == "group")
+         return { method: "get_group_latency", timeout: "10000" };
+     if (latency_type == "proxy_list")
+-        return { method: "get_proxy_latencies", timeout: "5000" };
+-    return { method: "get_proxy_latency", timeout: "5000" };
++        return { method: "get_proxy_latencies", timeout: "10000" };
++    return { method: "get_proxy_latency", timeout: "10000" };
+ }
+ 
+ function latency_worker(path, latency_type, tag, timeout) {
+diff --git a/tests/ui_runtime_job.sh b/tests/ui_runtime_job.sh
+index 165d8e8..7840a09 100644
+--- a/tests/ui_runtime_job.sh
++++ b/tests/ui_runtime_job.sh
+@@ -81,6 +81,12 @@ if grep -n -E 'pgrep.*sing-box|service-list-instance-running' "$UI_UC" >/dev/nul
+   fail "service/ui.uc must not use transient sing-box process probes for visible status"
+ fi
+ 
++latency_clash_method="$(sed -n '/^function latency_clash_method(/,/^}/p' "$UI_UC")"
++printf '%s\n' "$latency_clash_method" | grep -Fq 'return { method: "get_proxy_latencies", timeout: "10000" };' ||
++  fail "proxy_list latency checks must default to a 10000 ms timeout"
++printf '%s\n' "$latency_clash_method" | grep -Fq 'return { method: "get_proxy_latency", timeout: "10000" };' ||
++  fail "proxy latency checks must default to a 10000 ms timeout"
++
+ for mode in \
+   get-ui-capabilities \
+   get-ui-state \
+-- 
+2.43.0
+

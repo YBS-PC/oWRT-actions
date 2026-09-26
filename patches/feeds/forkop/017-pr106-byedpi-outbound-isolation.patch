@@ -1,0 +1,391 @@
+From 80a06236cfbff6debc8447c9df228dc904cc5cc9 Mon Sep 17 00:00:00 2001
+From: petrouspetr-pixel <280500603+petrouspetr-pixel@users.noreply.github.com>
+Date: Sat, 26 Sep 2026 07:11:16 +0000
+Subject: [PATCH] Isolate Forkop-managed ByeDPI outbound traffic (#102, PR
+ #106)
+
+Isolate Forkop-managed ByeDPI outbound traffic
+
+---
+
+Fix ByeDPI owner bypass call order and test
+
+---
+
+Make ByeDPI supervisor test semantic
+
+---
+
+Make ByeDPI command assertions quote-independent
+
+---
+
+Protect ByeDPI strategy args from ucode option parsing
+---
+ build.sh                                      | 44 +++++++++++++++----
+ forkop/Makefile                               |  1 +
+ forkop/files/usr/lib/nft/apply.uc             | 25 +++++++++++
+ .../files/usr/lib/providers/byedpi/runtime.uc | 34 ++++++++++++--
+ tests/byedpi_runtime_owner.sh                 | 33 ++++++++++++++
+ tests/nft_apply.sh                            |  7 +++
+ tests/package_contract.sh                     | 10 +++++
+ 7 files changed, 142 insertions(+), 12 deletions(-)
+
+diff --git a/build.sh b/build.sh
+index a9849fa..679373e 100755
+--- a/build.sh
++++ b/build.sh
+@@ -44,6 +44,7 @@ PROJECT_URL="https://github.com/ushan0v/forkop"
+ BACKEND_DEPENDS_IPK="libc, ca-bundle, kmod-inet-diag, kmod-netlink-diag, kmod-tun, curl, ucode, ucode-mod-fs, ucode-mod-uci, kmod-nft-tproxy, coreutils-base64, bind-dig, nftables, kmod-nft-nat, ip-full"
+ BACKEND_DEPENDS_APK="bind-dig ca-bundle coreutils-base64 curl ip-full kmod-inet-diag kmod-netlink-diag kmod-nft-nat kmod-nft-tproxy kmod-tun libc nftables ucode ucode-mod-fs ucode-mod-uci !https-dns-proxy !nextdns !luci-app-passwall !luci-app-passwall2"
+ BACKEND_CONFLICTS_IPK="https-dns-proxy, nextdns, luci-app-passwall, luci-app-passwall2"
++BACKEND_REQUIRE_USER="forkopbyedpi:forkopbyedpi"
+ APP_DEPENDS_IPK="libc, luci-base, forkop"
+ APP_DEPENDS_APK="libc luci-base forkop"
+ 
+@@ -221,6 +222,7 @@ generate_apk_metadata_files() {
+   local package_name="$1"
+   local package_root="$2"
+   local conffile_path="${3:-}"
++  local require_user="${4:-}"
+   local list_file="$package_root/lib/apk/packages/${package_name}.list"
+ 
+   make_dir "$(dirname "$list_file")"
+@@ -238,6 +240,10 @@ generate_apk_metadata_files() {
+     printf '%s\n' "$conffile_path" > "$conffiles_file"
+     printf '%s %s\n' "$conffile_path" "$hash_value" > "$conffiles_static_file"
+   fi
++
++  if [[ -n "$require_user" ]]; then
++    printf '%s\n' "$require_user" > "$package_root/lib/apk/packages/${package_name}.rusers"
++  fi
+ }
+ 
+ installed_size_bytes() {
+@@ -256,6 +262,7 @@ Package: forkop
+ Version: ${RELEASE_VERSION}
+ Depends: ${BACKEND_DEPENDS_IPK}
+ Conflicts: ${BACKEND_CONFLICTS_IPK}
++Require-User: ${BACKEND_REQUIRE_USER}
+ License: GPL-2.0-or-later
+ Section: net
+ URL: ${PROJECT_URL}
+@@ -271,6 +278,11 @@ EOF
+ 
+   cat > "$control_dir/postinst" <<'EOF'
+ #!/bin/sh
++[ -s ${IPKG_INSTROOT}/lib/functions.sh ] || exit 0
++. ${IPKG_INSTROOT}/lib/functions.sh
++export root="${IPKG_INSTROOT}"
++export pkgname="forkop"
++add_group_and_user
+ [ -n "${IPKG_INSTROOT}" ] && exit 0
+ FORKOP_LIB=/usr/lib/forkop ucode -L /usr/lib/forkop /usr/lib/forkop/config/migration.uc migrate || exit $?
+ /usr/bin/forkop package_postinst
+@@ -407,10 +419,16 @@ exit(0);
+ EOF
+ 
+   cat > "$scripts_dir/backend-post-install.sh" <<'EOF'
+-#!/usr/bin/ucode
+-if (getenv("IPKG_INSTROOT") == null || getenv("IPKG_INSTROOT") == "")
+-    exit(system("FORKOP_LIB=/usr/lib/forkop ucode -L /usr/lib/forkop /usr/lib/forkop/config/migration.uc migrate && /usr/bin/forkop package_postinst"));
+-exit(0);
++#!/bin/sh
++[ "${IPKG_NO_SCRIPT}" = "1" ] && exit 0
++[ -s ${IPKG_INSTROOT}/lib/functions.sh ] || exit 0
++. ${IPKG_INSTROOT}/lib/functions.sh
++export root="${IPKG_INSTROOT}"
++export pkgname="forkop"
++add_group_and_user
++[ -n "${IPKG_INSTROOT}" ] && exit 0
++FORKOP_LIB=/usr/lib/forkop ucode -L /usr/lib/forkop /usr/lib/forkop/config/migration.uc migrate &&
++  /usr/bin/forkop package_postinst
+ EOF
+ 
+   cat > "$scripts_dir/backend-pre-deinstall.sh" <<'EOF'
+@@ -430,10 +448,17 @@ exit(0);
+ EOF
+ 
+   cat > "$scripts_dir/backend-post-upgrade.sh" <<'EOF'
+-#!/usr/bin/ucode
+-if (getenv("IPKG_INSTROOT") == null || getenv("IPKG_INSTROOT") == "")
+-    exit(system("FORKOP_LIB=/usr/lib/forkop ucode -L /usr/lib/forkop /usr/lib/forkop/config/migration.uc migrate && /usr/bin/forkop package_postinst"));
+-exit(0);
++#!/bin/sh
++export PKG_UPGRADE=1
++[ "${IPKG_NO_SCRIPT}" = "1" ] && exit 0
++[ -s ${IPKG_INSTROOT}/lib/functions.sh ] || exit 0
++. ${IPKG_INSTROOT}/lib/functions.sh
++export root="${IPKG_INSTROOT}"
++export pkgname="forkop"
++add_group_and_user
++[ -n "${IPKG_INSTROOT}" ] && exit 0
++FORKOP_LIB=/usr/lib/forkop ucode -L /usr/lib/forkop /usr/lib/forkop/config/migration.uc migrate &&
++  /usr/bin/forkop package_postinst
+ EOF
+ 
+   chmod 0755 "$scripts_dir"/backend-*.sh
+@@ -595,6 +620,7 @@ verify_ipk_metadata() {
+   grep -q "^Version: ${expected_version}$" "$tmp_dir/control"
+   if [[ "$expected_package" == "forkop" ]]; then
+     grep -q "^Conflicts: ${BACKEND_CONFLICTS_IPK}$" "$tmp_dir/control"
++    grep -q "^Require-User: ${BACKEND_REQUIRE_USER}$" "$tmp_dir/control"
+   fi
+   rm -rf "$tmp_dir"
+ }
+@@ -708,7 +734,7 @@ main() {
+     "$i18n_control" \
+     "$output_dir/luci-i18n-forkop-ru_${RELEASE_VERSION}.ipk"
+ 
+-  generate_apk_metadata_files "forkop" "$backend_root" "/etc/config/forkop"
++  generate_apk_metadata_files "forkop" "$backend_root" "/etc/config/forkop" "$BACKEND_REQUIRE_USER"
+   generate_apk_metadata_files "luci-app-forkop" "$app_root"
+   generate_apk_metadata_files "luci-i18n-forkop-ru" "$i18n_root"
+   write_backend_apk_scripts "$apk_scripts"
+diff --git a/forkop/Makefile b/forkop/Makefile
+index 3a885de..ae60ecf 100644
+--- a/forkop/Makefile
++++ b/forkop/Makefile
+@@ -27,6 +27,7 @@ define Package/forkop
+ 	TITLE:=Forkop backend service
+ 	URL:=https://github.com/ushan0v/forkop
+ 	PKGARCH:=all
++	USERID:=forkopbyedpi:forkopbyedpi
+ endef
+ 
+ define Package/forkop/description
+diff --git a/forkop/files/usr/lib/nft/apply.uc b/forkop/files/usr/lib/nft/apply.uc
+index 3298570..2bef761 100644
+--- a/forkop/files/usr/lib/nft/apply.uc
++++ b/forkop/files/usr/lib/nft/apply.uc
+@@ -12,6 +12,8 @@ let runtime_constants = require("singbox.constants");
+ const CONFIG_NAME = getenv("FORKOP_CONFIG_NAME") || "forkop";
+ const DNS_SOURCE_SET = "forkop_dns_sources";
+ const DNS_SOURCE6_SET = "forkop_dns_sources6";
++const BYEDPI_RUNTIME_USER = getenv("BYEDPI_RUNTIME_USER") || "forkopbyedpi";
++const BYEDPI_RUNTIME_UID_OVERRIDE = getenv("BYEDPI_RUNTIME_UID") || "";
+ 
+ let common_read_json_file = common.read_json_file;
+ let list_option = common.list_option;
+@@ -136,6 +138,16 @@ function command_output_quiet_from_args(args) {
+     return as_string(data);
+ }
+ 
++function byedpi_runtime_uid() {
++    let uid = trim(as_string(BYEDPI_RUNTIME_UID_OVERRIDE));
++    if (match(uid, /^[0-9]+$/) != null)
++        return uid;
++
++    uid = trim(command_output_quiet_from_args([ "id", "-u", BYEDPI_RUNTIME_USER ]));
++    return match(uid, /^[0-9]+$/) != null ? uid : "";
++}
++
++
+ function log_debug(message) {
+     run_args([ "logger", "-t", "forkop", "[debug] " + as_string(message) ]);
+ }
+@@ -472,6 +484,18 @@ function nft_add_rule(table, chain, args) {
+     return run_args(command);
+ }
+ 
++function nft_add_byedpi_runtime_owner_rule(table, outbound_mark) {
++    let uid = byedpi_runtime_uid();
++    if (uid == "")
++        return true;
++
++    return nft_add_rule(table, "mangle_output", [
++        "meta", "skuid", uid,
++        "meta", "mark", "set", outbound_mark,
++        "counter", "return"
++    ]);
++}
++
+ function nft_insert_rule(table, chain, args) {
+     let command = [ "nft", "insert", "rule", "inet", table, chain ];
+     for (let arg in args)
+@@ -857,6 +881,7 @@ function nft_create_runtime_base(table, localv4_set, common_set, port_set, ip_po
+         !nft_add_rule(table, "proxy", [ "meta", "mark", "&", fakeip_mark, "==", fakeip_mark, "meta", "l4proto", "udp", "tproxy", "ip6", "to", core_ip.format_ipv6_tproxy_target(tproxy6_address, tproxy_port), "counter" ]) ||
+         !nft_add_rule(table, "mangle_output", [ "ip", "daddr", "@" + as_string(localv4_set), "return" ]) ||
+         !nft_add_rule(table, "mangle_output", [ "ip6", "daddr", "@" + as_string(localv6_set), "ip6", "daddr", "!=", fakeip6_range, "return" ]) ||
++        !nft_add_byedpi_runtime_owner_rule(table, outbound_mark) ||
+         !nft_add_rule(table, "mangle_output", [ "meta", "mark", outbound_mark, "counter", "return" ]) ||
+         !nft_add_rule(table, "mangle_output", [ "jump", "priority_output_rules" ]))
+         return false;
+diff --git a/forkop/files/usr/lib/providers/byedpi/runtime.uc b/forkop/files/usr/lib/providers/byedpi/runtime.uc
+index ba1595c..3164a21 100644
+--- a/forkop/files/usr/lib/providers/byedpi/runtime.uc
++++ b/forkop/files/usr/lib/providers/byedpi/runtime.uc
+@@ -18,6 +18,8 @@ const BYEDPI_PORT_BASE = getenv("BYEDPI_PORT_BASE") || "1080";
+ const BYEDPI_RESPAWN_DELAY = getenv("BYEDPI_RESPAWN_DELAY") || "5";
+ const BYEDPI_OPEN_FILES_LIMIT = getenv("BYEDPI_OPEN_FILES_LIMIT") || "4096";
+ const BYEDPI_DEFAULT_CMD_OPTS = getenv("BYEDPI_DEFAULT_CMD_OPTS") || "-o 2 --auto=t,r,a,s -d 2";
++const BYEDPI_RUNTIME_USER = getenv("BYEDPI_RUNTIME_USER") || "forkopbyedpi";
++const BYEDPI_RUNTIME_GROUP = getenv("BYEDPI_RUNTIME_GROUP") || "forkopbyedpi";
+ const SB_TPROXY_INBOUND_TAG = getenv("SB_TPROXY_INBOUND_TAG") || "tproxy-in";
+ 
+ function as_string(value) {
+@@ -248,12 +250,26 @@ function stop_runtime() {
+ }
+ 
+ function supervisor_command(port, raw_opt, child_pidfile) {
+-    let args = [ BYEDPI_BIN, "--ip", BYEDPI_LISTEN_ADDRESS, "--port", as_string(port) ];
++    let args = [
++        "start-stop-daemon",
++        "-S",
++        "-p", child_pidfile,
++        "-c", BYEDPI_RUNTIME_USER + ":" + BYEDPI_RUNTIME_GROUP,
++        "-x", BYEDPI_BIN,
++        "--",
++        "--ip", BYEDPI_LISTEN_ADDRESS,
++        "--port", as_string(port)
++    ];
+     for (let word in strategy_words(raw_opt))
+         push(args, word);
+ 
+     return "ulimit -n " + shell_quote(BYEDPI_OPEN_FILES_LIMIT) + " >/dev/null 2>&1 || true; " +
+-        command_from_args(args) + " & child=$!; echo $child > " + shell_quote(child_pidfile) + "; wait $child; rc=$?; rm -f " + shell_quote(child_pidfile) + "; exit $rc";
++        command_from_args(args) + " & child=$!; echo $child > " + shell_quote(child_pidfile) +
++        "; wait $child; rc=$?; rm -f " + shell_quote(child_pidfile) + "; exit $rc";
++}
++
++function runtime_user_available() {
++    return command_success_from_args([ "id", "-u", BYEDPI_RUNTIME_USER ]);
+ }
+ 
+ function supervisor(section, port, raw_opt, child_pidfile) {
+@@ -288,6 +304,7 @@ function start_rule(section, index_value) {
+     let command = command_from_args([
+         "ucode",
+         "-L", LIB_DIR,
++        "--",
+         LIB_DIR + "/providers/byedpi/runtime.uc",
+         "supervisor",
+         name,
+@@ -319,6 +336,15 @@ function start_runtime() {
+     if (length(sections) == 0 || !provider_available())
+         return;
+ 
++    if (!runtime_user_available()) {
++        log_message("Forkop ByeDPI runtime user '" + BYEDPI_RUNTIME_USER + "' is missing. Reinstall or upgrade the Forkop package before using action 'byedpi'. Aborted.", "fatal");
++        exit(1);
++    }
++    if (!command_exists("start-stop-daemon")) {
++        log_message("start-stop-daemon is unavailable; cannot drop privileges for Forkop-managed ciadpi. Aborted.", "fatal");
++        exit(1);
++    }
++
+     if (standalone_service_enabled())
+         log_message("Standalone byedpi service is enabled. Forkop manages ciadpi itself for action 'byedpi'; disable standalone byedpi autostart to avoid boot-time port conflicts.", "warn");
+ 
+@@ -537,6 +563,8 @@ else if (mode == "stop-runtime")
+     stop_runtime();
+ else if (mode == "supervisor")
+     supervisor(ARGV[1], ARGV[2], ARGV[3], ARGV[4]);
++else if (mode == "supervisor-command")
++    print(supervisor_command(ARGV[1], ARGV[2], ARGV[3]), "\n");
+ else if (mode == "status")
+     status_json();
+ else if (mode == "check")
+@@ -550,6 +578,6 @@ else if (mode == "package-version")
+ else if (mode == "enabled-rule-count")
+     print(enabled_rule_count(), "\n");
+ else {
+-    warn("Usage: providers/byedpi/runtime.uc <start-runtime|stop-runtime|status|check|installed|package-installed|package-version> ...\n");
++    warn("Usage: providers/byedpi/runtime.uc <start-runtime|stop-runtime|supervisor-command|status|check|installed|package-installed|package-version> ...\n");
+     exit(1);
+ }
+diff --git a/tests/byedpi_runtime_owner.sh b/tests/byedpi_runtime_owner.sh
+index 1d69d4e..00aaddf 100644
+--- a/tests/byedpi_runtime_owner.sh
++++ b/tests/byedpi_runtime_owner.sh
+@@ -85,4 +85,37 @@ if (value.byedpi_installed !== false || value.byedpi_package_installed !== false
+ }
+ '
+ 
++supervisor_command="$(
++  FORKOP_LIB="$FORKOP_LIB" \
++  BYEDPI_BIN="/usr/bin/ciadpi" \
++  BYEDPI_RUNTIME_USER="forkopbyedpi" \
++  BYEDPI_RUNTIME_GROUP="forkopbyedpi" \
++  ucode -L "$FORKOP_LIB" -- "$BYEDPI_RUNTIME_UC" supervisor-command \
++    1080 '-o 1' /tmp/forkop-byedpi-child.pid
++)"
++
++grep -Fq '"--",' "$BYEDPI_RUNTIME_UC" ||
++  fail "Forkop-managed supervisor launch must protect dash-prefixed strategy arguments with ucode --"
++
++case "$supervisor_command" in
++  *start-stop-daemon*) ;;
++  *) fail "Forkop-managed ciadpi must start through start-stop-daemon" ;;
++esac
++case "$supervisor_command" in
++  *forkopbyedpi:forkopbyedpi*) ;;
++  *) fail "Forkop-managed ciadpi must run under the dedicated user/group" ;;
++esac
++case "$supervisor_command" in
++  */usr/bin/ciadpi*) ;;
++  *) fail "Forkop-managed runtime must execute ciadpi" ;;
++esac
++case "$supervisor_command" in
++  *127.0.0.1*1080*) ;;
++  *) fail "Forkop-managed ciadpi listen address/port mismatch" ;;
++esac
++case "$supervisor_command" in
++  *"-o"*"1"*) ;;
++  *) fail "ByeDPI strategy arguments must survive privilege dropping" ;;
++esac
++
+ printf 'ByeDPI runtime ownership checks passed\n'
+diff --git a/tests/nft_apply.sh b/tests/nft_apply.sh
+index 72354e4..6450911 100644
+--- a/tests/nft_apply.sh
++++ b/tests/nft_apply.sh
+@@ -214,7 +214,9 @@ assert_eq "^xn--80aswg[.]xn--p1ai$" \
+   "$(nft_ucode rule-condition-csv domain_regex generic 0 0 '' '' 'сайт.рф full:пример.испытание keyword:пример regex:^сайт[.]рф$' '')" \
+   "combined IDN regex is punycoded"
+ 
++export BYEDPI_RUNTIME_UID=65533
+ nft_ucode nft-create-runtime-base ForkopTable localv4 forkop_subnets forkop_ports forkop_ip_ports forkop_interfaces "br-lan tun0" 0x00100000 0x00200000 198.18.0.0/15 1602 1
++unset BYEDPI_RUNTIME_UID
+ assert_contains "$NFT_LOG" $'nft\tadd\ttable\tinet\tForkopTable' "runtime table"
+ assert_contains "$NFT_LOG" $'nft\tadd\tset\tinet\tForkopTable\tlocalv4\t{ type ipv4_addr; flags interval; auto-merge; }' "runtime localv4 set"
+ assert_contains "$NFT_LOG" $'nft\tadd\tset\tinet\tForkopTable\tlocalv6\t{ type ipv6_addr; flags interval; auto-merge; }' "runtime localv6 set"
+@@ -241,9 +243,14 @@ assert_contains "$NFT_LOG" $'nft\tadd\trule\tinet\tForkopTable\tmangle\tiifname\
+ assert_contains "$NFT_LOG" $'nft\tadd\trule\tinet\tForkopTable\tmangle\tiifname\t@forkop_interfaces\tip6\tdaddr\t@forkop_subnets6\tmeta\tl4proto\ttcp\tmeta\tmark\tset\t0x00100000\tcounter' "runtime common6 tcp rule"
+ assert_contains "$NFT_LOG" $'nft\tadd\trule\tinet\tForkopTable\tproxy\tmeta\tmark\t&\t0x00100000\t==\t0x00100000\tmeta\tl4proto\ttcp\ttproxy\tip\tto\t:1602\tcounter' "runtime proxy tcp rule"
+ assert_contains "$NFT_LOG" $'nft\tadd\trule\tinet\tForkopTable\tproxy\tmeta\tmark\t&\t0x00100000\t==\t0x00100000\tmeta\tl4proto\ttcp\ttproxy\tip6\tto\t[::1]:1602\tcounter' "runtime proxy6 tcp rule"
++assert_contains "$NFT_LOG" $'nft\tadd\trule\tinet\tForkopTable\tmangle_output\tmeta\tskuid\t65533\tmeta\tmark\tset\t0x00200000\tcounter\treturn' "runtime ByeDPI owner bypass"
+ assert_contains "$NFT_LOG" $'nft\tadd\trule\tinet\tForkopTable\tmangle_output\tmeta\tmark\t0x00200000\tcounter\treturn' "runtime outbound return"
+ assert_contains "$NFT_LOG" $'nft\tadd\trule\tinet\tForkopTable\tmangle_output\tip6\tdaddr\t@localv6\tip6\tdaddr\t!=\tfc00::/18\treturn' "runtime output local6 return preserves FakeIP6 capture"
+ assert_contains "$NFT_LOG" $'nft\tadd\trule\tinet\tForkopTable\tmangle_output\tjump\tpriority_output_rules' "runtime priority output jump"
++assert_line_before "$NFT_LOG" \
++  $'nft\tadd\trule\tinet\tForkopTable\tmangle_output\tmeta\tskuid\t65533\tmeta\tmark\tset\t0x00200000\tcounter\treturn' \
++  $'nft\tadd\trule\tinet\tForkopTable\tmangle_output\tjump\tpriority_output_rules' \
++  "ByeDPI owner bypass must run before Priority output routing"
+ assert_contains "$NFT_LOG" $'nft\tinsert\trule\tinet\tForkopTable\tmangle\tudp\tdport\t123\treturn' "runtime ntp exclusion"
+ 
+ cat >"$WORK_DIR/runtime-base-uci.state" <<'EOF_UCI'
+diff --git a/tests/package_contract.sh b/tests/package_contract.sh
+index 7b37912..fa83eb9 100644
+--- a/tests/package_contract.sh
++++ b/tests/package_contract.sh
+@@ -94,6 +94,16 @@ grep -Fq "must use x.y.z format" "$FORKOP_MAKEFILE" ||
+   fail "forkop/Makefile must enforce the three-part release version contract"
+ grep -Fq 'APK_INTERNAL_VERSION="$RELEASE_VERSION"' "$BUILD_SCRIPT" ||
+   fail "build.sh must use the exact three-part release version for APK metadata"
++grep -Fq 'USERID:=forkopbyedpi:forkopbyedpi' "$FORKOP_MAKEFILE" ||
++  fail "Forkop package must create a dedicated ByeDPI runtime user"
++grep -Fq 'BACKEND_REQUIRE_USER="forkopbyedpi:forkopbyedpi"' "$BUILD_SCRIPT" ||
++  fail "manual release builds must preserve the ByeDPI runtime user contract"
++grep -Fq 'Require-User: ${BACKEND_REQUIRE_USER}' "$BUILD_SCRIPT" ||
++  fail "manual IPK metadata must declare the ByeDPI runtime user"
++grep -Fq '${package_name}.rusers' "$BUILD_SCRIPT" ||
++  fail "manual APK metadata must carry the ByeDPI runtime user"
++grep -Fq 'export pkgname="forkop"' "$BUILD_SCRIPT" ||
++  fail "manual backend package scripts must initialize Forkop user metadata"
+ grep -Fq "option component_update_check_enabled '1'" "$FORKOP_CONFIG" ||
+   fail "new installations must enable component update checks by default"
+ grep -Fq "option config_version '1.0.5'" "$FORKOP_CONFIG" ||
+-- 
+2.43.0
+

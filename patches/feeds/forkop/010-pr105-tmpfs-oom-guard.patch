@@ -1,0 +1,248 @@
+From e955263e7e7c6268371a839c1d1a53fd8cf19d18 Mon Sep 17 00:00:00 2001
+From: petrouspetr-pixel <280500603+petrouspetr-pixel@users.noreply.github.com>
+Date: Sat, 26 Sep 2026 07:11:15 +0000
+Subject: [PATCH] Guard sing-box downloads against tmpfs OOM (#99, PR #105)
+
+Guard sing-box downloads against tmpfs OOM
+---
+ forkop/files/usr/lib/components/action.uc  | 99 +++++++++++++++++++++-
+ forkop/files/usr/lib/components/updater.uc | 18 ++++
+ tests/components_updater_job.sh            | 39 +++++++++
+ 3 files changed, 154 insertions(+), 2 deletions(-)
+
+diff --git a/forkop/files/usr/lib/components/action.uc b/forkop/files/usr/lib/components/action.uc
+index d136f21..65baf4d 100644
+--- a/forkop/files/usr/lib/components/action.uc
++++ b/forkop/files/usr/lib/components/action.uc
+@@ -14,6 +14,7 @@ const SYSTEM_INFO_CACHE_FILE = getenv("FORKOP_SYSTEM_INFO_CACHE_FILE") || RUNTIM
+ const COMPONENT_LOCK_DIR = getenv("UPDATES_LOCK_DIR") || RUNTIME_STATE_DIR + "/component-action.lock";
+ const TMP_STALE_TTL_MINUTES = getenv("UPDATES_TMP_STALE_TTL_MINUTES") || "30";
+ const TMP_FILE_STALE_TTL_MINUTES = getenv("UPDATES_TMP_FILE_STALE_TTL_MINUTES") || "10";
++const TMP_DOWNLOAD_RESERVE_BYTES = int(getenv("UPDATES_TMP_DOWNLOAD_RESERVE_BYTES") || "33554432");
+ const SB_MANAGED_SERVICE_MARKER = getenv("SB_MANAGED_SERVICE_MARKER") || constants.SB_MANAGED_SERVICE_MARKER || "Forkop managed sing-box service for binary variants";
+ 
+ let tmp_dir = "";
+@@ -110,6 +111,86 @@ function file_nonempty(path) {
+     return stat != null && int(stat.size || 0) > 0;
+ }
+ 
++function filesystem_available_bytes(path) {
++    let output = command_output_from_args([ "df", "-P", "-k", as_string(path) ]);
++    let last = "";
++    for (let line in split(as_string(output), "\n")) {
++        line = trim(as_string(line));
++        if (line != "")
++            last = line;
++    }
++
++    if (last == "")
++        return -1;
++
++    let fields = split(last, /[ \t]+/);
++    if (length(fields) < 4 || match(as_string(fields[3]), /^[0-9]+$/) == null)
++        return -1;
++    return int(fields[3], 10) * 1024;
++}
++
++function mem_available_bytes() {
++    for (let line in split(read_file("/proc/meminfo"), "\n")) {
++        let matched = match(as_string(line), /^MemAvailable:[ \t]+([0-9]+)[ \t]+kB/);
++        if (matched != null)
++            return int(matched[1], 10) * 1024;
++    }
++    return -1;
++}
++
++function tmp_download_capacity_ok(asset_size, filesystem_available, memory_available, reserve_bytes) {
++    asset_size = int(asset_size || 0);
++    filesystem_available = int(filesystem_available);
++    memory_available = int(memory_available);
++    reserve_bytes = int(reserve_bytes || 0);
++
++    if (asset_size <= 0)
++        return true;
++    if (reserve_bytes < 0)
++        reserve_bytes = 0;
++
++    let required = asset_size + reserve_bytes;
++    if (filesystem_available >= 0 && filesystem_available < required)
++        return false;
++    if (memory_available >= 0 && memory_available < required)
++        return false;
++    return true;
++}
++
++function bytes_to_mib_ceil(value) {
++    value = int(value || 0);
++    return value <= 0 ? 0 : int((value + 1048575) / 1048576);
++}
++
++function ensure_tmp_download_capacity(asset_size, label) {
++    asset_size = int(asset_size || 0);
++    if (asset_size <= 0) {
++        updates_log("Release asset size is unavailable for " + as_string(label) + "; skipping tmpfs capacity preflight", "warn");
++        return true;
++    }
++
++    let target = tmp_dir != "" ? tmp_dir : "/tmp";
++    let filesystem_available = filesystem_available_bytes(target);
++    let memory_available = mem_available_bytes();
++    let reserve = TMP_DOWNLOAD_RESERVE_BYTES > 0 ? TMP_DOWNLOAD_RESERVE_BYTES : 0;
++
++    if (tmp_download_capacity_ok(asset_size, filesystem_available, memory_available, reserve))
++        return true;
++
++    let required = asset_size + reserve;
++    let fs_text = filesystem_available >= 0 ? as_string(bytes_to_mib_ceil(filesystem_available)) + " MiB" : "unknown";
++    let mem_text = memory_available >= 0 ? as_string(bytes_to_mib_ceil(memory_available)) + " MiB" : "unknown";
++    updates_log(
++        "Insufficient memory-backed /tmp capacity for " + as_string(label) +
++        ": need at least " + bytes_to_mib_ceil(required) + " MiB (" +
++        bytes_to_mib_ceil(asset_size) + " MiB asset + " +
++        bytes_to_mib_ceil(reserve) + " MiB reserve), /tmp available " +
++        fs_text + ", MemAvailable " + mem_text,
++        "error"
++    );
++    return false;
++}
++
+ function path_basename(path) {
+     let parts = split(as_string(path), "/");
+     return length(parts) > 0 ? as_string(parts[length(parts) - 1]) : "";
+@@ -1170,11 +1251,18 @@ function set_sing_box_extended_release_from_json(release_json, compressed) {
+     if (asset_url == "")
+         return null;
+ 
++    let asset_size = int(trim(helper_output_input(
++        release_json,
++        "release-asset-size-by-url",
++        [ asset_url ]
++    )) || "0");
++
+     return {
+         tag,
+         release_url: trim(helper_output_input(release_json, "object-get-default", [ "html_url", "" ])),
+         asset_url,
+-        asset_name: path_basename(asset_url)
++        asset_name: path_basename(asset_url),
++        asset_size
+     };
+ }
+ 
+@@ -1225,6 +1313,8 @@ function restore_sing_box_extended_package_variant() {
+     let release = resolve_sing_box_extended_release(false);
+     if (release == null)
+         return false;
++    if (!ensure_tmp_download_capacity(release.asset_size, release.asset_name))
++        return false;
+     let package_file = tmp_dir + "/" + release.asset_name;
+     if (!download_with_retry(release.asset_url, package_file, release.asset_name))
+         return false;
+@@ -1379,6 +1469,9 @@ function install_sing_box_extended_package(action) {
+         check_success("sing_box", normalize_sing_box_version(current_version), normalize_sing_box_version(latest_version), release.release_url);
+     }
+ 
++    if (!ensure_tmp_download_capacity(release.asset_size, release.asset_name))
++        action_fail("sing_box", action, "Not enough available RAM/tmpfs to safely download sing-box-extended package", current_version, latest_version);
++
+     let package_file = tmp_dir + "/" + release.asset_name;
+     if (!download_with_retry(release.asset_url, package_file, release.asset_name))
+         action_fail("sing_box", action, "Failed to download sing-box-extended package", current_version, latest_version);
+@@ -1889,7 +1982,9 @@ else if (mode == "latest-forkop-version")
+     print(latest_forkop_version(), "\n");
+ else if (mode == "forkop-release-metadata")
+     print(fetch_forkop_latest_release_metadata(), "\n");
++else if (mode == "tmp-download-capacity-fixture")
++    exit(tmp_download_capacity_ok(ARGV[1], ARGV[2], ARGV[3], ARGV[4]) ? 0 : 1);
+ else {
+-    warn("Usage: components/action.uc <component-action|latest-forkop-version|forkop-release-metadata> ...\n");
++    warn("Usage: components/action.uc <component-action|latest-forkop-version|forkop-release-metadata|tmp-download-capacity-fixture> ...\n");
+     exit(1);
+ }
+diff --git a/forkop/files/usr/lib/components/updater.uc b/forkop/files/usr/lib/components/updater.uc
+index c470d0b..4f0cd8f 100644
+--- a/forkop/files/usr/lib/components/updater.uc
++++ b/forkop/files/usr/lib/components/updater.uc
+@@ -189,6 +189,22 @@ function release_asset_url(name) {
+     }
+ }
+ 
++function release_asset_size_by_url(url) {
++    let release = object_or_empty(read_stdin_json());
++    url = as_string(url);
++
++    for (let asset in array_or_empty(release.assets)) {
++        if (type(asset) != "object" ||
++            as_string(asset.browser_download_url || "") != url)
++            continue;
++
++        let size = arg_number(asset.size);
++        if (size > 0)
++            print(size, "\n");
++        return;
++    }
++}
++
+ function release_asset_name_by_suffix(suffix) {
+     let release = object_or_empty(read_stdin_json());
+     for (let asset in array_or_empty(release.assets)) {
+@@ -1159,6 +1175,8 @@ else if (mode == "release-asset-name")
+     release_asset_name(ARGV[1], ARGV[2]);
+ else if (mode == "release-asset-url")
+     release_asset_url(ARGV[1]);
++else if (mode == "release-asset-size-by-url")
++    release_asset_size_by_url(ARGV[1]);
+ else if (mode == "release-asset-name-by-suffix")
+     release_asset_name_by_suffix(ARGV[1]);
+ else if (mode == "release-asset-url-by-suffix")
+diff --git a/tests/components_updater_job.sh b/tests/components_updater_job.sh
+index ec687b6..62d7e7d 100644
+--- a/tests/components_updater_job.sh
++++ b/tests/components_updater_job.sh
+@@ -480,4 +480,43 @@ if (value.running !== false || value.success !== false || value.exit_code !== nu
+ }
+ NODE
+ 
++sing_box_release_json="$(cat <<'JSON'
++{
++  "tag_name": "v1.14.0",
++  "assets": [
++    {
++      "name": "sing-box-extended_1.14.0_test.ipk",
++      "browser_download_url": "https://example.com/sing-box-extended.ipk",
++      "size": 31457280
++    }
++  ]
++}
++JSON
++)"
++
++assert_eq "31457280" \
++  "$(printf '%s' "$sing_box_release_json" | ucode "$UPDATER" release-asset-size-by-url 'https://example.com/sing-box-extended.ipk')" \
++  "release asset size"
++
++[ -z "$(printf '%s' "$sing_box_release_json" | ucode "$UPDATER" release-asset-size-by-url 'https://example.com/missing.ipk')" ] || \
++  fail "missing release asset must not report a size"
++
++ucode -L "$FORKOP_LIB" "$ACTION_UC" tmp-download-capacity-fixture \
++  31457280 100663296 100663296 33554432 ||
++  fail "sufficient tmpfs and MemAvailable capacity must pass"
++
++if ucode -L "$FORKOP_LIB" "$ACTION_UC" tmp-download-capacity-fixture \
++  31457280 100663296 62914560 33554432; then
++  fail "insufficient MemAvailable must reject the download"
++fi
++
++if ucode -L "$FORKOP_LIB" "$ACTION_UC" tmp-download-capacity-fixture \
++  31457280 62914560 100663296 33554432; then
++  fail "insufficient tmpfs capacity must reject the download"
++fi
++
++ucode -L "$FORKOP_LIB" "$ACTION_UC" tmp-download-capacity-fixture \
++  0 0 0 33554432 ||
++  fail "unknown asset size must preserve legacy download behavior"
++
+ printf 'component updater job checks passed\n'
+-- 
+2.43.0
+

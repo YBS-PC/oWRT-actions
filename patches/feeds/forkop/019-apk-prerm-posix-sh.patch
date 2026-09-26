@@ -1,0 +1,67 @@
+From e71d4aa4ad37fa68a1c986313f94f18e65b7a289 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 26 Sep 2026 07:11:17 +0000
+Subject: [PATCH] Makefile: prerm hook in POSIX sh for APK buildroot
+
+Makefile: write the forkop prerm hook in POSIX sh
+
+With CONFIG_USE_APK (OpenWrt 25.12 buildroot) include/package-pack.mk
+strips the shebang of Package/<name>/prerm and appends its body to the
+generated /bin/sh pre-deinstall script. The ucode body then fails with
+a shell syntax error, so `apk del forkop` from a buildroot/ImageBuilder
+build never ran package_prerm cleanup. The ipk path runs it via
+default_prerm and keeps working with the sh version too.
+
+build.sh already emits sh scripts for its own APK packages; this only
+affects packages built from the Makefile (SDK, buildroot, firmware).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01HEQfjBzS7Wos7AvTk18TDQ
+---
+ forkop/Makefile            | 11 ++++++-----
+ tests/package_lifecycle.sh |  5 +++--
+ 2 files changed, 9 insertions(+), 7 deletions(-)
+
+diff --git a/forkop/Makefile b/forkop/Makefile
+index ae60ecf..cfd48ae 100644
+--- a/forkop/Makefile
++++ b/forkop/Makefile
+@@ -40,13 +40,14 @@ endef
+ define Build/Compile
+ endef
+ 
++# Must stay POSIX sh: with CONFIG_USE_APK (OpenWrt 25.12+) the buildroot
++# inlines this body into the /bin/sh pre-deinstall script.
+ define Package/forkop/prerm
+-#!/usr/bin/ucode
+-
+-if (getenv("IPKG_INSTROOT") == null || getenv("IPKG_INSTROOT") == "")
+-	system("/usr/bin/forkop package_prerm " + (ARGV[0] || "") + " >/dev/null 2>&1");
++#!/bin/sh
+ 
+-exit(0);
++[ -n "$${IPKG_INSTROOT}" ] && exit 0
++/usr/bin/forkop package_prerm "$${1:-remove}" >/dev/null 2>&1 || true
++exit 0
+ endef
+ 
+ define Package/forkop/postinst
+diff --git a/tests/package_lifecycle.sh b/tests/package_lifecycle.sh
+index 672ff0c..2b4f63a 100644
+--- a/tests/package_lifecycle.sh
++++ b/tests/package_lifecycle.sh
+@@ -45,8 +45,9 @@ fi
+ if grep -n -E 'grep -q "105 forkop"|sed -i "/105 forkop|forkop_dont_touch_dhcp=.*uci|cp /etc/config/forkop|rm -f /tmp/luci-indexcache|killall -HUP rpcd' "$FORKOP_MAKEFILE" "$BUILD_SCRIPT" >/dev/null; then
+   fail "package scripts must not keep backend/LuCI lifecycle business logic in shell"
+ fi
+-grep -Fq '#!/usr/bin/ucode' "$FORKOP_MAKEFILE" ||
+-  fail "forkop Makefile package hooks must use ucode entrypoints"
++if grep -Fq '#!/usr/bin/ucode' "$FORKOP_MAKEFILE"; then
++  fail "forkop Makefile package hooks must be POSIX sh: APK buildroot inlines them into /bin/sh scripts"
++fi
+ grep -Fq '/usr/bin/forkop package_prerm' "$FORKOP_MAKEFILE" ||
+   fail "forkop Makefile prerm must delegate cleanup to package_prerm"
+ grep -Fq '/usr/bin/forkop package_postinst' "$FORKOP_MAKEFILE" ||
+-- 
+2.43.0
+

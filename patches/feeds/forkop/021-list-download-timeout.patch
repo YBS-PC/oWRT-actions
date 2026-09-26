@@ -1,0 +1,104 @@
+From 08ff09889957a22e37af2b2171844c99348092af Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 26 Sep 2026 07:11:17 +0000
+Subject: [PATCH] Bound stalled list downloads with wget -T (#127)
+
+Bound stalled list downloads with wget -T (#127)
+
+download_to_file() ran `wget -O file url` without a timeout. A silently
+stalled connection then hit wget's 900 s default read timeout on each of
+the three attempts, keeping the list-update PID lock for up to 45 min
+while reload-triggered updates were skipped.
+
+Pass `-T 30` (understood by GNU wget and uclient-fetch, and already used
+by components/action.uc), overridable with FORKOP_LIST_DOWNLOAD_TIMEOUT.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01HEQfjBzS7Wos7AvTk18TDQ
+---
+ forkop/files/usr/lib/components/updates.uc |  7 +++-
+ tests/list_download_timeout.sh             | 40 ++++++++++++++++++++++
+ 2 files changed, 46 insertions(+), 1 deletion(-)
+ create mode 100755 tests/list_download_timeout.sh
+
+diff --git a/forkop/files/usr/lib/components/updates.uc b/forkop/files/usr/lib/components/updates.uc
+index 1a0d9ca..c1bf876 100644
+--- a/forkop/files/usr/lib/components/updates.uc
++++ b/forkop/files/usr/lib/components/updates.uc
+@@ -11,6 +11,7 @@ const TMP_RULESET_FOLDER = getenv("TMP_RULESET_FOLDER") || TMP_SING_BOX_FOLDER +
+ const TMP_SUBSCRIPTION_FOLDER = getenv("TMP_SUBSCRIPTION_FOLDER") || TMP_SING_BOX_FOLDER + "/subscriptions";
+ const RUNTIME_STATE_DIR = getenv("FORKOP_RUNTIME_STATE_DIR") || "/var/run/forkop";
+ const LIST_UPDATE_STATE_FILE = getenv("FORKOP_LIST_UPDATE_STATE_FILE") || RUNTIME_STATE_DIR + "/list-update.timestamp";
++const LIST_DOWNLOAD_TIMEOUT = getenv("FORKOP_LIST_DOWNLOAD_TIMEOUT") || "30";
+ const LIST_UPDATE_PID_FILE = getenv("FORKOP_LIST_UPDATE_PID_FILE") || "/var/run/forkop_list_update.pid";
+ const SUBSCRIPTION_UPDATE_STATE_DIR = getenv("FORKOP_SUBSCRIPTION_UPDATE_STATE_DIR") || RUNTIME_STATE_DIR + "/subscription-update";
+ const SUBSCRIPTION_JOB_DIR = getenv("FORKOP_SUBSCRIPTION_UPDATE_JOB_DIR") || "/var/run/forkop/subscription-update-jobs";
+@@ -1938,7 +1939,9 @@ function service_proxy_address(settings, purpose) {
+ function download_to_file(url, filepath, proxy_address) {
+     let attempt = 1;
+     while (attempt <= 3) {
+-        let command = command_from_args([ "wget", "-O", filepath, url ]);
++        // -T bounds DNS/connect/read stalls (GNU wget and uclient-fetch);
++        // without it one silent stall blocks list updates for 15 min per try.
++        let command = command_from_args([ "wget", "-T", LIST_DOWNLOAD_TIMEOUT, "-O", filepath, url ]);
+         if (as_string(proxy_address) != "")
+             command = "http_proxy=" + shell_quote("http://" + as_string(proxy_address)) +
+                 " https_proxy=" + shell_quote("http://" + as_string(proxy_address)) + " " + command;
+@@ -2888,6 +2891,8 @@ else if (mode == "subscription-update-interval-plan")
+     subscription_update_interval_plan();
+ else if (mode == "cron-refresh-plan")
+     uci_cron_refresh_plan(ARGV[1], ARGV[2], ARGV[3], ARGV[4]);
++else if (mode == "download-to-file-fixture")
++    exit(download_to_file(ARGV[1], ARGV[2], ARGV[3] || "") ? 0 : 1);
+ else if (mode == "cron-refresh-plan-fixture")
+     fixture_cron_refresh_plan(ARGV[1], ARGV[2], ARGV[3], ARGV[4], ARGV[5]);
+ else if (mode == "refresh-cron-from-uci")
+diff --git a/tests/list_download_timeout.sh b/tests/list_download_timeout.sh
+new file mode 100755
+index 0000000..9147cce
+--- /dev/null
++++ b/tests/list_download_timeout.sh
+@@ -0,0 +1,40 @@
++#!/usr/bin/env bash
++set -eo pipefail
++
++ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
++FORKOP_LIB="$ROOT_DIR/forkop/files/usr/lib"
++UPDATES_UC="$FORKOP_LIB/components/updates.uc"
++WORK_DIR="$(mktemp -d)"
++
++cleanup() {
++  rm -rf "$WORK_DIR"
++}
++trap cleanup EXIT
++
++fail() {
++  printf 'FAIL: %s\n' "$1" >&2
++  exit 1
++}
++
++mkdir -p "$WORK_DIR/bin"
++cat >"$WORK_DIR/bin/wget" <<'SH'
++#!/bin/sh
++printf '%s\n' "$*" >>"$WGET_LOG"
++while [ "$#" -gt 0 ]; do
++  [ "$1" = "-O" ] && { shift; printf 'data\n' >"$1"; }
++  shift
++done
++exit 0
++SH
++chmod +x "$WORK_DIR/bin/wget"
++
++PATH="$WORK_DIR/bin:$PATH" WGET_LOG="$WORK_DIR/wget.log" \
++  ucode -L "$FORKOP_LIB" "$UPDATES_UC" download-to-file-fixture \
++    "https://example.com/list.lst" "$WORK_DIR/out.lst" ||
++  fail "download_to_file fixture failed"
++
++grep -Eq '(^| )-T 30( |$)' "$WORK_DIR/wget.log" ||
++  fail "list downloads must bound stalled transfers with wget -T (#127): $(cat "$WORK_DIR/wget.log")"
++[ -s "$WORK_DIR/out.lst" ] || fail "download_to_file did not write the output file"
++
++printf 'list download timeout checks passed\n'
+-- 
+2.43.0
+

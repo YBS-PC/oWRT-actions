@@ -1,0 +1,30 @@
+From 13166de06708270ae757687a46fdc6edd7e86b1a Mon Sep 17 00:00:00 2001
+From: petrouspetr-pixel <petrouspetr-pixel@users.noreply.github.com>
+Date: Sat, 26 Sep 2026 07:11:14 +0000
+Subject: [PATCH] Resolve proxy check domain before routing (#74, PR #82)
+
+Resolve proxy check domain before routing
+---
+ forkop/files/usr/lib/singbox/generator.uc | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/forkop/files/usr/lib/singbox/generator.uc b/forkop/files/usr/lib/singbox/generator.uc
+index c8aa336..7f20025 100644
+--- a/forkop/files/usr/lib/singbox/generator.uc
++++ b/forkop/files/usr/lib/singbox/generator.uc
+@@ -2908,6 +2908,12 @@ function add_service_route_rules(config, sections) {
+         }
+     }
+     if (first != null) {
++        push(config.route.rules, {
++            action: "resolve",
++            inbound: tproxy_inbound_matcher(),
++            server: runtime_constants.DNS_SERVER_TAG,
++            domain: runtime_constants.CHECK_PROXY_IP_DOMAIN
++        });
+         push(config.route.rules, {
+             action: "route",
+             inbound: tproxy_inbound_matcher(),
+-- 
+2.43.0
+

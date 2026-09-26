@@ -1,0 +1,1123 @@
+From e7aa9d2f63c1932a7a0e6647e2d5cc591a6230e4 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 26 Sep 2026 07:11:17 +0000
+Subject: [PATCH] Add Excluded devices: full bypass by IP, subnet or MAC (#88)
+
+Requires: 020-sing-box-114-dns-http-client
+
+Add "Excluded devices": full Forkop bypass by IP, subnet or MAC (#88)
+
+New settings list routing_excluded_ips. For each listed device:
+
+- nft: its traffic leaves the mangle chain before any section rule, so
+  the exclusion no longer depends on section order (a bypass section
+  with "Forced device routing" only works when it is placed first);
+- DNS: its port-53 traffic is redirected to a new excluded-dns-in
+  inbound (:1605) and answered like a source-aware bypass client:
+  local resolver unless it returns a nested FakeIP, otherwise the
+  upstream DNS. Without this the device would receive FakeIP answers it
+  cannot reach once nft stops sending its traffic to sing-box. On
+  sing-box >= 1.14 the evaluate/respond form is used;
+- sing-box: a route rule sends IP entries to bypass-out before section
+  rules, as a safety net.
+
+Entries may be IPv4/IPv6 addresses, CIDRs or MAC addresses. A MAC keeps
+matching after a new DHCP lease or an IPv6 privacy address change;
+Gavr1024/forkop-mod resolves DHCP host names to IPs once at start, which
+goes stale. Invalid entries are rejected by the validator and skipped by
+nft. The LuCI field reuses the local-device picker and also offers MAC
+addresses from host hints and DHCP leases.
+
+Verified: tests/excluded_devices.sh (nft commands and order, generated
+config for 1.13/1.14, validator); `sing-box check` and a short
+`sing-box run` with the official 1.13.21 and 1.14.2 binaries.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01HEQfjBzS7Wos7AvTk18TDQ
+---
+ fe-app-forkop/locales/calls.json              |  28 +++
+ fe-app-forkop/locales/forkop.pot              |  16 ++
+ fe-app-forkop/locales/forkop.ru.po            |  12 +
+ forkop/files/usr/lib/config/exclusions.uc     |  70 ++++++
+ forkop/files/usr/lib/config/validator.uc      |   8 +
+ forkop/files/usr/lib/nft/apply.uc             |  59 ++++-
+ forkop/files/usr/lib/service/state.uc         |   4 +
+ forkop/files/usr/lib/singbox/constants.uc     |   7 +
+ forkop/files/usr/lib/singbox/generator.uc     |  47 +++-
+ forkop/files/usr/lib/singbox/route.uc         |   2 +
+ .../resources/view/forkop/local_devices.js    | 101 +++++++--
+ .../resources/view/forkop/settings.js         |  28 +++
+ luci-app-forkop/po/ru/forkop.po               |  12 +
+ luci-app-forkop/po/templates/forkop.pot       |  16 ++
+ tests/excluded_devices.sh                     | 207 ++++++++++++++++++
+ 15 files changed, 591 insertions(+), 26 deletions(-)
+ create mode 100644 forkop/files/usr/lib/config/exclusions.uc
+ create mode 100755 tests/excluded_devices.sh
+
+diff --git a/fe-app-forkop/locales/calls.json b/fe-app-forkop/locales/calls.json
+index 438c510..8c06069 100644
+--- a/fe-app-forkop/locales/calls.json
++++ b/fe-app-forkop/locales/calls.json
+@@ -1062,6 +1062,34 @@
+       "../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:458"
+     ]
+   },
++  {
++    "call": "Excluded devices",
++    "key": "Excluded devices",
++    "places": [
++      "../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:468"
++    ]
++  },
++  {
++    "call": "Traffic from these devices bypasses Forkop completely, regardless of section order, and their DNS returns real addresses. Use an IP address, a subnet or a MAC address; a MAC address keeps working when the device gets a new IPv4 lease or IPv6 address.",
++    "key": "Traffic from these devices bypasses Forkop completely, regardless of section order, and their DNS returns real addresses. Use an IP address, a subnet or a MAC address; a MAC address keeps working when the device gets a new IPv4 lease or IPv6 address.",
++    "places": [
++      "../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:470"
++    ]
++  },
++  {
++    "call": "Device, IP or MAC",
++    "key": "Device, IP or MAC",
++    "places": [
++      "../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:473"
++    ]
++  },
++  {
++    "call": "Use an IP address, a CIDR subnet or a MAC address",
++    "key": "Use an IP address, a CIDR subnet or a MAC address",
++    "places": [
++      "../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:482"
++    ]
++  },
+   {
+     "call": "Disabling interception is incompatible with action=zapret2 because Forkop sends matched traffic through NFQUEUE.",
+     "key": "Disabling interception is incompatible with action=zapret2 because Forkop sends matched traffic through NFQUEUE.",
+diff --git a/fe-app-forkop/locales/forkop.pot b/fe-app-forkop/locales/forkop.pot
+index e98b7f9..a5fee0e 100644
+--- a/fe-app-forkop/locales/forkop.pot
++++ b/fe-app-forkop/locales/forkop.pot
+@@ -610,6 +610,10 @@ msgstr ""
+ msgid "Device or IP"
+ msgstr ""
+ 
++#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:473
++msgid "Device, IP or MAC"
++msgstr ""
++
+ #: src/forkop/tabs/diagnostic/checks/getDnsCheckPresentation.ts:37
+ msgid "DHCP has DNS server"
+ msgstr ""
+@@ -985,6 +989,10 @@ msgstr ""
+ msgid "Exclude URLTest / Priority group"
+ msgstr ""
+ 
++#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:468
++msgid "Excluded devices"
++msgstr ""
++
+ #: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/forkop.js:54
+ msgid "Expecting: %s"
+ msgstr ""
+@@ -2876,6 +2884,10 @@ msgstr ""
+ msgid "Traffic for this level goes directly."
+ msgstr ""
+ 
++#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:470
++msgid "Traffic from these devices bypasses Forkop completely, regardless of section order, and their DNS returns real addresses. Use an IP address, a subnet or a MAC address; a MAC address keeps working when the device gets a new IPv4 lease or IPv6 address."
++msgstr ""
++
+ #: src/forkop/tabs/dashboard/initController.ts:1590
+ msgid "Traffic Total"
+ msgstr ""
+@@ -3117,6 +3129,10 @@ msgstr ""
+ msgid "Use an IP address"
+ msgstr ""
+ 
++#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:482
++msgid "Use an IP address, a CIDR subnet or a MAC address"
++msgstr ""
++
+ #: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/server.js:1910
+ msgid "Use an IP listen address"
+ msgstr ""
+diff --git a/fe-app-forkop/locales/forkop.ru.po b/fe-app-forkop/locales/forkop.ru.po
+index 0faded5..81e234a 100644
+--- a/fe-app-forkop/locales/forkop.ru.po
++++ b/fe-app-forkop/locales/forkop.ru.po
+@@ -416,6 +416,9 @@ msgstr "Фильтр по устройствам"
+ msgid "Device or IP"
+ msgstr "Устройство или IP"
+ 
++msgid "Device, IP or MAC"
++msgstr "Устройство, IP или MAC"
++
+ msgid "DHCP has DNS server"
+ msgstr "DHCP содержит DNS сервер"
+ 
+@@ -677,6 +680,9 @@ msgstr "Исключить из этого уровня серверы с одн
+ msgid "Exclude URLTest / Priority group"
+ msgstr "Исключить URLTest / Приоритет группу"
+ 
++msgid "Excluded devices"
++msgstr "Исключённые устройства"
++
+ msgid "Expecting: %s"
+ msgstr "Ожидается: %s"
+ 
+@@ -2000,6 +2006,9 @@ msgstr "Трафик"
+ msgid "Traffic for this level goes directly."
+ msgstr "Трафик этого уровня пойдёт напрямую."
+ 
++msgid "Traffic from these devices bypasses Forkop completely, regardless of section order, and their DNS returns real addresses. Use an IP address, a subnet or a MAC address; a MAC address keeps working when the device gets a new IPv4 lease or IPv6 address."
++msgstr "Трафик этих устройств полностью идёт мимо Forkop независимо от порядка секций, а DNS отвечает им реальными адресами. Укажите IP-адрес, подсеть или MAC-адрес; MAC-адрес продолжает работать, когда устройство получает новый IPv4-адрес по DHCP или новый IPv6-адрес."
++
+ msgid "Traffic Total"
+ msgstr "Всего трафика"
+ 
+@@ -2156,6 +2165,9 @@ msgstr "Укажите HTTP или HTTPS URL"
+ msgid "Use an IP address"
+ msgstr "Используйте IP-адрес"
+ 
++msgid "Use an IP address, a CIDR subnet or a MAC address"
++msgstr "Укажите IP-адрес, CIDR-подсеть или MAC-адрес"
++
+ msgid "Use an IP listen address"
+ msgstr "Используйте IP-адрес для прослушивания"
+ 
+diff --git a/forkop/files/usr/lib/config/exclusions.uc b/forkop/files/usr/lib/config/exclusions.uc
+new file mode 100644
+index 0000000..c3657f2
+--- /dev/null
++++ b/forkop/files/usr/lib/config/exclusions.uc
+@@ -0,0 +1,70 @@
++#!/usr/bin/env ucode
++
++// Devices excluded from Forkop routing (settings.routing_excluded_ips).
++// Entries are IPv4/IPv6 addresses or CIDRs, or MAC addresses. MAC entries
++// keep matching a device whose DHCP lease or IPv6 privacy address changes.
++
++let ip = require("core.ip");
++
++function as_string(value) {
++    return value == null ? "" : "" + value;
++}
++
++function valid_mac(value) {
++    return match(as_string(value), /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/) != null;
++}
++
++function list_values(value) {
++    if (type(value) == "array")
++        return value;
++    return split(as_string(value), /[ \t\r\n,]+/);
++}
++
++function parse(values) {
++    let result = { ipv4: [], ipv6: [], ips: [], macs: [], invalid: [] };
++    let seen = {};
++
++    for (let value in list_values(values)) {
++        value = trim(as_string(value));
++        if (value == "")
++            continue;
++
++        let key = lc(value);
++        if (seen[key])
++            continue;
++        seen[key] = true;
++
++        if (valid_mac(value)) {
++            push(result.macs, key);
++            continue;
++        }
++
++        let family = ip.ip_family(value);
++        if (family == 4)
++            push(result.ipv4, value);
++        else if (family == 6)
++            push(result.ipv6, value);
++        else {
++            push(result.invalid, value);
++            continue;
++        }
++        push(result.ips, value);
++    }
++
++    return result;
++}
++
++function from_settings(settings) {
++    return parse(type(settings) == "object" ? settings.routing_excluded_ips : null);
++}
++
++function has_entries(parsed) {
++    return type(parsed) == "object" && (length(parsed.ips) > 0 || length(parsed.macs) > 0);
++}
++
++return {
++    valid_mac,
++    parse,
++    from_settings,
++    has_entries
++};
+diff --git a/forkop/files/usr/lib/config/validator.uc b/forkop/files/usr/lib/config/validator.uc
+index 4140937..e20e686 100644
+--- a/forkop/files/usr/lib/config/validator.uc
++++ b/forkop/files/usr/lib/config/validator.uc
+@@ -12,6 +12,7 @@ let core_url = require("core.url");
+ let core_ip = require("core.ip");
+ let rule_config = require("config.rule");
+ let connections = require("config.connections");
++let exclusions = require("config.exclusions");
+ 
+ const CONFIG_NAME = getenv("FORKOP_CONFIG_NAME") || "forkop";
+ const DEFAULT_LATENCY_TEST_URL = "https://www.gstatic.com/generate_204";
+@@ -898,6 +899,12 @@ function dns_setting_values(settings, key) {
+     return values;
+ }
+ 
++function validate_excluded_devices(settings) {
++    let parsed = exclusions.from_settings(settings);
++    for (let value in parsed.invalid)
++        fail_validation("Invalid excluded device '" + value + "'. Use an IP address, CIDR subnet or MAC address. Aborted.");
++}
++
+ function validate_dns_settings(settings, sections, context) {
+     let dns_type = option(settings, "dns_type", "udp");
+     if (!contains([ "udp", "dot", "doh" ], dns_type))
+@@ -1703,6 +1710,7 @@ function validate_runtime_config(context) {
+ 
+     validate_runtime_mark_ranges_context(context);
+     validate_dns_settings(settings, sections, context);
++    validate_excluded_devices(settings);
+     validate_list_update_settings(settings);
+     validate_http_url_option(option(settings, "latency_test_url", DEFAULT_LATENCY_TEST_URL) || DEFAULT_LATENCY_TEST_URL, "settings.latency_test_url");
+ 
+diff --git a/forkop/files/usr/lib/nft/apply.uc b/forkop/files/usr/lib/nft/apply.uc
+index 2bef761..f64c416 100644
+--- a/forkop/files/usr/lib/nft/apply.uc
++++ b/forkop/files/usr/lib/nft/apply.uc
+@@ -9,9 +9,13 @@ let domain_config = require("config.domain");
+ let connections = require("config.connections");
+ let routing_rulesets = require("routing.rulesets");
+ let runtime_constants = require("singbox.constants");
++let exclusions = require("config.exclusions");
+ const CONFIG_NAME = getenv("FORKOP_CONFIG_NAME") || "forkop";
+ const DNS_SOURCE_SET = "forkop_dns_sources";
+ const DNS_SOURCE6_SET = "forkop_dns_sources6";
++const EXCLUDED_SOURCE_SET = "forkop_excluded_sources";
++const EXCLUDED_SOURCE6_SET = "forkop_excluded_sources6";
++const EXCLUDED_MAC_SET = "forkop_excluded_macs";
+ const BYEDPI_RUNTIME_USER = getenv("BYEDPI_RUNTIME_USER") || "forkopbyedpi";
+ const BYEDPI_RUNTIME_UID_OVERRIDE = getenv("BYEDPI_RUNTIME_UID") || "";
+ 
+@@ -818,6 +822,49 @@ function nft_add_section_priority_rules_from_sections(sections, table, interface
+     return true;
+ }
+ 
++// Excluded devices (settings.routing_excluded_ips): their DNS is answered
++// with real addresses by the excluded-dns-in inbound, and their traffic
++// leaves the mangle chain before any section rule, so section order does
++// not matter. Matching by MAC also covers changing IPv4 leases and IPv6
++// privacy addresses.
++function nft_add_excluded_device_rules(table, interface_set) {
++    let iif = [ "iifname", "@" + as_string(interface_set) ];
++    let port = ":" + as_string(runtime_constants.EXCLUDED_DNS_INBOUND_PORT);
++    let matchers = [
++        [ "ip", "saddr", "@" + EXCLUDED_SOURCE_SET ],
++        [ "ip6", "saddr", "@" + EXCLUDED_SOURCE6_SET ],
++        [ "ether", "saddr", "@" + EXCLUDED_MAC_SET ]
++    ];
++
++    for (let matcher in matchers)
++        for (let proto in [ "udp", "tcp" ])
++            if (!nft_add_rule(table, "dns_redirect", [ ...iif, ...matcher, proto, "dport", "53", "counter", "redirect", "to", port ]))
++                return false;
++
++    return true;
++}
++
++function nft_add_excluded_device_returns(table, interface_set) {
++    let iif = [ "iifname", "@" + as_string(interface_set) ];
++    return nft_add_rule(table, "mangle", [ ...iif, "ip", "saddr", "@" + EXCLUDED_SOURCE_SET, "counter", "return" ]) &&
++        nft_add_rule(table, "mangle", [ ...iif, "ip6", "saddr", "@" + EXCLUDED_SOURCE6_SET, "counter", "return" ]) &&
++        nft_add_rule(table, "mangle", [ ...iif, "ether", "saddr", "@" + EXCLUDED_MAC_SET, "counter", "return" ]);
++}
++
++function nft_add_excluded_devices(settings, table) {
++    let parsed = exclusions.from_settings(settings);
++    for (let value in parsed.invalid)
++        log_debug("Ignoring excluded device entry that is not an IP, CIDR or MAC: " + value);
++
++    if (length(parsed.ipv4) > 0 && !nft_add_set_elements(table, EXCLUDED_SOURCE_SET, join(",", parsed.ipv4)))
++        return false;
++    if (length(parsed.ipv6) > 0 && !nft_add_set_elements(table, EXCLUDED_SOURCE6_SET, join(",", parsed.ipv6)))
++        return false;
++    if (length(parsed.macs) > 0 && !nft_add_set_elements(table, EXCLUDED_MAC_SET, join(",", parsed.macs)))
++        return false;
++    return true;
++}
++
+ function nft_create_runtime_base(table, localv4_set, common_set, port_set, ip_port_set, interface_set, source_interfaces, fakeip_mark, outbound_mark, fakeip_range, tproxy_port, exclude_ntp, localv6_set, common6_set, ip_port6_set, fakeip6_range, tproxy6_address) {
+     localv6_set = default_arg(localv6_set, "localv6");
+     common6_set = default_arg(common6_set, "forkop_subnets6");
+@@ -837,6 +884,9 @@ function nft_create_runtime_base(table, localv4_set, common_set, port_set, ip_po
+         !nft_create_ipv6_port_set(table, ip_port6_set) ||
+         !nft_create_ipv4_set(table, DNS_SOURCE_SET) ||
+         !nft_create_ipv6_set(table, DNS_SOURCE6_SET) ||
++        !nft_create_ipv4_set(table, EXCLUDED_SOURCE_SET) ||
++        !nft_create_ipv6_set(table, EXCLUDED_SOURCE6_SET) ||
++        !nft_create_set(table, EXCLUDED_MAC_SET, "{ type ether_addr; }") ||
+         !nft_create_ifname_set(table, interface_set))
+         return false;
+ 
+@@ -851,11 +901,13 @@ function nft_create_runtime_base(table, localv4_set, common_set, port_set, ip_po
+         !nft_create_chain(table, "proxy", "{ type filter hook prerouting priority -100; policy accept; }"))
+         return false;
+ 
+-    if (!nft_add_rule(table, "dns_redirect", [ "iifname", "@" + as_string(interface_set), "ip", "saddr", "@" + DNS_SOURCE_SET, "tcp", "dport", "53", "counter", "redirect", "to", ":" + as_string(runtime_constants.SOURCE_DNS_INBOUND_PORT) ]) ||
++    if (!nft_add_excluded_device_rules(table, interface_set) ||
++        !nft_add_rule(table, "dns_redirect", [ "iifname", "@" + as_string(interface_set), "ip", "saddr", "@" + DNS_SOURCE_SET, "tcp", "dport", "53", "counter", "redirect", "to", ":" + as_string(runtime_constants.SOURCE_DNS_INBOUND_PORT) ]) ||
+         !nft_add_rule(table, "dns_redirect", [ "iifname", "@" + as_string(interface_set), "ip", "saddr", "@" + DNS_SOURCE_SET, "udp", "dport", "53", "counter", "redirect", "to", ":" + as_string(runtime_constants.SOURCE_DNS_INBOUND_PORT) ]) ||
+         !nft_add_rule(table, "dns_redirect", [ "iifname", "@" + as_string(interface_set), "ip6", "saddr", "@" + DNS_SOURCE6_SET, "tcp", "dport", "53", "counter", "redirect", "to", ":" + as_string(runtime_constants.SOURCE_DNS_INBOUND_PORT) ]) ||
+         !nft_add_rule(table, "dns_redirect", [ "iifname", "@" + as_string(interface_set), "ip6", "saddr", "@" + DNS_SOURCE6_SET, "udp", "dport", "53", "counter", "redirect", "to", ":" + as_string(runtime_constants.SOURCE_DNS_INBOUND_PORT) ]) ||
+         !nft_add_rule(table, "mangle", [ "ct", "status", "dnat", "return" ]) ||
++        !nft_add_excluded_device_returns(table, interface_set) ||
+         !nft_add_rule(table, "mangle", [ "iifname", "@" + as_string(interface_set), "ip", "daddr", "@" + as_string(localv4_set), "return" ]) ||
+         !nft_add_rule(table, "mangle", [ "iifname", "@" + as_string(interface_set), "ip6", "daddr", "@" + as_string(localv6_set), "ip6", "daddr", "!=", fakeip6_range, "return" ]) ||
+         !nft_add_rule(table, "mangle", [ "jump", "priority_rules" ]) ||
+@@ -913,7 +965,7 @@ function nft_create_runtime_base_from_uci(table, localv4_set, common_set, port_s
+         ip_port6_set,
+         fakeip6_range,
+         tproxy6_address
+-    );
++    ) && nft_add_excluded_devices(settings, table);
+ }
+ 
+ function nft_create_runtime_output_rules(table, localv4_set, common_set, port_set, ip_port_set, fakeip_mark, fakeip_range, localv6_set, common6_set, ip_port6_set, fakeip6_range) {
+@@ -1492,6 +1544,9 @@ function nft_runtime_signature_from_settings_and_sections(settings, sections) {
+ 
+     body = signature_add_value(body, "settings.source_network_interfaces", option(settings, "source_network_interfaces", "br-lan"));
+     body = signature_add_value(body, "settings.exclude_ntp", bool_option(settings, "exclude_ntp", false) ? "1" : "0");
++    let excluded = exclusions.from_settings(settings);
++    if (exclusions.has_entries(excluded))
++        body = signature_add_value(body, "settings.routing_excluded_ips", join(" ", [ ...excluded.ips, ...excluded.macs ]));
+ 
+     for (let section in sections)
+         body = nft_rule_signature_body(body, object_or_empty(section));
+diff --git a/forkop/files/usr/lib/service/state.uc b/forkop/files/usr/lib/service/state.uc
+index b962383..6bf5a31 100644
+--- a/forkop/files/usr/lib/service/state.uc
++++ b/forkop/files/usr/lib/service/state.uc
+@@ -8,6 +8,7 @@ let connections = require("config.connections");
+ let zapret_validator = require("providers.zapret.validator");
+ let zapret2_validator = require("providers.zapret2.validator");
+ let byedpi_validator = require("providers.byedpi.validator");
++let exclusions = require("config.exclusions");
+ const CONFIG_NAME = getenv("FORKOP_CONFIG_NAME") || "forkop";
+ const LIB_DIR = getenv("FORKOP_LIB") || "/usr/lib/forkop";
+ const DEFAULT_PENDING_RELOAD_FILE = getenv("FORKOP_PENDING_RELOAD_FILE") || "/var/run/forkop/reload.pending";
+@@ -1402,6 +1403,9 @@ function sing_box_signature_body(settings, sections, servers, mwan3_active) {
+     body = signature_add_value(body, "settings.output_network_interface", option(settings, "output_network_interface", ""));
+     body = signature_add_value(body, "settings.disable_quic", bool_option_value(settings, "disable_quic", false));
+     body = signature_add_value(body, "settings.exclude_bittorrent", bool_option_value(settings, "exclude_bittorrent", false));
++    let excluded_devices = exclusions.from_settings(settings);
++    if (exclusions.has_entries(excluded_devices))
++        body = signature_add_value(body, "settings.routing_excluded_ips", join(" ", [ ...excluded_devices.ips, ...excluded_devices.macs ]));
+     if (sing_box_signature_has_remote_ruleset_sources(sections))
+         body = signature_add_value(body, "settings.update_interval", settings_update_interval(settings));
+     body = signature_add_value(body, "settings.cache_path", option(settings, "cache_path", "/tmp/sing-box/cache.db"));
+diff --git a/forkop/files/usr/lib/singbox/constants.uc b/forkop/files/usr/lib/singbox/constants.uc
+index 57e5c43..3e427b9 100644
+--- a/forkop/files/usr/lib/singbox/constants.uc
++++ b/forkop/files/usr/lib/singbox/constants.uc
+@@ -19,6 +19,9 @@ const DNS_INBOUND_PORT = 53;
+ const SOURCE_DNS_INBOUND_TAG = "source-dns-in";
+ const SOURCE_DNS_INBOUND_ADDRESS = "::";
+ const SOURCE_DNS_INBOUND_PORT = 1603;
++const EXCLUDED_DNS_INBOUND_TAG = "excluded-dns-in";
++const EXCLUDED_DNS_INBOUND_ADDRESS = "::";
++const EXCLUDED_DNS_INBOUND_PORT = 1605;
+ 
+ const SERVICE_MIXED_INBOUND_TAG = "service-mixed-in";
+ const SERVICE_MIXED_INBOUND_ADDRESS = "127.0.0.1";
+@@ -52,6 +55,7 @@ const RESERVED_TAGS = {
+     [TPROXY_INBOUND6_TAG]: true,
+     [DNS_INBOUND_TAG]: true,
+     [SOURCE_DNS_INBOUND_TAG]: true,
++    [EXCLUDED_DNS_INBOUND_TAG]: true,
+     [SERVICE_MIXED_INBOUND_TAG]: true,
+     [DIRECT_OUTBOUND_TAG]: true,
+     [BYPASS_OUTBOUND_TAG]: true
+@@ -105,6 +109,9 @@ return {
+     SOURCE_DNS_INBOUND_TAG,
+     SOURCE_DNS_INBOUND_ADDRESS,
+     SOURCE_DNS_INBOUND_PORT,
++    EXCLUDED_DNS_INBOUND_TAG,
++    EXCLUDED_DNS_INBOUND_ADDRESS,
++    EXCLUDED_DNS_INBOUND_PORT,
+     SERVICE_MIXED_INBOUND_TAG,
+     SERVICE_MIXED_INBOUND_ADDRESS,
+     SERVICE_MIXED_INBOUND_PORT,
+diff --git a/forkop/files/usr/lib/singbox/generator.uc b/forkop/files/usr/lib/singbox/generator.uc
+index c0d648a..4c308c4 100644
+--- a/forkop/files/usr/lib/singbox/generator.uc
++++ b/forkop/files/usr/lib/singbox/generator.uc
+@@ -16,6 +16,7 @@ let source_rulesets = require("routing.rulesets");
+ let rule_config = require("config.rule");
+ let connections = require("config.connections");
+ let subscription_share_link = require("subscription.share_link");
++let exclusions = require("config.exclusions");
+ let uci = null;
+ let fixture_uci_data = null;
+ let runtime_settings_cache = null;
+@@ -499,6 +500,8 @@ function base_config(settings, service_address, runtime_context) {
+     ];
+     if (runtime_context.source_aware_dns)
+         push(inbounds, { type: "direct", tag: runtime_constants.SOURCE_DNS_INBOUND_TAG, listen: runtime_constants.SOURCE_DNS_INBOUND_ADDRESS, listen_port: runtime_constants.SOURCE_DNS_INBOUND_PORT });
++    if (runtime_context.excluded_devices_dns)
++        push(inbounds, { type: "direct", tag: runtime_constants.EXCLUDED_DNS_INBOUND_TAG, listen: runtime_constants.EXCLUDED_DNS_INBOUND_ADDRESS, listen_port: runtime_constants.EXCLUDED_DNS_INBOUND_PORT });
+     for (let inbound in dns_config.inbounds)
+         push(inbounds, inbound);
+ 
+@@ -2651,9 +2654,10 @@ function source_aware_dns_sources(sections) {
+     return values;
+ }
+ 
+-function add_source_aware_dns_support(config, source_ip_cidr) {
+-    if (length(source_ip_cidr) == 0)
+-        return;
++function ensure_dnsmasq_dns_server(config) {
++    for (let server in config.dns.servers)
++        if (server.tag == runtime_constants.DNSMASQ_DNS_SERVER_TAG)
++            return;
+ 
+     push(config.dns.servers, {
+         type: "udp",
+@@ -2663,6 +2667,13 @@ function add_source_aware_dns_support(config, source_ip_cidr) {
+     });
+ }
+ 
++function add_source_aware_dns_support(config, source_ip_cidr) {
++    if (length(source_ip_cidr) == 0)
++        return;
++
++    ensure_dnsmasq_dns_server(config);
++}
++
+ function add_source_aware_dns_fallback(config, source_ip_cidr) {
+     if (length(source_ip_cidr) == 0)
+         return;
+@@ -3110,6 +3121,31 @@ function add_server_routes(config, servers, sections) {
+     }
+ }
+ 
++// Excluded devices never reach the TPROXY inbound (nft returns early), but
++// their DNS still must not return FakeIP: nft redirects it to
++// excluded-dns-in, answered like a source-aware bypass client (local
++// resolver unless it hands out a nested FakeIP, otherwise the upstream DNS).
++// The route rule is a safety net for IP entries.
++function add_excluded_devices_support(config, excluded) {
++    if (!exclusions.has_entries(excluded))
++        return;
++
++    ensure_dnsmasq_dns_server(config);
++    add_source_aware_bypass_dns_rules(
++        config,
++        { inbound: [ runtime_constants.EXCLUDED_DNS_INBOUND_TAG ] },
++        int_option(runtime_settings(), "dns_rewrite_ttl", "60")
++    );
++
++    if (length(excluded.ips) > 0)
++        push(config.route.rules, {
++            action: "route",
++            inbound: tproxy_inbound_matcher(),
++            source_ip_cidr: single_or_array(excluded.ips),
++            outbound: runtime_constants.BYPASS_OUTBOUND_TAG
++        });
++}
++
+ function generate_config(output_path, service_address, mwan3_active, supports_xhttp, deferred_sections, sing_box_version) {
+     runtime_supports_xhttp = supports_xhttp == null || as_string(supports_xhttp) == ""
+         ? true
+@@ -3126,11 +3162,14 @@ function generate_config(output_path, service_address, mwan3_active, supports_xh
+         runtime_generate_unsupported("no enabled sections");
+ 
+     let source_aware_dns = source_aware_dns_sources(sections);
++    let excluded_devices = exclusions.from_settings(settings);
+     let config = base_config(settings, service_address, {
+         mwan3_active: cli_bool(mwan3_active),
+-        source_aware_dns: length(source_aware_dns) > 0
++        source_aware_dns: length(source_aware_dns) > 0,
++        excluded_devices_dns: exclusions.has_entries(excluded_devices)
+     });
+     add_source_aware_dns_support(config, source_aware_dns);
++    add_excluded_devices_support(config, excluded_devices);
+     let taken = reserved_runtime_tag_set(config.outbounds);
+     reserve_section_outbound_tags(sections, taken);
+     for (let server in servers)
+diff --git a/forkop/files/usr/lib/singbox/route.uc b/forkop/files/usr/lib/singbox/route.uc
+index 8c5f277..c91b93b 100644
+--- a/forkop/files/usr/lib/singbox/route.uc
++++ b/forkop/files/usr/lib/singbox/route.uc
+@@ -21,6 +21,8 @@ function config(settings, runtime) {
+     let sniff_inbounds = [ runtime_constants.TPROXY_INBOUND_TAG, runtime_constants.DNS_INBOUND_TAG ];
+     if (type(runtime) == "object" && bool_value(runtime.source_aware_dns))
+         push(sniff_inbounds, runtime_constants.SOURCE_DNS_INBOUND_TAG);
++    if (type(runtime) == "object" && bool_value(runtime.excluded_devices_dns))
++        push(sniff_inbounds, runtime_constants.EXCLUDED_DNS_INBOUND_TAG);
+     if (type(runtime) == "object" && type(runtime.dns_health_inbounds) == "array")
+         for (let inbound in runtime.dns_health_inbounds)
+             push(sniff_inbounds, inbound);
+diff --git a/luci-app-forkop/htdocs/luci-static/resources/view/forkop/local_devices.js b/luci-app-forkop/htdocs/luci-static/resources/view/forkop/local_devices.js
+index 58183c2..05eb0f3 100644
+--- a/luci-app-forkop/htdocs/luci-static/resources/view/forkop/local_devices.js
++++ b/luci-app-forkop/htdocs/luci-static/resources/view/forkop/local_devices.js
+@@ -22,6 +22,8 @@ const callNetworkInterfaceDump = rpc.declare({
+ 
+ let localDeviceChoicesCache = null;
+ let localDeviceChoicesPromise = null;
++let localDeviceMacChoicesCache = null;
++let localDeviceMacChoicesPromise = null;
+ 
+ function normalizeOptionValues(value) {
+   if (!value) {
+@@ -60,6 +62,21 @@ function addLocalDeviceChoice(choices, ip, name) {
+   choices[normalizedIp] = normalizedName;
+ }
+ 
++function isMacAddress(value) {
++  return /^[0-9a-f]{2}(:[0-9a-f]{2}){5}$/i.test(`${value || ""}`.trim());
++}
++
++function addLocalDeviceMacChoice(choices, mac, name) {
++  const normalizedMac = `${mac || ""}`.trim().toLowerCase();
++  const normalizedName = normalizeLocalDeviceName(name);
++
++  if (!normalizedName || !isMacAddress(normalizedMac)) {
++    return;
++  }
++
++  choices[normalizedMac] = normalizedName;
++}
++
+ function addRouterIp(routerIps, ip) {
+   const normalizedIp = `${ip || ""}`.trim();
+ 
+@@ -104,16 +121,25 @@ function buildRouterIpMap(networkInterfaces) {
+   return routerIps;
+ }
+ 
+-function buildLocalDeviceChoices(hostHints, dhcpLeases, networkInterfaces) {
++function buildLocalDeviceChoices(
++  hostHints,
++  dhcpLeases,
++  networkInterfaces,
++  includeMacs,
++) {
+   const choices = {};
+   const routerIps = buildRouterIpMap(networkInterfaces);
+ 
+   if (hostHints && typeof hostHints === "object") {
+-    Object.values(hostHints).forEach((hint) => {
++    Object.entries(hostHints).forEach(([mac, hint]) => {
+       if (!hint || typeof hint !== "object") {
+         return;
+       }
+ 
++      if (includeMacs) {
++        addLocalDeviceMacChoice(choices, mac, hint.name);
++      }
++
+       [
+         ...normalizeOptionValues(hint.ipaddrs),
+         ...normalizeOptionValues(hint.ipv4),
+@@ -131,6 +157,9 @@ function buildLocalDeviceChoices(hostHints, dhcpLeases, networkInterfaces) {
+       }
+ 
+       addLocalDeviceChoice(choices, lease.ipaddr, lease.hostname);
++      if (includeMacs) {
++        addLocalDeviceMacChoice(choices, lease.macaddr, lease.hostname);
++      }
+     });
+   }
+ 
+@@ -141,7 +170,41 @@ function buildLocalDeviceChoices(hostHints, dhcpLeases, networkInterfaces) {
+   return choices;
+ }
+ 
+-function loadLocalDeviceChoices() {
++function fetchLocalDeviceChoices(includeMacs) {
++  return Promise.all([
++    callHostHints().catch(() => ({})),
++    callDHCPLeases().catch(() => ({})),
++    callNetworkInterfaceDump().catch(() => []),
++  ]).then(([hostHints, dhcpLeases, networkInterfaces]) =>
++    buildLocalDeviceChoices(
++      hostHints,
++      dhcpLeases,
++      networkInterfaces,
++      includeMacs,
++    ),
++  );
++}
++
++function loadLocalDeviceChoices(includeMacs) {
++  if (includeMacs) {
++    if (localDeviceMacChoicesCache) {
++      return Promise.resolve(localDeviceMacChoicesCache);
++    }
++
++    if (!localDeviceMacChoicesPromise) {
++      localDeviceMacChoicesPromise = fetchLocalDeviceChoices(true)
++        .then((choices) => {
++          localDeviceMacChoicesCache = choices;
++          return choices;
++        })
++        .finally(() => {
++          localDeviceMacChoicesPromise = null;
++        });
++    }
++
++    return localDeviceMacChoicesPromise;
++  }
++
+   if (localDeviceChoicesCache) {
+     return Promise.resolve(localDeviceChoicesCache);
+   }
+@@ -150,18 +213,10 @@ function loadLocalDeviceChoices() {
+     return localDeviceChoicesPromise;
+   }
+ 
+-  localDeviceChoicesPromise = Promise.all([
+-    callHostHints().catch(() => ({})),
+-    callDHCPLeases().catch(() => ({})),
+-    callNetworkInterfaceDump().catch(() => []),
+-  ])
+-    .then(([hostHints, dhcpLeases, networkInterfaces]) => {
+-      localDeviceChoicesCache = buildLocalDeviceChoices(
+-        hostHints,
+-        dhcpLeases,
+-        networkInterfaces,
+-      );
+-      return localDeviceChoicesCache;
++  localDeviceChoicesPromise = fetchLocalDeviceChoices(false)
++    .then((choices) => {
++      localDeviceChoicesCache = choices;
++      return choices;
+     })
+     .finally(() => {
+       localDeviceChoicesPromise = null;
+@@ -179,7 +234,7 @@ function sortLocalDeviceChoiceValues(choices) {
+ 
+ function hasSingleIpValue(values) {
+   return normalizeOptionValues(values).some(
+-    (value) => main.validateIP(value).valid,
++    (value) => main.validateIP(value).valid || isMacAddress(value),
+   );
+ }
+ 
+@@ -190,15 +245,20 @@ function preloadLocalDeviceChoicesForValues(values) {
+ }
+ 
+ function createLocalDeviceDynamicListWidget(option, section_id, cfgvalue) {
++  const includeMacs = Boolean(option.includeMacChoices);
++  const cachedChoices = () =>
++    includeMacs ? localDeviceMacChoicesCache : localDeviceChoicesCache;
+   const values = normalizeOptionValues(
+     cfgvalue != null ? cfgvalue : option.default,
+   );
+   const shouldResolveExistingLabels = hasSingleIpValue(values);
+ 
+   return (
+-    shouldResolveExistingLabels ? loadLocalDeviceChoices() : Promise.resolve({})
++    shouldResolveExistingLabels
++      ? loadLocalDeviceChoices(includeMacs)
++      : Promise.resolve({})
+   ).then((initialChoices) => {
+-    const choices = localDeviceChoicesCache || initialChoices || {};
++    const choices = cachedChoices() || initialChoices || {};
+     const widget = new ui.DynamicList(values, choices, {
+       id: option.cbid(section_id),
+       sort: sortLocalDeviceChoiceValues(choices),
+@@ -217,7 +277,7 @@ function createLocalDeviceDynamicListWidget(option, section_id, cfgvalue) {
+         option.onDeviceListChange(section_id, widget.getValue());
+       });
+     }
+-    let choicesLoaded = Boolean(localDeviceChoicesCache);
++    let choicesLoaded = Boolean(cachedChoices());
+     let choicesLoading = false;
+ 
+     const loadChoices = () => {
+@@ -226,7 +286,7 @@ function createLocalDeviceDynamicListWidget(option, section_id, cfgvalue) {
+       }
+ 
+       choicesLoading = true;
+-      loadLocalDeviceChoices()
++      loadLocalDeviceChoices(includeMacs)
+         .then((loadedChoices) => {
+           widget.clearChoices();
+           widget.addChoices(
+@@ -260,6 +320,7 @@ function createLocalDeviceDynamicListWidget(option, section_id, cfgvalue) {
+ const EntryPoint = {
+   createLocalDeviceDynamicListWidget,
+   hasSingleIpValue,
++  isMacAddress,
+   loadLocalDeviceChoices,
+   normalizeOptionValues,
+   preloadLocalDeviceChoicesForValues,
+diff --git a/luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js b/luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js
+index 7def687..68224fc 100644
+--- a/luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js
++++ b/luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js
+@@ -4,6 +4,7 @@
+ "require baseclass";
+ "require tools.widgets as widgets";
+ "require view.forkop.main as main";
++"require view.forkop.local_devices as localDevices";
+ 
+ const UCI_PACKAGE = main.FORKOP_UCI_PACKAGE;
+ 
+@@ -461,6 +462,33 @@ function createSettingsContent(section, capabilities) {
+   o.default = "0";
+   o.rmempty = false;
+ 
++  o = section.option(
++    form.DynamicList,
++    "routing_excluded_ips",
++    _("Excluded devices"),
++    _(
++      "Traffic from these devices bypasses Forkop completely, regardless of section order, and their DNS returns real addresses. Use an IP address, a subnet or a MAC address; a MAC address keeps working when the device gets a new IPv4 lease or IPv6 address.",
++    ),
++  );
++  o.placeholder = _("Device, IP or MAC");
++  o.includeMacChoices = true;
++  o.validate = function (_section_id, value) {
++    if (!value || value.length === 0 || localDevices.isMacAddress(value)) {
++      return true;
++    }
++
++    return main.validateSubnet(value).valid
++      ? true
++      : _("Use an IP address, a CIDR subnet or a MAC address");
++  };
++  o.renderWidget = function (section_id, _option_index, cfgvalue) {
++    return localDevices.createLocalDeviceDynamicListWidget(
++      this,
++      section_id,
++      cfgvalue,
++    );
++  };
++
+   o = section.option(
+     form.Flag,
+     "list_update_enabled",
+diff --git a/luci-app-forkop/po/ru/forkop.po b/luci-app-forkop/po/ru/forkop.po
+index 0faded5..81e234a 100644
+--- a/luci-app-forkop/po/ru/forkop.po
++++ b/luci-app-forkop/po/ru/forkop.po
+@@ -416,6 +416,9 @@ msgstr "Фильтр по устройствам"
+ msgid "Device or IP"
+ msgstr "Устройство или IP"
+ 
++msgid "Device, IP or MAC"
++msgstr "Устройство, IP или MAC"
++
+ msgid "DHCP has DNS server"
+ msgstr "DHCP содержит DNS сервер"
+ 
+@@ -677,6 +680,9 @@ msgstr "Исключить из этого уровня серверы с одн
+ msgid "Exclude URLTest / Priority group"
+ msgstr "Исключить URLTest / Приоритет группу"
+ 
++msgid "Excluded devices"
++msgstr "Исключённые устройства"
++
+ msgid "Expecting: %s"
+ msgstr "Ожидается: %s"
+ 
+@@ -2000,6 +2006,9 @@ msgstr "Трафик"
+ msgid "Traffic for this level goes directly."
+ msgstr "Трафик этого уровня пойдёт напрямую."
+ 
++msgid "Traffic from these devices bypasses Forkop completely, regardless of section order, and their DNS returns real addresses. Use an IP address, a subnet or a MAC address; a MAC address keeps working when the device gets a new IPv4 lease or IPv6 address."
++msgstr "Трафик этих устройств полностью идёт мимо Forkop независимо от порядка секций, а DNS отвечает им реальными адресами. Укажите IP-адрес, подсеть или MAC-адрес; MAC-адрес продолжает работать, когда устройство получает новый IPv4-адрес по DHCP или новый IPv6-адрес."
++
+ msgid "Traffic Total"
+ msgstr "Всего трафика"
+ 
+@@ -2156,6 +2165,9 @@ msgstr "Укажите HTTP или HTTPS URL"
+ msgid "Use an IP address"
+ msgstr "Используйте IP-адрес"
+ 
++msgid "Use an IP address, a CIDR subnet or a MAC address"
++msgstr "Укажите IP-адрес, CIDR-подсеть или MAC-адрес"
++
+ msgid "Use an IP listen address"
+ msgstr "Используйте IP-адрес для прослушивания"
+ 
+diff --git a/luci-app-forkop/po/templates/forkop.pot b/luci-app-forkop/po/templates/forkop.pot
+index e98b7f9..a5fee0e 100644
+--- a/luci-app-forkop/po/templates/forkop.pot
++++ b/luci-app-forkop/po/templates/forkop.pot
+@@ -610,6 +610,10 @@ msgstr ""
+ msgid "Device or IP"
+ msgstr ""
+ 
++#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:473
++msgid "Device, IP or MAC"
++msgstr ""
++
+ #: src/forkop/tabs/diagnostic/checks/getDnsCheckPresentation.ts:37
+ msgid "DHCP has DNS server"
+ msgstr ""
+@@ -985,6 +989,10 @@ msgstr ""
+ msgid "Exclude URLTest / Priority group"
+ msgstr ""
+ 
++#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:468
++msgid "Excluded devices"
++msgstr ""
++
+ #: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/forkop.js:54
+ msgid "Expecting: %s"
+ msgstr ""
+@@ -2876,6 +2884,10 @@ msgstr ""
+ msgid "Traffic for this level goes directly."
+ msgstr ""
+ 
++#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:470
++msgid "Traffic from these devices bypasses Forkop completely, regardless of section order, and their DNS returns real addresses. Use an IP address, a subnet or a MAC address; a MAC address keeps working when the device gets a new IPv4 lease or IPv6 address."
++msgstr ""
++
+ #: src/forkop/tabs/dashboard/initController.ts:1590
+ msgid "Traffic Total"
+ msgstr ""
+@@ -3117,6 +3129,10 @@ msgstr ""
+ msgid "Use an IP address"
+ msgstr ""
+ 
++#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:482
++msgid "Use an IP address, a CIDR subnet or a MAC address"
++msgstr ""
++
+ #: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/server.js:1910
+ msgid "Use an IP listen address"
+ msgstr ""
+diff --git a/tests/excluded_devices.sh b/tests/excluded_devices.sh
+new file mode 100755
+index 0000000..472147e
+--- /dev/null
++++ b/tests/excluded_devices.sh
+@@ -0,0 +1,207 @@
++#!/usr/bin/env bash
++set -eo pipefail
++
++ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
++FORKOP_LIB="$ROOT_DIR/forkop/files/usr/lib"
++NFT_RUNTIME="$FORKOP_LIB/nft/apply.uc"
++GENERATOR="$FORKOP_LIB/singbox/generator.uc"
++VALIDATOR="$FORKOP_LIB/config/validator.uc"
++WORK_DIR="$(mktemp -d)"
++NFT_LOG="$WORK_DIR/nft.log"
++
++cleanup() {
++  rm -rf "$WORK_DIR"
++}
++trap cleanup EXIT
++
++fail() {
++  printf 'FAIL: %s\n' "$1" >&2
++  exit 1
++}
++
++line_of() {
++  grep -Fn "$1" "$NFT_LOG" | head -n 1 | cut -d: -f1
++}
++
++# --- nftables ---------------------------------------------------------------
++
++mkdir -p "$WORK_DIR/bin"
++for tool in nft ip logger sysctl; do
++  cat >"$WORK_DIR/bin/$tool" <<'SH'
++#!/usr/bin/env bash
++if [ "$(basename "$0")" = "nft" ]; then
++  { printf 'nft'; for arg in "$@"; do printf '\t%s' "$arg"; done; printf '\n'; } >>"$NFT_LOG"
++fi
++exit 0
++SH
++  chmod +x "$WORK_DIR/bin/$tool"
++done
++
++cat >"$WORK_DIR/uci.state" <<'EOF_UCI'
++forkop.settings=settings
++forkop.settings.source_network_interfaces=br-lan
++forkop.settings.routing_excluded_ips=192.168.1.50 2001:db8::50/128 AA:BB:CC:DD:EE:FF not-a-device
++EOF_UCI
++
++PATH="$WORK_DIR/bin:$PATH" NFT_LOG="$NFT_LOG" FORKOP_UCI_STATE_FILE="$WORK_DIR/uci.state" \
++  ucode -L "$FORKOP_LIB" "$NFT_RUNTIME" nft-create-runtime-base-from-uci \
++    ForkopTable localv4 forkop_subnets forkop_ports forkop_ip_ports forkop_interfaces \
++    0x00100000 0x00200000 198.18.0.0/15 1602 ||
++  fail "runtime base with excluded devices failed"
++
++for expected in \
++  $'add\tset\tinet\tForkopTable\tforkop_excluded_sources\t' \
++  $'add\tset\tinet\tForkopTable\tforkop_excluded_sources6\t' \
++  $'add\tset\tinet\tForkopTable\tforkop_excluded_macs\t{ type ether_addr; }' \
++  $'add\telement\tinet\tForkopTable\tforkop_excluded_sources\t{ 192.168.1.50 }' \
++  $'add\telement\tinet\tForkopTable\tforkop_excluded_sources6\t{ 2001:db8::50/128 }' \
++  $'add\telement\tinet\tForkopTable\tforkop_excluded_macs\t{ aa:bb:cc:dd:ee:ff }' \
++  $'dns_redirect\tiifname\t@forkop_interfaces\tether\tsaddr\t@forkop_excluded_macs\tudp\tdport\t53\tcounter\tredirect\tto\t:1605' \
++  $'dns_redirect\tiifname\t@forkop_interfaces\tip6\tsaddr\t@forkop_excluded_sources6\ttcp\tdport\t53\tcounter\tredirect\tto\t:1605' \
++  $'mangle\tiifname\t@forkop_interfaces\tether\tsaddr\t@forkop_excluded_macs\tcounter\treturn'; do
++  grep -Fq "$expected" "$NFT_LOG" || fail "missing nft command: $expected"
++done
++grep -Fq "not-a-device" "$NFT_LOG" && fail "invalid entries must not reach nft"
++
++excluded_dns="$(line_of $'saddr\t@forkop_excluded_sources\tudp\tdport\t53')"
++source_dns="$(line_of $'saddr\t@forkop_dns_sources\ttcp\tdport\t53')"
++[ "$excluded_dns" -lt "$source_dns" ] || fail "excluded DNS redirect must precede source-aware DNS redirect"
++excluded_return="$(line_of $'mangle\tiifname\t@forkop_interfaces\tip\tsaddr\t@forkop_excluded_sources\tcounter\treturn')"
++priority_jump="$(line_of $'mangle\tjump\tpriority_rules')"
++[ -n "$excluded_return" ] && [ "$excluded_return" -lt "$priority_jump" ] ||
++  fail "excluded devices must leave the mangle chain before section rules"
++
++# --- sing-box config --------------------------------------------------------
++
++cat >"$WORK_DIR/fixture.json" <<'JSON'
++{
++  "settings": {
++    ".name": "settings",
++    ".type": "settings",
++    "config_path": "/tmp/sing-box/config.json",
++    "dns_server": "1.1.1.1",
++    "bootstrap_dns_server": "1.1.1.1",
++    "service_listen_address": "127.0.0.1",
++    "routing_excluded_ips": [ "192.168.1.50", "2001:db8::50/128", "aa:bb:cc:dd:ee:ff" ]
++  },
++  "section": [
++    {
++      ".name": "proxy",
++      ".type": "section",
++      "enabled": "1",
++      "action": "outbound",
++      "outbound_json": "{\"type\":\"socks\",\"server\":\"127.0.0.1\",\"server_port\":1080,\"version\":\"5\"}",
++      "domain_suffix": [ "example.org" ]
++    }
++  ]
++}
++JSON
++
++generate_for_version() {
++  local version="$1" output="$2"
++  mkdir -p "$output.section-cache" "$output.rulesets"
++  ucode -L "$FORKOP_LIB" "$GENERATOR" generate-config-fixture \
++    "$WORK_DIR/fixture.json" "$output" "127.0.0.1" "0" "1" "" "$version"
++}
++
++check_config() {
++  ucode -e '
++let config = json(require("fs").readfile(ARGV[0]));
++let modern = ARGV[1] == "1";
++
++function assert(condition, message) {
++    if (!condition)
++        die(message + "\n");
++}
++
++function has_inbound(rule, tag) {
++    let inbound = rule.inbound;
++    if (type(inbound) == "array") {
++        for (let item in inbound)
++            if (item == tag)
++                return true;
++        return false;
++    }
++    return inbound == tag;
++}
++
++function mentions_excluded(rule) {
++    if (has_inbound(rule, "excluded-dns-in"))
++        return true;
++    for (let sub in rule.rules || [])
++        if (has_inbound(sub, "excluded-dns-in"))
++            return true;
++    return false;
++}
++
++let inbound = null;
++for (let item in config.inbounds)
++    if (item.tag == "excluded-dns-in")
++        inbound = item;
++assert(inbound && inbound.type == "direct" && inbound.listen_port == 1605, "excluded-dns-in inbound on port 1605");
++
++let dnsmasq = 0;
++for (let server in config.dns.servers)
++    if (server.tag == "dnsmasq-server")
++        dnsmasq++;
++assert(dnsmasq == 1, "exactly one dnsmasq DNS server");
++
++let sniff = null, safety = null, section = null;
++for (let i = 0; i < length(config.route.rules); i++) {
++    let rule = config.route.rules[i];
++    if (rule.action == "sniff" && has_inbound(rule, "excluded-dns-in"))
++        sniff = i;
++    if (rule.outbound == "bypass-out" && rule.source_ip_cidr != null)
++        safety = i;
++    if (section == null && rule.outbound == "proxy-out")
++        section = i;
++}
++assert(sniff != null, "excluded-dns-in must be sniffed so hijack-dns handles it");
++assert(safety != null && safety < section, "safety route for excluded IPs must precede section rules");
++let cidrs = config.route.rules[safety].source_ip_cidr;
++assert(type(cidrs) == "array" && length(cidrs) == 2, "safety route lists IP entries only (MACs are not visible to sing-box)");
++
++let first_excluded = null, first_section_dns = null, evaluate = null, respond = null;
++for (let i = 0; i < length(config.dns.rules); i++) {
++    let rule = config.dns.rules[i];
++    if (first_excluded == null && mentions_excluded(rule))
++        first_excluded = i;
++    if (first_section_dns == null && rule.server == "fakeip-server" && rule.domain_suffix != null)
++        first_section_dns = i;
++    if (rule.action == "evaluate" && has_inbound(rule, "excluded-dns-in"))
++        evaluate = i;
++    if (rule.action == "respond" && mentions_excluded(rule))
++        respond = i;
++}
++assert(first_excluded != null && first_excluded < first_section_dns, "excluded DNS rules must precede section FakeIP rules");
++if (modern)
++    assert(evaluate != null && respond != null && evaluate < respond, "1.14: evaluate dnsmasq, then respond");
++else
++    assert(evaluate == null && respond == null, "pre-1.14: legacy DNS rules");
++' "$1" "$2" || fail "$3"
++}
++
++generate_for_version "1.13.21" "$WORK_DIR/sb113.json"
++check_config "$WORK_DIR/sb113.json" 0 "sing-box 1.13 excluded devices config"
++generate_for_version "1.14.2" "$WORK_DIR/sb114.json"
++check_config "$WORK_DIR/sb114.json" 1 "sing-box 1.14 excluded devices config"
++
++for bin in ${FORKOP_TEST_SING_BOX_113:-} ${FORKOP_TEST_SING_BOX_114:-}; do
++  [ -x "$bin" ] || continue
++  case "$("$bin" version | head -n1)" in
++    *" 1.14."*) cfg="$WORK_DIR/sb114.json" ;;
++    *) cfg="$WORK_DIR/sb113.json" ;;
++  esac
++  "$bin" check -c "$cfg" || fail "sing-box check rejected $cfg ($bin)"
++done
++
++# --- validator --------------------------------------------------------------
++
++sed 's/"aa:bb:cc:dd:ee:ff"/"aa:bb:cc:dd:ee:ff", "printer.lan"/' "$WORK_DIR/fixture.json" >"$WORK_DIR/bad.json"
++if output="$(FORKOP_LIB="$FORKOP_LIB" ucode -L "$FORKOP_LIB" "$VALIDATOR" validate-runtime-fixture "$WORK_DIR/bad.json" "{}" 2>&1)"; then
++  fail "validator must reject a non IP/MAC excluded device"
++fi
++printf '%s' "$output" | grep -Fq "Invalid excluded device 'printer.lan'" ||
++  fail "validator message must name the invalid excluded device: $output"
++
++printf 'excluded devices checks passed\n'
+-- 
+2.43.0
+

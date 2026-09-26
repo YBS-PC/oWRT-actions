@@ -1,0 +1,42 @@
+From deb39efe2432e0061808b4c74a7bcab1f94f2663 Mon Sep 17 00:00:00 2001
+From: theurs <theurs@gmail.com>
+Date: Sat, 26 Sep 2026 07:11:15 +0000
+Subject: [PATCH] Component downloads: low-speed abort, 600 s timeout (#99, PR
+ #100)
+
+components: add curl low-speed abort and increase download timeout to 600s
+---
+ forkop/files/usr/lib/components/action.uc | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/forkop/files/usr/lib/components/action.uc b/forkop/files/usr/lib/components/action.uc
+index d0b09c8..d136f21 100644
+--- a/forkop/files/usr/lib/components/action.uc
++++ b/forkop/files/usr/lib/components/action.uc
+@@ -498,7 +498,7 @@ function http_get_once(url, output_path, proxy_address, timeout) {
+     timeout = as_string(timeout || "30");
+ 
+     if (command_exists("curl")) {
+-        let args = [ "curl", "--connect-timeout", "5", "-m", timeout, "-fsSL" ];
++        let args = [ "curl", "--connect-timeout", "5", "--speed-limit", "1024", "--speed-time", "30", "-m", timeout, "-fsSL" ];
+         if (proxy_address != "") {
+             push(args, "-x");
+             push(args, "http://" + proxy_address);
+@@ -549,12 +549,12 @@ function http_get(url) {
+ function download_file_once(url, output_path) {
+     let proxy_address = service_proxy_address();
+     if (proxy_address != "") {
+-        if (http_get_once(url, output_path, proxy_address, "120"))
++        if (http_get_once(url, output_path, proxy_address, "600"))
+             return true;
+         remove_file(output_path);
+         updates_log("Download via service proxy failed for " + as_string(url) + "; retrying directly", "warn");
+     }
+-    return http_get_once(url, output_path, "", "120");
++    return http_get_once(url, output_path, "", "600");
+ }
+ 
+ function download_with_retry(url, output_path, label) {
+-- 
+2.43.0
+
