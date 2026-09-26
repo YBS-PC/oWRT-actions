@@ -102,7 +102,7 @@ fi
 # --------------------------------------------------------------------------
 
 apply_feed_patches() {
-    local _dir _feed _p _name _req _missing _ok _applied _present _failed _failed_names
+    local _dir _feed _p _pp _name _req _missing _ok _applied _present _failed _failed_names _nomatch
 
     for _dir in "$GITHUB_WORKSPACE"/patches/feeds/*/; do
         [ -d "$_dir" ] || continue
@@ -112,19 +112,24 @@ apply_feed_patches() {
             continue
         fi
 
-        _ok=" "; _applied=0; _present=0; _failed=0; _failed_names=""
+        _ok=" "; _applied=0; _present=0; _failed=0; _failed_names=""; _nomatch=" "
         for _p in "$_dir"*.patch; do
             [ -f "$_p" ] || continue
             _name=$(basename "$_p" .patch)
+            # CRLF снимаем при чтении: .gitattributes приводит *.patch к LF
+            # только при коммите через git, а загрузка через веб-интерфейс
+            # GitHub оставляет файл как есть. С -F 0 такой патч не лёг бы.
+            _pp="/tmp/feedpatch.$$.patch"
+            sed 's/\r$//' "$_p" > "$_pp"
 
-            if patch -p1 -d "feeds/$_feed" -R -F 0 -f -s --dry-run < "$_p" >/dev/null 2>&1; then
+            if patch -p1 -d "feeds/$_feed" -R -F 0 -f -s --dry-run < "$_pp" >/dev/null 2>&1; then
                 echo "✓ $_feed: $_name уже есть в исходниках, пропуск"
                 _ok="$_ok$_name "; _present=$((_present + 1))
                 continue
             fi
 
             _missing=""
-            for _req in $(sed -n '/^diff --git /q; s/^Requires:[[:space:]]*//p' "$_p"); do
+            for _req in $(sed -n '/^diff --git /q; s/^Requires:[[:space:]]*//p' "$_pp"); do
                 case "$_ok" in
                 *" $_req "*) ;;
                 *) _missing="$_missing $_req" ;;
@@ -136,16 +141,49 @@ apply_feed_patches() {
                 continue
             fi
 
-            if patch -p1 -d "feeds/$_feed" -F 0 -f -s --dry-run < "$_p" >/dev/null 2>&1 &&
-                patch -p1 -d "feeds/$_feed" -F 0 -f -s --no-backup-if-mismatch < "$_p" >/dev/null; then
+            if patch -p1 -d "feeds/$_feed" -F 0 -f -s --dry-run < "$_pp" >/dev/null 2>&1 &&
+                patch -p1 -d "feeds/$_feed" -F 0 -f -s --no-backup-if-mismatch < "$_pp" >/dev/null; then
                 echo "✓ $_feed: применён $_name"
                 _ok="$_ok$_name "; _applied=$((_applied + 1))
             else
-                echo "::warning::$_feed: $_name не применяется (код фида изменился или исправление уже внесено в другом виде), пропущен"
+                # Предупреждение — после уточнения ниже: патч может оказаться
+                # в исходниках, просто неузнаваемым под патчем сверху.
                 _failed=$((_failed + 1)); _failed_names="$_failed_names $_name"
+                _nomatch="$_nomatch $_name "
             fi
         done
 
+        # Патч, правящий строки предыдущего (011 поверх 010), делает тот
+        # неузнаваемым: когда в исходниках есть оба, обратный прогон одного
+        # 010 уже не сходится, и 010 ложно считался бы непримененным — с
+        # FEED_PATCH_STRICT=1 это остановило бы сборку на исправном коде.
+        # Поэтому: не применённый патч, от которого зависит патч, найденный
+        # в исходниках или применённый, — тоже в исходниках. (Применённым
+        # зависимый быть не может: без предшественника его остановил бы
+        # Requires, значит, он найден в исходниках.)
+        local _f _q _dep _still=""
+        for _f in $_failed_names; do
+            _dep=""
+            for _p in "$_dir"*.patch; do
+                _q=$(basename "$_p" .patch)
+                case "$_ok" in *" $_q "*) ;; *) continue ;; esac
+                if sed -n '/^diff --git /q; s/\r$//; s/^Requires:[[:space:]]*//p' "$_p" | tr -s ' \t' '\n' | grep -qxF "$_f"; then
+                    _dep="$_q"; break
+                fi
+            done
+            if [ -n "$_dep" ]; then
+                echo "✓ $_feed: $_f уже есть в исходниках (его правит $_dep, найденный там же)"
+                _failed=$((_failed - 1)); _present=$((_present + 1))
+            else
+                _still="$_still $_f"
+                case "$_nomatch" in
+                *" $_f "*) echo "::warning::$_feed: $_f не применяется (код фида изменился или исправление уже внесено в другом виде), пропущен" ;;
+                esac
+            fi
+        done
+        _failed_names="$_still"
+
+        rm -f "/tmp/feedpatch.$$.patch"
         echo ">>> $_feed: применено $_applied, уже было $_present, пропущено $_failed"
         if [ "$_failed" -gt 0 ]; then
             echo "::warning title=Патчи фида $_feed::Не применены:$_failed_names"
