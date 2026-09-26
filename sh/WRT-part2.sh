@@ -103,6 +103,7 @@ fi
 
 apply_feed_patches() {
     local _dir _feed _p _pp _name _req _missing _ok _applied _present _failed _failed_names _nomatch
+    local -A _why
 
     for _dir in "$GITHUB_WORKSPACE"/patches/feeds/*/; do
         [ -d "$_dir" ] || continue
@@ -112,7 +113,7 @@ apply_feed_patches() {
             continue
         fi
 
-        _ok=" "; _applied=0; _present=0; _failed=0; _failed_names=""; _nomatch=" "
+        _ok=" "; _applied=0; _present=0; _failed=0; _failed_names=""; _nomatch=" "; _why=()
         for _p in "$_dir"*.patch; do
             [ -f "$_p" ] || continue
             _name=$(basename "$_p" .patch)
@@ -136,7 +137,9 @@ apply_feed_patches() {
                 esac
             done
             if [ -n "$_missing" ]; then
-                echo "::warning::$_feed: $_name пропущен — не применён нужный ему патч:$_missing"
+                # Предупреждение — после уточнения ниже: нужный патч может
+                # найтись в исходниках под более поздним патчем.
+                _why[$_name]="$_missing"
                 _failed=$((_failed + 1)); _failed_names="$_failed_names $_name"
                 continue
             fi
@@ -186,6 +189,7 @@ apply_feed_patches() {
         for _f in $_still; do
             case "$_nomatch" in
             *" $_f "*) echo "::warning::$_feed: $_f не применяется (код фида изменился или исправление уже внесено в другом виде), пропущен" ;;
+            *) [ -n "${_why[$_f]:-}" ] && echo "::warning::$_feed: $_f пропущен — не применён нужный ему патч:${_why[$_f]}" ;;
             esac
         done
         _failed_names=" $_still"
