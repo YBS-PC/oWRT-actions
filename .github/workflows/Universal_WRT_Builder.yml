@@ -680,26 +680,21 @@ jobs:
           echo ">>> Feed/package patch sources will also be hidden before WRT-part2.sh/WRT-part3.sh."
           PATCH_STATUS="Disabled by matrix (all patches skipped)"
         elif [ -d "$GITHUB_WORKSPACE/patches" ]; then
-          # Рекурсивно ищем обычные патчи к дереву OpenWrt.
-          # patches/feeds/* и patches/packages/* здесь НЕ применяем:
-          # их обрабатывают WRT-part2.sh и WRT-part3.sh соответственно.
+          # Обычные патчи к дереву OpenWrt находятся только
+          # непосредственно в patches/*.patch.
+          # Патчи feeds/packages обрабатываются отдельно
+          # WRT-part2.sh и WRT-part3.sh.
           files=()
-          while IFS= read -r -d '' p; do
-            files+=("$p")
-          done < <(
-            find "$GITHUB_WORKSPACE/patches" \
-              -type f -name '*.patch' \
-              ! -path "$GITHUB_WORKSPACE/patches/feeds/*" \
-              ! -path "$GITHUB_WORKSPACE/patches/packages/*" \
-              -print0 | sort -z
-          )
+          shopt -s nullglob
+          files=( "$GITHUB_WORKSPACE"/patches/*.patch )
+          shopt -u nullglob
 
           if [ ${#files[@]} -gt 0 ]; then
             for p in "${files[@]}"; do
               echo "Applying patch: $p"
               patch -p1 -d openwrt < "$p" || { echo "Patch failed: $p"; exit 1; }
             done
-            PATCH_STATUS="Applied ${#files[@]} OpenWrt patches (recursive)"
+            PATCH_STATUS="Applied ${#files[@]} OpenWrt patches"
           else
             echo "No direct OpenWrt patches found in patches/ (feed/package patches are handled later)."
             PATCH_STATUS="No direct OpenWrt patches"
