@@ -1,0 +1,129 @@
+From 9401050f669261bd56468b413aa69a65c9a5675f Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 26 Sep 2026 16:21:53 +0000
+Subject: [PATCH] feat(client): support sing-box 1.13 and later
+
+sing-box 1.13 removed the legacy inbound fields sniff and
+sniff_override_destination, so every generated client config was
+rejected: 'legacy inbound fields are deprecated in sing-box 1.11.0 and
+removed in sing-box 1.13.0'.
+
+Ask the installed core for its version. Below 1.13 the config is
+unchanged (the legacy fields also implement 'Override destination').
+From 1.13 on, or when the version cannot be read, sniff with the route
+rule action placed right after DNS hijacking (the slot the generator
+already reserved), available since sing-box 1.11. That action cannot
+override the destination, so 'Override destination' has no effect
+there.
+
+Checked with sing-box 1.12.25, 1.13.21 and 1.14.2 (check and run) in
+custom, bypass_mainland_china and URLTest main node modes: the 1.12
+config is byte-identical to before, 1.13/1.14 start, and a request to a
+bare IP with a listed Host header is still routed by the sniffed domain.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01HEQfjBzS7Wos7AvTk18TDQ
+---
+ root/etc/homeproxy/scripts/generate_client.uc | 43 ++++++++++++-------
+ 1 file changed, 28 insertions(+), 15 deletions(-)
+
+diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
+index 890d23b..9f30b18 100755
+--- a/root/etc/homeproxy/scripts/generate_client.uc
++++ b/root/etc/homeproxy/scripts/generate_client.uc
+@@ -7,7 +7,7 @@
+ 
+ 'use strict';
+ 
+-import { readfile, writefile } from 'fs';
++import { popen, readfile, writefile } from 'fs';
+ import { isnan } from 'math';
+ import { connect } from 'ubus';
+ import { cursor } from 'uci';
+@@ -139,6 +139,22 @@ if (match(proxy_mode, /tun/)) {
+ const log_level = uci.get(uciconfig, ucimain, 'log_level') || 'warn';
+ /* UCI config end */
+ 
++/*
++ * sing-box 1.13 removed the legacy inbound sniff fields (sniff,
++ * sniff_override_destination). Older cores keep them, as they also
++ * implement "Override destination"; 1.13+ (or an unknown version) get the
++ * sniff rule action instead, available since 1.11, which cannot override
++ * the destination.
++ */
++let sing_box_version = null;
++const sing_box_version_fd = popen('/usr/bin/sing-box version 2>/dev/null');
++if (sing_box_version_fd) {
++	sing_box_version = match(sing_box_version_fd.read('all') || '', /^sing-box version ([0-9]+)\.([0-9]+)/);
++	sing_box_version_fd.close();
++}
++const legacy_inbound_sniff = sing_box_version ?
++	(int(sing_box_version[1]) < 1 || (int(sing_box_version[1]) === 1 && int(sing_box_version[2]) < 13)) : false;
++
+ /* Config helper start */
+ function parse_port(strport) {
+ 	if (type(strport) !== 'array' || isEmpty(strport))
+@@ -606,8 +622,8 @@ push(config.inbounds, {
+ 	listen: '::',
+ 	listen_port: int(mixed_port),
+ 	udp_timeout: strToTime(udp_timeout),
+-	sniff: true,
+-	sniff_override_destination: strToBool(sniff_override),
++	sniff: legacy_inbound_sniff || null,
++	sniff_override_destination: legacy_inbound_sniff ? strToBool(sniff_override) : null,
+ 	set_system_proxy: false
+ });
+ 
+@@ -618,8 +634,8 @@ if (match(proxy_mode, /redirect/))
+ 
+ 		listen: '::',
+ 		listen_port: int(redirect_port),
+-		sniff: true,
+-		sniff_override_destination: strToBool(sniff_override)
++		sniff: legacy_inbound_sniff || null,
++		sniff_override_destination: legacy_inbound_sniff ? strToBool(sniff_override) : null
+ 	});
+ if (match(proxy_mode, /tproxy/))
+ 	push(config.inbounds, {
+@@ -630,8 +646,8 @@ if (match(proxy_mode, /tproxy/))
+ 		listen_port: int(tproxy_port),
+ 		network: 'udp',
+ 		udp_timeout: strToTime(udp_timeout),
+-		sniff: true,
+-		sniff_override_destination: strToBool(sniff_override)
++		sniff: legacy_inbound_sniff || null,
++		sniff_override_destination: legacy_inbound_sniff ? strToBool(sniff_override) : null
+ 	});
+ if (match(proxy_mode, /tun/))
+ 	push(config.inbounds, {
+@@ -645,8 +661,8 @@ if (match(proxy_mode, /tun/))
+ 		endpoint_independent_nat: strToBool(endpoint_independent_nat),
+ 		udp_timeout: strToTime(udp_timeout),
+ 		stack: tcpip_stack,
+-		sniff: true,
+-		sniff_override_destination: strToBool(sniff_override)
++		sniff: legacy_inbound_sniff || null,
++		sniff_override_destination: legacy_inbound_sniff ? strToBool(sniff_override) : null
+ 	});
+ /* Inbound end */
+ 
+@@ -795,13 +811,10 @@ config.route = {
+ 		{
+ 			inbound: 'dns-in',
+ 			action: 'hijack-dns'
++		},
++		legacy_inbound_sniff ? null : {
++			action: 'sniff'
+ 		}
+-		/*
+-		 * leave for sing-box 1.13.0
+-		 * {
+-		 * 	action: 'sniff'
+-		 * }
+-		 */
+ 	],
+ 	rule_set: [],
+ 	auto_detect_interface: isEmpty(default_interface) ? true : null,
+-- 
+2.43.0
+
