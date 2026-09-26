@@ -201,7 +201,7 @@
             <td class="key">Target Device <small>target</small></td>
             <td data-l="Значения"><div class="opts"><span class="opt def">combo</span><span class="opt">rb5009</span><span class="opt">nanopi-r6s</span><span class="opt">nanopi-r5s</span><span class="opt">slateax</span><span class="opt">ax59u</span><span class="opt">brume2</span><span class="opt">all</span></div></td>
             <td data-l="По умолчанию"><span class="opt def">combo</span></td>
-            <td data-l="Что делает"><p>Какое устройство (или набор) собирать. <code>combo</code> — четыре фиксированные сборки сразу, у каждой свои настройки AGH и sing-box (см. таблицу ниже); <code>all</code> — все шесть устройств с выбранным вариантом; одиночное значение — одно устройство. Из него же берётся архитектура пакетов.</p></td>
+            <td data-l="Что делает"><p>Какое устройство (или набор) собирать. <code>combo</code> — пять фиксированных сборок сразу, у каждой свои настройки AGH и sing-box (см. таблицу ниже); <code>all</code> — все шесть устройств с выбранным вариантом; одиночное значение — одно устройство. Из него же берётся архитектура пакетов.</p></td>
           </tr>
           <tr>
             <td class="key">Source Code <small>source</small></td>
@@ -257,7 +257,7 @@
 
     <div class="note warn">
       <span class="ic">◆</span>
-      <p><b>combo и all — особый случай.</b> Режим <code>combo</code> игнорирует поля Build Variant, Download AdGuardHome и Download Sing-Box: четыре сборки и их настройки жёстко зашиты в job <code>setup</code> (таблица ниже). Режим <code>all</code> собирает все шесть устройств (r6s, r5s, rb5009, slateax, ax59u, brume2) с выбранным вариантом. На slateax и ax59u всегда ставится <code>sing-box-tiny</code> из фида (выбор sing-box формы к ним не применяется), поэтому в вариантах homeproxy эти две сборки могут остановиться на проверке совместимости до компиляции — остальные при этом продолжатся.</p>
+      <p><b>combo и all — особый случай.</b> Режим <code>combo</code> игнорирует поля Build Variant, Download AdGuardHome и Download Sing-Box: пять сборок и их настройки жёстко зашиты в job <code>setup</code> (таблица ниже). Режим <code>all</code> собирает все шесть устройств (r6s, r5s, rb5009, slateax, ax59u, brume2) с выбранным вариантом. На slateax и ax59u всегда ставится <code>sing-box-tiny</code> из фида (выбор sing-box формы к ним не применяется), поэтому в вариантах homeproxy эти две сборки могут остановиться на проверке совместимости до компиляции — остальные при этом продолжатся.</p>
     </div>
 
     <div class="card scroll" style="margin-top:18px">
@@ -265,6 +265,7 @@
         <thead><tr><th>Сборка combo</th><th>Вариант</th><th>AdGuardHome</th><th>sing-box</th></tr></thead>
         <tbody>
           <tr><td class="feat">nanopi-r6s</td><td data-l="Вариант"><code>homeproxy</code></td><td data-l="AdGuardHome">скачивается</td><td data-l="sing-box"><code>1.12.x</code></td></tr>
+          <tr><td class="feat">nanopi-r6s</td><td data-l="Вариант"><code>homeproxy</code></td><td data-l="AdGuardHome">скачивается</td><td data-l="sing-box"><code>latest</code> (с патчем 004 HomeProxy)</td></tr>
           <tr><td class="feat">nanopi-r6s</td><td data-l="Вариант"><code>forkop</code></td><td data-l="AdGuardHome">скачивается</td><td data-l="sing-box"><code>extended</code></td></tr>
           <tr><td class="feat">rb5009</td><td data-l="Вариант"><code>clear</code></td><td data-l="AdGuardHome">—</td><td data-l="sing-box">—</td></tr>
           <tr><td class="feat">rb5009</td><td data-l="Вариант"><code>switch</code></td><td data-l="AdGuardHome">—</td><td data-l="sing-box">—</td></tr>
@@ -292,7 +293,7 @@
     <div class="sec-head"><span class="sec-num">02</span><h2>Конвейер сборки</h2></div>
     <p class="sec-sub">Что делает <code>Universal_WRT_Builder.yml</code> по шагам. Сначала job <code>setup</code> строит матрицу из выбранного target/variant, затем job <code>build</code> на раннере из поля <code>runner_os</code> прогоняет сборку для каждой пары «устройство × вариант», а job <code>notify</code> подводит итог.</p>
     <ol class="steps">
-      <li><b>Матрица сборки.</b> Из target/variant формируется список пар: <code>combo</code> → четыре фикс-сборки со своими настройками AGH/sing-box, <code>all</code> → все шесть устройств, одиночный → одна пара.</li>
+      <li><b>Матрица сборки.</b> Из target/variant формируется список пар: <code>combo</code> → пять фикс-сборок со своими настройками AGH/sing-box, <code>all</code> → все шесть устройств, одиночный → одна пара.</li>
       <li><b>Подготовка раннера.</b> Освобождение места на диске, checkout репозитория со скриптами.</li>
       <li><b>Права на <code>files/</code>.</b> Делаются исполняемыми скрипты в <code>files/etc/uci-defaults</code> и <code>files/usr/bin</code> (попадут в образ).</li>
       <li><b>Скачивание AdGuardHome</b> — если включён флаг и вариант это допускает. Последний стабильный тег ищется через <code>git ls-remote</code>, архив сверяется по SHA-256 (<code>sh/verify-sha256.sh</code>: digest ассета из GitHub API, иначе <code>checksums.txt</code> релиза). При несовпадении бинарь не кладётся и используется пакет из фида. Бинарь кладётся в <code>files/</code>.</li>
