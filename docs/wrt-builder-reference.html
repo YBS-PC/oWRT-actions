@@ -229,8 +229,8 @@
           </tr>
           <tr>
             <td class="key">Download latest AdGuardHome <small>download_binaries_agh</small></td>
-            <td data-l="Значения"><div class="opts"><span class="opt">да</span><span class="opt def">нет</span></div></td>
-            <td data-l="По умолчанию"><span class="opt def">нет</span></td>
+            <td data-l="Значения"><div class="opts"><span class="opt def">да</span><span class="opt">нет</span></div></td>
+            <td data-l="По умолчанию"><span class="opt def">да</span></td>
             <td data-l="Что делает"><p>Класть ли в образ бинарь последнего стабильного релиза AdGuardHome (arm64). Перед использованием сверяется SHA-256. Игнорируется для вариантов <code>clear</code>, <code>crystal_clear</code>, <code>switch</code> — там AGH не нужен — и в режиме <code>combo</code>.</p></td>
           </tr>
           <tr>
@@ -238,6 +238,12 @@
             <td data-l="Значения"><div class="opts"><span class="opt def">no</span><span class="opt">1.12.x</span><span class="opt">1.13.x</span><span class="opt">1.14.x</span><span class="opt">latest</span><span class="opt">extended</span></div></td>
             <td data-l="По умолчанию"><span class="opt def">no</span></td>
             <td data-l="Что делает"><p>Класть ли бинарь sing-box и какой ветки: <code>X.Y.x</code> — последний стабильный релиз ветки, <code>latest</code> — последний стабильный вообще, <code>extended</code> — последний стабильный <code>shtorm-7/sing-box-extended</code>. Перед использованием сверяется SHA-256. Пропускается для <code>clear</code>/<code>crystal_clear</code>/<code>switch</code>, для прокси-вариантов с другим ядром (<code>passwall</code>, <code>v2raya</code>, <code>xray</code>) и в режиме <code>combo</code>. На slateax/ax59u скачанный бинарь удаляется в пользу <code>sing-box-tiny</code> из фида.</p></td>
+          </tr>
+          <tr>
+            <td class="key">Apply patches <small>apply_patches</small></td>
+            <td data-l="Значения"><div class="opts"><span class="opt def">да</span><span class="opt">нет</span></div></td>
+            <td data-l="По умолчанию"><span class="opt def">да</span></td>
+            <td data-l="Что делает"><p>Применять ли любые патчи из <code>patches/</code>: к дереву OpenWrt (только корень <code>patches/*.patch</code>), к фидам (<code>patches/feeds/</code>, part2) и к пакетам (<code>patches/packages/</code>, part3). При «нет» каталог <code>patches/</code> на время part2/part3 скрывается, а для варианта <code>forkop</code> подключается <code>Gavr1024/forkop-mod</code>. В <code>combo</code> задаётся для каждой сборки полем <code>patches</code> матрицы. Сборка без патчей получает в имени артефакта суффикс <code>_nopatches</code>.</p></td>
           </tr>
           <tr>
             <td class="key">Exclude Packages <small>exclude_keywords</small></td>
@@ -257,18 +263,18 @@
 
     <div class="note warn">
       <span class="ic">◆</span>
-      <p><b>combo и all — особый случай.</b> Режим <code>combo</code> игнорирует поля Build Variant, Download AdGuardHome и Download Sing-Box: пять сборок и их настройки жёстко зашиты в job <code>setup</code> (таблица ниже). Режим <code>all</code> собирает все шесть устройств (r6s, r5s, rb5009, slateax, ax59u, brume2) с выбранным вариантом. На slateax и ax59u всегда ставится <code>sing-box-tiny</code> из фида (выбор sing-box формы к ним не применяется), поэтому в вариантах homeproxy эти две сборки могут остановиться на проверке совместимости до компиляции — остальные при этом продолжатся.</p>
+      <p><b>combo и all — особый случай.</b> Режим <code>combo</code> игнорирует поля Build Variant, Download AdGuardHome, Download Sing-Box и Apply patches: пять сборок и их настройки жёстко зашиты в job <code>setup</code> (таблица ниже). Режим <code>all</code> собирает все шесть устройств (r6s, r5s, rb5009, slateax, ax59u, brume2) с выбранным вариантом. На slateax и ax59u всегда ставится <code>sing-box-tiny</code> из фида (выбор sing-box формы к ним не применяется), поэтому в вариантах homeproxy эти две сборки могут остановиться на проверке совместимости до компиляции — остальные при этом продолжатся.</p>
     </div>
 
     <div class="card scroll" style="margin-top:18px">
       <table class="pt stack">
-        <thead><tr><th>Сборка combo</th><th>Вариант</th><th>AdGuardHome</th><th>sing-box</th></tr></thead>
+        <thead><tr><th>Сборка combo</th><th>Вариант</th><th>AdGuardHome</th><th>sing-box</th><th>Патчи</th></tr></thead>
         <tbody>
-          <tr><td class="feat">nanopi-r6s</td><td data-l="Вариант"><code>homeproxy</code></td><td data-l="AdGuardHome">скачивается</td><td data-l="sing-box"><code>1.12.x</code></td></tr>
-          <tr><td class="feat">nanopi-r6s</td><td data-l="Вариант"><code>homeproxy</code></td><td data-l="AdGuardHome">скачивается</td><td data-l="sing-box"><code>latest</code> (с патчем 004 HomeProxy)</td></tr>
-          <tr><td class="feat">nanopi-r6s</td><td data-l="Вариант"><code>forkop</code></td><td data-l="AdGuardHome">скачивается</td><td data-l="sing-box"><code>extended</code></td></tr>
-          <tr><td class="feat">rb5009</td><td data-l="Вариант"><code>clear</code></td><td data-l="AdGuardHome">—</td><td data-l="sing-box">—</td></tr>
-          <tr><td class="feat">rb5009</td><td data-l="Вариант"><code>switch</code></td><td data-l="AdGuardHome">—</td><td data-l="sing-box">—</td></tr>
+          <tr><td class="feat">nanopi-r6s</td><td data-l="Вариант"><code>homeproxy</code></td><td data-l="AdGuardHome">скачивается</td><td data-l="sing-box"><code>1.12.x</code></td><td data-l="Патчи">нет</td></tr>
+          <tr><td class="feat">nanopi-r6s</td><td data-l="Вариант"><code>homeproxy</code></td><td data-l="AdGuardHome">скачивается</td><td data-l="sing-box"><code>latest</code> (нужны патчи 004/006 HomeProxy)</td><td data-l="Патчи">да</td></tr>
+          <tr><td class="feat">nanopi-r6s</td><td data-l="Вариант"><code>forkop</code></td><td data-l="AdGuardHome">скачивается</td><td data-l="sing-box"><code>extended</code></td><td data-l="Патчи">да</td></tr>
+          <tr><td class="feat">rb5009</td><td data-l="Вариант"><code>clear</code></td><td data-l="AdGuardHome">—</td><td data-l="sing-box">—</td><td data-l="Патчи">нет</td></tr>
+          <tr><td class="feat">rb5009</td><td data-l="Вариант"><code>switch</code></td><td data-l="AdGuardHome">—</td><td data-l="sing-box">—</td><td data-l="Патчи">нет</td></tr>
         </tbody>
       </table>
     </div>
@@ -314,7 +320,7 @@
 
     <div class="note">
       <span class="ic" style="color:var(--accent)">i</span>
-      <p><b>Где лежат патчи.</b> <code>patches/*.patch</code> — к дереву OpenWrt (путь в патче от корня <code>openwrt/</code>). <code>patches/feeds/forkop/</code> — 25 патчей к оригиналу ushan0v/forkop (используется сейчас), <code>patches/feeds/forkopmod/</code> — к форку Gavr1024/forkop-mod (если переключить фид в YML). <code>patches/packages/luci-app-homeproxy/</code> — 5 патчей HomeProxy (проверка URLTest в LuCI, несуществующий DNS-сервер по умолчанию, права на логи в 25.12, поддержка sing-box 1.13+, исправления из ветки <code>dev</code>); применяются в <code>WRT-part3.sh</code> сразу после клонирования. С патчем 004 проверка совместимости пропускает homeproxy с sing-box 1.13+. Имя подпапки должно совпадать с именем фида в <code>feeds.conf</code>. Подробности — в <code>patches/README.md</code>.</p>
+      <p><b>Где лежат патчи.</b> <code>patches/*.patch</code> (только корень, подпапки не просматриваются) — к дереву OpenWrt (путь в патче от корня <code>openwrt/</code>). Все патчи отключаются полем <code>apply_patches</code> (в combo — полем <code>patches</code> матрицы). <code>patches/feeds/forkop/</code> — 25 патчей к оригиналу ushan0v/forkop (используется сейчас), <code>patches/feeds/forkopmod/</code> — к форку Gavr1024/forkop-mod (если переключить фид в YML). <code>patches/packages/luci-app-homeproxy/</code> — 6 патчей HomeProxy (проверка URLTest в LuCI, несуществующий DNS-сервер по умолчанию, права на логи в 25.12, поддержка sing-box 1.13+, исправления из ветки <code>dev</code>, опции кэша DNS для 1.14); применяются в <code>WRT-part3.sh</code> сразу после клонирования. С патчем 004 проверка совместимости пропускает homeproxy с sing-box 1.13+. Имя подпапки должно совпадать с именем фида в <code>feeds.conf</code>. Подробности — в <code>patches/README.md</code>.</p>
     </div>
   </section>
 
