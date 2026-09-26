@@ -73,6 +73,70 @@ if [[ "$VARIANT" != "clear" && "$VARIANT" != "crystal_clear" && "$VARIANT" != "s
 fi
 
 # =========================================================
+# Патчи пакетов: patches/packages/<пакет>/*.patch
+# Для пакетов, которые клонируются в package/ выше (их нет на этапе
+# патчей фидов в part2). Каталог пакета ищется в package/<пакет>, затем
+# в фидах (ImmortalWrt LuCI держит luci-app-homeproxy в
+# feeds/luci/applications/). Пути в патче — от корня репозитория пакета
+# (a/htdocs/..., a/root/...). Правила те же, что у patches/feeds:
+# уже есть в исходниках — пропуск, не подходит — ::warning и сборка
+# дальше (FEED_PATCH_STRICT=1 — остановка).
+# =========================================================
+apply_package_patches() {
+    local _dir _name _pkg _p _pp _patch _applied _present _failed _failed_names
+
+    for _dir in "$GITHUB_WORKSPACE"/patches/packages/*/; do
+        [ -d "$_dir" ] || continue
+        _name=$(basename "$_dir")
+        _pkg=""
+        if [ -d "package/$_name" ]; then
+            _pkg="package/$_name"
+        else
+            _pkg=$(find feeds -mindepth 2 -maxdepth 3 -type d -name "$_name" 2>/dev/null | head -n 1)
+        fi
+        if [ -z "$_pkg" ]; then
+            echo ">>> Пакет '$_name' не найден, патчи patches/packages/$_name пропущены."
+            continue
+        fi
+
+        _applied=0; _present=0; _failed=0; _failed_names=""
+        _pp="/tmp/pkgpatch.$$.patch"
+        for _p in "$_dir"*.patch; do
+            [ -f "$_p" ] || continue
+            _patch=$(basename "$_p" .patch)
+            sed 's/\r$//' "$_p" > "$_pp"
+
+            if patch -p1 -d "$_pkg" -R -F 0 -f -s --dry-run < "$_pp" >/dev/null 2>&1; then
+                echo "✓ $_name: $_patch уже есть в исходниках, пропуск"
+                _present=$((_present + 1))
+            elif patch -p1 -d "$_pkg" -F 0 -f -s --dry-run < "$_pp" >/dev/null 2>&1 &&
+                patch -p1 -d "$_pkg" -F 0 -f -s --no-backup-if-mismatch < "$_pp" >/dev/null; then
+                echo "✓ $_name: применён $_patch"
+                _applied=$((_applied + 1))
+            else
+                echo "::warning::$_name: $_patch не применяется (код пакета изменился или исправление уже внесено в другом виде), пропущен"
+                _failed=$((_failed + 1)); _failed_names="$_failed_names $_patch"
+            fi
+        done
+        rm -f "$_pp"
+
+        echo ">>> $_name ($_pkg): применено $_applied, уже было $_present, пропущено $_failed"
+        if [ "$_failed" -gt 0 ]; then
+            echo "::warning title=Патчи пакета $_name::Не применены:$_failed_names"
+            if [ "${FEED_PATCH_STRICT:-0}" = "1" ]; then
+                echo "::error::FEED_PATCH_STRICT=1: сборка остановлена из-за непримененных патчей пакета $_name"
+                exit 1
+            fi
+        fi
+    done
+}
+
+echo "=================================================="
+echo "Патчи пакетов (patches/packages/*)"
+echo "=================================================="
+apply_package_patches
+
+# =========================================================
 # Установка всех фидов (включая только что клонированные пакеты)
 # Повторная установка фидов для регистрации локально склонированных 
 # в ./package/ пакетов и разрешения их скрытых зависимостей.
