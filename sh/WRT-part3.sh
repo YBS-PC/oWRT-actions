@@ -83,7 +83,8 @@ fi
 # дальше (FEED_PATCH_STRICT=1 — остановка).
 # =========================================================
 apply_package_patches() {
-    local _dir _name _pkg _p _pp _patch _applied _present _failed _failed_names
+    local _dir _name _pkg _p _pp _patch _applied _present _failed _failed_names _ok
+    local _f _q _tmp _later _still _rev
 
     for _dir in "$GITHUB_WORKSPACE"/patches/packages/*/; do
         [ -d "$_dir" ] || continue
@@ -99,7 +100,7 @@ apply_package_patches() {
             continue
         fi
 
-        _applied=0; _present=0; _failed=0; _failed_names=""
+        _applied=0; _present=0; _failed=0; _failed_names=""; _ok=" "
         _pp="/tmp/pkgpatch.$$.patch"
         for _p in "$_dir"*.patch; do
             [ -f "$_p" ] || continue
@@ -108,17 +109,49 @@ apply_package_patches() {
 
             if patch -p1 -d "$_pkg" -R -F 0 -f -s --dry-run < "$_pp" >/dev/null 2>&1; then
                 echo "✓ $_name: $_patch уже есть в исходниках, пропуск"
-                _present=$((_present + 1))
+                _ok="$_ok$_patch "; _present=$((_present + 1))
             elif patch -p1 -d "$_pkg" -F 0 -f -s --dry-run < "$_pp" >/dev/null 2>&1 &&
                 patch -p1 -d "$_pkg" -F 0 -f -s --no-backup-if-mismatch < "$_pp" >/dev/null; then
                 echo "✓ $_name: применён $_patch"
-                _applied=$((_applied + 1))
+                _ok="$_ok$_patch "; _applied=$((_applied + 1))
             else
-                echo "::warning::$_name: $_patch не применяется (код пакета изменился или исправление уже внесено в другом виде), пропущен"
+                # Предупреждение — после уточнения ниже.
                 _failed=$((_failed + 1)); _failed_names="$_failed_names $_patch"
             fi
         done
         rm -f "$_pp"
+
+        # Повторная проверка (как в WRT-part2.sh): патч, чьи строки правит
+        # более поздний патч (006 рядом с 004), не узнаётся обратным прогоном,
+        # даже если автор пакета уже внёс оба. Во временной копии пакета
+        # откатываем более поздние найденные/применённые патчи и проверяем
+        # его снова. Сам пакет не меняется.
+        _still=""; _rev=""
+        for _f in $_failed_names; do _rev="$_f $_rev"; done
+        for _f in $_rev; do
+            _tmp=$(mktemp -d) || break
+            tar -C "$_pkg" --exclude=.git -cf - . | tar -C "$_tmp" -xf -
+            _later=""
+            for _p in "$_dir"*.patch; do
+                _q=$(basename "$_p" .patch)
+                [[ "$_q" > "$_f" ]] || continue
+                case "$_ok" in *" $_q "*) _later="$_q $_later" ;; esac
+            done
+            for _q in $_later; do
+                sed 's/\r$//' "$_dir$_q.patch" | patch -p1 -d "$_tmp" -R -F 0 -f -s --no-backup-if-mismatch >/dev/null 2>&1 || break
+            done
+            if sed 's/\r$//' "$_dir$_f.patch" | patch -p1 -d "$_tmp" -R -F 0 -f -s --dry-run >/dev/null 2>&1; then
+                echo "✓ $_name: $_f уже есть в исходниках (под изменениями более поздних патчей)"
+                _ok="$_ok$_f "; _failed=$((_failed - 1)); _present=$((_present + 1))
+            else
+                _still="$_f $_still"
+            fi
+            rm -rf "$_tmp"
+        done
+        for _f in $_still; do
+            echo "::warning::$_name: $_f не применяется (код пакета изменился или исправление уже внесено в другом виде), пропущен"
+        done
+        _failed_names=" $_still"
 
         echo ">>> $_name ($_pkg): применено $_applied, уже было $_present, пропущено $_failed"
         if [ "$_failed" -gt 0 ]; then
