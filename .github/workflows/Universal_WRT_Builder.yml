@@ -153,10 +153,12 @@ jobs:
             # Все устройства из config/conf/ — при добавлении нового дописать сюда.
             # ВНИМАНИЕ: slateax и ax59u — «тонкие» устройства: part3 ставит им
             # пакет sing-box-tiny из фида и удаляет скачанный бинарник, поэтому
-            # download_binaries_sb на них не влияет. Если генератор homeproxy
-            # несовместим с версией sing-box в фиде, в вариантах homeproxy*
-            # эти две сборки честно упадут на «Check sing-box compatibility»
-            # (до компиляции, остальные сборки матрицы продолжатся: fail-fast: false).
+            # download_binaries_sb на них не влияет. С патчами homeproxy
+            # (patches/packages/luci-app-homeproxy/004, 006) генератор сам
+            # подстраивается под версию sing-box из фида (1.13+). Без патчей
+            # (apply_patches=false) генератор несовместим с sing-box 1.13+, и в
+            # вариантах homeproxy* эти сборки честно упадут на «Check sing-box
+            # compatibility» (до компиляции, остальные продолжатся: fail-fast: false).
             TINY_TARGETS="slateax ax59u"
             targets="nanopi-r6s nanopi-r5s rb5009 slateax ax59u brume2"
             if [ "$INPUT_TARGET" == "all" ]; then
@@ -186,16 +188,20 @@ jobs:
           echo "$json" | jq -r '.include[] | "  \(.target) / \(.variant) / agh=\(.agh) / sb=\(.sb) / patches=\(.patches)"'
           echo "=========================================="
 
-          # Заранее предупреждаем о сборках, чей sing-box не выбирается формой
-          case "$INPUT_VARIANT" in
-            homeproxy|homeproxy_sqm)
-              for t in ${TINY_TARGETS:-}; do
-                if echo "$json" | jq -e --arg t "$t" '.include[] | select(.target == $t)' >/dev/null; then
-                  echo "::warning title=${t}: sing-box из фида::На ${t} ставится sing-box-tiny из фида, выбор download_binaries_sb к нему не применяется. Если homeproxy несовместим с этой версией, сборка ${t} остановится на проверке совместимости до компиляции."
-                fi
-              done
-              ;;
-          esac
+          # Заранее предупреждаем о сборках, чей sing-box не выбирается формой.
+          # Нужно только без патчей: с патчами 004/006 homeproxy работает с
+          # sing-box из фида (1.13+).
+          for t in ${TINY_TARGETS:-}; do
+            if echo "$json" | jq -e --arg t "$t" '.include[] | select(.target == $t and (.variant == "homeproxy" or .variant == "homeproxy_sqm") and .patches == false)' >/dev/null; then
+              echo "::warning title=${t}: homeproxy без патчей::На ${t} ставится sing-box-tiny из фида (1.13+), выбор download_binaries_sb к нему не применяется. Без патчей homeproxy несовместим с sing-box 1.13+, и сборка ${t} остановится на проверке совместимости до компиляции. Включите apply_patches."
+            fi
+          done
+
+          # forkop без патчей: голый ushan0v/forkop 1.0.5 не стартует на
+          # sing-box 1.14 (issue #98), пока автор не внесёт исправления.
+          if echo "$json" | jq -e '.include[] | select(.variant == "forkop" and .patches == false)' >/dev/null; then
+            echo "::warning title=forkop без патчей::forkop собирается из оригинала ushan0v/forkop без patches/feeds/forkop. Пока автор не внёс исправления, он несовместим с sing-box 1.14 (issue #98): не скачивайте sing-box 1.14.x/latest/extended для этой сборки или включите apply_patches."
+          fi
 
           echo "matrix<<EOF" >> $GITHUB_OUTPUT
           echo "$json" >> $GITHUB_OUTPUT
@@ -741,14 +747,13 @@ jobs:
         elif [ "$VARIANT" == "podkop" ]; then
             echo -e "\nsrc-git podkop https://github.com/itdoginfo/podkop.git;main" >> feeds.conf.default
         elif [ "$VARIANT" == "forkop" ]; then
-            # Есть патчи в patches/feeds/forkop — оригинал ushan0v/forkop, который
-            # они исправляют и дополняют (применяются в WRT-part2.sh). Без них
-            # голый оригинал 1.0.5 не стартует на sing-box 1.14 (issue #98),
-            # поэтому тогда берётся форк Gavr1024/forkop-mod, как раньше.
-            if [ "${{ matrix.patches }}" = "true" ] && ls "$GITHUB_WORKSPACE"/patches/feeds/forkop/*.patch >/dev/null 2>&1; then
-                echo -e "\nsrc-git forkop https://github.com/ushan0v/forkop.git;main" >> feeds.conf.default
-            else
-                echo -e "\nsrc-git forkopmod https://github.com/Gavr1024/forkop-mod.git;main" >> feeds.conf.default
+            # Всегда оригинал ushan0v/forkop. patches/feeds/forkop (WRT-part2.sh)
+            # исправляют и дополняют его, включая всё рабочее из forkop-mod.
+            # Без патчей голый 1.0.5 не стартует на sing-box 1.14 (issue #98),
+            # пока автор не внёс исправления, — об этом предупреждает setup.
+            echo -e "\nsrc-git forkop https://github.com/ushan0v/forkop.git;main" >> feeds.conf.default
+            if [ "${{ matrix.patches }}" != "true" ]; then
+                echo "::warning title=forkop без патчей::ushan0v/forkop собирается без patches/feeds/forkop — несовместим с sing-box 1.14 (issue #98), пока автор не внёс исправления."
             fi
         fi
 
@@ -763,8 +768,8 @@ jobs:
 
         # -------------------------------------------------------------
         # Глобальный переключатель патчей для Part 2 / Part 3.
-        # Папку patches скрываем ТОЛЬКО после feeds update:
-        # до этого она нужна, в частности, для выбора forkop/forkopmod.
+        # Папку patches скрываем после feeds update (раньше в этой точке
+        # по ней выбирался фид forkop; скрывать до неё смысла нет).
         # Благодаря trap каталог вернётся даже при ошибке Part 2/3.
         # -------------------------------------------------------------
         PATCHES_BACKUP=""
