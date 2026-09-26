@@ -313,7 +313,7 @@
 
     <div class="note">
       <span class="ic" style="color:var(--accent)">i</span>
-      <p><b>Где лежат патчи.</b> <code>patches/*.patch</code> — к дереву OpenWrt (путь в патче от корня <code>openwrt/</code>). <code>patches/feeds/forkop/</code> — 25 патчей к оригиналу ushan0v/forkop (используется сейчас), <code>patches/feeds/forkopmod/</code> — к форку Gavr1024/forkop-mod (если переключить фид в YML). <code>patches/packages/luci-app-homeproxy/</code> — 3 исправления HomeProxy (проверка URLTest в LuCI, несуществующий DNS-сервер по умолчанию, права на логи в 25.12); применяются в <code>WRT-part3.sh</code> сразу после клонирования. Имя подпапки должно совпадать с именем фида в <code>feeds.conf</code>. Подробности — в <code>patches/README.md</code>.</p>
+      <p><b>Где лежат патчи.</b> <code>patches/*.patch</code> — к дереву OpenWrt (путь в патче от корня <code>openwrt/</code>). <code>patches/feeds/forkop/</code> — 25 патчей к оригиналу ushan0v/forkop (используется сейчас), <code>patches/feeds/forkopmod/</code> — к форку Gavr1024/forkop-mod (если переключить фид в YML). <code>patches/packages/luci-app-homeproxy/</code> — 5 патчей HomeProxy (проверка URLTest в LuCI, несуществующий DNS-сервер по умолчанию, права на логи в 25.12, поддержка sing-box 1.13+, исправления из ветки <code>dev</code>); применяются в <code>WRT-part3.sh</code> сразу после клонирования. С патчем 004 проверка совместимости пропускает homeproxy с sing-box 1.13+. Имя подпапки должно совпадать с именем фида в <code>feeds.conf</code>. Подробности — в <code>patches/README.md</code>.</p>
     </div>
   </section>
 
