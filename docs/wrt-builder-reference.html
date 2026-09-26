@@ -307,7 +307,7 @@
       <li><b>Kernel Hash.</b> Хеш ядра подменяется на официальный, чтобы на роутер можно было ставить готовые kmod из репозиториев.</li>
       <li><b>Компиляция.</b> Многопоточная; при сбое — повтор в один поток с сохранением <code>build.log</code>.</li>
       <li><b>Bootloader-файлы.</b> Глубокий поиск и сохранение <code>idbloader.img</code>/<code>u-boot.itb</code>/<code>.fip</code> для прошивки загрузчика.</li>
-      <li><b>Артефакт.</b> Содержимое <code>bin/</code> загружается (<code>upload-artifact@v7</code>, хранение 10 дней); при падении компиляции туда же попадает <code>build_failure.log</code>.</li>
+      <li><b>Артефакт.</b> Содержимое <code>bin/</code> загружается (<code>upload-artifact@v7</code>, хранение 10 дней) под именем <code>&lt;source&gt;_&lt;branch&gt;_&lt;вариант&gt;_&lt;устройство&gt;_sb-&lt;sing-box&gt;_&lt;дата&gt;</code>: версия sing-box в имени различает сборки одного устройства и варианта (например homeproxy с <code>1.12.x</code> и <code>latest</code>); при падении компиляции туда же попадает <code>build_failure.log</code>.</li>
       <li><b>Уведомление (job <code>notify</code>).</b> После всей матрицы в Telegram уходит одно сообщение со статусом и длительностью каждой сборки (если заданы секреты <code>TELEGRAM_BOT_TOKEN</code>/<code>TELEGRAM_CHAT_ID</code>); затем удаляются прогоны workflow старше 10 дней.</li>
     </ol>
 
