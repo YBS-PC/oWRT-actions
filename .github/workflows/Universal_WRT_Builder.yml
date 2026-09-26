@@ -137,7 +137,7 @@ jobs:
 
           if [ "$INPUT_TARGET" == "combo" ]; then
             echo ">>> Generating COMBO matrix..."
-            json="{\"include\":[$(entry nanopi-r6s homeproxy true  1.12.x),$(entry nanopi-r6s homeproxy true latest),$(entry nanopi-r6s forkop true extended),$(entry rb5009 clear false no),$(entry rb5009 switch false no)]}"
+            json="{\"include\":[$(entry nanopi-r6s homeproxy true  1.12.x),$(entry nanopi-r6s forkop true extended),$(entry rb5009 clear false no),$(entry rb5009 switch false no)]}"
           else
             # Все устройства из config/conf/ — при добавлении нового дописать сюда.
             # ВНИМАНИЕ: slateax и ax59u — «тонкие» устройства: part3 ставит им
@@ -1172,7 +1172,11 @@ jobs:
       if: ${{ always() }}
       uses: actions/upload-artifact@v7
       with:
-        name: ${{ inputs.source }}_${{ inputs.branch }}_${{ matrix.variant }}_${{ matrix.target }}_${{ steps.get_date.outputs.date }}
+        # sb в имени: в combo может быть несколько сборок одного устройства и
+        # варианта с разным sing-box (например homeproxy 1.12.x и latest).
+        # Без него имена совпадали бы (дата — до минуты), и второй артефакт
+        # с тем же именем upload-artifact отверг бы.
+        name: ${{ inputs.source }}_${{ inputs.branch }}_${{ matrix.variant }}_${{ matrix.target }}_sb-${{ matrix.sb }}_${{ steps.get_date.outputs.date }}
         path: openwrt/bin
         # На ранней ошибке (до создания bin/) не валим джоб красным "no files".
         if-no-files-found: warn
