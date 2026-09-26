@@ -301,8 +301,8 @@
       <li><b>Зависимости (apt).</b> Установка тулчейна сборки из файла репозитория под выбранный раннер: <code>depends-ubuntu-2404</code> или <code>depends-ubuntu-2204</code>.</li>
       <li><b>Клон исходников</b> и checkout на нужный коммит/тег OpenWrt/ImmortalWrt.</li>
       <li><b>Патчи дерева.</b> Файлы <code>patches/*.patch</code> (только корень каталога) применяются к исходникам OpenWrt: <code>patch -p1 -d openwrt</code>. Шаг идёт <b>до</b> <code>feeds update</code>, поэтому фидов здесь ещё нет; любой непримёнившийся патч останавливает сборку. Патчи к фидам лежат в подпапках <code>patches/feeds/</code> и этим шагом не трогаются — см. следующий шаг.</li>
-      <li><b>Update Feeds &amp; Config.</b> Главный шаг: P1 → <code>feeds update</code> → P2 → <code>feeds install</code> → копирование <code>WRT.config</code> в <code>.config</code> (с удалением CRLF) → команды устройства → P3 → правки под вариант → отключение по Exclude-словам → <code>make defconfig</code>. Для варианта <code>forkop</code> подключается фид <code>forkopmod</code> (<code>Gavr1024/forkop-mod</code>).</li>
-      <li class="tag-fk"><span class="badge">part2</span><b>Версии и патчи фидов.</b> <code>WRT-part2.sh</code> (между <code>feeds update</code> и <code>feeds install</code>): берёт версию forkop из последнего тега <code>x.y.z</code> репозитория (<code>FORKOP_VERSION</code>, без неё пакет получил бы <code>0.0.0</code>) и версию темы Proton2025; затем применяет патчи из <code>patches/feeds/&lt;имя фида&gt;/*.patch</code> к <code>feeds/&lt;имя фида&gt;</code>. Фид не загружен или патч уже есть в исходниках — пропуск; патч не подходит (автор изменил код) — предупреждение в Actions, сборка продолжается без него. Затем обновляется youtubeUnblock (кроме clear/switch/forkop).</li>
+      <li><b>Update Feeds &amp; Config.</b> Главный шаг: P1 → <code>feeds update</code> → P2 → <code>feeds install</code> → копирование <code>WRT.config</code> в <code>.config</code> (с удалением CRLF) → команды устройства → P3 → правки под вариант → отключение по Exclude-словам → <code>make defconfig</code>. Для варианта <code>forkop</code> подключается фид <code>forkop</code> (оригинал <code>ushan0v/forkop</code>) с патчами из <code>patches/feeds/forkop</code>; форк <code>Gavr1024/forkop-mod</code> оставлен закомментированной строкой.</li>
+      <li class="tag-fk"><span class="badge">part2</span><b>Версии и патчи фидов.</b> <code>WRT-part2.sh</code> (между <code>feeds update</code> и <code>feeds install</code>): берёт версию forkop из последнего тега <code>x.y.z</code> репозитория (<code>FORKOP_VERSION</code>, без неё пакет получил бы <code>0.0.0</code>) и версию темы Proton2025; версия берётся из репозитория, который подключён в <code>feeds.conf</code>. Затем применяет патчи из <code>patches/feeds/&lt;имя фида&gt;/*.patch</code> к <code>feeds/&lt;имя фида&gt;</code> по порядку имён: уже есть в исходниках — пропуск; не применён патч из строки <code>Requires:</code> — пропуск; иначе применяется только при точном совпадении контекста (<code>patch -F 0</code>), каждый целиком или никак. Не подошедшие — предупреждение в Actions и итог «применено / уже было / пропущено»; с <code>FEED_PATCH_STRICT=1</code> сборка останавливается. Затем обновляется youtubeUnblock (кроме clear/switch/forkop).</li>
       <li class="tag-hp"><span class="badge">homeproxy</span><b>Проверка совместимости sing-box.</b> Генератор homeproxy, который попадёт в прошивку, проверяется против той версии sing-box, которая попадёт в прошивку (скачанной или из фида): пробный конфиг прогоняется через <code>sing-box check</code>. Несовместимость останавливает сборку до компиляции.</li>
       <li><b>Kernel Hash.</b> Хеш ядра подменяется на официальный, чтобы на роутер можно было ставить готовые kmod из репозиториев.</li>
       <li><b>Компиляция.</b> Многопоточная; при сбое — повтор в один поток с сохранением <code>build.log</code>.</li>
@@ -313,7 +313,7 @@
 
     <div class="note">
       <span class="ic" style="color:var(--accent)">i</span>
-      <p><b>Где лежат патчи.</b> <code>patches/*.patch</code> — к дереву OpenWrt (путь в патче от корня <code>openwrt/</code>). <code>patches/feeds/forkopmod/</code> — к фиду Gavr1024/forkop-mod, <code>patches/feeds/forkop/</code> — к ushan0v/forkop (фид сейчас закомментирован в YML). Имя подпапки должно совпадать с именем фида в <code>feeds.conf</code>. Подробности — в <code>patches/README.md</code>.</p>
+      <p><b>Где лежат патчи.</b> <code>patches/*.patch</code> — к дереву OpenWrt (путь в патче от корня <code>openwrt/</code>). <code>patches/feeds/forkop/</code> — 24 патча к оригиналу ushan0v/forkop (используется сейчас), <code>patches/feeds/forkopmod/</code> — к форку Gavr1024/forkop-mod (если переключить фид в YML). Имя подпапки должно совпадать с именем фида в <code>feeds.conf</code>. Подробности — в <code>patches/README.md</code>.</p>
     </div>
   </section>
 
@@ -380,7 +380,7 @@
 
     <div class="note warn">
       <span class="ic">◆</span>
-      <p><b>forkop: что важно знать.</b> Пакеты <code>forkop</code>, <code>luci-app-forkop</code>, <code>luci-i18n-forkop-ru</code> собираются из фида <code>forkopmod</code> с патчем <code>001-fix-ucode-forward-refs-and-apk-prerm.patch</code>: он исправляет вызовы функций ucode до объявления (падала генерация конфига sing-box, не работало исключение устройств и др.) и скрипт удаления пакета для apk. Для ядра sing-box в образ собирается пакет из фида (25.12: 1.13.x), а скачанный бинарь (в combo — <code>extended</code> 1.14.x) кладётся через <code>files/</code> поверх него в <code>/usr/bin/sing-box</code>. Менеджер пакетов при этом считает установленной версию из фида, поэтому <code>apk upgrade</code> может вернуть её вместо extended — обновляйте sing-box через вкладку «Компоненты» forkop.</p>
+      <p><b>forkop: что важно знать.</b> Пакеты <code>forkop</code>, <code>luci-app-forkop</code>, <code>luci-i18n-forkop-ru</code> собираются из оригинала <code>ushan0v/forkop</code> 1.0.5 с 24 патчами: 17 исправлений из открытых PR репозитория (авторы сохранены), исправления вызовов ucode до объявления, скрипта удаления для apk, совместимости с sing-box 1.14, зависания загрузки списков и показа доменов в LuCI, а также две настройки из forkop-mod в доработанном виде — «Исключить BitTorrent» и «Исключённые устройства» (по IP, подсети или MAC). Для ядра sing-box в образ собирается пакет из фида (25.12: 1.13.x), а скачанный бинарь (в combo — <code>extended</code> 1.14.x) кладётся через <code>files/</code> поверх него в <code>/usr/bin/sing-box</code>. Менеджер пакетов при этом считает установленной версию из фида, поэтому <code>apk upgrade</code> может вернуть её вместо extended — обновляйте sing-box через вкладку «Компоненты» forkop.</p>
     </div>
   </section>
 
@@ -432,7 +432,7 @@
     </div>
     <div class="note">
       <span class="ic" style="color:var(--accent)">i</span>
-      <p>Все DNS-запросы приходят в forkop от AdGuardHome, то есть с адреса самого роутера, а не клиента. Функции forkop, которые смотрят на IP клиента в DNS (исключение устройств, DNS-действия по устройству), в такой схеме могут работать не полностью — это стоит проверить на роутере, если они нужны.</p>
+      <p>Обычные DNS-запросы приходят в forkop от AdGuardHome, то есть с адреса самого роутера. Для устройств из «Исключённых устройств» и секций с фильтром по устройству forkop перехватывает их DNS в nftables раньше AdGuardHome и видит адрес клиента, поэтому эти функции работают; фильтры AdGuardHome к таким запросам не применяются.</p>
     </div>
   </section>
 
