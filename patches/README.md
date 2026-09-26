@@ -1,12 +1,13 @@
 # patches/
 
-Патчи, которые применяются во время сборки. Их два вида, и они применяются
+Патчи, которые применяются во время сборки. Их три вида, и они применяются
 на разных этапах.
 
 | Где лежит | К чему применяется | Когда | Если не применился |
 |---|---|---|---|
 | `patches/*.patch` | к дереву исходников OpenWrt / ImmortalWrt (`openwrt/`) | шаг **Apply custom patches** в `Universal_WRT_Builder.yml`, до `feeds update` | сборка останавливается |
 | `patches/feeds/<фид>/*.patch` | к фиду `feeds/<фид>/` | `sh/WRT-part2.sh`, между `feeds update` и `feeds install` | предупреждение в Actions, сборка идёт дальше без патча (или стоп при `FEED_PATCH_STRICT=1`) |
+| `patches/packages/<пакет>/*.patch` | к пакету, который `sh/WRT-part3.sh` клонирует в `package/<пакет>` (или к нему же в фиде) | `sh/WRT-part3.sh`, сразу после клонирования | так же, как у патчей фидов |
 
 ## Патчи дерева: `patches/*.patch`
 
@@ -49,7 +50,7 @@ patch -p1 -d openwrt < patches/<файл>.patch
 
 ### forkop (`patches/feeds/forkop/`, фид `forkop` → ushan0v/forkop)
 
-Оригинальный forkop 1.0.5 (коммит `dd48329`) плюс 25 патча. Номера 001–017 —
+Оригинальный forkop 1.0.5 (коммит `dd48329`) плюс 24 патча. Номера 001–017 —
 открытые PR репозитория ushan0v/forkop (авторы сохранены в заголовках),
 остальные — наши исправления и доработки.
 
@@ -101,9 +102,34 @@ forkop, строгую проверку ucode и проверку конфиго
 Патчи фидов (patches/feeds/*)
 ✓ forkop: применён 001-pr83-hijack-dns-port53
 ...
->>> forkop: применено 25, уже было 0, пропущено 0
+>>> forkop: применено 24, уже было 0, пропущено 0
 >>> Фид 'forkopmod' не загружен, патчи patches/feeds/forkopmod пропущены.
 ```
+
+## Патчи пакетов: `patches/packages/<пакет>/*.patch`
+
+Для пакетов, которых нет в фидах и которые `WRT-part3.sh` клонирует в
+`package/` (сейчас это HomeProxy из `immortalwrt/homeproxy`). На этапе патчей
+фидов их ещё нет, поэтому применяются они в part3, сразу после клонирования.
+Имя подпапки — имя каталога пакета. Каталог ищется в `package/<пакет>`, затем
+в фидах: на ImmortalWrt HomeProxy лежит в `feeds/luci/applications/`, и
+патчи ложатся туда же. Пути в патче считаются от корня репозитория пакета
+(`a/htdocs/...`, `a/root/...`). Правила те же, что у патчей фидов: уже есть в
+исходниках — пропуск, не подходит — `::warning::` и сборка дальше
+(`FEED_PATCH_STRICT=1` — остановка), CRLF снимается. Строки `Requires:` не
+поддерживаются: патчи пакета должны быть независимыми.
+
+### HomeProxy (`patches/packages/luci-app-homeproxy/`)
+
+Проверено на `immortalwrt/homeproxy` master `edece28` (с ним совпадает
+форк YBS-PC/homeproxy): генератор запускался на конфигах разных режимов и
+проверялся настоящим sing-box 1.12.25 (`check` и `run`).
+
+| Файл | Что исправляет |
+|---|---|
+| `001-urltest-idle-timeout-validation.patch` | LuCI сравнивал интервал URLTest у узла маршрутизации не с его «Idle timeout», а всегда с 1800 с (читал несуществующую опцию `idle_timeout`). Интервал больше 1800 с запрещался даже при большем таймауте, а интервал больше меньшего таймаута пропускался — и sing-box не запускался: `interval must be less or equal than idle_timeout`. |
+| `002-dns-default-server.patch` | В `/etc/config/homeproxy` по умолчанию стоял DNS-сервер `local-dns`, которого не существует. В режиме custom, пока настройки DNS не сохранены в LuCI, sing-box не запускался: `default DNS server not found: cfg-local-dns-dns`. Теперь `default-dns`, существующие конфиги мигрируют. Заодно мёртвая опция `dns_strategy` переименована в `default_strategy`, которую читают LuCI и генератор. |
+| `003-rpcd-acl-tmp-run.patch` | Права LuCI на логи (`/var/run/homeproxy/*.log`) продублированы для реального пути `/tmp/run/homeproxy/`: rpcd в OpenWrt 25.12 проверяет права по реальному пути (то же, что PR #101 в forkop). |
 
 ## Как сделать новый патч
 
