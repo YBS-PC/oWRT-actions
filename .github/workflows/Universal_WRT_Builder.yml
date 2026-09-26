@@ -750,7 +750,7 @@ jobs:
             # они исправляют и дополняют (применяются в WRT-part2.sh). Без них
             # голый оригинал 1.0.5 не стартует на sing-box 1.14 (issue #98),
             # поэтому тогда берётся форк Gavr1024/forkop-mod, как раньше.
-            if ls "$GITHUB_WORKSPACE"/patches/feeds/forkop/*.patch >/dev/null 2>&1; then
+            if [ "${{ matrix.patches }}" = "true" ] && ls "$GITHUB_WORKSPACE"/patches/feeds/forkop/*.patch >/dev/null 2>&1; then
                 echo -e "\nsrc-git forkop https://github.com/ushan0v/forkop.git;main" >> feeds.conf.default
             else
                 echo -e "\nsrc-git forkopmod https://github.com/Gavr1024/forkop-mod.git;main" >> feeds.conf.default
