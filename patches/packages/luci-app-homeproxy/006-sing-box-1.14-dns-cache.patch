@@ -1,0 +1,68 @@
+From 2e936405b650650a8de35d3dd3f1f0145a6165f9 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 26 Sep 2026 21:27:48 +0000
+Subject: [PATCH] feat(client): use the sing-box 1.14 DNS cache options
+
+sing-box 1.14 deprecated dns.independent_cache (dropped without
+replacement) and experimental.cache_file.store_rdrc (replaced by
+store_dns); both will be removed in 1.16. Older cores reject store_dns.
+
+Reuse the version read for the sniff rule: below 1.14 the config is
+unchanged, from 1.14 on 'Store RDRC' maps to store_dns and
+independent_cache is omitted, with an unknown version none of these
+options is written.
+
+Checked with sing-box 1.12.25 (config byte-identical), 1.13.21 and
+1.14.2 (check and run, no deprecation warning for these options).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01HEQfjBzS7Wos7AvTk18TDQ
+---
+ root/etc/homeproxy/scripts/generate_client.uc | 17 ++++++++++++++---
+ 1 file changed, 14 insertions(+), 3 deletions(-)
+
+diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
+index 9f30b18..ba09f38 100755
+--- a/root/etc/homeproxy/scripts/generate_client.uc
++++ b/root/etc/homeproxy/scripts/generate_client.uc
+@@ -155,6 +155,16 @@ if (sing_box_version_fd) {
+ const legacy_inbound_sniff = sing_box_version ?
+ 	(int(sing_box_version[1]) < 1 || (int(sing_box_version[1]) === 1 && int(sing_box_version[2]) < 13)) : false;
+ 
++/*
++ * sing-box 1.14 deprecated dns.independent_cache (removed without
++ * replacement) and cache_file.store_rdrc (replaced by store_dns, which
++ * older cores reject). Legacy options only below 1.14, store_dns only from
++ * 1.14 on; with an unknown version neither is written.
++ */
++const legacy_dns_cache = sing_box_version ?
++	(int(sing_box_version[1]) < 1 || (int(sing_box_version[1]) === 1 && int(sing_box_version[2]) < 14)) : false;
++const modern_dns_cache = sing_box_version ? !legacy_dns_cache : false;
++
+ /* Config helper start */
+ function parse_port(strport) {
+ 	if (type(strport) !== 'array' || isEmpty(strport))
+@@ -451,7 +461,7 @@ config.dns = {
+ 	strategy: dns_default_strategy,
+ 	disable_cache: strToBool(dns_disable_cache),
+ 	disable_expire: strToBool(dns_disable_cache_expire),
+-	independent_cache: strToBool(dns_independent_cache),
++	independent_cache: legacy_dns_cache ? strToBool(dns_independent_cache) : null,
+ 	client_subnet: dns_client_subnet
+ };
+ 
+@@ -977,8 +987,9 @@ if (routing_mode in ['bypass_mainland_china', 'custom']) {
+ 		cache_file: {
+ 			enabled: true,
+ 			path: RUN_DIR + '/cache.db',
+-			store_rdrc: strToBool(cache_file_store_rdrc),
+-			rdrc_timeout: strToTime(cache_file_rdrc_timeout),
++			store_rdrc: legacy_dns_cache ? strToBool(cache_file_store_rdrc) : null,
++			rdrc_timeout: legacy_dns_cache ? strToTime(cache_file_rdrc_timeout) : null,
++			store_dns: modern_dns_cache ? strToBool(cache_file_store_rdrc) : null,
+ 		}
+ 	};
+ }
+-- 
+2.43.0
+
