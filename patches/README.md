@@ -127,8 +127,16 @@ forkop, строгую проверку ucode и проверку конфиго
 
 ### HomeProxy (`patches/packages/luci-app-homeproxy/`)
 
+С патчем 004 homeproxy работает и с sing-box 1.13+. Шаг
+**Check sing-box compatibility** в `Universal_WRT_Builder.yml` это учитывает:
+если генератор сам выбирает форму sniff по версии ядра (признаки патча 004),
+для sing-box ≥ 1.13 устаревшие поля в пробный конфиг не добавляются. Без
+патча проверка по-прежнему останавливает сборку homeproxy с sing-box 1.13+.
+Версия sing-box для homeproxy задаётся в матрице combo (`1.12.x` сейчас) или
+полем формы.
+
 Проверено на `immortalwrt/homeproxy` master `edece28` (с ним совпадает
-форк YBS-PC/homeproxy): генератор запускался на конфигах разных режимов и
+форк YBS-PC/homeproxy) и ветке `dev` `6fb4302`: генератор запускался на конфигах разных режимов и
 проверялся настоящим sing-box 1.12.25 (`check` и `run`).
 
 | Файл | Что исправляет |
@@ -136,6 +144,8 @@ forkop, строгую проверку ucode и проверку конфиго
 | `001-urltest-idle-timeout-validation.patch` | LuCI сравнивал интервал URLTest у узла маршрутизации не с его «Idle timeout», а всегда с 1800 с (читал несуществующую опцию `idle_timeout`). Интервал больше 1800 с запрещался даже при большем таймауте, а интервал больше меньшего таймаута пропускался — и sing-box не запускался: `interval must be less or equal than idle_timeout`. |
 | `002-dns-default-server.patch` | В `/etc/config/homeproxy` по умолчанию стоял DNS-сервер `local-dns`, которого не существует. В режиме custom, пока настройки DNS не сохранены в LuCI, sing-box не запускался: `default DNS server not found: cfg-local-dns-dns`. Теперь `default-dns`, существующие конфиги мигрируют. Заодно мёртвая опция `dns_strategy` переименована в `default_strategy`, которую читают LuCI и генератор. |
 | `003-rpcd-acl-tmp-run.patch` | Права LuCI на логи (`/var/run/homeproxy/*.log`) продублированы для реального пути `/tmp/run/homeproxy/`: rpcd в OpenWrt 25.12 проверяет права по реальному пути (то же, что PR #101 в forkop). |
+| `004-sing-box-1.13-sniff-rule.patch` | Поддержка sing-box 1.13+ (в т.ч. 1.14 и extended). 1.13 удалил поля `sniff`/`sniff_override_destination` у входящих подключений, и любой конфиг клиента отвергался. Генератор спрашивает версию у `/usr/bin/sing-box`: ниже 1.13 конфиг прежний (байт в байт), с 1.13 или при неизвестной версии — правило маршрута `action: sniff` сразу после перехвата DNS. «Override destination» на 1.13+ не действует (в новой схеме такой возможности нет). Проверено на 1.12.25, 1.13.21, 1.14.2 (`check` + `run`, режимы custom, основной узел, URLTest; маршрутизация по найденному sniff домену). На 1.14 остаются только предупреждения об устаревании (удаление — в 1.16): `independent_cache`, `store_rdrc`, адресные фильтры и `strategy` в DNS-правилах режима «bypass mainland China». |
+| `005-dev-typo-fixes.patch` | Три коммита из ветки `dev` immortalwrt/homeproxy (автор сохранён): ссылки подписок `socks5://` не распознавались (`socsk5` в коде), опечатки в LuCI. Когда `dev` попадёт в `master`, патч опознается как «уже есть». |
 
 ## Как сделать новый патч
 
