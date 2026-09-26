@@ -82,6 +82,12 @@ on:
           - 'latest'
           - 'extended'
       
+      apply_patches:
+        description: 'Применять патчи из patches/ и всех подпапок (в combo задаётся матрицей)'
+        required: true
+        type: boolean
+        default: true
+
       exclude_keywords:
         description: 'Exclude Packages (Space separated keywords)'
         required: false
@@ -118,26 +124,31 @@ jobs:
           INPUT_VARIANT="${{ inputs.variant }}"
           INPUT_AGH="${{ inputs.download_binaries_agh }}"
           INPUT_SB="${{ inputs.download_binaries_sb }}"
+          INPUT_PATCHES="${{ inputs.apply_patches }}"
 
-          # Каждая сборка матрицы несёт СВОИ настройки загрузки бинарников:
-          #   agh — true/false (JSON-булево), sb — выбор версии sing-box.
-          # В combo они заданы здесь и не зависят от полей формы, поэтому
-          # один запуск собирает, например, homeproxy с 1.12.x и forkop с
-          # extended. То есть в combo прописано:
-          # target (устройство),
-          # variant (вариант сборки),
-          # agh (скачивать или нет последний бинарник AdGuard Home),
-          # sb (не скачивать или какую версию бинарника sing-box скачать).
-          # Для clear/switch значения всё равно не применяются:
-          # шаги загрузки отключаются самим вариантом. Но указывать
-          # все четыре поля всё равно нужно: entry() подставляет их
-          # в JSON, и пропущенное значение («"agh":,») сделает матрицу
-          # невалидной — проверка jq ниже остановит запуск.
-          entry() { printf '{"target":"%s","variant":"%s","agh":%s,"sb":"%s"}' "$1" "$2" "$3" "$4"; }
+          # Каждая сборка матрицы несёт СВОИ настройки:
+          #   agh     — true/false (JSON-булево), скачивать ли AdGuard Home;
+          #   sb      — версия sing-box или "no";
+          #   patches — true/false (JSON-булево), применять ли ЛЮБЫЕ
+          #             пользовательские патчи из patches/ и подпапок.
+          #
+          # В combo значения заданы здесь и не зависят от полей формы.
+          # Специализированные патчи:
+          #   patches/feeds/*    -> WRT-part2.sh
+          #   patches/packages/* -> WRT-part3.sh
+          # Обычные патчи к дереву OpenWrt применяются этим workflow.
+          #
+          # Все поля должны присутствовать в JSON, иначе fromJson получит
+          # невалидную матрицу.
+          entry() { printf '{"target":"%s","variant":"%s","agh":%s,"sb":"%s","patches":%s}' "$1" "$2" "$3" "$4" "$5"; }
 
           if [ "$INPUT_TARGET" == "combo" ]; then
             echo ">>> Generating COMBO matrix..."
-            json="{\"include\":[$(entry nanopi-r6s homeproxy true 1.12.x),$(entry nanopi-r6s homeproxy true latest),$(entry nanopi-r6s forkop true extended),$(entry rb5009 clear false no),$(entry rb5009 switch false no)]}"
+            # false = не применять любые патчи:
+            #   R6S homeproxy + sing-box 1.12.x
+            #   RB5009 clear
+            #   RB5009 switch
+            json="{\"include\":[$(entry nanopi-r6s homeproxy true 1.12.x false),$(entry nanopi-r6s homeproxy true latest true),$(entry nanopi-r6s forkop true extended true),$(entry rb5009 clear false no false),$(entry rb5009 switch false no false)]}"
           else
             # Все устройства из config/conf/ — при добавлении нового дописать сюда.
             # ВНИМАНИЕ: slateax и ax59u — «тонкие» устройства: part3 ставит им
@@ -156,7 +167,7 @@ jobs:
             json_parts=""
             for t in $selected; do
               [ -n "$json_parts" ] && json_parts="$json_parts,"
-              json_parts="$json_parts$(entry "$t" "$INPUT_VARIANT" "$INPUT_AGH" "$INPUT_SB")"
+              json_parts="$json_parts$(entry "$t" "$INPUT_VARIANT" "$INPUT_AGH" "$INPUT_SB" "$INPUT_PATCHES")"
             done
             json="{\"include\":[$json_parts]}"
           fi
@@ -172,7 +183,7 @@ jobs:
           echo "=========================================="
           echo "Mode: $INPUT_TARGET"
           echo "Generated Matrix:"
-          echo "$json" | jq -r '.include[] | "  \(.target) / \(.variant) / agh=\(.agh) / sb=\(.sb)"'
+          echo "$json" | jq -r '.include[] | "  \(.target) / \(.variant) / agh=\(.agh) / sb=\(.sb) / patches=\(.patches)"'
           echo "=========================================="
 
           # Заранее предупреждаем о сборках, чей sing-box не выбирается формой
@@ -200,7 +211,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
     
-    name: ${{ inputs.source }} ${{ inputs.branch }} [${{ matrix.variant }}] - ${{ matrix.target }} (sb:${{ matrix.sb }})
+    name: ${{ inputs.source }} ${{ inputs.branch }} [${{ matrix.variant }}] - ${{ matrix.target }} (sb:${{ matrix.sb }}, patches:${{ matrix.patches }})
 
     steps:
     - name: Free up disk space
@@ -532,6 +543,12 @@ jobs:
         SUM_VARIANT="${{ matrix.variant }}"
         SUM_EXCLUDE="$EXCLUDE_INPUT"
 
+        if [ "${{ matrix.patches }}" = "true" ]; then
+          SUM_PATCHES="да"
+        else
+          SUM_PATCHES="нет"
+        fi
+
         if [ "$SUM_MODE" = "combo" ]; then
             SUM_VARIANT_NOTE="  (выбор Build Variant игнорируется: режим combo)"
         else
@@ -580,6 +597,7 @@ jobs:
         echo "------------------------------------------"
         echo "AdGuardHome    : $SUM_AGH"
         echo "Sing-box       : $SUM_SB"
+        echo "Патчи          : $SUM_PATCHES"
         echo "Exclude        : ${SUM_EXCLUDE:-(нет)}"
         echo "Device config  : ./config/conf/${{ matrix.target }}"
         echo "Kernel path    : $KERNEL_PATH"
@@ -653,30 +671,47 @@ jobs:
 
     - name: Apply custom patches
       run: |
-        # Проверяем наличие директории
+        APPLY_PATCHES="${{ matrix.patches }}"
         PATCH_STATUS="No patches dir"
-        if [ -d "patches" ]; then
-          # Включаем опцию nullglob, чтобы если файлов нет, цикл не запускался
-          shopt -s nullglob
-          files=(patches/*.patch)
-          
+
+        if [ "$APPLY_PATCHES" != "true" ]; then
+          echo ">>> Custom patches DISABLED by matrix."
+          echo ">>> Direct OpenWrt patches are skipped here."
+          echo ">>> Feed/package patch sources will also be hidden before WRT-part2.sh/WRT-part3.sh."
+          PATCH_STATUS="Disabled by matrix (all patches skipped)"
+        elif [ -d "$GITHUB_WORKSPACE/patches" ]; then
+          # Рекурсивно ищем обычные патчи к дереву OpenWrt.
+          # patches/feeds/* и patches/packages/* здесь НЕ применяем:
+          # их обрабатывают WRT-part2.sh и WRT-part3.sh соответственно.
+          files=()
+          while IFS= read -r -d '' p; do
+            files+=("$p")
+          done < <(
+            find "$GITHUB_WORKSPACE/patches" \
+              -type f -name '*.patch' \
+              ! -path "$GITHUB_WORKSPACE/patches/feeds/*" \
+              ! -path "$GITHUB_WORKSPACE/patches/packages/*" \
+              -print0 | sort -z
+          )
+
           if [ ${#files[@]} -gt 0 ]; then
             for p in "${files[@]}"; do
               echo "Applying patch: $p"
-              patch -p1 -d openwrt < "$p" || { echo "Patch failed!"; exit 1; }
+              patch -p1 -d openwrt < "$p" || { echo "Patch failed: $p"; exit 1; }
             done
-            PATCH_STATUS="Applied ${#files[@]} patches"
+            PATCH_STATUS="Applied ${#files[@]} OpenWrt patches (recursive)"
           else
-            echo "No patches found in patches/ directory."
-            PATCH_STATUS="Dir exists but empty"
+            echo "No direct OpenWrt patches found in patches/ (feed/package patches are handled later)."
+            PATCH_STATUS="No direct OpenWrt patches"
           fi
         else
           echo "Patches directory not found. Skipping."
         fi
-        
+
         echo "=========================================="
         echo "       [PATCH SUMMARY]                    "
         echo "=========================================="
+        echo "Apply patches: $APPLY_PATCHES"
         echo "Result: $PATCH_STATUS"
         echo "=========================================="
 
@@ -730,7 +765,34 @@ jobs:
         # -------------------------------------
         
         ./scripts/feeds update -a
-        
+
+        # -------------------------------------------------------------
+        # Глобальный переключатель патчей для Part 2 / Part 3.
+        # Папку patches скрываем ТОЛЬКО после feeds update:
+        # до этого она нужна, в частности, для выбора forkop/forkopmod.
+        # Благодаря trap каталог вернётся даже при ошибке Part 2/3.
+        # -------------------------------------------------------------
+        PATCHES_BACKUP=""
+        restore_patches() {
+            if [ -n "${PATCHES_BACKUP:-}" ] && [ -d "$PATCHES_BACKUP" ]; then
+                if [ ! -e "$GITHUB_WORKSPACE/patches" ]; then
+                    mv "$PATCHES_BACKUP" "$GITHUB_WORKSPACE/patches"
+                    rmdir "$(dirname "$PATCHES_BACKUP")" 2>/dev/null || true
+                    echo ">>> [Patches] Оригинальный каталог patches восстановлен."
+                else
+                    echo "::warning::Не удалось восстановить patches: целевой каталог уже существует."
+                fi
+            fi
+        }
+        trap restore_patches EXIT
+
+        if [ "${{ matrix.patches }}" != "true" ] && [ -d "$GITHUB_WORKSPACE/patches" ]; then
+            PATCHES_TMP_DIR="$(mktemp -d)"
+            PATCHES_BACKUP="$PATCHES_TMP_DIR/patches"
+            mv "$GITHUB_WORKSPACE/patches" "$PATCHES_BACKUP"
+            echo ">>> [Patches] DISABLED: patches/ временно скрыт для WRT-part2.sh и WRT-part3.sh."
+        fi
+
         # 2. Запуск Part 2 (Фиксы версий и Python - строго между update и install)
         if [ -f "$GITHUB_WORKSPACE/$DIY_P2_SH" ]; then
             chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
@@ -750,7 +812,9 @@ jobs:
         eval "$DEVICE_CONFIG_COMMANDS"
         
         # 3. Запуск Part 3 (Замена пакетов, очистка, клонирование доп. софта)
-        # Выполняется ПОСЛЕ install, чтобы перезаписать ссылки
+        # Выполняется ПОСЛЕ install, чтобы перезаписать ссылки.
+        # Если патчи отключены, patches/ всё ещё скрыт, поэтому
+        # apply_package_patches в WRT-part3.sh ничего не применит.
         if [ -f "$GITHUB_WORKSPACE/$DIY_P3_SH" ]; then
             chmod +x $GITHUB_WORKSPACE/$DIY_P3_SH
             $GITHUB_WORKSPACE/$DIY_P3_SH
