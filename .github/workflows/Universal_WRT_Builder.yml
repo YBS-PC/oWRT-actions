@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: 'Target Device (combo: R6S-homeproxy + R6S-forkop + RB5009-clear + RB5009-switch; AGH/sing-box задаёт сам)'
+        description: 'Target Device (combo: R6S-homeproxy-SBv12 + R6S-homeproxy + R6S-forkop + RB5009-clear + RB5009-switch; AGH/sing-box задаёт сам)'
         required: true
         default: 'combo'
         type: choice
