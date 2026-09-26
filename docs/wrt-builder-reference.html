@@ -17,6 +17,7 @@
   }
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
+  section,[id]{scroll-margin-top:72px}
   @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
   body{
     margin:0; background:
@@ -87,7 +88,7 @@
   .legend{display:flex; flex-wrap:wrap; gap:22px; margin:0 0 18px; font-size:13px; color:var(--muted2)}
   .legend span{display:inline-flex; align-items:center; gap:8px}
   .mk{font-family:var(--mono); font-weight:700; width:1.1em; text-align:center; display:inline-block}
-  .yes{color:var(--green)} .no{color:var(--red)} .cond{color:var(--amber)} .na{color:#3c4555}
+  .yes{color:var(--green)} .no{color:var(--red)} .cond{color:var(--amber)} .na{color:#5d677b}
   .matrix th:first-child,.matrix td:first-child{position:sticky; left:0; background:var(--panel2); z-index:1}
   .matrix tbody td:first-child{background:var(--bg2)}
   .matrix tbody tr:hover td:first-child{background:var(--row-hover)}
@@ -105,6 +106,12 @@
   .steps li.tag-hp{border-color:#2c3a2e}
   .steps li.tag-hp::before{color:var(--green); border-color:#2c4a33; background:rgba(74,222,128,.08)}
   .steps .badge{font-family:var(--mono); font-size:10.5px; color:var(--green); border:1px solid #2c4a33; border-radius:4px; padding:1px 6px; margin-right:6px; vertical-align:1px}
+  .steps li.tag-sw{border-color:#2a3556}
+  .steps li.tag-sw::before{color:#9aa6ff; border-color:#2a3556; background:rgba(107,120,255,.1)}
+  .steps li.tag-sw .badge{color:#9aa6ff; border-color:#2a3556}
+  .steps li.tag-fk{border-color:#4a3a2a}
+  .steps li.tag-fk::before{color:var(--amber); border-color:#5a4526; background:rgba(236,184,70,.08)}
+  .steps li.tag-fk .badge{color:var(--amber); border-color:#5a4526}
 
   /* callout */
   .note{display:flex; gap:14px; padding:16px 18px; border-radius:11px; border:1px solid var(--border); background:var(--panel); margin:20px 0 0}
@@ -119,6 +126,14 @@
   .svc h4{margin:0 0 4px; font-size:14px; color:var(--head)}
   .svc .port{font-family:var(--mono); font-size:12px; color:var(--accent); display:block; margin-bottom:7px}
   .svc p{margin:0; font-size:13px; color:var(--muted2)}
+  .svc p code{font-family:var(--mono); font-size:.86em; color:#aeb6ff; background:rgba(107,120,255,.09); padding:1px 6px; border-radius:5px}
+  h3.sub{color:var(--head); font-size:16px; margin:32px 0 12px; font-weight:600}
+
+  /* flow (DNS chain) */
+  .flow{display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:4px 0 0; font-family:var(--mono); font-size:12px}
+  .flow .node{background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:6px 10px; color:var(--head)}
+  .flow .node small{display:block; color:var(--accent); font-size:11px}
+  .flow .arr{color:var(--muted)}
 
   footer{padding:46px 0 70px; color:var(--muted); font-size:12.5px; border-top:1px solid var(--border-soft); margin-top:40px}
   footer code{font-family:var(--mono); color:var(--muted2)}
@@ -128,8 +143,21 @@
 
   @media (max-width:640px){
     .hero{padding:44px 0 18px}
-    .nav .links{gap:13px}
+    .nav{gap:6px 18px; padding-top:10px; padding-bottom:10px}
+    .nav .links{gap:14px; margin-left:0; flex-wrap:nowrap; overflow-x:auto; width:100%; scrollbar-width:none}
+    .nav .links::-webkit-scrollbar{display:none}
+    .nav .links a{white-space:nowrap}
     .steps li{padding-left:54px}
+    /* таблицы параметров: строки превращаются в карточки */
+    .pt.stack thead{display:none}
+    .pt.stack, .pt.stack tbody, .pt.stack tr, .pt.stack td{display:block; width:100%}
+    .pt.stack tr{padding:12px 14px; border-bottom:1px solid var(--border-soft)}
+    .pt.stack tbody tr:last-child{border-bottom:none}
+    .pt.stack tbody td{padding:4px 0; border:none}
+    .pt.stack td[data-l]::before{content:attr(data-l); display:block; font-family:var(--mono); font-size:10.5px; letter-spacing:.04em; color:var(--muted); margin-bottom:3px}
+    .pt.stack .feat{white-space:normal}
+    .flow{flex-direction:column; align-items:flex-start; gap:4px}
+    .flow .arr{transform:rotate(90deg); margin-left:14px}
   }
 </style>
 </head>
@@ -156,6 +184,7 @@
       <span class="chip"><b>6</b> устройств</span>
       <span class="chip"><b>10</b> вариантов</span>
       <span class="chip">apk · 25.12 / master &nbsp;|&nbsp; opkg · 24.10</span>
+      <span class="chip"><b>2</b> уровня патчей · дерево / фиды</span>
     </div>
   </header>
 
@@ -165,62 +194,62 @@
     <p class="sec-sub">Поля формы <code>workflow_dispatch</code>, которые ты задаёшь при ручном запуске сборки. Они определяют, что и как собирать; дальше эти значения проходят через все шаги пайплайна и попадают в скрипт первого старта.</p>
 
     <div class="card scroll">
-      <table class="pt">
+      <table class="pt stack">
         <thead><tr><th>Поле</th><th>Значения</th><th>По&nbsp;умолчанию</th><th>Что делает</th></tr></thead>
         <tbody>
           <tr>
             <td class="key">Target Device <small>target</small></td>
-            <td><div class="opts"><span class="opt def">combo</span><span class="opt">rb5009</span><span class="opt">nanopi-r6s</span><span class="opt">nanopi-r5s</span><span class="opt">slateax</span><span class="opt">ax59u</span><span class="opt">brume2</span><span class="opt">all</span></div></td>
-            <td><span class="opt def">combo</span></td>
-            <td><p>Какое устройство (или набор) собирать. <code>combo</code> — четыре фиксированные сборки сразу, у каждой свои настройки AGH и sing-box (см. таблицу ниже); <code>all</code> — все шесть устройств с выбранным вариантом; одиночное значение — одно устройство. Из него же берётся архитектура пакетов.</p></td>
+            <td data-l="Значения"><div class="opts"><span class="opt def">combo</span><span class="opt">rb5009</span><span class="opt">nanopi-r6s</span><span class="opt">nanopi-r5s</span><span class="opt">slateax</span><span class="opt">ax59u</span><span class="opt">brume2</span><span class="opt">all</span></div></td>
+            <td data-l="По умолчанию"><span class="opt def">combo</span></td>
+            <td data-l="Что делает"><p>Какое устройство (или набор) собирать. <code>combo</code> — четыре фиксированные сборки сразу, у каждой свои настройки AGH и sing-box (см. таблицу ниже); <code>all</code> — все шесть устройств с выбранным вариантом; одиночное значение — одно устройство. Из него же берётся архитектура пакетов.</p></td>
           </tr>
           <tr>
             <td class="key">Source Code <small>source</small></td>
-            <td><div class="opts"><span class="opt def">openwrt</span><span class="opt">immortalwrt</span></div></td>
-            <td><span class="opt def">openwrt</span></td>
-            <td><p>Из какого дерева исходников собирать. От выбора зависят драйверы (например, вариант <code>r8125</code> для NanoPi) и доступность FullCone NAT — он есть только в ImmortalWrt.</p></td>
+            <td data-l="Значения"><div class="opts"><span class="opt def">openwrt</span><span class="opt">immortalwrt</span></div></td>
+            <td data-l="По умолчанию"><span class="opt def">openwrt</span></td>
+            <td data-l="Что делает"><p>Из какого дерева исходников собирать. От выбора зависят драйверы (например, вариант <code>r8125</code> для NanoPi) и доступность FullCone NAT — он есть только в ImmortalWrt.</p></td>
           </tr>
           <tr>
             <td class="key">Branch <small>branch</small></td>
-            <td><div class="opts"><span class="opt def">openwrt-25.12</span><span class="opt">openwrt-24.10</span><span class="opt">master</span></div></td>
-            <td><span class="opt def">openwrt-25.12</span></td>
-            <td><p>Ветка/релиз. <code>25.12</code> и <code>master</code> — пакетный менеджер <b>apk</b>; <code>24.10</code> — <b>opkg/ipk</b>. На стабильных ветках сборка чекаутится на коммит последнего релизного тега ветки (например, <code>v25.12.5</code>); теги-кандидаты <code>-rc</code> не рассматриваются.</p></td>
+            <td data-l="Значения"><div class="opts"><span class="opt def">openwrt-25.12</span><span class="opt">openwrt-24.10</span><span class="opt">master</span></div></td>
+            <td data-l="По умолчанию"><span class="opt def">openwrt-25.12</span></td>
+            <td data-l="Что делает"><p>Ветка/релиз. <code>25.12</code> и <code>master</code> — пакетный менеджер <b>apk</b>; <code>24.10</code> — <b>opkg/ipk</b>. На стабильных ветках сборка чекаутится на коммит последнего релизного тега ветки (например, <code>v25.12.5</code>); теги-кандидаты <code>-rc</code> не рассматриваются.</p></td>
           </tr>
           <tr>
             <td class="key">Build Variant <small>variant</small></td>
-            <td><div class="opts"><span class="opt def">homeproxy</span><span class="opt">homeproxy_sqm</span><span class="opt">clear</span><span class="opt">switch</span><span class="opt">crystal_clear</span><span class="opt">podkop</span><span class="opt">forkop</span><span class="opt">passwall</span><span class="opt">v2raya</span><span class="opt">xray</span></div></td>
-            <td><span class="opt def">homeproxy</span></td>
-            <td><p>Что включается в прошивку и какой прокси-стек используется. В режиме <code>combo</code> игнорируется. Полная матрица — в разделе <a class="anchor" href="#variants">03</a>.</p></td>
+            <td data-l="Значения"><div class="opts"><span class="opt def">homeproxy</span><span class="opt">homeproxy_sqm</span><span class="opt">clear</span><span class="opt">switch</span><span class="opt">crystal_clear</span><span class="opt">podkop</span><span class="opt">forkop</span><span class="opt">passwall</span><span class="opt">v2raya</span><span class="opt">xray</span></div></td>
+            <td data-l="По умолчанию"><span class="opt def">homeproxy</span></td>
+            <td data-l="Что делает"><p>Что включается в прошивку и какой прокси-стек используется. В режиме <code>combo</code> игнорируется. Полная матрица — в разделе <a class="anchor" href="#variants">03</a>.</p></td>
           </tr>
           <tr>
             <td class="key">Runner image <small>runner_os</small></td>
-            <td><div class="opts"><span class="opt def">ubuntu-24.04</span><span class="opt">ubuntu-22.04</span></div></td>
-            <td><span class="opt def">ubuntu-24.04</span></td>
-            <td><p>Образ раннера GitHub Actions для всех джобов. Под него выбирается список пакетов тулчейна: <code>depends-ubuntu-2404</code> или <code>depends-ubuntu-2204</code> в корне репозитория (в 24.04 нет <code>libncurses5-dev</code>, <code>python2.7</code>, <code>mkisofs</code> и др.). 22.04 оставлен как запасной и постепенно устаревает.</p></td>
+            <td data-l="Значения"><div class="opts"><span class="opt def">ubuntu-24.04</span><span class="opt">ubuntu-22.04</span></div></td>
+            <td data-l="По умолчанию"><span class="opt def">ubuntu-24.04</span></td>
+            <td data-l="Что делает"><p>Образ раннера GitHub Actions для всех джобов. Под него выбирается список пакетов тулчейна: <code>depends-ubuntu-2404</code> или <code>depends-ubuntu-2204</code> в корне репозитория (в 24.04 нет <code>libncurses5-dev</code>, <code>python2.7</code>, <code>mkisofs</code> и др.). 22.04 оставлен как запасной и постепенно устаревает.</p></td>
           </tr>
           <tr>
             <td class="key">Download latest AdGuardHome <small>download_binaries_agh</small></td>
-            <td><div class="opts"><span class="opt">да</span><span class="opt def">нет</span></div></td>
-            <td><span class="opt def">нет</span></td>
-            <td><p>Класть ли в образ бинарь последнего стабильного релиза AdGuardHome (arm64). Перед использованием сверяется SHA-256. Игнорируется для вариантов <code>clear</code>, <code>crystal_clear</code>, <code>switch</code> — там AGH не нужен — и в режиме <code>combo</code>.</p></td>
+            <td data-l="Значения"><div class="opts"><span class="opt">да</span><span class="opt def">нет</span></div></td>
+            <td data-l="По умолчанию"><span class="opt def">нет</span></td>
+            <td data-l="Что делает"><p>Класть ли в образ бинарь последнего стабильного релиза AdGuardHome (arm64). Перед использованием сверяется SHA-256. Игнорируется для вариантов <code>clear</code>, <code>crystal_clear</code>, <code>switch</code> — там AGH не нужен — и в режиме <code>combo</code>.</p></td>
           </tr>
           <tr>
             <td class="key">Download Sing-Box binary <small>download_binaries_sb</small></td>
-            <td><div class="opts"><span class="opt def">no</span><span class="opt">1.12.x</span><span class="opt">1.13.x</span><span class="opt">1.14.x</span><span class="opt">latest</span><span class="opt">extended</span></div></td>
-            <td><span class="opt def">no</span></td>
-            <td><p>Класть ли бинарь sing-box и какой ветки: <code>X.Y.x</code> — последний стабильный релиз ветки, <code>latest</code> — последний стабильный вообще, <code>extended</code> — последний стабильный <code>shtorm-7/sing-box-extended</code>. Перед использованием сверяется SHA-256. Пропускается для <code>clear</code>/<code>crystal_clear</code>/<code>switch</code>, для прокси-вариантов с другим ядром (<code>passwall</code>, <code>v2raya</code>, <code>xray</code>) и в режиме <code>combo</code>. На slateax/ax59u скачанный бинарь удаляется в пользу <code>sing-box-tiny</code> из фида.</p></td>
+            <td data-l="Значения"><div class="opts"><span class="opt def">no</span><span class="opt">1.12.x</span><span class="opt">1.13.x</span><span class="opt">1.14.x</span><span class="opt">latest</span><span class="opt">extended</span></div></td>
+            <td data-l="По умолчанию"><span class="opt def">no</span></td>
+            <td data-l="Что делает"><p>Класть ли бинарь sing-box и какой ветки: <code>X.Y.x</code> — последний стабильный релиз ветки, <code>latest</code> — последний стабильный вообще, <code>extended</code> — последний стабильный <code>shtorm-7/sing-box-extended</code>. Перед использованием сверяется SHA-256. Пропускается для <code>clear</code>/<code>crystal_clear</code>/<code>switch</code>, для прокси-вариантов с другим ядром (<code>passwall</code>, <code>v2raya</code>, <code>xray</code>) и в режиме <code>combo</code>. На slateax/ax59u скачанный бинарь удаляется в пользу <code>sing-box-tiny</code> из фида.</p></td>
           </tr>
           <tr>
             <td class="key">Exclude Packages <small>exclude_keywords</small></td>
-            <td><div class="opts"><span class="opt">строка · через пробел</span></div></td>
-            <td><span class="opt">(пусто)</span></td>
-            <td><p>Грубый фильтр: перед <code>make defconfig</code> каждый включённый пакет (<code>CONFIG_PACKAGE_…=y</code>), в имени которого есть ключевое слово (подстрока, без учёта регистра), переводится в <code>is not set</code>. Спецсимволы в слове трактуются буквально. Способ вручную выкинуть лишние пакеты.</p></td>
+            <td data-l="Значения"><div class="opts"><span class="opt">строка · через пробел</span></div></td>
+            <td data-l="По умолчанию"><span class="opt">(пусто)</span></td>
+            <td data-l="Что делает"><p>Грубый фильтр: перед <code>make defconfig</code> каждый включённый пакет (<code>CONFIG_PACKAGE_…=y</code>), в имени которого есть ключевое слово (подстрока, без учёта регистра), переводится в <code>is not set</code>. Спецсимволы в слове трактуются буквально. Способ вручную выкинуть лишние пакеты.</p></td>
           </tr>
           <tr>
             <td class="key">Target Commit Hash <small>commit_hash</small></td>
-            <td><div class="opts"><span class="opt">хеш коммита</span></div></td>
-            <td><span class="opt">(пусто)</span></td>
-            <td><p>Необязательный. Если задан — чекаут на конкретный коммит исходников вместо релизного тега. Принимается только hex (7–40 символов). Если коммит совпадает с релизным тегом — kmods и хеш ядра берутся из этого релиза, иначе из <code>&lt;ветка&gt;-SNAPSHOT</code>. Для воспроизводимых сборок.</p></td>
+            <td data-l="Значения"><div class="opts"><span class="opt">хеш коммита</span></div></td>
+            <td data-l="По умолчанию"><span class="opt">(пусто)</span></td>
+            <td data-l="Что делает"><p>Необязательный. Если задан — чекаут на конкретный коммит исходников вместо релизного тега. Принимается только hex (7–40 символов). Если коммит совпадает с релизным тегом — kmods и хеш ядра берутся из этого релиза, иначе из <code>&lt;ветка&gt;-SNAPSHOT</code>. Для воспроизводимых сборок.</p></td>
           </tr>
         </tbody>
       </table>
@@ -232,27 +261,27 @@
     </div>
 
     <div class="card scroll" style="margin-top:18px">
-      <table class="pt">
+      <table class="pt stack">
         <thead><tr><th>Сборка combo</th><th>Вариант</th><th>AdGuardHome</th><th>sing-box</th></tr></thead>
         <tbody>
-          <tr><td class="feat">nanopi-r6s</td><td><code>homeproxy</code></td><td>скачивается</td><td><code>1.12.x</code></td></tr>
-          <tr><td class="feat">nanopi-r6s</td><td><code>forkop</code></td><td>скачивается</td><td><code>extended</code></td></tr>
-          <tr><td class="feat">rb5009</td><td><code>clear</code></td><td>—</td><td>—</td></tr>
-          <tr><td class="feat">rb5009</td><td><code>switch</code></td><td>—</td><td>—</td></tr>
+          <tr><td class="feat">nanopi-r6s</td><td data-l="Вариант"><code>homeproxy</code></td><td data-l="AdGuardHome">скачивается</td><td data-l="sing-box"><code>1.12.x</code></td></tr>
+          <tr><td class="feat">nanopi-r6s</td><td data-l="Вариант"><code>forkop</code></td><td data-l="AdGuardHome">скачивается</td><td data-l="sing-box"><code>extended</code></td></tr>
+          <tr><td class="feat">rb5009</td><td data-l="Вариант"><code>clear</code></td><td data-l="AdGuardHome">—</td><td data-l="sing-box">—</td></tr>
+          <tr><td class="feat">rb5009</td><td data-l="Вариант"><code>switch</code></td><td data-l="AdGuardHome">—</td><td data-l="sing-box">—</td></tr>
         </tbody>
       </table>
     </div>
 
     <div class="card scroll" style="margin-top:18px">
-      <table class="pt">
+      <table class="pt stack">
         <thead><tr><th>Устройство</th><th>Арх. пакетов</th><th>Таргет ядра</th><th>Заметки</th></tr></thead>
         <tbody>
-          <tr><td class="feat">rb5009</td><td><code>aarch64_cortex-a72</code></td><td><code>mvebu/cortexa72</code></td><td><p>MikroTik RB5009, rootfs 256 МБ</p></td></tr>
-          <tr><td class="feat">nanopi-r6s</td><td><code>aarch64_generic</code></td><td><code>rockchip/armv8</code></td><td><p>FriendlyElec, rootfs 512 МБ; драйвер r8125 (RSS на OpenWrt)</p></td></tr>
-          <tr><td class="feat">nanopi-r5s</td><td><code>aarch64_generic</code></td><td><code>rockchip/armv8</code></td><td><p>FriendlyElec, rootfs 512 МБ; драйвер r8125 (RSS на OpenWrt)</p></td></tr>
-          <tr><td class="feat">slateax</td><td><code>aarch64_cortex-a53</code></td><td><code>qualcommax/ipq60xx</code></td><td><p>GL.iNet AXT1800, добавляется fancontrol; sing-box-tiny, без GNU coreutils/findutils</p></td></tr>
-          <tr><td class="feat">ax59u</td><td><code>aarch64_cortex-a53</code></td><td><code>mediatek/filogic</code></td><td><p>ASUS RT-AX59U, добавляется facinstall; sing-box-tiny, без GNU coreutils/findutils</p></td></tr>
-          <tr><td class="feat">brume2</td><td><code>aarch64_cortex-a53</code></td><td><code>mediatek/filogic</code></td><td><p>GL.iNet MT2500</p></td></tr>
+          <tr><td class="feat">rb5009</td><td data-l="Арх. пакетов"><code>aarch64_cortex-a72</code></td><td data-l="Таргет ядра"><code>mvebu/cortexa72</code></td><td data-l="Заметки"><p>MikroTik RB5009, rootfs 256 МБ</p></td></tr>
+          <tr><td class="feat">nanopi-r6s</td><td data-l="Арх. пакетов"><code>aarch64_generic</code></td><td data-l="Таргет ядра"><code>rockchip/armv8</code></td><td data-l="Заметки"><p>FriendlyElec, rootfs 512 МБ; драйвер r8125 (RSS на OpenWrt)</p></td></tr>
+          <tr><td class="feat">nanopi-r5s</td><td data-l="Арх. пакетов"><code>aarch64_generic</code></td><td data-l="Таргет ядра"><code>rockchip/armv8</code></td><td data-l="Заметки"><p>FriendlyElec, rootfs 512 МБ; драйвер r8125 (RSS на OpenWrt)</p></td></tr>
+          <tr><td class="feat">slateax</td><td data-l="Арх. пакетов"><code>aarch64_cortex-a53</code></td><td data-l="Таргет ядра"><code>qualcommax/ipq60xx</code></td><td data-l="Заметки"><p>GL.iNet AXT1800, добавляется fancontrol; sing-box-tiny, без GNU coreutils/findutils</p></td></tr>
+          <tr><td class="feat">ax59u</td><td data-l="Арх. пакетов"><code>aarch64_cortex-a53</code></td><td data-l="Таргет ядра"><code>mediatek/filogic</code></td><td data-l="Заметки"><p>ASUS RT-AX59U, добавляется facinstall; sing-box-tiny, без GNU coreutils/findutils</p></td></tr>
+          <tr><td class="feat">brume2</td><td data-l="Арх. пакетов"><code>aarch64_cortex-a53</code></td><td data-l="Таргет ядра"><code>mediatek/filogic</code></td><td data-l="Заметки"><p>GL.iNet MT2500</p></td></tr>
         </tbody>
       </table>
     </div>
@@ -271,8 +300,9 @@
       <li><b>Переменные сборки.</b> Вычисляются URL репозитория, ветка и коммит. Последний релизный тег ветки ищется через <code>git ls-remote</code> (сортировка по версии, без <code>-rc</code>); если тега нет или ручной коммит не релизный — используется <code>&lt;ветка&gt;-SNAPSHOT</code>. Подгружается конфиг устройства <code>config/conf/&lt;target&gt;</code>.</li>
       <li><b>Зависимости (apt).</b> Установка тулчейна сборки из файла репозитория под выбранный раннер: <code>depends-ubuntu-2404</code> или <code>depends-ubuntu-2204</code>.</li>
       <li><b>Клон исходников</b> и checkout на нужный коммит/тег OpenWrt/ImmortalWrt.</li>
-      <li><b>Патчи.</b> Применяются кастомные патчи из каталога <code>patches/</code>.</li>
-      <li><b>Update Feeds &amp; Config.</b> Главный шаг: P1 → <code>feeds update</code> → P2 → <code>feeds install</code> → копирование <code>WRT.config</code> в <code>.config</code> (с удалением CRLF) → команды устройства → P3 → правки под вариант → отключение по Exclude-словам → <code>make defconfig</code>.</li>
+      <li><b>Патчи дерева.</b> Файлы <code>patches/*.patch</code> (только корень каталога) применяются к исходникам OpenWrt: <code>patch -p1 -d openwrt</code>. Шаг идёт <b>до</b> <code>feeds update</code>, поэтому фидов здесь ещё нет; любой непримёнившийся патч останавливает сборку. Патчи к фидам лежат в подпапках <code>patches/feeds/</code> и этим шагом не трогаются — см. следующий шаг.</li>
+      <li><b>Update Feeds &amp; Config.</b> Главный шаг: P1 → <code>feeds update</code> → P2 → <code>feeds install</code> → копирование <code>WRT.config</code> в <code>.config</code> (с удалением CRLF) → команды устройства → P3 → правки под вариант → отключение по Exclude-словам → <code>make defconfig</code>. Для варианта <code>forkop</code> подключается фид <code>forkopmod</code> (<code>Gavr1024/forkop-mod</code>).</li>
+      <li class="tag-fk"><span class="badge">part2</span><b>Версии и патчи фидов.</b> <code>WRT-part2.sh</code> (между <code>feeds update</code> и <code>feeds install</code>): берёт версию forkop из последнего тега <code>x.y.z</code> репозитория (<code>FORKOP_VERSION</code>, без неё пакет получил бы <code>0.0.0</code>) и версию темы Proton2025; затем применяет патчи из <code>patches/feeds/&lt;имя фида&gt;/*.patch</code> к <code>feeds/&lt;имя фида&gt;</code>. Фид не загружен или патч уже есть в исходниках — пропуск; патч не подходит (автор изменил код) — предупреждение в Actions, сборка продолжается без него. Затем обновляется youtubeUnblock (кроме clear/switch/forkop).</li>
       <li class="tag-hp"><span class="badge">homeproxy</span><b>Проверка совместимости sing-box.</b> Генератор homeproxy, который попадёт в прошивку, проверяется против той версии sing-box, которая попадёт в прошивку (скачанной или из фида): пробный конфиг прогоняется через <code>sing-box check</code>. Несовместимость останавливает сборку до компиляции.</li>
       <li><b>Kernel Hash.</b> Хеш ядра подменяется на официальный, чтобы на роутер можно было ставить готовые kmod из репозиториев.</li>
       <li><b>Компиляция.</b> Многопоточная; при сбое — повтор в один поток с сохранением <code>build.log</code>.</li>
@@ -280,6 +310,11 @@
       <li><b>Артефакт.</b> Содержимое <code>bin/</code> загружается (<code>upload-artifact@v7</code>, хранение 10 дней); при падении компиляции туда же попадает <code>build_failure.log</code>.</li>
       <li><b>Уведомление (job <code>notify</code>).</b> После всей матрицы в Telegram уходит одно сообщение со статусом и длительностью каждой сборки (если заданы секреты <code>TELEGRAM_BOT_TOKEN</code>/<code>TELEGRAM_CHAT_ID</code>); затем удаляются прогоны workflow старше 10 дней.</li>
     </ol>
+
+    <div class="note">
+      <span class="ic" style="color:var(--accent)">i</span>
+      <p><b>Где лежат патчи.</b> <code>patches/*.patch</code> — к дереву OpenWrt (путь в патче от корня <code>openwrt/</code>). <code>patches/feeds/forkopmod/</code> — к фиду Gavr1024/forkop-mod, <code>patches/feeds/forkop/</code> — к ushan0v/forkop (фид сейчас закомментирован в YML). Имя подпапки должно совпадать с именем фида в <code>feeds.conf</code>. Подробности — в <code>patches/README.md</code>.</p>
+    </div>
   </section>
 
   <!-- 03 VARIANTS -->
@@ -342,6 +377,11 @@
       <span class="ic" style="color:var(--accent)">i</span>
       <p>Различие <code>clear</code> и <code>crystal_clear</code>: <code>crystal_clear</code> вдобавок удаляет сам <code>zz1</code> — это «чистая болванка» без первичной настройки. <code>switch</code> делит bloat-список с <code>crystal_clear</code>, но оставляет <code>zz1</code>, который переводит устройство в L2-мост.</p>
     </div>
+
+    <div class="note warn">
+      <span class="ic">◆</span>
+      <p><b>forkop: что важно знать.</b> Пакеты <code>forkop</code>, <code>luci-app-forkop</code>, <code>luci-i18n-forkop-ru</code> собираются из фида <code>forkopmod</code> с патчем <code>001-fix-ucode-forward-refs-and-apk-prerm.patch</code>: он исправляет вызовы функций ucode до объявления (падала генерация конфига sing-box, не работало исключение устройств и др.) и скрипт удаления пакета для apk. Для ядра sing-box в образ собирается пакет из фида (25.12: 1.13.x), а скачанный бинарь (в combo — <code>extended</code> 1.14.x) кладётся через <code>files/</code> поверх него в <code>/usr/bin/sing-box</code>. Менеджер пакетов при этом считает установленной версию из фида, поэтому <code>apk upgrade</code> может вернуть её вместо extended — обновляйте sing-box через вкладку «Компоненты» forkop.</p>
+    </div>
   </section>
 
   <!-- 04 FIRST BOOT -->
@@ -362,11 +402,11 @@
       <li><b>SQM и BBR.</b> Если SQM установлен — настраивается CAKE; TCP BBR включается, если модуль есть в ядре.</li>
       <li><b>FullCone NAT</b> — только на ImmortalWrt и только при наличии модуля (на OpenWrt тихо пропускается).</li>
       <li><b>Время и идентичность.</b> Синхронизация RTC/NTP, исправление mtime из будущего, обновление баннера; hostname и commonname — только на first boot.</li>
-      <li class="tag-hp" style="border-color:#2a3556"><span class="badge" style="color:#9aa6ff;border-color:#2a3556">switch</span><b>Режим L2-коммутатора.</b> Только для <code>switch</code>: все порты собираются в <code>br-lan</code>, DHCP-клиент, firewall-зоны и WAN отключаются.</li>
+      <li class="tag-sw"><span class="badge">switch</span><b>Режим L2-коммутатора.</b> Только для <code>switch</code>: все порты собираются в <code>br-lan</code>, DHCP-клиент, firewall-зоны и WAN отключаются.</li>
       <li><b>Перезагрузка.</b> Отложенный ребут через 120 секунд в фоне — чтобы применить sysctl, AGH и остальное.</li>
     </ol>
 
-    <h3 style="color:var(--head);font-size:16px;margin:32px 0 12px;font-weight:600">Что получаешь на роутере (вариант homeproxy / homeproxy_sqm)</h3>
+    <h3 class="sub">Что получаешь на роутере (вариант homeproxy / homeproxy_sqm)</h3>
     <div class="grid">
       <div class="svc"><h4>LuCI</h4><span class="port">http://192.168.x.1 · :80</span><p>Веб-интерфейс роутера.</p></div>
       <div class="svc"><h4>AdGuardHome</h4><span class="port">DNS :53 · web :8080</span><p>Резолвер и фильтрация; доступ через редирект из LuCI.</p></div>
@@ -376,10 +416,28 @@
       <div class="svc"><h4>youtubeUnblock</h4><span class="port">nftables · queue 537</span><p>DPI-байпас с ipset-исключениями и меткой гостевой сети.</p></div>
       <div class="svc"><h4>Оптимизации</h4><span class="port">TCP BBR · CAKE (если SQM)</span><p>Включены на первом старте; применяются после авто-ребута через ~2 мин.</p></div>
     </div>
+
+    <h3 class="sub">Вариант forkop: цепочка DNS</h3>
+    <div class="flow" role="img" aria-label="Клиенты LAN, затем AdGuardHome на порту 53, затем sing-box forkop на 127.0.0.42:53, затем интернет или FakeIP. dnsmasq на порту 54 только DHCP и локальные имена.">
+      <span class="node">Клиенты LAN<small>DNS → роутер</small></span><span class="arr">→</span>
+      <span class="node">AdGuardHome<small>:53</small></span><span class="arr">→</span>
+      <span class="node">sing-box forkop<small>127.0.0.42:53</small></span><span class="arr">→</span>
+      <span class="node">FakeIP / upstream<small>по правилам секций</small></span>
+    </div>
+    <div class="grid" style="margin-top:13px">
+      <div class="svc"><h4>forkop</h4><span class="port">LuCI → Services → Forkop</span><p>Панель, секции, «Компоненты» (sing-box / Xray). <code>dont_touch_dhcp=1</code>: dnsmasq не перенастраивается, DNS держит AGH.</p></div>
+      <div class="svc"><h4>dnsmasq</h4><span class="port">:54 · dnsmasq-full</span><p>DHCP и локальные имена; <code>-full</code> нужен для <code>nftset</code> в режиме Xray.</p></div>
+      <div class="svc"><h4>NTP мимо прокси</h4><span class="port">exclude_ntp=1</span><p>Правило <code>udp dport 123 return</code> для клиентов и самого роутера.</p></div>
+      <div class="svc"><h4>Проверка после прошивки</h4><span class="port">ssh</span><p><code>sing-box version</code> и <code>logread | grep forkop</code> — без «left-hand side is not a function».</p></div>
+    </div>
+    <div class="note">
+      <span class="ic" style="color:var(--accent)">i</span>
+      <p>Все DNS-запросы приходят в forkop от AdGuardHome, то есть с адреса самого роутера, а не клиента. Функции forkop, которые смотрят на IP клиента в DNS (исключение устройств, DNS-действия по устройству), в такой схеме могут работать не полностью — это стоит проверить на роутере, если они нужны.</p>
+    </div>
   </section>
 
   <footer>
-    Справочник составлен по файлам проекта <code>Universal_WRT_Builder.yml</code>, <code>WRT-part1..3.sh</code>, <code>verify-sha256.sh</code> и <code>zz1-final-offline-setup.sh</code>; подробный список изменений первого старта — в <code>files/README.md</code>. Матрица вариантов отражает логику сборки; крайние случаи (например, SQM на <code>clear</code>) стоит сверять с <code>WRT.config</code>, если они критичны.
+    Справочник составлен по файлам проекта <code>Universal_WRT_Builder.yml</code>, <code>WRT-part1..3.sh</code>, <code>verify-sha256.sh</code> и <code>zz1-final-offline-setup.sh</code>; подробный список изменений первого старта — в <code>files/README.md</code>, устройство каталога патчей — в <code>patches/README.md</code>. Матрица вариантов отражает логику сборки; крайние случаи (например, SQM на <code>clear</code>) стоит сверять с <code>WRT.config</code>, если они критичны.
   </footer>
 
 </div>
