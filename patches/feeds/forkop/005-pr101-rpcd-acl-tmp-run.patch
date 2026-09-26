@@ -1,0 +1,74 @@
+From e73b6f9e761de3b136a1b83bf6ea0da8f1156f1a Mon Sep 17 00:00:00 2001
+From: clarkxkent <astomilov@gmail.com>
+Date: Sat, 26 Sep 2026 07:11:15 +0000
+Subject: [PATCH] LuCI ACL: /tmp/run/forkop paths for rpcd 2026-07-19 (PR #101)
+
+Update luci-app-forkop.json
+
+ACL fix for real path
+---
+ .../usr/share/rpcd/acl.d/luci-app-forkop.json | 24 +++++++++++++++++++
+ 1 file changed, 24 insertions(+)
+
+diff --git a/luci-app-forkop/root/usr/share/rpcd/acl.d/luci-app-forkop.json b/luci-app-forkop/root/usr/share/rpcd/acl.d/luci-app-forkop.json
+index 40ca9ce..e41db16 100644
+--- a/luci-app-forkop/root/usr/share/rpcd/acl.d/luci-app-forkop.json
++++ b/luci-app-forkop/root/usr/share/rpcd/acl.d/luci-app-forkop.json
+@@ -9,18 +9,33 @@
+         "/var/run/forkop/section-cache/*": [
+           "read"
+         ],
++        "/tmp/run/forkop/section-cache/*": [
++          "read"
++        ],
+         "/var/run/forkop/component-actions/*": [
+           "read"
+         ],
++        "/tmp/run/forkop/component-actions/*": [
++          "read"
++        ],
+         "/var/run/forkop/ui-state/*": [
+           "read"
+         ],
++        "/tmp/run/forkop/ui-state/*": [
++          "read"
++        ],
+         "/var/run/forkop/ui-state/service-actions/*": [
+           "read"
+         ],
++        "/tmp/run/forkop/ui-state/service-actions/*": [
++          "read"
++        ],
+         "/var/run/forkop/ui-state/latency-actions/*": [
+           "read"
+         ],
++        "/tmp/run/forkop/ui-state/latency-actions/*": [
++          "read"
++        ],
+         "/usr/bin/forkop": [
+           "exec"
+         ]
+@@ -46,11 +61,20 @@
+         "/var/run/forkop/ui-state/*": [
+           "write"
+         ],
++        "/tmp/run/forkop/ui-state/*": [
++          "write"
++        ],
+         "/var/run/forkop/ui-state/service-actions/*": [
+           "write"
+         ],
++        "/tmp/run/forkop/ui-state/service-actions/*": [
++          "write"
++        ],
+         "/var/run/forkop/ui-state/latency-actions/*": [
+           "write"
++        ],
++        "/tmp/run/forkop/ui-state/latency-actions/*": [
++          "write"
+         ]
+       },
+       "uci": [
+-- 
+2.43.0
+
