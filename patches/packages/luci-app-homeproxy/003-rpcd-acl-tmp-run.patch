@@ -1,0 +1,35 @@
+From 8177ac1fa95362aaa6b1fce9b17fc925b7ac84cc Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 26 Sep 2026 15:05:43 +0000
+Subject: [PATCH 3/3] fix(acl): allow log reads through the /tmp/run real path
+
+/var/run is a symlink to /tmp/run. rpcd in OpenWrt 25.12 checks file
+ACLs against the resolved path, so the status page could no longer read
+the logs listed only under /var/run/homeproxy. Grant the same files
+under /tmp/run/homeproxy as well (same fix as forkop PR #101).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01HEQfjBzS7Wos7AvTk18TDQ
+---
+ root/usr/share/rpcd/acl.d/luci-app-homeproxy.json | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/root/usr/share/rpcd/acl.d/luci-app-homeproxy.json b/root/usr/share/rpcd/acl.d/luci-app-homeproxy.json
+index b4b97ea..3e8f5ed 100644
+--- a/root/usr/share/rpcd/acl.d/luci-app-homeproxy.json
++++ b/root/usr/share/rpcd/acl.d/luci-app-homeproxy.json
+@@ -6,7 +6,10 @@
+ 				"/etc/homeproxy/scripts/update_subscriptions.uc": [ "exec" ],
+ 				"/var/run/homeproxy/homeproxy.log": [ "read" ],
+ 				"/var/run/homeproxy/sing-box-c.log": [ "read" ],
+-				"/var/run/homeproxy/sing-box-s.log": [ "read" ]
++				"/var/run/homeproxy/sing-box-s.log": [ "read" ],
++				"/tmp/run/homeproxy/homeproxy.log": [ "read" ],
++				"/tmp/run/homeproxy/sing-box-c.log": [ "read" ],
++				"/tmp/run/homeproxy/sing-box-s.log": [ "read" ]
+ 			},
+ 			"ubus": {
+ 				"service": [ "list" ],
+-- 
+2.43.0
+

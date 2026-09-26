@@ -1,0 +1,56 @@
+From 8bcdd215a0de8b3f6aa1739b8b44077afa119d4d Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 26 Sep 2026 15:05:35 +0000
+Subject: [PATCH 2/3] fix(config): ship a DNS default server that exists
+
+/etc/config/homeproxy set dns.default_server to 'local-dns', which is
+not a built-in server and not offered by LuCI ('default-dns',
+'system-dns' or a configured server). In custom routing mode the
+generator turns it into 'cfg-local-dns-dns' and sing-box refuses to
+start: 'default DNS server not found: cfg-local-dns-dns'. Ship
+'default-dns' (the LuCI default) and migrate existing configs.
+
+The same section carried 'dns_strategy', which nothing reads; LuCI and
+the generator use 'default_strategy'.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01HEQfjBzS7Wos7AvTk18TDQ
+---
+ root/etc/config/homeproxy                    | 4 ++--
+ root/etc/homeproxy/scripts/migrate_config.uc | 5 +++++
+ 2 files changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/root/etc/config/homeproxy b/root/etc/config/homeproxy
+index 1a53b56..aaab740 100644
+--- a/root/etc/config/homeproxy
++++ b/root/etc/config/homeproxy
+@@ -58,8 +58,8 @@ config homeproxy 'routing'
+ 	option default_outbound_dns 'default-dns'
+ 
+ config homeproxy 'dns'
+-	option dns_strategy 'prefer_ipv4'
+-	option default_server 'local-dns'
++	option default_strategy 'prefer_ipv4'
++	option default_server 'default-dns'
+ 	option disable_cache '0'
+ 	option disable_cache_expire '0'
+ 
+diff --git a/root/etc/homeproxy/scripts/migrate_config.uc b/root/etc/homeproxy/scripts/migrate_config.uc
+index 7cfeb3f..dda0886 100755
+--- a/root/etc/homeproxy/scripts/migrate_config.uc
++++ b/root/etc/homeproxy/scripts/migrate_config.uc
+@@ -95,6 +95,11 @@ if (default_dns_server === 'block-dns') {
+ 	uci.set(uciconfig, ucidns, 'default_server', 'default-dns');
+ }
+ 
++/* local-dns never existed: the shipped default made sing-box fail with
++ * "default DNS server not found: cfg-local-dns-dns" in custom mode */
++if (default_dns_server === 'local-dns')
++	uci.set(uciconfig, ucidns, 'default_server', 'default-dns');
++
+ const dns_server_migration = {};
+ /* DNS servers options */
+ uci.foreach(uciconfig, ucidnsserver, (cfg) => {
+-- 
+2.43.0
+
