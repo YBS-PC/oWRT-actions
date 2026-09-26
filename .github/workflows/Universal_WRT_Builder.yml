@@ -67,7 +67,7 @@ on:
         description: 'Download latest AdGuardHome (в combo игнорируется)'
         required: true
         type: boolean
-        default: false
+        default: true
 
       download_binaries_sb:
         description: 'Download Sing-Box binary (в combo игнорируется)'
