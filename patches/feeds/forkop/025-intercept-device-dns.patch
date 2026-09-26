@@ -1,0 +1,714 @@
+From 994fa6dfc56de7a984abbbd905918628dd335104 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 26 Sep 2026 11:01:51 +0000
+Subject: [PATCH] Add Intercept device DNS setting for resolvers in front of Forkop
+
+Requires: 024-excluded-devices
+
+New settings option intercept_device_dns (default on, no behaviour
+change). When a resolver such as AdGuard Home listens on :53 and
+forwards to Forkop (127.0.0.42:53), Forkop still redirected the DNS of
+excluded devices (:1605) and of devices named in section device filters
+(:1603) before the resolver saw it. The resolver then only saw
+127.0.0.1: no per-client statistics, query log, filtering or blocked
+services for those devices.
+
+With the option off:
+
+- nft: no DNS redirect for excluded devices, and the source-aware DNS
+  set only keeps devices of DNS-action sections (a per-device DNS server
+  cannot work without seeing the client);
+- excluded devices may now receive FakeIP answers from the resolver.
+  Their traffic to the FakeIP ranges is marked and sent with TPROXY to a
+  new excluded-tproxy-in inbound (:1606, placed before the generic
+  TPROXY rules), which sing-box routes to bypass-out: the connection
+  goes direct to the real domain. Other traffic of these devices still
+  leaves the mangle chain early, as before;
+- sing-box: DNS rules of bypass/connection sections no longer depend on
+  the client. Device-filtered section domains resolve to FakeIP for
+  everyone and the route rule, which still matches the source address,
+  decides per device.
+
+Tests: tests/device_dns_intercept.sh (nft commands and order, DNS source
+set, sing-box 1.13/1.14 config, optional sing-box check). Checked live
+with AdGuard Home v0.107.79 and sing-box-extended 1.14.1 in network
+namespaces: AdGuard Home sees every client and blocks per client,
+excluded devices (IP and MAC) and a bypass device reach FakeIP domains
+directly, a normal client is still proxied.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01HEQfjBzS7Wos7AvTk18TDQ
+---
+ fe-app-forkop/locales/calls.json              |  14 ++
+ fe-app-forkop/locales/forkop.pot              |   8 +
+ fe-app-forkop/locales/forkop.ru.po            |   6 +
+ forkop/files/usr/lib/config/exclusions.uc     |  13 +-
+ forkop/files/usr/lib/nft/apply.uc             |  66 ++++++
+ forkop/files/usr/lib/service/state.uc         |   2 +
+ forkop/files/usr/lib/singbox/constants.uc     |   8 +
+ forkop/files/usr/lib/singbox/generator.uc     |  35 +++-
+ .../resources/view/forkop/settings.js         |  11 +
+ luci-app-forkop/po/ru/forkop.po               |   6 +
+ luci-app-forkop/po/templates/forkop.pot       |   8 +
+ tests/device_dns_intercept.sh                 | 195 ++++++++++++++++++
+ 12 files changed, 369 insertions(+), 3 deletions(-)
+ create mode 100755 tests/device_dns_intercept.sh
+
+diff --git a/fe-app-forkop/locales/calls.json b/fe-app-forkop/locales/calls.json
+index 8c06069..b0587d0 100644
+--- a/fe-app-forkop/locales/calls.json
++++ b/fe-app-forkop/locales/calls.json
+@@ -1889,6 +1889,20 @@
+       "../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:602"
+     ]
+   },
++  {
++    "call": "Intercept device DNS",
++    "key": "Intercept device DNS",
++    "places": [
++      "../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:649"
++    ]
++  },
++  {
++    "call": "Answer DNS of excluded devices and of devices named in section device filters inside Forkop. Turn off when a resolver such as AdGuard Home forwards to Forkop and must see every client: their traffic is still routed correctly. Device filters of DNS sections always intercept DNS.",
++    "key": "Answer DNS of excluded devices and of devices named in section device filters inside Forkop. Turn off when a resolver such as AdGuard Home forwards to Forkop and must see every client: their traffic is still routed correctly. Device filters of DNS sections always intercept DNS.",
++    "places": [
++      "../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:651"
++    ]
++  },
+   {
+     "call": "Forkop-managed ciadpi runtime has restarted",
+     "key": "Forkop-managed ciadpi runtime has restarted",
+diff --git a/fe-app-forkop/locales/forkop.pot b/fe-app-forkop/locales/forkop.pot
+index a5fee0e..bfa55e1 100644
+--- a/fe-app-forkop/locales/forkop.pot
++++ b/fe-app-forkop/locales/forkop.pot
+@@ -208,6 +208,10 @@ msgstr ""
+ msgid "Alter ID"
+ msgstr ""
+ 
++#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:651
++msgid "Answer DNS of excluded devices and of devices named in section device filters inside Forkop. Turn off when a resolver such as AdGuard Home forwards to Forkop and must see every client: their traffic is still routed correctly. Device filters of DNS sections always intercept DNS."
++msgstr ""
++
+ #: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7930
+ msgid "Apply section rules only to the specified local IP addresses"
+ msgstr ""
+@@ -1370,6 +1374,10 @@ msgstr ""
+ msgid "Installed version is newer than release"
+ msgstr ""
+ 
++#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:649
++msgid "Intercept device DNS"
++msgstr ""
++
+ #: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:365
+ msgid "Interface Monitoring"
+ msgstr ""
+diff --git a/fe-app-forkop/locales/forkop.ru.po b/fe-app-forkop/locales/forkop.ru.po
+index 81e234a..2a64a90 100644
+--- a/fe-app-forkop/locales/forkop.ru.po
++++ b/fe-app-forkop/locales/forkop.ru.po
+@@ -149,6 +149,9 @@ msgstr "ALPN"
+ msgid "Alter ID"
+ msgstr "Alter ID"
+ 
++msgid "Answer DNS of excluded devices and of devices named in section device filters inside Forkop. Turn off when a resolver such as AdGuard Home forwards to Forkop and must see every client: their traffic is still routed correctly. Device filters of DNS sections always intercept DNS."
++msgstr "Отвечать на DNS-запросы исключённых устройств и устройств из фильтров секций внутри Forkop. Отключите, если DNS-сервер вроде AdGuard Home пересылает запросы в Forkop и должен видеть каждого клиента: трафик этих устройств всё равно направляется правильно. Для DNS-секций с фильтром по устройствам DNS перехватывается всегда."
++
+ msgid "Apply section rules only to the specified local IP addresses"
+ msgstr "Применять правила секции только к указанным локальным IP-адресам"
+ 
+@@ -944,6 +947,9 @@ msgstr "Установить другую сборку:"
+ msgid "Installed version is newer than release"
+ msgstr "Установлена версия новее релиза"
+ 
++msgid "Intercept device DNS"
++msgstr "Перехватывать DNS устройств"
++
+ msgid "Interface Monitoring"
+ msgstr "Мониторинг интерфейса"
+ 
+diff --git a/forkop/files/usr/lib/config/exclusions.uc b/forkop/files/usr/lib/config/exclusions.uc
+index c3657f2..cd7b404 100644
+--- a/forkop/files/usr/lib/config/exclusions.uc
++++ b/forkop/files/usr/lib/config/exclusions.uc
+@@ -62,9 +62,20 @@ function has_entries(parsed) {
+     return type(parsed) == "object" && (length(parsed.ips) > 0 || length(parsed.macs) > 0);
+ }
+ 
++// settings.intercept_device_dns (default on). When off, Forkop does not
++// redirect the DNS of excluded or source-filtered devices to its own
++// inbounds, so a resolver in front of Forkop (AdGuard Home, dnsmasq) keeps
++// seeing every client. Their traffic to FakeIP addresses is then sorted by
++// sing-box, which still sees the source device.
++function device_dns_intercept(settings) {
++    let value = lc(as_string(type(settings) == "object" ? settings.intercept_device_dns : null));
++    return !(value == "0" || value == "false" || value == "no" || value == "off");
++}
++
+ return {
+     valid_mac,
+     parse,
+     from_settings,
+-    has_entries
++    has_entries,
++    device_dns_intercept
+ };
+diff --git a/forkop/files/usr/lib/nft/apply.uc b/forkop/files/usr/lib/nft/apply.uc
+index f64c416..512b4e8 100644
+--- a/forkop/files/usr/lib/nft/apply.uc
++++ b/forkop/files/usr/lib/nft/apply.uc
+@@ -16,6 +16,9 @@ const DNS_SOURCE6_SET = "forkop_dns_sources6";
+ const EXCLUDED_SOURCE_SET = "forkop_excluded_sources";
+ const EXCLUDED_SOURCE6_SET = "forkop_excluded_sources6";
+ const EXCLUDED_MAC_SET = "forkop_excluded_macs";
++
++// settings.intercept_device_dns; set by the *_from_uci entry points.
++let device_dns_intercept = true;
+ const BYEDPI_RUNTIME_USER = getenv("BYEDPI_RUNTIME_USER") || "forkopbyedpi";
+ const BYEDPI_RUNTIME_UID_OVERRIDE = getenv("BYEDPI_RUNTIME_UID") || "";
+ 
+@@ -827,7 +830,13 @@ function nft_add_section_priority_rules_from_sections(sections, table, interface
+ // leaves the mangle chain before any section rule, so section order does
+ // not matter. Matching by MAC also covers changing IPv4 leases and IPv6
+ // privacy addresses.
++// With intercept_device_dns off their DNS goes to the router resolver
++// instead and may return FakeIP; that traffic goes to the dedicated
++// excluded-tproxy-in inbound, which sing-box routes directly.
+ function nft_add_excluded_device_rules(table, interface_set) {
++    if (!device_dns_intercept)
++        return true;
++
+     let iif = [ "iifname", "@" + as_string(interface_set) ];
+     let port = ":" + as_string(runtime_constants.EXCLUDED_DNS_INBOUND_PORT);
+     let matchers = [
+@@ -844,6 +853,52 @@ function nft_add_excluded_device_rules(table, interface_set) {
+     return true;
+ }
+ 
++function nft_add_excluded_device_fakeip_marks(table, interface_set, fakeip_mark, fakeip_range, fakeip6_range) {
++    if (device_dns_intercept)
++        return true;
++
++    let iif = [ "iifname", "@" + as_string(interface_set) ];
++    let matchers = [
++        [ "ip", "saddr", "@" + EXCLUDED_SOURCE_SET, "ip", "daddr", fakeip_range ],
++        [ "ip6", "saddr", "@" + EXCLUDED_SOURCE6_SET, "ip6", "daddr", fakeip6_range ],
++        [ "ether", "saddr", "@" + EXCLUDED_MAC_SET, "ip", "daddr", fakeip_range ],
++        [ "ether", "saddr", "@" + EXCLUDED_MAC_SET, "ip6", "daddr", fakeip6_range ]
++    ];
++
++    for (let matcher in matchers)
++        for (let proto in [ "tcp", "udp" ])
++            if (!nft_add_rule(table, "mangle", [ ...iif, ...matcher, "meta", "l4proto", proto, "meta", "mark", "set", fakeip_mark, "counter", "accept" ]))
++                return false;
++
++    return true;
++}
++
++// Must precede the generic TPROXY rules: the last tproxy statement wins,
++// so these rules end the chain with accept.
++function nft_add_excluded_device_tproxy(table, interface_set, fakeip_mark, tproxy6_address) {
++    if (device_dns_intercept)
++        return true;
++
++    let iif = [ "iifname", "@" + as_string(interface_set) ];
++    let marked = [ "meta", "mark", "&", fakeip_mark, "==", fakeip_mark ];
++    let port = runtime_constants.EXCLUDED_TPROXY_INBOUND_PORT;
++    let target4 = [ "tproxy", "ip", "to", ":" + as_string(port) ];
++    let target6 = [ "tproxy", "ip6", "to", core_ip.format_ipv6_tproxy_target(tproxy6_address, port) ];
++    let matchers = [
++        [ [ "ip", "saddr", "@" + EXCLUDED_SOURCE_SET ], target4 ],
++        [ [ "ip6", "saddr", "@" + EXCLUDED_SOURCE6_SET ], target6 ],
++        [ [ "ether", "saddr", "@" + EXCLUDED_MAC_SET, "meta", "nfproto", "ipv4" ], target4 ],
++        [ [ "ether", "saddr", "@" + EXCLUDED_MAC_SET, "meta", "nfproto", "ipv6" ], target6 ]
++    ];
++
++    for (let item in matchers)
++        for (let proto in [ "tcp", "udp" ])
++            if (!nft_add_rule(table, "proxy", [ ...iif, ...marked, ...item[0], "meta", "l4proto", proto, ...item[1], "counter", "accept" ]))
++                return false;
++
++    return true;
++}
++
+ function nft_add_excluded_device_returns(table, interface_set) {
+     let iif = [ "iifname", "@" + as_string(interface_set) ];
+     return nft_add_rule(table, "mangle", [ ...iif, "ip", "saddr", "@" + EXCLUDED_SOURCE_SET, "counter", "return" ]) &&
+@@ -907,6 +962,7 @@ function nft_create_runtime_base(table, localv4_set, common_set, port_set, ip_po
+         !nft_add_rule(table, "dns_redirect", [ "iifname", "@" + as_string(interface_set), "ip6", "saddr", "@" + DNS_SOURCE6_SET, "tcp", "dport", "53", "counter", "redirect", "to", ":" + as_string(runtime_constants.SOURCE_DNS_INBOUND_PORT) ]) ||
+         !nft_add_rule(table, "dns_redirect", [ "iifname", "@" + as_string(interface_set), "ip6", "saddr", "@" + DNS_SOURCE6_SET, "udp", "dport", "53", "counter", "redirect", "to", ":" + as_string(runtime_constants.SOURCE_DNS_INBOUND_PORT) ]) ||
+         !nft_add_rule(table, "mangle", [ "ct", "status", "dnat", "return" ]) ||
++        !nft_add_excluded_device_fakeip_marks(table, interface_set, fakeip_mark, fakeip_range, fakeip6_range) ||
+         !nft_add_excluded_device_returns(table, interface_set) ||
+         !nft_add_rule(table, "mangle", [ "iifname", "@" + as_string(interface_set), "ip", "daddr", "@" + as_string(localv4_set), "return" ]) ||
+         !nft_add_rule(table, "mangle", [ "iifname", "@" + as_string(interface_set), "ip6", "daddr", "@" + as_string(localv6_set), "ip6", "daddr", "!=", fakeip6_range, "return" ]) ||
+@@ -927,6 +983,7 @@ function nft_create_runtime_base(table, localv4_set, common_set, port_set, ip_po
+         !nft_add_rule(table, "mangle", [ "iifname", "@" + as_string(interface_set), "ip", "daddr", fakeip_range, "meta", "l4proto", "udp", "meta", "mark", "set", fakeip_mark, "counter" ]) ||
+         !nft_add_rule(table, "mangle", [ "iifname", "@" + as_string(interface_set), "ip6", "daddr", fakeip6_range, "meta", "l4proto", "tcp", "meta", "mark", "set", fakeip_mark, "counter" ]) ||
+         !nft_add_rule(table, "mangle", [ "iifname", "@" + as_string(interface_set), "ip6", "daddr", fakeip6_range, "meta", "l4proto", "udp", "meta", "mark", "set", fakeip_mark, "counter" ]) ||
++        !nft_add_excluded_device_tproxy(table, interface_set, fakeip_mark, tproxy6_address) ||
+         !nft_add_rule(table, "proxy", [ "meta", "mark", "&", fakeip_mark, "==", fakeip_mark, "meta", "l4proto", "tcp", "tproxy", "ip", "to", ":" + as_string(tproxy_port), "counter" ]) ||
+         !nft_add_rule(table, "proxy", [ "meta", "mark", "&", fakeip_mark, "==", fakeip_mark, "meta", "l4proto", "udp", "tproxy", "ip", "to", ":" + as_string(tproxy_port), "counter" ]) ||
+         !nft_add_rule(table, "proxy", [ "meta", "mark", "&", fakeip_mark, "==", fakeip_mark, "meta", "l4proto", "tcp", "tproxy", "ip6", "to", core_ip.format_ipv6_tproxy_target(tproxy6_address, tproxy_port), "counter" ]) ||
+@@ -946,6 +1003,7 @@ function nft_create_runtime_base(table, localv4_set, common_set, port_set, ip_po
+ 
+ function nft_create_runtime_base_from_uci(table, localv4_set, common_set, port_set, ip_port_set, interface_set, fakeip_mark, outbound_mark, fakeip_range, tproxy_port, localv6_set, common6_set, ip_port6_set, fakeip6_range, tproxy6_address) {
+     let settings = uci_settings();
++    device_dns_intercept = exclusions.device_dns_intercept(settings);
+ 
+     return nft_create_runtime_base(
+         table,
+@@ -1547,6 +1605,8 @@ function nft_runtime_signature_from_settings_and_sections(settings, sections) {
+     let excluded = exclusions.from_settings(settings);
+     if (exclusions.has_entries(excluded))
+         body = signature_add_value(body, "settings.routing_excluded_ips", join(" ", [ ...excluded.ips, ...excluded.macs ]));
++    if (!exclusions.device_dns_intercept(settings))
++        body = signature_add_value(body, "settings.intercept_device_dns", "0");
+ 
+     for (let section in sections)
+         body = nft_rule_signature_body(body, object_or_empty(section));
+@@ -1690,6 +1750,10 @@ function source_aware_dns_values(sections, deferred_sections) {
+             continue;
+ 
+         let action = section_action(section);
++        // Without DNS interception only DNS-action sections need the
++        // client address at DNS time; sing-box sorts the rest by source.
++        if (!device_dns_intercept && action != "dns")
++            continue;
+ 
+         if (connections.has_dns_matchers(section)) {
+             for (let value in nft_csv_values(section_source_ip_values(section))) {
+@@ -1866,12 +1930,14 @@ function nft_populate_runtime_sets_from_uci(populate_enabled, deferred_section_n
+     if (!arg_bool(populate_enabled))
+         return true;
+ 
++    device_dns_intercept = exclusions.device_dns_intercept(uci_settings());
+     return nft_populate_runtime_sets_from_sections(uci_sections("section"), populate_enabled, deferred_section_names, table, common_set, port_set, ip_port_set, interface_set, localv4_set, mark, common6_set, ip_port6_set, localv6_set);
+ }
+ 
+ function nft_populate_runtime_sets_fixture(path, populate_enabled, deferred_section_names, table, common_set, port_set, ip_port_set, interface_set, localv4_set, mark, common6_set, ip_port6_set, localv6_set) {
+     let data = object_or_empty(common_read_json_file(path));
+     connections.set_item_sections_from_data(data);
++    device_dns_intercept = exclusions.device_dns_intercept(object_or_empty(data.settings));
+     return nft_populate_runtime_sets_from_sections(fixture_section_list(data, "section"), populate_enabled, deferred_section_names, table, common_set, port_set, ip_port_set, interface_set, localv4_set, mark, common6_set, ip_port6_set, localv6_set);
+ }
+ 
+diff --git a/forkop/files/usr/lib/service/state.uc b/forkop/files/usr/lib/service/state.uc
+index 6bf5a31..a56a034 100644
+--- a/forkop/files/usr/lib/service/state.uc
++++ b/forkop/files/usr/lib/service/state.uc
+@@ -1406,6 +1406,8 @@ function sing_box_signature_body(settings, sections, servers, mwan3_active) {
+     let excluded_devices = exclusions.from_settings(settings);
+     if (exclusions.has_entries(excluded_devices))
+         body = signature_add_value(body, "settings.routing_excluded_ips", join(" ", [ ...excluded_devices.ips, ...excluded_devices.macs ]));
++    if (!exclusions.device_dns_intercept(settings))
++        body = signature_add_value(body, "settings.intercept_device_dns", "0");
+     if (sing_box_signature_has_remote_ruleset_sources(sections))
+         body = signature_add_value(body, "settings.update_interval", settings_update_interval(settings));
+     body = signature_add_value(body, "settings.cache_path", option(settings, "cache_path", "/tmp/sing-box/cache.db"));
+diff --git a/forkop/files/usr/lib/singbox/constants.uc b/forkop/files/usr/lib/singbox/constants.uc
+index 3e427b9..88474e2 100644
+--- a/forkop/files/usr/lib/singbox/constants.uc
++++ b/forkop/files/usr/lib/singbox/constants.uc
+@@ -22,6 +22,9 @@ const SOURCE_DNS_INBOUND_PORT = 1603;
+ const EXCLUDED_DNS_INBOUND_TAG = "excluded-dns-in";
+ const EXCLUDED_DNS_INBOUND_ADDRESS = "::";
+ const EXCLUDED_DNS_INBOUND_PORT = 1605;
++const EXCLUDED_TPROXY_INBOUND_TAG = "excluded-tproxy-in";
++const EXCLUDED_TPROXY_INBOUND6_TAG = "excluded-tproxy6-in";
++const EXCLUDED_TPROXY_INBOUND_PORT = 1606;
+ 
+ const SERVICE_MIXED_INBOUND_TAG = "service-mixed-in";
+ const SERVICE_MIXED_INBOUND_ADDRESS = "127.0.0.1";
+@@ -56,6 +59,8 @@ const RESERVED_TAGS = {
+     [DNS_INBOUND_TAG]: true,
+     [SOURCE_DNS_INBOUND_TAG]: true,
+     [EXCLUDED_DNS_INBOUND_TAG]: true,
++    [EXCLUDED_TPROXY_INBOUND_TAG]: true,
++    [EXCLUDED_TPROXY_INBOUND6_TAG]: true,
+     [SERVICE_MIXED_INBOUND_TAG]: true,
+     [DIRECT_OUTBOUND_TAG]: true,
+     [BYPASS_OUTBOUND_TAG]: true
+@@ -112,6 +117,9 @@ return {
+     EXCLUDED_DNS_INBOUND_TAG,
+     EXCLUDED_DNS_INBOUND_ADDRESS,
+     EXCLUDED_DNS_INBOUND_PORT,
++    EXCLUDED_TPROXY_INBOUND_TAG,
++    EXCLUDED_TPROXY_INBOUND6_TAG,
++    EXCLUDED_TPROXY_INBOUND_PORT,
+     SERVICE_MIXED_INBOUND_TAG,
+     SERVICE_MIXED_INBOUND_ADDRESS,
+     SERVICE_MIXED_INBOUND_PORT,
+diff --git a/forkop/files/usr/lib/singbox/generator.uc b/forkop/files/usr/lib/singbox/generator.uc
+index 4c308c4..435ac32 100644
+--- a/forkop/files/usr/lib/singbox/generator.uc
++++ b/forkop/files/usr/lib/singbox/generator.uc
+@@ -20,6 +20,8 @@ let exclusions = require("config.exclusions");
+ let uci = null;
+ let fixture_uci_data = null;
+ let runtime_settings_cache = null;
++// settings.intercept_device_dns, see config/exclusions.uc.
++let runtime_device_dns_intercept = true;
+ let runtime_ruleset_folder = runtime_constants.TMP_RULESET_FOLDER;
+ let runtime_supports_xhttp = true;
+ let runtime_sing_box_version = "";
+@@ -502,6 +504,10 @@ function base_config(settings, service_address, runtime_context) {
+         push(inbounds, { type: "direct", tag: runtime_constants.SOURCE_DNS_INBOUND_TAG, listen: runtime_constants.SOURCE_DNS_INBOUND_ADDRESS, listen_port: runtime_constants.SOURCE_DNS_INBOUND_PORT });
+     if (runtime_context.excluded_devices_dns)
+         push(inbounds, { type: "direct", tag: runtime_constants.EXCLUDED_DNS_INBOUND_TAG, listen: runtime_constants.EXCLUDED_DNS_INBOUND_ADDRESS, listen_port: runtime_constants.EXCLUDED_DNS_INBOUND_PORT });
++    if (runtime_context.excluded_devices_tproxy) {
++        push(inbounds, { type: "tproxy", tag: runtime_constants.EXCLUDED_TPROXY_INBOUND_TAG, listen: runtime_constants.TPROXY_INBOUND_ADDRESS, listen_port: runtime_constants.EXCLUDED_TPROXY_INBOUND_PORT, tcp_fast_open: true, udp_fragment: true });
++        push(inbounds, { type: "tproxy", tag: runtime_constants.EXCLUDED_TPROXY_INBOUND6_TAG, listen: runtime_constants.TPROXY_INBOUND6_ADDRESS, listen_port: runtime_constants.EXCLUDED_TPROXY_INBOUND_PORT, tcp_fast_open: true, udp_fragment: true });
++    }
+     for (let inbound in dns_config.inbounds)
+         push(inbounds, inbound);
+ 
+@@ -2615,6 +2621,16 @@ function add_source_aware_bypass_dns_rules(config, matchers, rewrite_ttl) {
+ 
+ function add_section_dns_matcher_rule(config, section, matchers, rewrite_ttl) {
+     let source_ip_cidr = legacy_condition_values(section, "source_ip_cidr");
++    if (!runtime_device_dns_intercept && length(source_ip_cidr) > 0) {
++        // DNS arrives through the router resolver, so the client is unknown
++        // here: answer with FakeIP for everyone and let the route rule, which
++        // still matches the source address, decide per device.
++        matchers.action = "route";
++        matchers.server = runtime_constants.FAKEIP_DNS_SERVER_TAG;
++        matchers.rewrite_ttl = rewrite_ttl;
++        push_dns_matcher_rule(config, matchers);
++        return;
++    }
+     add_source_dns_matchers(matchers, source_ip_cidr);
+ 
+     if (option(section, "action", "") == "bypass" && length(source_ip_cidr) > 0) {
+@@ -2635,6 +2651,8 @@ function source_aware_dns_sources(sections) {
+     for (let section in sections) {
+         let action = option(section, "action", "");
+         let candidates = [];
++        if (!runtime_device_dns_intercept && action != "dns")
++            continue;
+         if (connections.has_dns_matchers(section))
+             for (let value in legacy_condition_values(section, "source_ip_cidr"))
+                 push(candidates, value);
+@@ -2825,7 +2843,7 @@ function add_fully_routed_ips_rules(config, section) {
+     if (length(source_ip_cidr) == 0)
+         return;
+ 
+-    if (option(section, "action", "") == "bypass") {
++    if (option(section, "action", "") == "bypass" && runtime_device_dns_intercept) {
+         let dns_matchers = {};
+         add_source_dns_matchers(dns_matchers, source_ip_cidr);
+         add_source_aware_bypass_dns_rules(
+@@ -3130,6 +3148,17 @@ function add_excluded_devices_support(config, excluded) {
+     if (!exclusions.has_entries(excluded))
+         return;
+ 
++    if (!runtime_device_dns_intercept) {
++        // DNS is left to the router resolver; nft sends their FakeIP traffic
++        // to excluded-tproxy-in and sing-box connects it directly.
++        push(config.route.rules, {
++            action: "route",
++            inbound: [ runtime_constants.EXCLUDED_TPROXY_INBOUND_TAG, runtime_constants.EXCLUDED_TPROXY_INBOUND6_TAG ],
++            outbound: runtime_constants.BYPASS_OUTBOUND_TAG
++        });
++        return;
++    }
++
+     ensure_dnsmasq_dns_server(config);
+     add_source_aware_bypass_dns_rules(
+         config,
+@@ -3155,6 +3184,7 @@ function generate_config(output_path, service_address, mwan3_active, supports_xh
+     cursor.load(CONFIG_NAME);
+     runtime_settings_cache = object_or_empty(cursor.get_all(CONFIG_NAME, "settings"));
+     let settings = runtime_settings_cache;
++    runtime_device_dns_intercept = exclusions.device_dns_intercept(settings);
+ 
+     let sections = enabled_sections(deferred_sections);
+     let servers = enabled_servers();
+@@ -3166,7 +3196,8 @@ function generate_config(output_path, service_address, mwan3_active, supports_xh
+     let config = base_config(settings, service_address, {
+         mwan3_active: cli_bool(mwan3_active),
+         source_aware_dns: length(source_aware_dns) > 0,
+-        excluded_devices_dns: exclusions.has_entries(excluded_devices)
++        excluded_devices_dns: runtime_device_dns_intercept && exclusions.has_entries(excluded_devices),
++        excluded_devices_tproxy: !runtime_device_dns_intercept && exclusions.has_entries(excluded_devices)
+     });
+     add_source_aware_dns_support(config, source_aware_dns);
+     add_excluded_devices_support(config, excluded_devices);
+diff --git a/luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js b/luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js
+index 68224fc..8559422 100644
+--- a/luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js
++++ b/luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js
+@@ -643,6 +643,17 @@ function createSettingsContent(section, capabilities) {
+   o.default = "0";
+   o.rmempty = false;
+ 
++  o = section.option(
++    form.Flag,
++    "intercept_device_dns",
++    _("Intercept device DNS"),
++    _(
++      "Answer DNS of excluded devices and of devices named in section device filters inside Forkop. Turn off when a resolver such as AdGuard Home forwards to Forkop and must see every client: their traffic is still routed correctly. Device filters of DNS sections always intercept DNS.",
++    ),
++  );
++  o.default = "1";
++  o.rmempty = false;
++
+   o = section.option(
+     form.ListValue,
+     "config_path",
+diff --git a/luci-app-forkop/po/ru/forkop.po b/luci-app-forkop/po/ru/forkop.po
+index 81e234a..2a64a90 100644
+--- a/luci-app-forkop/po/ru/forkop.po
++++ b/luci-app-forkop/po/ru/forkop.po
+@@ -149,6 +149,9 @@ msgstr "ALPN"
+ msgid "Alter ID"
+ msgstr "Alter ID"
+ 
++msgid "Answer DNS of excluded devices and of devices named in section device filters inside Forkop. Turn off when a resolver such as AdGuard Home forwards to Forkop and must see every client: their traffic is still routed correctly. Device filters of DNS sections always intercept DNS."
++msgstr "Отвечать на DNS-запросы исключённых устройств и устройств из фильтров секций внутри Forkop. Отключите, если DNS-сервер вроде AdGuard Home пересылает запросы в Forkop и должен видеть каждого клиента: трафик этих устройств всё равно направляется правильно. Для DNS-секций с фильтром по устройствам DNS перехватывается всегда."
++
+ msgid "Apply section rules only to the specified local IP addresses"
+ msgstr "Применять правила секции только к указанным локальным IP-адресам"
+ 
+@@ -944,6 +947,9 @@ msgstr "Установить другую сборку:"
+ msgid "Installed version is newer than release"
+ msgstr "Установлена версия новее релиза"
+ 
++msgid "Intercept device DNS"
++msgstr "Перехватывать DNS устройств"
++
+ msgid "Interface Monitoring"
+ msgstr "Мониторинг интерфейса"
+ 
+diff --git a/luci-app-forkop/po/templates/forkop.pot b/luci-app-forkop/po/templates/forkop.pot
+index a5fee0e..bfa55e1 100644
+--- a/luci-app-forkop/po/templates/forkop.pot
++++ b/luci-app-forkop/po/templates/forkop.pot
+@@ -208,6 +208,10 @@ msgstr ""
+ msgid "Alter ID"
+ msgstr ""
+ 
++#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:651
++msgid "Answer DNS of excluded devices and of devices named in section device filters inside Forkop. Turn off when a resolver such as AdGuard Home forwards to Forkop and must see every client: their traffic is still routed correctly. Device filters of DNS sections always intercept DNS."
++msgstr ""
++
+ #: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js:7930
+ msgid "Apply section rules only to the specified local IP addresses"
+ msgstr ""
+@@ -1370,6 +1374,10 @@ msgstr ""
+ msgid "Installed version is newer than release"
+ msgstr ""
+ 
++#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:649
++msgid "Intercept device DNS"
++msgstr ""
++
+ #: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js:365
+ msgid "Interface Monitoring"
+ msgstr ""
+diff --git a/tests/device_dns_intercept.sh b/tests/device_dns_intercept.sh
+new file mode 100755
+index 0000000..684b42a
+--- /dev/null
++++ b/tests/device_dns_intercept.sh
+@@ -0,0 +1,195 @@
++#!/usr/bin/env bash
++set -eo pipefail
++
++ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
++FORKOP_LIB="$ROOT_DIR/forkop/files/usr/lib"
++NFT_RUNTIME="$FORKOP_LIB/nft/apply.uc"
++GENERATOR="$FORKOP_LIB/singbox/generator.uc"
++WORK_DIR="$(mktemp -d)"
++NFT_LOG="$WORK_DIR/nft.log"
++
++cleanup() {
++  rm -rf "$WORK_DIR"
++}
++trap cleanup EXIT
++
++fail() {
++  printf 'FAIL: %s\n' "$1" >&2
++  exit 1
++}
++
++line_of() {
++  grep -Fn "$1" "$NFT_LOG" | head -n 1 | cut -d: -f1
++}
++
++mkdir -p "$WORK_DIR/bin"
++for tool in nft ip logger sysctl; do
++  cat >"$WORK_DIR/bin/$tool" <<'SH'
++#!/usr/bin/env bash
++if [ "$(basename "$0")" = "nft" ]; then
++  { printf 'nft'; for arg in "$@"; do printf '\t%s' "$arg"; done; printf '\n'; } >>"$NFT_LOG"
++fi
++exit 0
++SH
++  chmod +x "$WORK_DIR/bin/$tool"
++done
++
++runtime_base() {
++  : >"$NFT_LOG"
++  PATH="$WORK_DIR/bin:$PATH" NFT_LOG="$NFT_LOG" FORKOP_UCI_STATE_FILE="$1" \
++    ucode -L "$FORKOP_LIB" "$NFT_RUNTIME" nft-create-runtime-base-from-uci \
++      ForkopTable localv4 forkop_subnets forkop_ports forkop_ip_ports forkop_interfaces \
++      0x00100000 0x00200000 198.18.0.0/15 1602 ||
++    fail "runtime base failed for $1"
++}
++
++# --- nftables: default keeps intercepting ----------------------------------
++
++cat >"$WORK_DIR/default.state" <<'EOF_UCI'
++forkop.settings=settings
++forkop.settings.source_network_interfaces=br-lan
++forkop.settings.routing_excluded_ips=192.168.1.50 aa:bb:cc:dd:ee:ff
++EOF_UCI
++runtime_base "$WORK_DIR/default.state"
++grep -Fq $'redirect\tto\t:1605' "$NFT_LOG" || fail "default must redirect excluded DNS to :1605"
++grep -Fq ':1606' "$NFT_LOG" && fail "default must not use the excluded TPROXY inbound"
++
++# --- nftables: interception off --------------------------------------------
++
++sed 's/^forkop.settings=settings$/&\nforkop.settings.intercept_device_dns=0/' "$WORK_DIR/default.state" >"$WORK_DIR/off.state"
++runtime_base "$WORK_DIR/off.state"
++
++grep -Fq ':1605' "$NFT_LOG" && fail "interception off must not redirect excluded DNS"
++for expected in \
++  $'mangle\tiifname\t@forkop_interfaces\tip\tsaddr\t@forkop_excluded_sources\tip\tdaddr\t198.18.0.0/15\tmeta\tl4proto\ttcp\tmeta\tmark\tset\t0x00100000\tcounter\taccept' \
++  $'mangle\tiifname\t@forkop_interfaces\tether\tsaddr\t@forkop_excluded_macs\tip6\tdaddr\tfc00::/18\tmeta\tl4proto\tudp\tmeta\tmark\tset\t0x00100000\tcounter\taccept' \
++  $'proxy\tiifname\t@forkop_interfaces\tmeta\tmark\t&\t0x00100000\t==\t0x00100000\tip\tsaddr\t@forkop_excluded_sources\tmeta\tl4proto\ttcp\ttproxy\tip\tto\t:1606\tcounter\taccept' \
++  $'proxy\tiifname\t@forkop_interfaces\tmeta\tmark\t&\t0x00100000\t==\t0x00100000\tether\tsaddr\t@forkop_excluded_macs\tmeta\tnfproto\tipv6\tmeta\tl4proto\tudp\ttproxy\tip6\tto\t[::1]:1606\tcounter\taccept'; do
++  grep -Fq "$expected" "$NFT_LOG" || fail "missing nft command: $expected"
++done
++
++fakeip_mark="$(line_of $'@forkop_excluded_sources\tip\tdaddr\t198.18.0.0/15\tmeta\tl4proto\ttcp')"
++excluded_return="$(line_of $'ip\tsaddr\t@forkop_excluded_sources\tcounter\treturn')"
++[ "$fakeip_mark" -lt "$excluded_return" ] || fail "FakeIP traffic of excluded devices must be marked before their return"
++excluded_tproxy="$(line_of $'tproxy\tip\tto\t:1606')"
++generic_tproxy="$(line_of $'tproxy\tip\tto\t:1602')"
++[ "$excluded_tproxy" -lt "$generic_tproxy" ] || fail "excluded TPROXY must precede the generic TPROXY rule"
++
++# --- nftables: only DNS sections keep source-aware DNS ---------------------
++
++cat >"$WORK_DIR/populate.json" <<'JSON'
++{
++  "settings": { ".name": "settings", ".type": "settings", "intercept_device_dns": "0" },
++  "section": [
++    { ".name": "tv", ".type": "section", "enabled": "1", "action": "bypass", "fully_routed_ips": [ "192.168.1.60" ] },
++    { ".name": "kids", ".type": "section", "enabled": "1", "action": "connection",
++      "outbound_json": "{\"type\":\"socks\",\"server\":\"127.0.0.1\",\"server_port\":1080,\"version\":\"5\"}",
++      "source_ip_cidr": [ "192.168.1.61" ], "domain_suffix": [ "example.org" ] },
++    { ".name": "dnsonly", ".type": "section", "enabled": "1", "action": "dns", "dns_server": "9.9.9.9",
++      "fully_routed_ips": [ "192.168.1.70" ] }
++  ]
++}
++JSON
++: >"$NFT_LOG"
++PATH="$WORK_DIR/bin:$PATH" NFT_LOG="$NFT_LOG" \
++  ucode -L "$FORKOP_LIB" "$NFT_RUNTIME" nft-populate-runtime-sets-fixture "$WORK_DIR/populate.json" 1 "" \
++    ForkopTable forkop_subnets forkop_ports forkop_ip_ports forkop_interfaces localv4 0x00100000 ||
++  fail "populate with interception off failed"
++dns_sources="$(grep -F $'\tforkop_dns_sources\t' "$NFT_LOG" || true)"
++printf '%s' "$dns_sources" | grep -Fq '192.168.1.70' || fail "DNS section devices must still be intercepted"
++printf '%s' "$dns_sources" | grep -Eq '192\.168\.1\.6[01]' && fail "bypass/connection device filters must not intercept DNS"
++
++# --- sing-box config --------------------------------------------------------
++
++cat >"$WORK_DIR/fixture.json" <<'JSON'
++{
++  "settings": {
++    ".name": "settings",
++    ".type": "settings",
++    "config_path": "/tmp/sing-box/config.json",
++    "dns_server": "1.1.1.1",
++    "bootstrap_dns_server": "1.1.1.1",
++    "service_listen_address": "127.0.0.1",
++    "intercept_device_dns": "0",
++    "routing_excluded_ips": [ "192.168.1.50", "aa:bb:cc:dd:ee:ff" ]
++  },
++  "section": [
++    { ".name": "tv", ".type": "section", "enabled": "1", "action": "bypass",
++      "fully_routed_ips": [ "192.168.1.60" ], "domain_suffix": [ "tv.example" ] },
++    { ".name": "kids", ".type": "section", "enabled": "1", "action": "outbound",
++      "outbound_json": "{\"type\":\"socks\",\"server\":\"127.0.0.1\",\"server_port\":1080,\"version\":\"5\"}",
++      "source_ip_cidr": [ "192.168.1.61" ], "domain_suffix": [ "example.org" ] }
++  ]
++}
++JSON
++
++generate_for_version() {
++  local version="$1" output="$2"
++  mkdir -p "$output.section-cache" "$output.rulesets"
++  ucode -L "$FORKOP_LIB" "$GENERATOR" generate-config-fixture \
++    "$WORK_DIR/fixture.json" "$output" "127.0.0.1" "0" "1" "" "$version"
++}
++
++check_config() {
++  ucode -e '
++let config = json(require("fs").readfile(ARGV[0]));
++
++function assert(condition, message) {
++    if (!condition)
++        die(message + "\n");
++}
++
++function has(list, value) {
++    if (type(list) != "array")
++        return list == value;
++    for (let item in list)
++        if (item == value)
++            return true;
++    return false;
++}
++
++let tags = {};
++for (let inbound in config.inbounds)
++    tags[inbound.tag] = inbound;
++assert(tags["excluded-tproxy-in"] && tags["excluded-tproxy-in"].type == "tproxy" && tags["excluded-tproxy-in"].listen_port == 1606, "excluded-tproxy-in on 1606");
++assert(tags["excluded-tproxy6-in"] && tags["excluded-tproxy6-in"].listen == "::1", "excluded-tproxy6-in on ::1");
++assert(!tags["excluded-dns-in"] && !tags["source-dns-in"], "no DNS interception inbounds");
++
++let excluded_route = null, section_route = null;
++for (let i = 0; i < length(config.route.rules); i++) {
++    let rule = config.route.rules[i];
++    if (has(rule.inbound, "excluded-tproxy-in") && rule.outbound == "bypass-out")
++        excluded_route = i;
++    if (section_route == null && rule.source_ip_cidr != null && has(rule.inbound, "tproxy-in"))
++        section_route = i;
++}
++assert(excluded_route != null && excluded_route < section_route, "excluded TPROXY traffic goes direct before section rules");
++
++for (let server in config.dns.servers)
++    assert(server.tag != "dnsmasq-server", "no dnsmasq round trip without interception");
++let fakeip_for_filtered = false;
++for (let rule in config.dns.rules) {
++    assert(rule.source_ip_cidr == null && !has(rule.inbound, "source-dns-in") && !has(rule.inbound, "excluded-dns-in"),
++        "DNS rules must not depend on the client");
++    if (has(rule.domain_suffix, "example.org"))
++        fakeip_for_filtered = rule.server == "fakeip-server";
++}
++assert(fakeip_for_filtered, "device-filtered section domains resolve to FakeIP for everyone");
++' "$1" || fail "$2"
++}
++
++generate_for_version "1.13.21" "$WORK_DIR/sb113.json"
++check_config "$WORK_DIR/sb113.json" "sing-box 1.13 config without DNS interception"
++generate_for_version "1.14.2" "$WORK_DIR/sb114.json"
++check_config "$WORK_DIR/sb114.json" "sing-box 1.14 config without DNS interception"
++
++for bin in ${FORKOP_TEST_SING_BOX_113:-} ${FORKOP_TEST_SING_BOX_114:-}; do
++  [ -x "$bin" ] || continue
++  case "$("$bin" version | head -n1)" in
++    *" 1.14."*) cfg="$WORK_DIR/sb114.json" ;;
++    *) cfg="$WORK_DIR/sb113.json" ;;
++  esac
++  "$bin" check -c "$cfg" || fail "sing-box check rejected $cfg ($bin)"
++done
++
++printf 'device DNS interception checks passed\n'
+-- 
+2.43.0
+
