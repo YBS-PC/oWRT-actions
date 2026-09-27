@@ -249,7 +249,7 @@ echo 'CONFIG_BUSYBOX_DEFAULT_FEATURE_FAST_TOP=y' >> ./.config
 echo 'CONFIG_BUSYBOX_DEFAULT_FEATURE_USE_INITTAB=y' >> ./.config
 echo ">>> [Heavy packages] Тяжелые пакеты отключены."
         # Для сборок с homeproxy и podkop/forkop ставим Tiny версию sing-box.
-        if [[ "$VARIANT" == "homeproxy_sqm" || "$VARIANT" == "homeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "forkop" ]]; then
+        if [[ "$VARIANT" == "homeproxy_default" || "$VARIANT" == "homeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "forkop" ]]; then
             echo ">>> [Heavy packages] Sing-box Tiny for $VARIANT compatibility..."
             sed -i '/sing-box/Id' ./.config
             echo '# CONFIG_PACKAGE_sing-box is not set' >> ./.config
@@ -267,7 +267,7 @@ fi
 # И добавление индивидуальных пакетов
 # =========================================================
 
-# Пакеты SQM. Вырезаются в homeproxy, podkop и forkop; в homeproxy_sqm остаются.
+# Пакеты SQM. Вырезаются в homeproxy, podkop и forkop; в homeproxy_default остаются.
 SQM_BLOAT=(
 "sqm"
 "sqm-scripts"
@@ -505,8 +505,8 @@ if [ "$VARIANT" == "forkop" ]; then
     echo "# CONFIG_PACKAGE_luci-i18n-youtubeUnblock-ru is not set" >> ./.config
 fi
 
-# --- ЛОГИКА ДЛЯ homeproxy_sqm ---
-if [ "$VARIANT" == "homeproxy_sqm" ]; then
+# --- ЛОГИКА ДЛЯ homeproxy_default ---
+if [ "$VARIANT" == "homeproxy_default" ]; then
     echo ">>> [Variant: $VARIANT] Performing cleanup..."
     # Вычищаем пакеты из конфига
     for PKG in "${DEFAULT_BLOAT[@]}"; do
