@@ -483,9 +483,9 @@ fi
 # /etc/nftables.d/ переживают sysupgrade, и ссылка на несуществующий набор
 # роняет весь fw4 reload. Пустой набор безопаснее отсутствующего.
 #   dpi_ips      — youtubeUnblock: reject UDP/443 и очередь TCP/443
-#                  (наполняет ip-lists-downloader.sh)
+#                  (наполняет fwlist-dpi.sh)
 #   bypass_ips   — обход homeproxy по метке 0x64 (RU-трафик мимо VPN)
-#                  И обход очереди youtubeUnblock (наполняет bypass_ips.sh)
+#                  И обход очереди youtubeUnblock (наполняет fwlist-bypass.sh)
 #   bypass_local — обход очереди youtubeUnblock по адресу ИСТОЧНИКА, отсюда
 #                  match=src_net, а не dest_net
 # loadfile обязателен: без него набор создаётся пустым и файлы из
