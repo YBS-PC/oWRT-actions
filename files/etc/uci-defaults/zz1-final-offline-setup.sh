@@ -349,7 +349,11 @@ Y_INST_EOF
     # по которому открыт сам LuCI. hostname/port в query-параметрах избавляют
     # от ручного добавления бэкенда: по умолчанию YACD предлагает 127.0.0.1,
     # а это адрес браузера, а не роутера.
-    if [ -d /usr/lib/lua/luci/controller ]; then
+    # В 25.12 каталога controller в образе нет: luci-lua-runtime его не
+    # содержит, а ни один включённый пакет не ставит Lua-контроллеры.
+    # Поэтому проверяем сам Lua-рантайм и создаём каталог.
+    if [ -f /usr/lib/lua/luci/dispatcher.lua ]; then
+        mkdir -p /usr/lib/lua/luci/controller
         cat << 'EOF' > /usr/lib/lua/luci/controller/yacd.lua
 module("luci.controller.yacd", package.seeall)
 function index()
@@ -598,6 +602,7 @@ if [ -x "/usr/bin/AdGuardHome" ] && [ -f "/etc/config/adguardhome" ]; then
 EOF
     _RC=$?; [ $_RC -eq 0 ] && log_ok "UCI adguardhome применён" || log_err "Ошибка uci batch AdGuardHome (exit: $_RC)"
 
+    mkdir -p /usr/lib/lua/luci/controller   # в образе 25.12 каталога нет
     cat << 'EOF' > /usr/lib/lua/luci/controller/adguardhome_net.lua
 module("luci.controller.adguardhome_net", package.seeall)
 
@@ -660,6 +665,42 @@ EOF
     run_cmd "Запуск adguardhome" /etc/init.d/adguardhome start
 else
     log_info "AdGuardHome не найден"
+fi
+
+# Свои пункты меню LuCI (Lua-контроллеры) из /root/apps/luci-controllers/.
+# Папка есть только на роутере (в репозитории её нет: там личные ссылки) и
+# переживает sysupgrade через /etc/sysupgrade.conf. Копируются, только если
+# в прошивке есть и AdGuardHome, и sing-box, и только те файлы, которых на
+# роутере ещё нет: правки, сделанные на роутере, не затираются. Нужен
+# Lua-рантайм LuCI (luci-lua-runtime / luci-compat).
+LUCI_CTRL_SRC="/root/apps/luci-controllers"
+LUCI_CTRL_DST="/usr/lib/lua/luci/controller"
+if [ -d "$LUCI_CTRL_SRC" ]; then
+    # Строка каталогом, а не списком файлов: новые файлы в папке попадут в
+    # резервную копию сами. sysupgrade берёт каталог целиком через find.
+    grep -qxE "$LUCI_CTRL_SRC/?" /etc/sysupgrade.conf 2>/dev/null \
+        || { echo "$LUCI_CTRL_SRC" >> /etc/sysupgrade.conf && log_ok "$LUCI_CTRL_SRC добавлен в /etc/sysupgrade.conf"; }
+fi
+if ls "$LUCI_CTRL_SRC"/*.lua >/dev/null 2>&1; then
+    if [ -x /usr/bin/AdGuardHome ] && [ -x /usr/bin/sing-box ] && [ -f /usr/lib/lua/luci/dispatcher.lua ]; then
+        mkdir -p "$LUCI_CTRL_DST"
+        _CTRL_NEW=0
+        for _ctrl in "$LUCI_CTRL_SRC"/*.lua; do
+            _ctrl_name=$(basename "$_ctrl")
+            if [ -f "$LUCI_CTRL_DST/$_ctrl_name" ]; then
+                log_ok "Контроллер LuCI $_ctrl_name уже есть, не трогаем"
+            elif cp "$_ctrl" "$LUCI_CTRL_DST/$_ctrl_name"; then
+                chmod 644 "$LUCI_CTRL_DST/$_ctrl_name"
+                log_ok "Контроллер LuCI $_ctrl_name скопирован"
+                _CTRL_NEW=1
+            else
+                log_err "Не удалось скопировать контроллер LuCI $_ctrl_name"
+            fi
+        done
+        [ "$_CTRL_NEW" = 1 ] && rm -f /tmp/luci-indexcache* /tmp/luci-modulecache/* 2>/dev/null
+    else
+        log_info "Свои контроллеры LuCI пропущены: нет AdGuardHome, sing-box или Lua-рантайма LuCI"
+    fi
 fi
 
 # forkop: NTP мимо прокси. Штатная опция вставляет «udp dport 123 return» в
