@@ -162,7 +162,10 @@ if [ -f "$DISTFEEDS_FILE" ]; then
     # Бэкап делаем один раз: на повторном прогоне в .bak лёг бы уже
     # отфильтрованный файл и оригинал был бы потерян навсегда.
     [ -f "${DISTFEEDS_FILE}.bak" ] || cp "$DISTFEEDS_FILE" "${DISTFEEDS_FILE}.bak"
-    FILTERED_CONTENT=$(grep -E "targets|packages/${ARCH_VERSION}/(base|luci|packages|routing|telephony|video)" "$DISTFEEDS_FILE")
+    # Имя фида должно кончаться «/» (apk: …/luci/packages.adb) или концом
+    # строки (opkg: …/luci). Без этого «luci» ловил и luciappbandix,
+    # luciappbandixplus — фиды из feeds.conf сборки, которых на сервере нет.
+    FILTERED_CONTENT=$(grep -E "targets|packages/${ARCH_VERSION}/(base|luci|packages|routing|telephony|video)(/|\$)" "$DISTFEEDS_FILE")
     if [ -n "$FILTERED_CONTENT" ]; then
         echo "$FILTERED_CONTENT" > "$DISTFEEDS_FILE"
         log_ok "Репозитории очищены"
