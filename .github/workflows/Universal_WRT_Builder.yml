@@ -1,5 +1,5 @@
 name: Universal WRT Builder
-
+ 
 on:
   workflow_dispatch:
     inputs:
@@ -53,7 +53,7 @@ on:
           - passwall
           - v2raya
           - xray
-
+ 
       runner_os:
         description: 'Runner image (22.04 устаревает)'
         required: true
@@ -62,13 +62,13 @@ on:
         options:
           - ubuntu-22.04
           - ubuntu-24.04
-
+ 
       download_binaries_agh:
         description: 'Download latest AdGuardHome (в combo игнорируется)'
         required: true
         type: boolean
         default: true
-
+ 
       download_binaries_sb:
         description: 'Download Sing-Box binary (в combo игнорируется)'
         required: true
@@ -87,7 +87,7 @@ on:
         required: true
         type: boolean
         default: true
-
+ 
       exclude_keywords:
         description: 'Exclude Packages (Space separated keywords)'
         required: false
@@ -98,7 +98,7 @@ on:
         description: 'Target Commit Hash (Optional)'
         required: false
         default: ''
-
+ 
 env:
   CONFIG_FILE: ./config/WRT.config
   # 1. Источники
@@ -107,11 +107,22 @@ env:
   DIY_P2_SH: ./sh/WRT-part2.sh
   # 3. Пакеты и настройка (после install)
   DIY_P3_SH: ./sh/WRT-part3.sh
-
+ 
   TZ: Europe/Moscow
-
+ 
+  # Фид для варианта forkop — ПЕРЕКЛЮЧАЕТСЯ ТОЛЬКО ЗДЕСЬ, формат «имя URL;ветка».
+  # Имя фида = имя подпапки с его патчами: patches/feeds/<имя>/ (WRT-part2.sh
+  # применяет подпапку того фида, который реально загружен, остальные
+  # пропускает). Версия пакета берётся из тегов этого же репозитория.
+  #   оригинал: forkop https://github.com/ushan0v/forkop.git;main
+  #             патчи patches/feeds/forkop (25 шт., включая всё рабочее из форка)
+  #   форк:     forkopmod https://github.com/Gavr1024/forkop-mod.git;main
+  #             патч  patches/feeds/forkopmod (001: без него не работает
+  #             генерация конфига sing-box)
+  FORKOP_FEED: "forkop https://github.com/ushan0v/forkop.git;main"
+ 
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
+ 
 jobs:
   setup:
     runs-on: ${{ inputs.runner_os }}
@@ -125,7 +136,7 @@ jobs:
           INPUT_AGH="${{ inputs.download_binaries_agh }}"
           INPUT_SB="${{ inputs.download_binaries_sb }}"
           INPUT_PATCHES="${{ inputs.apply_patches }}"
-
+ 
           # Каждая сборка матрицы несёт СВОИ настройки:
           #   agh     — true/false (JSON-булево), скачивать ли AdGuard Home;
           #   sb      — версия sing-box или "no";
@@ -141,7 +152,7 @@ jobs:
           # Все поля должны присутствовать в JSON, иначе fromJson получит
           # невалидную матрицу.
           entry() { printf '{"target":"%s","variant":"%s","agh":%s,"sb":"%s","patches":%s}' "$1" "$2" "$3" "$4" "$5"; }
-
+ 
           if [ "$INPUT_TARGET" == "combo" ]; then
             echo ">>> Generating COMBO matrix..."
             # false = не применять любые патчи:
@@ -153,10 +164,12 @@ jobs:
             # Все устройства из config/conf/ — при добавлении нового дописать сюда.
             # ВНИМАНИЕ: slateax и ax59u — «тонкие» устройства: part3 ставит им
             # пакет sing-box-tiny из фида и удаляет скачанный бинарник, поэтому
-            # download_binaries_sb на них не влияет. Если генератор homeproxy
-            # несовместим с версией sing-box в фиде, в вариантах homeproxy*
-            # эти две сборки честно упадут на «Check sing-box compatibility»
-            # (до компиляции, остальные сборки матрицы продолжатся: fail-fast: false).
+            # download_binaries_sb на них не влияет. С патчами homeproxy
+            # (patches/packages/luci-app-homeproxy/004, 006) генератор сам
+            # подстраивается под версию sing-box из фида (1.13+). Без патчей
+            # (apply_patches=false) генератор несовместим с sing-box 1.13+, и в
+            # вариантах homeproxy* эти сборки честно упадут на «Check sing-box
+            # compatibility» (до компиляции, остальные продолжатся: fail-fast: false).
             TINY_TARGETS="slateax ax59u"
             targets="nanopi-r6s nanopi-r5s rb5009 slateax ax59u brume2"
             if [ "$INPUT_TARGET" == "all" ]; then
@@ -171,7 +184,7 @@ jobs:
             done
             json="{\"include\":[$json_parts]}"
           fi
-
+ 
           # Невалидный JSON уронил бы fromJson уже в джобе build с невнятной
           # ошибкой — проверяем здесь.
           if ! echo "$json" | jq -e . >/dev/null; then
@@ -185,22 +198,33 @@ jobs:
           echo "Generated Matrix:"
           echo "$json" | jq -r '.include[] | "  \(.target) / \(.variant) / agh=\(.agh) / sb=\(.sb) / patches=\(.patches)"'
           echo "=========================================="
-
-          # Заранее предупреждаем о сборках, чей sing-box не выбирается формой
-          case "$INPUT_VARIANT" in
-            homeproxy|homeproxy_sqm)
-              for t in ${TINY_TARGETS:-}; do
-                if echo "$json" | jq -e --arg t "$t" '.include[] | select(.target == $t)' >/dev/null; then
-                  echo "::warning title=${t}: sing-box из фида::На ${t} ставится sing-box-tiny из фида, выбор download_binaries_sb к нему не применяется. Если homeproxy несовместим с этой версией, сборка ${t} остановится на проверке совместимости до компиляции."
-                fi
-              done
-              ;;
-          esac
-
+ 
+          # Заранее предупреждаем о сборках, чей sing-box не выбирается формой.
+          # Нужно только без патчей: с патчами 004/006 homeproxy работает с
+          # sing-box из фида (1.13+).
+          for t in ${TINY_TARGETS:-}; do
+            if echo "$json" | jq -e --arg t "$t" '.include[] | select(.target == $t and (.variant == "homeproxy" or .variant == "homeproxy_sqm") and .patches == false)' >/dev/null; then
+              echo "::warning title=${t}: homeproxy без патчей::На ${t} ставится sing-box-tiny из фида (1.13+), выбор download_binaries_sb к нему не применяется. Без патчей homeproxy несовместим с sing-box 1.13+, и сборка ${t} остановится на проверке совместимости до компиляции. Включите apply_patches."
+            fi
+          done
+ 
+          # forkop без патчей (фид — из FORKOP_FEED в env):
+          #   ushan0v/forkop 1.0.5 не стартует на sing-box 1.14 (issue #98);
+          #   Gavr1024/forkop-mod без патча 001 не генерирует конфиг sing-box.
+          if echo "$json" | jq -e '.include[] | select(.variant == "forkop" and .patches == false)' >/dev/null; then
+            FK_NAME="${FORKOP_FEED%% *}"
+            case "$FK_NAME" in
+              forkop)    FK_WHY="Пока автор не внёс исправления, оригинал ushan0v/forkop несовместим с sing-box 1.14 (issue #98): не скачивайте sing-box 1.14.x/latest/extended для этой сборки" ;;
+              forkopmod) FK_WHY="Без патча 001 форк Gavr1024/forkop-mod не генерирует конфиг sing-box (ucode: left-hand side is not a function)" ;;
+              *)         FK_WHY="Исправления из patches/feeds/${FK_NAME} не будут применены" ;;
+            esac
+            echo "::warning title=forkop без патчей::Фид ${FK_NAME} собирается без patches/feeds/${FK_NAME}. ${FK_WHY}. Включите apply_patches."
+          fi
+ 
           echo "matrix<<EOF" >> $GITHUB_OUTPUT
           echo "$json" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-
+ 
   build:
     needs: setup
     runs-on: ${{ inputs.runner_os }}
@@ -212,7 +236,7 @@ jobs:
       matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
     
     name: ${{ inputs.source }} ${{ inputs.branch }} [${{ matrix.variant }}] - ${{ matrix.target }} (sb:${{ matrix.sb }}, patches:${{ matrix.patches }})
-
+ 
     steps:
     - name: Free up disk space
       run: |
@@ -239,10 +263,10 @@ jobs:
         
         echo "Final space:"
         df -h
-
+ 
     - name: Checkout
       uses: actions/checkout@v7
-
+ 
     - name: Set permissions
       run: |
         [ -d "./files/usr/bin" ] && find ./files/usr/bin -maxdepth 1 -type f -exec chmod 755 {} + || true
@@ -254,7 +278,7 @@ jobs:
         echo "Permissions set for ./files/usr/bin and uci-defaults."
         [ -d "./files/usr/bin" ] && ls -l ./files/usr/bin | head -n 5 || echo "No custom bins"
         echo "=========================================="
-
+ 
     - name: Download AdGuardHome
       # Условие: выполнять только если вариант НЕ switch И НЕ clear и НЕ crystal_clear
       if: matrix.agh && matrix.variant != 'switch' && matrix.variant != 'clear' && matrix.variant != 'crystal_clear'
@@ -318,7 +342,7 @@ jobs:
         SB_TAG=""
         SB_URL=""
         SB_REPO="SagerNet/sing-box"
-
+ 
         # Последний стабильный тег SagerNet/sing-box через git ls-remote.
         # Раньше тег искали в первой странице API (releases?per_page=100),
         # отсортированной по ДАТЕ: альфы новых веток выходят каждую неделю и
@@ -337,7 +361,7 @@ jobs:
                 | awk '{print $2}' | sed 's|refs/tags/||' \
                 | grep -E "$pattern" | sort -V | tail -n1
         }
-
+ 
         if [ "$SB_VERSION_CHOICE" == "latest" ] || [[ "$SB_VERSION_CHOICE" =~ ^[0-9]+\.[0-9]+\.x$ ]]; then
             # latest — последний стабильный вообще; X.Y.x — последний стабильный в ветке
             if [ "$SB_VERSION_CHOICE" == "latest" ]; then
@@ -375,23 +399,15 @@ jobs:
             echo "::error::Неизвестный выбор версии sing-box: '$SB_VERSION_CHOICE'"
             exit 1
         fi
-        # С 1.13 SagerNet кладёт в «-linux-arm64.tar.gz» бинарник под glibc
-        # (динамический, /lib/ld-linux-aarch64.so.1, ради libcronet) — на musl
-        # OpenWrt он даёт «/usr/bin/sing-box: not found». Статическая сборка
-        # лежит в «-linux-arm64-musl.tar.gz»; у 1.12 такого ассета нет (404),
-        # там обычный архив и так статический. Поэтому сначала -musl, затем обычный.
-        SB_URL_MUSL="${SB_URL%.tar.gz}-musl.tar.gz"
+        echo ">>> Downloading sing-box ($SB_VERSION_CHOICE) from: $SB_URL"
         # -f: при 404 GitHub отдаёт HTML-страницу; без -f она сохранялась как
         # непустой sb.tar.gz, проходила проверку -s и роняла шаг уже на tar.
-        if curl -fsSL --retry 3 -o sb.tar.gz "$SB_URL_MUSL" && [ -s sb.tar.gz ]; then
-            SB_URL="$SB_URL_MUSL"
-        elif ! curl -fL --retry 3 -o sb.tar.gz "$SB_URL" || [ ! -s sb.tar.gz ]; then
+        if ! curl -fL --retry 3 -o sb.tar.gz "$SB_URL" || [ ! -s sb.tar.gz ]; then
             echo ">>> WARNING: Download failed or file is empty. Skipping."
             echo ">>> Sing-box from OpenWrt feed will be used instead."
             rm -f sb.tar.gz
             exit 0
         fi
-        echo ">>> Downloaded sing-box ($SB_VERSION_CHOICE) from: $SB_URL"
         # Сумма из digest ассета в GitHub API (файлов сумм sing-box не публикует)
         if ! bash ./sh/verify-sha256.sh sb.tar.gz "$SB_REPO" "$SB_TAG" "$(basename "$SB_URL")"; then
             echo ">>> WARNING: sing-box checksum mismatch. Skipping."
@@ -399,26 +415,16 @@ jobs:
             rm -f sb.tar.gz
             exit 0
         fi
-        SB_UNPACK=$(mktemp -d)
-        tar -xzf sb.tar.gz -C "$SB_UNPACK"
+        tar -xzf sb.tar.gz
         mkdir -p ./files/usr/bin
         # cp sing-box-*/sing-box ./files/usr/bin/ && chmod 755 ./files/usr/bin/sing-box
-        SB_BINARY_PATH=$(find "$SB_UNPACK" -type f -name sing-box | head -n 1)
+        SB_BINARY_PATH=$(find . -type f -name sing-box | head -n 1)
         if [ -z "$SB_BINARY_PATH" ]; then
             echo ">>> WARNING: sing-box binary not found in archive. Skipping."
-            rm -rf sb.tar.gz "$SB_UNPACK"
-            exit 0
-        fi
-        # Бинарник под glibc на OpenWrt не запустится: лучше sing-box из фида,
-        # чем прошивка с неработающим /usr/bin/sing-box.
-        SB_INTERP=$(readelf -l "$SB_BINARY_PATH" 2>/dev/null | sed -n 's/.*interpreter: \(.*\)]/\1/p')
-        if [ -n "$SB_INTERP" ] && [[ "$SB_INTERP" != *ld-musl* ]]; then
-            echo "::warning title=sing-box не для musl::$(basename "$SB_URL") собран под $SB_INTERP и не запустится на OpenWrt. Будет использован sing-box из фида."
-            rm -rf sb.tar.gz "$SB_UNPACK"
             exit 0
         fi
         mv -f "$SB_BINARY_PATH" ./files/usr/bin/sing-box && chmod 755 ./files/usr/bin/sing-box
-        rm -rf sb.tar.gz "$SB_UNPACK"
+        rm -rf sb.tar.gz sing-box-*
         # Для шага «Check sing-box compatibility»: какой именно бинарник в files/
         echo "SB_DOWNLOADED_TAG=$SB_TAG" >> $GITHUB_ENV
         echo "SB_DOWNLOADED_REPO=$SB_REPO" >> $GITHUB_ENV
@@ -428,12 +434,10 @@ jobs:
         echo "Version choice : $SB_VERSION_CHOICE"
         echo "Repository     : $SB_REPO"
         echo "Downloaded tag : $SB_TAG"
-        echo "Asset          : $(basename "$SB_URL")"
-        echo "Linkage        : ${SB_INTERP:-static}"
         echo "Files in destination:"
         ls -lh ./files/usr/bin/
         echo "=========================================="
-
+ 
     - name: Configure Build Variables
       env:
         # Поля формы — через env, а не подстановкой ${{ }} в текст скрипта:
@@ -448,7 +452,7 @@ jobs:
           VAR_REPO_URL="https://github.com/openwrt/openwrt.git"
         fi
         echo "REPO_URL=$VAR_REPO_URL" >> $GITHUB_ENV
-
+ 
         # Хеш коммита из формы: только hex, иначе git checkout получил бы
         # произвольную строку (ветку, опцию и т.п.)
         if [ -n "$MANUAL_COMMIT" ] && ! [[ "$MANUAL_COMMIT" =~ ^[0-9a-fA-F]{7,40}$ ]]; then
@@ -456,14 +460,14 @@ jobs:
             exit 1
         fi
         MANUAL_COMMIT="${MANUAL_COMMIT,,}"
-
+ 
         # 2. Логика Ветки
         INPUT_BRANCH="${{ inputs.branch }}"
-
+ 
         VAR_BRANCH="$INPUT_BRANCH"
         VAR_TARGET_RELEASE=""
         VAR_COMMIT_HASH="$MANUAL_COMMIT"
-
+ 
         if [ "$INPUT_BRANCH" == "master" ]; then
             # --- ЛОГИКА ДЛЯ MASTER ---
             if [ "${{ inputs.source }}" == "openwrt" ]; then
@@ -471,12 +475,12 @@ jobs:
             fi
             VAR_TARGET_RELEASE="snapshots"
             echo ">>> Master/Main branch selected. Using snapshots."
-
+ 
         else
             # --- ЛОГИКА ДЛЯ СТАБИЛЬНЫХ ВЕТОК ---
             echo ">>> Stable branch selected: $INPUT_BRANCH"
             BRANCH_VER="${INPUT_BRANCH#openwrt-}"          # openwrt-25.12 -> 25.12
-
+ 
             # Теги через git ls-remote: без лимитов API и с сортировкой по
             # ВЕРСИИ (API /tags не гарантирует порядок, v25.12.10 < v25.12.9
             # при сравнении строк). Шаблон отсекает -rc и прочие пре-релизы.
@@ -491,7 +495,7 @@ jobs:
                 [ -z "$c" ] && c=$(printf '%s\n' "$TAGS_RAW" | awk -v r="refs/tags/$1" '$2 == r {print $1}')
                 printf '%s' "$c"
             }
-
+ 
             if [ -z "$TAGS_RAW" ]; then
                 echo ">>> WARNING: git ls-remote не вернул теги (сеть?)."
             elif [ -z "$MANUAL_COMMIT" ]; then
@@ -521,7 +525,7 @@ jobs:
                     echo ">>> Коммит не совпадает ни с одним релизным тегом."
                 fi
             fi
-
+ 
             # Специфика ImmortalWrt: если папки релиза на сервере ещё нет
             if [ -n "$VAR_TARGET_RELEASE" ] && [ "${{ inputs.source }}" == "immortalwrt" ]; then
                 # || true: при недоступном сервере curl вернул бы ошибку и
@@ -532,7 +536,7 @@ jobs:
                     VAR_TARGET_RELEASE=""
                 fi
             fi
-
+ 
             # ФОЛБЭК: SNAPSHOT ветки. Зашитые номера релизов (раньше тут были
             # 25.12.5 / 24.10.8) устаревали и давали хеш ядра чужого релиза.
             if [ -z "$VAR_TARGET_RELEASE" ]; then
@@ -544,7 +548,7 @@ jobs:
         echo "REPO_BRANCH=$VAR_BRANCH" >> $GITHUB_ENV
         echo "TARGET_RELEASE=$VAR_TARGET_RELEASE" >> $GITHUB_ENV
         echo "AUTO_COMMIT_HASH=$VAR_COMMIT_HASH" >> $GITHUB_ENV
-
+ 
         # 3. Устройство
         source ./config/conf/${{ matrix.target }}
         echo "TARGET_NAME=${TARGET_NAME}" >> $GITHUB_ENV
@@ -562,13 +566,13 @@ jobs:
         SUM_MODE="${{ inputs.target }}"
         SUM_VARIANT="${{ matrix.variant }}"
         SUM_EXCLUDE="$EXCLUDE_INPUT"
-
+ 
         if [ "${{ matrix.patches }}" = "true" ]; then
           SUM_PATCHES="да"
         else
           SUM_PATCHES="нет"
         fi
-
+ 
         if [ "$SUM_MODE" = "combo" ]; then
             SUM_VARIANT_NOTE="  (выбор Build Variant игнорируется: режим combo)"
         else
@@ -576,12 +580,12 @@ jobs:
         fi
         SUM_SRC_NOTE=""
         [ "$SUM_MODE" = "combo" ] && SUM_SRC_NOTE="  (пресет combo)"
-
+ 
         case "$SUM_VARIANT" in
             switch|clear|crystal_clear) SUM_NO_BIN=1 ;;
             *)                          SUM_NO_BIN=0 ;;
         esac
-
+ 
         if [ "$SUM_NO_BIN" = "1" ]; then
             SUM_AGH="пропуск (вариант $SUM_VARIANT)"
         elif [ "${{ matrix.agh }}" = "true" ]; then
@@ -589,7 +593,7 @@ jobs:
         else
             SUM_AGH="нет (не запрошено)$SUM_SRC_NOTE"
         fi
-
+ 
         case "$SUM_VARIANT" in
             switch|clear|crystal_clear|passwall|v2raya|xray) SUM_SB="пропуск (вариант $SUM_VARIANT)" ;;
             *)
@@ -600,7 +604,7 @@ jobs:
                 fi
                 ;;
         esac
-
+ 
         echo "=========================================="
         echo "       [BUILD SUMMARY]                    "
         echo "=========================================="
@@ -622,7 +626,7 @@ jobs:
         echo "Device config  : ./config/conf/${{ matrix.target }}"
         echo "Kernel path    : $KERNEL_PATH"
         echo "=========================================="
-
+ 
     - name: Init Env
       env: { DEBIAN_FRONTEND: noninteractive }
       run: |
@@ -634,18 +638,18 @@ jobs:
         if [ "${{ inputs.runner_os }}" = "ubuntu-22.04" ]; then
             DEPENDS_FILE="$GITHUB_WORKSPACE/depends-ubuntu-2204"
         fi
-
+ 
         if [ ! -f "$DEPENDS_FILE" ]; then
             echo "::error::Не найден файл зависимостей $DEPENDS_FILE"
             exit 1
         fi
-
+ 
         echo ">>> Раннер: ${{ inputs.runner_os }}"
         echo ">>> Файл зависимостей: $(basename "$DEPENDS_FILE") ($(wc -l < "$DEPENDS_FILE") пакетов)"
-
+ 
         # Обновляем базу пакетов
         sudo -E apt-get -qq update
-
+ 
         # Устанавливаем зависимости
         sudo -E apt-get -qq install $(tr '\n' ' ' < "$DEPENDS_FILE")
         
@@ -661,7 +665,7 @@ jobs:
         echo "Workdir: /workdir"
         date
         echo "=========================================="
-
+ 
     - name: Clone Source
       working-directory: /workdir
       run: |
@@ -688,12 +692,12 @@ jobs:
         echo "Current Head:"
         git log -1 --format="%H - %s"
         echo "=========================================="
-
+ 
     - name: Apply custom patches
       run: |
         APPLY_PATCHES="${{ matrix.patches }}"
         PATCH_STATUS="No patches dir"
-
+ 
         if [ "$APPLY_PATCHES" != "true" ]; then
           echo ">>> Custom patches DISABLED by matrix."
           echo ">>> Direct OpenWrt patches are skipped here."
@@ -708,7 +712,7 @@ jobs:
           shopt -s nullglob
           files=( "$GITHUB_WORKSPACE"/patches/*.patch )
           shopt -u nullglob
-
+ 
           if [ ${#files[@]} -gt 0 ]; then
             for p in "${files[@]}"; do
               echo "Applying patch: $p"
@@ -722,24 +726,24 @@ jobs:
         else
           echo "Patches directory not found. Skipping."
         fi
-
+ 
         echo "=========================================="
         echo "       [PATCH SUMMARY]                    "
         echo "=========================================="
         echo "Apply patches: $APPLY_PATCHES"
         echo "Result: $PATCH_STATUS"
         echo "=========================================="
-
+ 
     - name: Update Feeds & Config
       env:
         EXCLUDE_INPUT: ${{ inputs.exclude_keywords }}
       run: |
         cd openwrt
-
+ 
         export VARIANT="${{ matrix.variant }}"
         export CURRENT_MATRIX_TARGET="${{ matrix.target }}"
         echo ">>> Выбран: Variant=$VARIANT, Target=$CURRENT_MATRIX_TARGET"
-
+ 
         mkdir -p files/etc
         date +'%Y-%m-%d' > files/etc/build_date
         
@@ -761,17 +765,19 @@ jobs:
         elif [ "$VARIANT" == "podkop" ]; then
             echo -e "\nsrc-git podkop https://github.com/itdoginfo/podkop.git;main" >> feeds.conf.default
         elif [ "$VARIANT" == "forkop" ]; then
-            # Есть патчи в patches/feeds/forkop — оригинал ushan0v/forkop, который
-            # они исправляют и дополняют (применяются в WRT-part2.sh). Без них
-            # голый оригинал 1.0.5 не стартует на sing-box 1.14 (issue #98),
-            # поэтому тогда берётся форк Gavr1024/forkop-mod, как раньше.
-            if [ "${{ matrix.patches }}" = "true" ] && ls "$GITHUB_WORKSPACE"/patches/feeds/forkop/*.patch >/dev/null 2>&1; then
-                echo -e "\nsrc-git forkop https://github.com/ushan0v/forkop.git;main" >> feeds.conf.default
-            else
-                echo -e "\nsrc-git forkopmod https://github.com/Gavr1024/forkop-mod.git;main" >> feeds.conf.default
+            # Фид задаётся переменной FORKOP_FEED в env в начале файла
+            # (оригинал ushan0v/forkop или форк Gavr1024/forkop-mod). Его патчи —
+            # patches/feeds/<имя фида>, их применяет WRT-part2.sh.
+            FK_NAME="${FORKOP_FEED%% *}"
+            echo ">>> forkop: фид $FORKOP_FEED"
+            echo -e "\nsrc-git $FORKOP_FEED" >> feeds.conf.default
+            if [ "${{ matrix.patches }}" != "true" ]; then
+                echo "::warning title=forkop без патчей::Фид ${FK_NAME} собирается без patches/feeds/${FK_NAME} (подробности — в предупреждении job setup)."
+            elif ! ls "$GITHUB_WORKSPACE/patches/feeds/${FK_NAME}"/*.patch >/dev/null 2>&1; then
+                echo "::warning title=forkop: нет патчей для фида::Для фида ${FK_NAME} нет patches/feeds/${FK_NAME}/*.patch — пакет соберётся без исправлений."
             fi
         fi
-
+ 
         # --- ЗАМЕНА ЗЕРКАЛ (FIX 503 ERROR) Меняем git.openwrt.org на github.com---
         sed -i 's|https://git.openwrt.org/feed/packages.git|https://github.com/openwrt/packages.git|g' feeds.conf.default
         sed -i 's|https://git.openwrt.org/project/luci.git|https://github.com/openwrt/luci.git|g' feeds.conf.default
@@ -780,11 +786,11 @@ jobs:
         # -------------------------------------
         
         ./scripts/feeds update -a
-
+ 
         # -------------------------------------------------------------
         # Глобальный переключатель патчей для Part 2 / Part 3.
-        # Папку patches скрываем ТОЛЬКО после feeds update:
-        # до этого она нужна, в частности, для выбора forkop/forkopmod.
+        # Папку patches скрываем после feeds update (раньше в этой точке
+        # по ней выбирался фид forkop; скрывать до неё смысла нет).
         # Благодаря trap каталог вернётся даже при ошибке Part 2/3.
         # -------------------------------------------------------------
         PATCHES_BACKUP=""
@@ -800,20 +806,20 @@ jobs:
             fi
         }
         trap restore_patches EXIT
-
+ 
         if [ "${{ matrix.patches }}" != "true" ] && [ -d "$GITHUB_WORKSPACE/patches" ]; then
             PATCHES_TMP_DIR="$(mktemp -d)"
             PATCHES_BACKUP="$PATCHES_TMP_DIR/patches"
             mv "$GITHUB_WORKSPACE/patches" "$PATCHES_BACKUP"
             echo ">>> [Patches] DISABLED: patches/ временно скрыт для WRT-part2.sh и WRT-part3.sh."
         fi
-
+ 
         # 2. Запуск Part 2 (Фиксы версий и Python - строго между update и install)
         if [ -f "$GITHUB_WORKSPACE/$DIY_P2_SH" ]; then
             chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
             $GITHUB_WORKSPACE/$DIY_P2_SH
         fi
-
+ 
         ./scripts/feeds install -a
         
         [ -e $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE ./.config
@@ -903,7 +909,7 @@ jobs:
             echo 'CONFIG_PACKAGE_podkop=y' >> ./.config
             echo 'CONFIG_PACKAGE_luci-app-podkop=y' >> ./.config
             echo 'CONFIG_PACKAGE_luci-i18n-podkop-ru=y' >> ./.config
-
+ 
         elif [ "$VARIANT" == "forkop" ]; then
             echo 'CONFIG_PACKAGE_forkop=y' >> ./.config
             echo 'CONFIG_PACKAGE_luci-app-forkop=y' >> ./.config
@@ -950,7 +956,7 @@ jobs:
         # Проверяем наличие ключевых пакетов для уверенности
         grep -E "CONFIG_PACKAGE_(luci-app-homeproxy|sing-box|luci-app-passwall2|luci-app-v2raya|xray-core|luci-app-podkop|luci-app-forkop)=" .config || echo "None found"
         echo "=========================================="
-
+ 
     - name: Check sing-box compatibility (homeproxy)
       # Проверяем ФАКТИЧЕСКУЮ совместимость, а не номер версии: генератор
       # homeproxy, который едет в прошивку, против sing-box, который едет в
@@ -963,7 +969,7 @@ jobs:
       if: matrix.variant == 'homeproxy' || matrix.variant == 'homeproxy_sqm'
       run: |
         cd openwrt
-
+ 
         # --- 1. Генератор homeproxy, который попадёт в прошивку ---
         # Сначала клон из part3 (package/), затем встроенный в фид ImmortalWrt LuCI.
         GEN=""
@@ -975,7 +981,7 @@ jobs:
             echo "::warning title=Проверка sing-box пропущена::Генератор homeproxy не найден в package/ и feeds/"
             exit 0
         fi
-
+ 
         # --- 2. Версия sing-box, которая попадёт в прошивку ---
         # files/usr/bin/sing-box перекрывает пакетный бинарник. part3 может его
         # удалить (slateax/ax59u → sing-box-tiny), поэтому смотрим на файл, а не
@@ -1001,7 +1007,7 @@ jobs:
             echo "::warning title=Проверка sing-box пропущена::Не удалось определить версию sing-box в прошивке"
             exit 0
         fi
-
+ 
         # --- 3. sing-box той же версии под архитектуру раннера ---
         # Бинарник для роутера (arm64) на раннере не запустить, берём amd64
         # той же версии: разбор конфига у них одинаковый.
@@ -1013,7 +1019,7 @@ jobs:
         fi
         tar -xzf "$PROBE_DIR/sb.tgz" -C "$PROBE_DIR"
         SB_BIN=$(find "$PROBE_DIR" -type f -name sing-box | head -n 1)
-
+ 
         # --- 4. Пробный конфиг из того, что РЕАЛЬНО пишет генератор ---
         # Каждый маркер — возможность, которую sing-box объявлял устаревшей.
         # Новый маркер добавляется одной строкой grep и одной веткой в jq.
@@ -1022,7 +1028,7 @@ jobs:
         M_BLOCK=$(has "type: 'block'")                                 # legacy special outbound
         M_RDRC=$(has 'store_rdrc')                                     # cache_file.store_rdrc (устарел в 1.14)
         M_INDEP=$(has 'independent_cache')                             # dns.independent_cache (устарел в 1.14)
-
+ 
         # Генератор, который сам выбирает форму sniff по версии ядра
         # (patches/packages/luci-app-homeproxy/004-*): legacy-поля пишутся
         # только для sing-box < 1.13, иначе — правило action 'sniff'.
@@ -1040,7 +1046,7 @@ jobs:
                 *) M_SNIFF=0; SNIFF_MODE="по версии: правило sniff (sing-box ≥ 1.13)" ;;
             esac
         fi
-
+ 
         # То же для опций кэша DNS (patches/packages/luci-app-homeproxy/006-*):
         # store_rdrc и independent_cache пишутся только для sing-box < 1.14,
         # с 1.14 — store_dns. Тогда для 1.14+ их нет и в пробе.
@@ -1053,7 +1059,7 @@ jobs:
                 *) M_RDRC=0; M_INDEP=0; CACHE_MODE="по версии: store_dns (sing-box ≥ 1.14)" ;;
             esac
         fi
-
+ 
         jq -n --argjson s "$M_SNIFF" --argjson b "$M_BLOCK" --argjson r "$M_RDRC" --argjson i "$M_INDEP" '
         {
           log: {level: "warn"},
@@ -1067,12 +1073,12 @@ jobs:
           experimental: {cache_file: ({enabled: true, path: "/tmp/sb-probe-cache.db"}
                 + (if $r == 1 then {store_rdrc: true} else {} end))}
         }' > "$PROBE_DIR/probe.json"
-
+ 
         # --- 5. Вердикт самого sing-box ---
         RC=0
         "$SB_BIN" check -c "$PROBE_DIR/probe.json" > "$PROBE_DIR/out.txt" 2>&1 || RC=$?
         OUT=$(sed 's/\x1b\[[0-9;]*m//g' "$PROBE_DIR/out.txt")
-
+ 
         echo "=========================================="
         echo "   [SING-BOX COMPATIBILITY CHECK]         "
         echo "=========================================="
@@ -1084,15 +1090,15 @@ jobs:
         echo "------------------------------------------"
         echo "${OUT:-(замечаний нет)}"
         echo "=========================================="
-
+ 
         # Предупреждения об устаревании — в аннотации: видно заранее,
         # что сломается при переходе на следующую версию sing-box.
         echo "$OUT" | grep 'WARN' | sed 's/^WARN\[[0-9]*\] //' | while IFS= read -r w; do
             echo "::warning title=sing-box ${SB_VER}: устаревшее поле в homeproxy::$w"
         done
-
+ 
         rm -rf "$PROBE_DIR"
-
+ 
         if [ "$RC" -ne 0 ]; then
             FATAL_MSG=$(echo "$OUT" | grep -m1 'FATAL' | sed 's/^FATAL\[[0-9]*\] //; s/^decode config at [^:]*: //')
             echo "::error title=homeproxy несовместим с sing-box ${SB_VER}::${FATAL_MSG}"
@@ -1116,7 +1122,7 @@ jobs:
             exit 1
         fi
         echo ">>> OK: homeproxy совместим с sing-box ${SB_VER}"
-
+ 
     - name: Kernel Hash
       run: |
         cd openwrt
@@ -1156,13 +1162,13 @@ jobs:
                  fi
              fi
         fi
-
+ 
         # 5. Резервная проверка на ядро не 6.x
         if [ -z "$KERNEL_LIST" ]; then
              echo ">>> Warning: Kernel 6.x pattern not found. Trying generic pattern..."
              KERNEL_LIST=$(curl -sf "$FULL_URL" | grep -oE '[0-9]\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+' || true)
         fi
-
+ 
         # 6. Парсинг и выбор последнего хеша
         LATEST_HASH=$(echo "$KERNEL_LIST" | while read -r line; do
             version=$(echo "$line" | cut -d'-' -f1)
@@ -1229,7 +1235,7 @@ jobs:
         echo "Compilation finished successfully."
         echo "Firmware Date: $(date +"%Y%m%d%H%M")"
         echo "=========================================="
-
+ 
     - name: Save Bootloader files (Deep Search)
       run: |
         cd openwrt
@@ -1246,7 +1252,7 @@ jobs:
         # Обычно это файлы с расширением .fip или .bin внутри папки u-boot
         find build_dir/target-* -name "*.fip" -type f -exec cp -vf {} bin/u-boot-files/ \;
         find build_dir/target-* -name "u-boot.bin" -type f -path "*/u-boot-*" -exec cp -vf {} bin/u-boot-files/ \;
-
+ 
         # 3. Дополнительный поиск, если файлы уже переименованы системой
         # Ищем в папке bin/targets, исключая пакеты (.apk/.ipk)
         find bin/targets -type f -name "*idbloader.img" -exec cp -vf {} bin/u-boot-files/ \;
@@ -1281,7 +1287,7 @@ jobs:
         # На ранней ошибке (до создания bin/) не валим джоб красным "no files".
         if-no-files-found: warn
         retention-days: 10
-
+ 
   notify:
     # Одно уведомление в Telegram после ВСЕЙ матрицы — со статусом каждой
     # сборки. always(): сообщение нужно и при падении, и при отмене.
@@ -1318,10 +1324,10 @@ jobs:
           echo "::notice::Секреты TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID не заданы — уведомление пропущено."
           exit 0
         fi
-
+ 
         # Экранирование для parse_mode=HTML
         esc() { sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }
-
+ 
         # needs.build.result — только общий итог матрицы. Статус и длительность
         # каждой сборки берём из списка джобов текущего запуска.
         # Сборки узнаются по имени: «... [вариант] - устройство (sb:...)».
@@ -1345,7 +1351,7 @@ jobs:
         if [ -n "$ALL" ] && [ "$ALL" != "0" ]; then
           COUNT_LINE="Успешно: ${OK} из ${ALL}"
         fi
-
+ 
         if [ "$SETUP_RESULT" != "success" ]; then
           HEAD="❌ Матрица не сформирована (setup: $SETUP_RESULT)"
         else
@@ -1356,7 +1362,7 @@ jobs:
             *)         HEAD="❔ Сборка: $BUILD_RESULT" ;;
           esac
         fi
-
+ 
         # Собираем построчно: пустые части не оставляют «дыр» в сообщении
         {
           printf '<b>%s</b>\n' "$(printf '%s' "$HEAD" | esc)"
@@ -1367,14 +1373,14 @@ jobs:
         } > /tmp/tg_text.txt
         TEXT=$(cat /tmp/tg_text.txt)
         rm -f /tmp/tg_text.txt
-
+ 
         HTTP=$(curl -sS -o /tmp/tg.json -w '%{http_code}' --max-time 20 \
           "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
           --data-urlencode "chat_id=${TG_CHAT}" \
           --data-urlencode "text=${TEXT}" \
           --data-urlencode "parse_mode=HTML" \
           --data-urlencode "disable_web_page_preview=true" 2>/dev/null) || HTTP="000"
-
+ 
         if [ "$HTTP" = "200" ]; then
           echo ">>> Уведомление в Telegram отправлено."
         else
@@ -1383,7 +1389,7 @@ jobs:
           echo "::warning::Telegram API ответил HTTP $HTTP: $(jq -r '.description // "нет ответа"' /tmp/tg.json 2>/dev/null)"
         fi
         rm -f /tmp/tg.json
-
+ 
     - name: Delete workflow runs
       # Один раз на запуск, а не в каждой сборке матрицы (раньше в combo
       # шаг выполнялся 4 раза параллельно и дрался за одни и те же run'ы).
@@ -1414,3 +1420,4 @@ jobs:
             gh run delete "$ID" || echo "Failed to delete $ID (maybe currently running)"
           done
         fi
+ 
