@@ -217,7 +217,7 @@
           </tr>
           <tr>
             <td class="key">Build Variant <small>variant</small></td>
-            <td data-l="Значения"><div class="opts"><span class="opt def">homeproxy</span><span class="opt">homeproxy_sqm</span><span class="opt">clear</span><span class="opt">switch</span><span class="opt">crystal_clear</span><span class="opt">podkop</span><span class="opt">forkop</span><span class="opt">passwall</span><span class="opt">v2raya</span><span class="opt">xray</span></div></td>
+            <td data-l="Значения"><div class="opts"><span class="opt def">homeproxy</span><span class="opt">homeproxy_default</span><span class="opt">clear</span><span class="opt">switch</span><span class="opt">crystal_clear</span><span class="opt">podkop</span><span class="opt">forkop</span><span class="opt">passwall</span><span class="opt">v2raya</span><span class="opt">xray</span></div></td>
             <td data-l="По умолчанию"><span class="opt def">homeproxy</span></td>
             <td data-l="Что делает"><p>Что включается в прошивку и какой прокси-стек используется. В режиме <code>combo</code> игнорируется. Полная матрица — в разделе <a class="anchor" href="#variants">03</a>.</p></td>
           </tr>
@@ -231,7 +231,7 @@
             <td class="key">Download latest AdGuardHome <small>download_binaries_agh</small></td>
             <td data-l="Значения"><div class="opts"><span class="opt def">да</span><span class="opt">нет</span></div></td>
             <td data-l="По умолчанию"><span class="opt def">да</span></td>
-            <td data-l="Что делает"><p>Класть ли в образ бинарь последнего стабильного релиза AdGuardHome (arm64). Перед использованием сверяется SHA-256. Игнорируется для вариантов <code>clear</code>, <code>crystal_clear</code>, <code>switch</code> и <code>homeproxy_sqm</code> — там AGH не нужен — и в режиме <code>combo</code>.</p></td>
+            <td data-l="Что делает"><p>Класть ли в образ бинарь последнего стабильного релиза AdGuardHome (arm64). Перед использованием сверяется SHA-256. Игнорируется для вариантов <code>clear</code>, <code>crystal_clear</code>, <code>switch</code> и <code>homeproxy_default</code> — там AGH не нужен — и в режиме <code>combo</code>.</p></td>
           </tr>
           <tr>
             <td class="key">Download Sing-Box binary <small>download_binaries_sb</small></td>
@@ -309,7 +309,7 @@
       <li><b>Клон исходников</b> и checkout на нужный коммит/тег OpenWrt/ImmortalWrt.</li>
       <li><b>Патчи дерева.</b> Файлы <code>patches/*.patch</code> (только корень каталога) применяются к исходникам OpenWrt: <code>patch -p1 -d openwrt</code>. Шаг идёт <b>до</b> <code>feeds update</code>, поэтому фидов здесь ещё нет; любой непримёнившийся патч останавливает сборку. Патчи к фидам лежат в подпапках <code>patches/feeds/</code> и этим шагом не трогаются — см. следующий шаг.</li>
       <li><b>Update Feeds &amp; Config.</b> Главный шаг: P1 → <code>feeds update</code> → P2 → <code>feeds install</code> → копирование <code>WRT.config</code> в <code>.config</code> (с удалением CRLF) → команды устройства → P3 → правки под вариант → отключение по Exclude-словам → <code>make defconfig</code>. Фид варианта <code>forkop</code> задаётся одной переменной <code>FORKOP_FEED</code> в <code>env:</code> workflow: по умолчанию оригинал <code>ushan0v/forkop</code> с патчами <code>patches/feeds/forkop</code>, либо форк <code>Gavr1024/forkop-mod</code> (<code>forkopmod …</code>) с патчем <code>patches/feeds/forkopmod</code>. Применяется подпапка только загруженного фида, версия пакета берётся из его тегов.</li>
-      <li class="tag-fk"><span class="badge">part2</span><b>Версии и патчи фидов.</b> <code>WRT-part2.sh</code> (между <code>feeds update</code> и <code>feeds install</code>): берёт версию forkop из последнего тега <code>x.y.z</code> репозитория (<code>FORKOP_VERSION</code>, без неё пакет получил бы <code>0.0.0</code>) и версию темы Proton2025; версия берётся из репозитория, который подключён в <code>feeds.conf</code>. Затем применяет патчи из <code>patches/feeds/&lt;имя фида&gt;/*.patch</code> к <code>feeds/&lt;имя фида&gt;</code> по порядку имён: уже есть в исходниках — пропуск; не применён патч из строки <code>Requires:</code> — пропуск; иначе применяется только при точном совпадении контекста (<code>patch -F 0</code>), каждый целиком или никак. Не подошедшие — предупреждение в Actions и итог «применено / уже было / пропущено»; с <code>FEED_PATCH_STRICT=1</code> сборка останавливается. Затем обновляется youtubeUnblock (кроме <code>clear</code>, <code>crystal_clear</code>, <code>switch</code>, <code>forkop</code> и <code>homeproxy_sqm</code> — там его нет в прошивке).</li>
+      <li class="tag-fk"><span class="badge">part2</span><b>Версии и патчи фидов.</b> <code>WRT-part2.sh</code> (между <code>feeds update</code> и <code>feeds install</code>): берёт версию forkop из последнего тега <code>x.y.z</code> репозитория (<code>FORKOP_VERSION</code>, без неё пакет получил бы <code>0.0.0</code>) и версию темы Proton2025; версия берётся из репозитория, который подключён в <code>feeds.conf</code>. Затем применяет патчи из <code>patches/feeds/&lt;имя фида&gt;/*.patch</code> к <code>feeds/&lt;имя фида&gt;</code> по порядку имён: уже есть в исходниках — пропуск; не применён патч из строки <code>Requires:</code> — пропуск; иначе применяется только при точном совпадении контекста (<code>patch -F 0</code>), каждый целиком или никак. Не подошедшие — предупреждение в Actions и итог «применено / уже было / пропущено»; с <code>FEED_PATCH_STRICT=1</code> сборка останавливается. Затем обновляется youtubeUnblock (кроме <code>clear</code>, <code>crystal_clear</code>, <code>switch</code>, <code>forkop</code> и <code>homeproxy_default</code> — там его нет в прошивке).</li>
       <li class="tag-hp"><span class="badge">homeproxy</span><b>Проверка совместимости sing-box.</b> Генератор homeproxy, который попадёт в прошивку, проверяется против той версии sing-box, которая попадёт в прошивку (скачанной или из фида): пробный конфиг прогоняется через <code>sing-box check</code>. Несовместимость останавливает сборку до компиляции.</li>
       <li><b>Kernel Hash.</b> Хеш ядра подменяется на официальный, чтобы на роутер можно было ставить готовые kmod из репозиториев.</li>
       <li><b>Компиляция.</b> Многопоточная; при сбое — повтор в один поток с сохранением <code>build.log</code>.</li>
@@ -340,7 +340,7 @@
       <table class="matrix">
         <thead><tr>
           <th>Фича / пакет</th>
-          <th>homeproxy</th><th>homeproxy_sqm</th><th>clear</th><th>crystal_clear</th><th>switch</th>
+          <th>homeproxy</th><th>homeproxy_default</th><th>clear</th><th>crystal_clear</th><th>switch</th>
           <th>podkop</th><th>forkop</th><th>passwall</th><th>v2raya</th><th>xray</th>
         </tr></thead>
         <tbody>
@@ -387,7 +387,7 @@
 
     <div class="note">
       <span class="ic" style="color:var(--accent)">i</span>
-      <p><b>homeproxy_sqm — «стоковая» прошивка с VPN-клиентом.</b> Всё настроено так, как задумали авторы пакетов: part3 удаляет <code>zz1</code>, вырезает AdGuardHome, youtubeUnblock, bandix и avahi, убирает <code>speedtest</code>; бинарь AGH не скачивается, youtubeUnblock в part2 не обновляется. homeproxy работает со своими настройками по умолчанию (DNS через dnsmasq, без Clash API/YACD и без bypass-метки <code>0x64</code>). SQM установлен, но в стоке выключен, пока его не включить в LuCI. Для кода homeproxy без изменений собирайте с <code>apply_patches</code> = нет и sing-box <code>1.12.x</code>: без патча 004 генератор автора не принимает sing-box 1.13+ (в фиде 25.12 — 1.13.x), и сборка остановится на проверке совместимости. У стока одна известная ошибка (её исправляет патч 002): в режиме custom sing-box не стартует, пока настройки DNS ни разу не сохранены в LuCI.</p>
+      <p><b>homeproxy_default — «стоковая» прошивка с VPN-клиентом.</b> Всё настроено так, как задумали авторы пакетов: part3 удаляет <code>zz1</code>, вырезает AdGuardHome, youtubeUnblock, bandix и avahi, убирает <code>speedtest</code>; бинарь AGH не скачивается, youtubeUnblock в part2 не обновляется. homeproxy работает со своими настройками по умолчанию (DNS через dnsmasq, без Clash API/YACD и без bypass-метки <code>0x64</code>). SQM установлен, но в стоке выключен, пока его не включить в LuCI. Для кода homeproxy без изменений собирайте с <code>apply_patches</code> = нет и sing-box <code>1.12.x</code>: без патча 004 генератор автора не принимает sing-box 1.13+ (в фиде 25.12 — 1.13.x), и сборка остановится на проверке совместимости. У стока одна известная ошибка (её исправляет патч 002): в режиме custom sing-box не стартует, пока настройки DNS ни разу не сохранены в LuCI.</p>
     </div>
 
     <div class="note warn">
@@ -399,7 +399,7 @@
   <!-- 04 FIRST BOOT -->
   <section id="firstboot">
     <div class="sec-head"><span class="sec-num">04</span><h2>Первый старт после прошивки</h2></div>
-    <p class="sec-sub">Скрипт <code>zz1-final-offline-setup.sh</code> лежит в <code>/etc/uci-defaults/</code> и выполняется при первой загрузке роутера (режим <b>firstboot</b>, лог <code>/root/setup_log.txt</code>). Сохранённую копию можно запустить вручную, например после <code>apk upgrade</code> (режим <b>maintenance</b>, лог <code>/root/setup_log_maintenance.txt</code>): тогда hostname, customfeeds и настройки first boot не трогаются. Многие шаги выполняются с учётом выбранного варианта. В вариантах <code>crystal_clear</code> и <code>homeproxy_sqm</code> скрипта нет — раздел к ним не относится. Полный список изменений — в <code>files/README.md</code>.</p>
+    <p class="sec-sub">Скрипт <code>zz1-final-offline-setup.sh</code> лежит в <code>/etc/uci-defaults/</code> и выполняется при первой загрузке роутера (режим <b>firstboot</b>, лог <code>/root/setup_log.txt</code>). Сохранённую копию можно запустить вручную, например после <code>apk upgrade</code> (режим <b>maintenance</b>, лог <code>/root/setup_log_maintenance.txt</code>): тогда hostname, customfeeds и настройки first boot не трогаются. Многие шаги выполняются с учётом выбранного варианта. В вариантах <code>crystal_clear</code> и <code>homeproxy_default</code> скрипта нет — раздел к ним не относится. Полный список изменений — в <code>files/README.md</code>.</p>
     <ol class="steps">
       <li><b>Инициализация.</b> Логирование, определение версии ядра, архитектуры, модели роутера и текущего варианта сборки.</li>
       <li><b>База.</b> Часовой пояс (Europe/Moscow), очистка строки FullCone, сохранение system.</li>
