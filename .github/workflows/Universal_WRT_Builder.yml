@@ -110,6 +110,17 @@ env:
 
   TZ: Europe/Moscow
 
+  # Фид для варианта forkop — ПЕРЕКЛЮЧАЕТСЯ ТОЛЬКО ЗДЕСЬ, формат «имя URL;ветка».
+  # Имя фида = имя подпапки с его патчами: patches/feeds/<имя>/ (WRT-part2.sh
+  # применяет подпапку того фида, который реально загружен, остальные
+  # пропускает). Версия пакета берётся из тегов этого же репозитория.
+  #   оригинал: forkop https://github.com/ushan0v/forkop.git;main
+  #             патчи patches/feeds/forkop (25 шт., включая всё рабочее из форка)
+  #   форк:     forkopmod https://github.com/Gavr1024/forkop-mod.git;main
+  #             патч  patches/feeds/forkopmod (001: без него не работает
+  #             генерация конфига sing-box)
+  FORKOP_FEED: "forkop https://github.com/ushan0v/forkop.git;main"
+
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -197,10 +208,17 @@ jobs:
             fi
           done
 
-          # forkop без патчей: голый ushan0v/forkop 1.0.5 не стартует на
-          # sing-box 1.14 (issue #98), пока автор не внесёт исправления.
+          # forkop без патчей (фид — из FORKOP_FEED в env):
+          #   ushan0v/forkop 1.0.5 не стартует на sing-box 1.14 (issue #98);
+          #   Gavr1024/forkop-mod без патча 001 не генерирует конфиг sing-box.
           if echo "$json" | jq -e '.include[] | select(.variant == "forkop" and .patches == false)' >/dev/null; then
-            echo "::warning title=forkop без патчей::forkop собирается из оригинала ushan0v/forkop без patches/feeds/forkop. Пока автор не внёс исправления, он несовместим с sing-box 1.14 (issue #98): не скачивайте sing-box 1.14.x/latest/extended для этой сборки или включите apply_patches."
+            FK_NAME="${FORKOP_FEED%% *}"
+            case "$FK_NAME" in
+              forkop)    FK_WHY="Пока автор не внёс исправления, оригинал ushan0v/forkop несовместим с sing-box 1.14 (issue #98): не скачивайте sing-box 1.14.x/latest/extended для этой сборки" ;;
+              forkopmod) FK_WHY="Без патча 001 форк Gavr1024/forkop-mod не генерирует конфиг sing-box (ucode: left-hand side is not a function)" ;;
+              *)         FK_WHY="Исправления из patches/feeds/${FK_NAME} не будут применены" ;;
+            esac
+            echo "::warning title=forkop без патчей::Фид ${FK_NAME} собирается без patches/feeds/${FK_NAME}. ${FK_WHY}. Включите apply_patches."
           fi
 
           echo "matrix<<EOF" >> $GITHUB_OUTPUT
@@ -747,15 +765,16 @@ jobs:
         elif [ "$VARIANT" == "podkop" ]; then
             echo -e "\nsrc-git podkop https://github.com/itdoginfo/podkop.git;main" >> feeds.conf.default
         elif [ "$VARIANT" == "forkop" ]; then
-            # Всегда оригинал ushan0v/forkop. patches/feeds/forkop (WRT-part2.sh)
-            # исправляют и дополняют его, включая всё рабочее из forkop-mod.
-            # Без патчей голый 1.0.5 не стартует на sing-box 1.14 (issue #98),
-            # пока автор не внёс исправления, — об этом предупреждает setup.
-            #
-            echo -e "\nsrc-git forkop https://github.com/ushan0v/forkop.git;main" >> feeds.conf.default
-            # echo -e "\nsrc-git forkopmod https://github.com/Gavr1024/forkop-mod.git;main" >> feeds.conf.default
+            # Фид задаётся переменной FORKOP_FEED в env в начале файла
+            # (оригинал ushan0v/forkop или форк Gavr1024/forkop-mod). Его патчи —
+            # patches/feeds/<имя фида>, их применяет WRT-part2.sh.
+            FK_NAME="${FORKOP_FEED%% *}"
+            echo ">>> forkop: фид $FORKOP_FEED"
+            echo -e "\nsrc-git $FORKOP_FEED" >> feeds.conf.default
             if [ "${{ matrix.patches }}" != "true" ]; then
-                echo "::warning title=forkop без патчей::ushan0v/forkop собирается без patches/feeds/forkop — несовместим с sing-box 1.14 (issue #98), пока автор не внёс исправления."
+                echo "::warning title=forkop без патчей::Фид ${FK_NAME} собирается без patches/feeds/${FK_NAME} (подробности — в предупреждении job setup)."
+            elif ! ls "$GITHUB_WORKSPACE/patches/feeds/${FK_NAME}"/*.patch >/dev/null 2>&1; then
+                echo "::warning title=forkop: нет патчей для фида::Для фида ${FK_NAME} нет patches/feeds/${FK_NAME}/*.patch — пакет соберётся без исправлений."
             fi
         fi
 
