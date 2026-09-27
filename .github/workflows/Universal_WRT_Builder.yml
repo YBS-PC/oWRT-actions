@@ -399,15 +399,25 @@ jobs:
             echo "::error::Неизвестный выбор версии sing-box: '$SB_VERSION_CHOICE'"
             exit 1
         fi
-        echo ">>> Downloading sing-box ($SB_VERSION_CHOICE) from: $SB_URL"
+        # С 1.13 SagerNet кладёт в «-linux-arm64.tar.gz» (и «-glibc») бинарник
+        # под glibc (динамический, /lib/ld-linux-aarch64.so.1, ради libcronet) —
+        # на musl OpenWrt он даёт «/usr/bin/sing-box: not found», а LuCI
+        # homeproxy без тегов из «sing-box version» прячет Hysteria/TUIC и т.п.
+        # Статическая сборка (та же, что в официальном openwrt .ipk) лежит в
+        # «-linux-arm64-musl.tar.gz»; у 1.12 такого ассета нет (404), там
+        # обычный архив и так статический. Поэтому сначала -musl, затем обычный.
+        SB_URL_MUSL="${SB_URL%.tar.gz}-musl.tar.gz"
         # -f: при 404 GitHub отдаёт HTML-страницу; без -f она сохранялась как
         # непустой sb.tar.gz, проходила проверку -s и роняла шаг уже на tar.
-        if ! curl -fL --retry 3 -o sb.tar.gz "$SB_URL" || [ ! -s sb.tar.gz ]; then
+        if curl -fsSL --retry 3 -o sb.tar.gz "$SB_URL_MUSL" && [ -s sb.tar.gz ]; then
+            SB_URL="$SB_URL_MUSL"
+        elif ! curl -fL --retry 3 -o sb.tar.gz "$SB_URL" || [ ! -s sb.tar.gz ]; then
             echo ">>> WARNING: Download failed or file is empty. Skipping."
             echo ">>> Sing-box from OpenWrt feed will be used instead."
             rm -f sb.tar.gz
             exit 0
         fi
+        echo ">>> Downloaded sing-box ($SB_VERSION_CHOICE) from: $SB_URL"
         # Сумма из digest ассета в GitHub API (файлов сумм sing-box не публикует)
         if ! bash ./sh/verify-sha256.sh sb.tar.gz "$SB_REPO" "$SB_TAG" "$(basename "$SB_URL")"; then
             echo ">>> WARNING: sing-box checksum mismatch. Skipping."
@@ -415,16 +425,26 @@ jobs:
             rm -f sb.tar.gz
             exit 0
         fi
-        tar -xzf sb.tar.gz
+        SB_UNPACK=$(mktemp -d)
+        tar -xzf sb.tar.gz -C "$SB_UNPACK"
         mkdir -p ./files/usr/bin
         # cp sing-box-*/sing-box ./files/usr/bin/ && chmod 755 ./files/usr/bin/sing-box
-        SB_BINARY_PATH=$(find . -type f -name sing-box | head -n 1)
+        SB_BINARY_PATH=$(find "$SB_UNPACK" -type f -name sing-box | head -n 1)
         if [ -z "$SB_BINARY_PATH" ]; then
             echo ">>> WARNING: sing-box binary not found in archive. Skipping."
+            rm -rf sb.tar.gz "$SB_UNPACK"
+            exit 0
+        fi
+        # Бинарник под glibc на OpenWrt не запустится: лучше sing-box из фида,
+        # чем прошивка с неработающим /usr/bin/sing-box.
+        SB_INTERP=$(readelf -l "$SB_BINARY_PATH" 2>/dev/null | sed -n 's/.*interpreter: \(.*\)]/\1/p')
+        if [ -n "$SB_INTERP" ] && [[ "$SB_INTERP" != *ld-musl* ]]; then
+            echo "::warning title=sing-box не для musl::$(basename "$SB_URL") собран под $SB_INTERP и не запустится на OpenWrt. Будет использован sing-box из фида."
+            rm -rf sb.tar.gz "$SB_UNPACK"
             exit 0
         fi
         mv -f "$SB_BINARY_PATH" ./files/usr/bin/sing-box && chmod 755 ./files/usr/bin/sing-box
-        rm -rf sb.tar.gz sing-box-*
+        rm -rf sb.tar.gz "$SB_UNPACK"
         # Для шага «Check sing-box compatibility»: какой именно бинарник в files/
         echo "SB_DOWNLOADED_TAG=$SB_TAG" >> $GITHUB_ENV
         echo "SB_DOWNLOADED_REPO=$SB_REPO" >> $GITHUB_ENV
@@ -434,6 +454,8 @@ jobs:
         echo "Version choice : $SB_VERSION_CHOICE"
         echo "Repository     : $SB_REPO"
         echo "Downloaded tag : $SB_TAG"
+        echo "Asset          : $(basename "$SB_URL")"
+        echo "Linkage        : ${SB_INTERP:-static}"
         echo "Files in destination:"
         ls -lh ./files/usr/bin/
         echo "=========================================="
