@@ -218,7 +218,7 @@ apply_feed_patches
 # Обновление youtubeUnblock
 # --------------------------------------------------------------------------
 
-if [[ "$VARIANT" == "clear" || "$VARIANT" == "crystal_clear" || "$VARIANT" == "switch" || "$VARIANT" == "forkop" || "$VARIANT" == "homeproxy_sqm" ]]; then
+if [[ "$VARIANT" == "clear" || "$VARIANT" == "crystal_clear" || "$VARIANT" == "switch" || "$VARIANT" == "forkop" || "$VARIANT" == "homeproxy_default" ]]; then
     echo ">>> Variant is '$VARIANT'. Skipping youtubeUnblock update."
 else
     echo "=================================================="
