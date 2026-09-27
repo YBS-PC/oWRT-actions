@@ -44,7 +44,7 @@ on:
         type: choice
         options:
           - homeproxy
-          - homeproxy_sqm
+          - homeproxy_default
           - clear
           - switch
           - crystal_clear
@@ -203,7 +203,7 @@ jobs:
           # Нужно только без патчей: с патчами 004/006 homeproxy работает с
           # sing-box из фида (1.13+).
           for t in ${TINY_TARGETS:-}; do
-            if echo "$json" | jq -e --arg t "$t" '.include[] | select(.target == $t and (.variant == "homeproxy" or .variant == "homeproxy_sqm") and .patches == false)' >/dev/null; then
+            if echo "$json" | jq -e --arg t "$t" '.include[] | select(.target == $t and (.variant == "homeproxy" or .variant == "homeproxy_default") and .patches == false)' >/dev/null; then
               echo "::warning title=${t}: homeproxy без патчей::На ${t} ставится sing-box-tiny из фида (1.13+), выбор download_binaries_sb к нему не применяется. Без патчей homeproxy несовместим с sing-box 1.13+, и сборка ${t} остановится на проверке совместимости до компиляции. Включите apply_patches."
             fi
           done
@@ -281,8 +281,8 @@ jobs:
 
     - name: Download AdGuardHome
       # Условие: выполнять только если вариант НЕ switch, НЕ clear, НЕ crystal_clear
-      # и НЕ homeproxy_sqm (сток-вариант: part3 всё равно вырезает AGH и удаляет бинарник)
-      if: matrix.agh && matrix.variant != 'switch' && matrix.variant != 'clear' && matrix.variant != 'crystal_clear' && matrix.variant != 'homeproxy_sqm'
+      # и НЕ homeproxy_default (сток-вариант: part3 всё равно вырезает AGH и удаляет бинарник)
+      if: matrix.agh && matrix.variant != 'switch' && matrix.variant != 'clear' && matrix.variant != 'crystal_clear' && matrix.variant != 'homeproxy_default'
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
@@ -609,7 +609,7 @@ jobs:
             *)                          SUM_NO_BIN=0 ;;
         esac
 
-        if [ "$SUM_NO_BIN" = "1" ] || [ "$SUM_VARIANT" = "homeproxy_sqm" ]; then
+        if [ "$SUM_NO_BIN" = "1" ] || [ "$SUM_VARIANT" = "homeproxy_default" ]; then
             SUM_AGH="пропуск (вариант $SUM_VARIANT)"
         elif [ "${{ matrix.agh }}" = "true" ]; then
             SUM_AGH="да$SUM_SRC_NOTE"
@@ -989,7 +989,7 @@ jobs:
       # удалит ещё какое-то поле, которое пишет генератор, сборка упадёт здесь.
       # Шаг стоит ДО компиляции: падение здесь экономит ~1.5 часа и не даёт
       # собрать прошивку, в которой прокси не стартует.
-      if: matrix.variant == 'homeproxy' || matrix.variant == 'homeproxy_sqm'
+      if: matrix.variant == 'homeproxy' || matrix.variant == 'homeproxy_default'
       run: |
         cd openwrt
 
