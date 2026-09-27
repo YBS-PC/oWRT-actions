@@ -55,8 +55,10 @@ echo "Определение версий пакетов из git"
 echo "=================================================="
 
 if [[ "$VARIANT" == "forkop" ]]; then
-    # Версию берём из репозитория фида forkop в feeds.conf (ushan0v/forkop).
-    FORKOP_REPO=$(awk '$1 == "src-git" && $2 == "forkop" { print $3; exit }' feeds.conf.default 2>/dev/null | sed 's/[;^].*//')
+    # Версию берём из репозитория того фида forkop, который реально подключён
+    # в feeds.conf (FORKOP_FEED в yml): forkop (ushan0v) или forkopmod
+    # (Gavr1024) — подходит любое имя фида, начинающееся с «forkop».
+    FORKOP_REPO=$(awk '$1 == "src-git" && $2 ~ /^forkop/ { print $3; exit }' feeds.conf.default 2>/dev/null | sed 's/[;^].*//')
     [ -n "$FORKOP_REPO" ] || FORKOP_REPO="https://github.com/ushan0v/forkop.git"
     FORKOP_VER=$(resolve_latest_tag "$FORKOP_REPO")
     if [ -n "$FORKOP_VER" ]; then
@@ -86,7 +88,9 @@ fi
 # Шаг "Apply custom patches" в yml работает ДО feeds update и берёт только
 # patches/*.patch (патчи к дереву openwrt). Патчи к фидам лежат в подпапках,
 # чтобы тот шаг их не трогал, и применяются здесь — после feeds update, до
-# feeds install. Имя подпапки = имя фида из feeds.conf (например, forkop).
+# feeds install. Имя подпапки = имя фида из feeds.conf (forkop, forkopmod).
+# Подпапки фидов, которые не загружены, пропускаются — поэтому патчи для
+# обоих вариантов forkop могут лежать рядом, а применятся только нужные.
 #
 # Для каждого патча по порядку имён:
 #   - фид не загружен                  -> все патчи подпапки пропускаются;
