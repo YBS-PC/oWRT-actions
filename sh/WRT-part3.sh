@@ -287,6 +287,14 @@ CLEAR_BLOAT=(
 "bandix"
 )
 
+DEFAULT_BLOAT=(
+"adguardhome"
+"youtubeUnblock"
+"avahi-nodbus-daemon"
+"libavahi-nodbus-support"
+"bandix"
+)
+
 CRYSTAL_CLEAR_BLOAT=(
 # "${CLEAR_BLOAT[@]}"
 # СПИСОК ПАКЕТОВ НА УДАЛЕНИЕ для задачи "чистый L2 switch"
@@ -478,7 +486,7 @@ SWITCH_BLOAT=(
 "${CRYSTAL_CLEAR_BLOAT[@]}"
 )
 
-# --- ЛОГИКА ДЛЯ ВАРИАНТОВ 'homeproxy', 'podkop', 'forkop' (homeproxy_sqm обработки не требует) ---
+# --- ЛОГИКА ДЛЯ ВАРИАНТОВ 'homeproxy', 'podkop', 'forkop' ---
 if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "forkop" ]]; then
     echo ">>> [Variant: $VARIANT] Performing cleanup..."
     # Вычищаем пакеты из конфига. В SQM_BLOAT уже перечислены полные имена
@@ -495,6 +503,31 @@ if [ "$VARIANT" == "forkop" ]; then
     echo "# CONFIG_PACKAGE_youtubeUnblock is not set" >> ./.config
     echo "# CONFIG_PACKAGE_luci-app-youtubeUnblock is not set" >> ./.config
     echo "# CONFIG_PACKAGE_luci-i18n-youtubeUnblock-ru is not set" >> ./.config
+fi
+
+# --- ЛОГИКА ДЛЯ homeproxy_sqm ---
+if [ "$VARIANT" == "homeproxy_sqm" ]; then
+    echo ">>> [Variant: $VARIANT] Performing cleanup..."
+    # Вычищаем пакеты из конфига
+    for PKG in "${DEFAULT_BLOAT[@]}"; do
+        sed -i "/${PKG}/Id" ./.config
+        echo "# CONFIG_PACKAGE_${PKG} is not set" >> ./.config
+        # LuCI-обвязку достраиваем только для «голых» имён: для luci-app-homeproxy
+        # получилось бы luci-app-luci-app-homeproxy
+        case "$PKG" in
+            luci-*) ;;
+            *)
+                echo "# CONFIG_PACKAGE_luci-app-${PKG} is not set" >> ./.config
+                echo "# CONFIG_PACKAGE_luci-i18n-${PKG}-ru is not set" >> ./.config
+                ;;
+        esac
+    done
+    # Удаляем тяжелые файлы
+    echo "   > Cleaned up binary files (if any were present)"
+    rm -f "./files/usr/bin/AdGuardHome"
+    rm -f "./files/root/apps/speedtest.tar.gz"
+    # Удаляем основной скрипт настройки
+    rm -f "./files/etc/uci-defaults/zz1-final-offline-setup.sh"
 fi
 
 # --- ЛОГИКА ДЛЯ ВАРИАНТА 'clear' ---
