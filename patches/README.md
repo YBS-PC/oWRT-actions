@@ -14,9 +14,8 @@
 `Universal_WRT_Builder.yml`). При отключении шаг **Apply custom patches**
 ничего не применяет, каталог `patches/` на время `WRT-part2.sh`/`WRT-part3.sh`
 скрывается (и возвращается в конце шага, даже при ошибке). Вариант `forkop`
-при этом собирается из голого `ushan0v/forkop`: пока автор не внёс
-исправления, он несовместим с sing-box 1.14 (issue #98) — об этом
-предупреждает job `setup`. Сборка без патчей получает в имени артефакта
+при этом собирается из голого репозитория фида (см. `FORKOP_FEED` ниже) —
+job `setup` предупреждает, чем это грозит. Сборка без патчей получает в имени артефакта
 суффикс `_nopatches`.
 
 ## Патчи дерева: `patches/*.patch`
@@ -61,9 +60,21 @@ patch -p1 -d openwrt < patches/<файл>.patch
 
 ### forkop (`patches/feeds/forkop/`, фид `forkop` → ushan0v/forkop)
 
-Вариант `forkop` всегда собирается из оригинала `ushan0v/forkop` (фид `forkop`).
-Форк `Gavr1024/forkop-mod` больше не используется: всё рабочее из него перенесено
-в эти патчи (023, 024 и исправления 018, 019). Голый оригинал 1.0.5 без патчей
+Фид для варианта `forkop` задаётся **одной строкой** — переменной `FORKOP_FEED`
+в блоке `env:` в начале `Universal_WRT_Builder.yml`:
+
+```yaml
+FORKOP_FEED: "forkop https://github.com/ushan0v/forkop.git;main"        # оригинал (по умолчанию)
+FORKOP_FEED: "forkopmod https://github.com/Gavr1024/forkop-mod.git;main" # форк
+```
+
+Больше ничего менять не нужно: `WRT-part2.sh` применяет подпапку
+`patches/feeds/<имя фида>` только для загруженного фида (вторая пропускается с
+сообщением «Фид '…' не загружен»), версию пакета берёт из тегов того же
+репозитория, а предупреждения в Actions называют выбранный фид.
+
+По умолчанию — оригинал `ushan0v/forkop`: в эти патчи перенесено всё рабочее
+из форка (023, 024 и исправления 018, 019). Голый оригинал 1.0.5 без патчей
 на sing-box 1.14 не запускается (issue #98), пока автор не внёс исправления, —
 при `apply_patches=false` job `setup` об этом предупреждает.
 
@@ -112,7 +123,20 @@ forkop, строгую проверку ucode и проверку конфиго
 ✓ forkop: применён 001-pr83-hijack-dns-port53
 ...
 >>> forkop: применено 25, уже было 0, пропущено 0
+>>> Фид 'forkopmod' не загружен, патчи patches/feeds/forkopmod пропущены.
 ```
+
+### forkop-mod (`patches/feeds/forkopmod/`, фид `forkopmod` → Gavr1024/forkop-mod)
+
+Применяется, только если в `FORKOP_FEED` выбран `forkopmod`.
+
+| Патч | Что делает |
+|---|---|
+| 001 | функции ucode объявлены до вызова (без этого не работает генерация конфига sing-box: `left-hand side is not a function`) и `prerm` на sh для apk |
+
+Без патча 001 (`apply_patches=false`) форк собирается с этой ошибкой — job
+`setup` предупреждает. Патч не обновляет тест `tests/package_lifecycle.sh`
+форка (тест ждёт ucode в `prerm`); на прошивку это не влияет.
 
 ## Патчи пакетов: `patches/packages/<пакет>/*.patch`
 
