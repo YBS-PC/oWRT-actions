@@ -14,9 +14,9 @@
 `Universal_WRT_Builder.yml`). При отключении шаг **Apply custom patches**
 ничего не применяет, каталог `patches/` на время `WRT-part2.sh`/`WRT-part3.sh`
 скрывается (и возвращается в конце шага, даже при ошибке). Вариант `forkop`
-при этом собирается из голого репозитория фида (см. `FORKOP_FEED` ниже) —
-job `setup` предупреждает, чем это грозит. Сборка без патчей получает в имени артефакта
-суффикс `_nopatches`.
+(и `forkop-mod`) при этом собирается из голого репозитория фида (см. ниже) —
+job `setup` предупреждает, чем это грозит. В имени артефакта сборки стоит
+`patches` или `nopatches`.
 
 ## Патчи дерева: `patches/*.patch`
 
@@ -60,13 +60,17 @@ patch -p1 -d openwrt < patches/<файл>.patch
 
 ### forkop (`patches/feeds/forkop/`, фид `forkop` → ushan0v/forkop)
 
-Фид для варианта `forkop` задаётся **одной строкой** — переменной `FORKOP_FEED`
-в блоке `env:` в начале `Universal_WRT_Builder.yml`:
+Фид forkop выбирается полем формы **Build Variant**: `forkop` — оригинал,
+`forkop-mod` — форк. Адреса фидов заданы в блоке `env:` в начале
+`Universal_WRT_Builder.yml`:
 
 ```yaml
-FORKOP_FEED: "forkop https://github.com/ushan0v/forkop.git;main"        # оригинал (по умолчанию)
-FORKOP_FEED: "forkopmod https://github.com/Gavr1024/forkop-mod.git;main" # форк
+FORKOP_FEED_ORIG: "forkop https://github.com/ushan0v/forkop.git;main"        # вариант forkop
+FORKOP_FEED_MOD: "forkopmod https://github.com/Gavr1024/forkop-mod.git;main" # вариант forkop-mod
 ```
+
+Внутри сборки оба — вариант `forkop` (part2, part3 и `zz1` их не различают);
+`forkop-mod` виден только в имени job и артефакта.
 
 Больше ничего менять не нужно: `WRT-part2.sh` применяет подпапку
 `patches/feeds/<имя фида>` только для загруженного фида (вторая пропускается с
@@ -128,7 +132,7 @@ forkop, строгую проверку ucode и проверку конфиго
 
 ### forkop-mod (`patches/feeds/forkopmod/`, фид `forkopmod` → Gavr1024/forkop-mod)
 
-Применяется, только если в `FORKOP_FEED` выбран `forkopmod`.
+Применяется, только если в форме выбран вариант `forkop-mod`.
 
 | Патч | Что делает |
 |---|---|
