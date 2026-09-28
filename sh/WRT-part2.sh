@@ -56,7 +56,7 @@ echo "=================================================="
 
 if [[ "$VARIANT" == "forkop" ]]; then
     # Версию берём из репозитория того фида forkop, который реально подключён
-    # в feeds.conf (FORKOP_FEED в yml): forkop (ushan0v) или forkopmod
+    # в feeds.conf (вариант forkop / forkop-mod в форме): forkop (ushan0v) или forkopmod
     # (Gavr1024) — подходит любое имя фида, начинающееся с «forkop».
     FORKOP_REPO=$(awk '$1 == "src-git" && $2 ~ /^forkop/ { print $3; exit }' feeds.conf.default 2>/dev/null | sed 's/[;^].*//')
     [ -n "$FORKOP_REPO" ] || FORKOP_REPO="https://github.com/ushan0v/forkop.git"
@@ -218,8 +218,10 @@ apply_feed_patches
 # Обновление youtubeUnblock
 # --------------------------------------------------------------------------
 
-if [[ "$VARIANT" == "clear" || "$VARIANT" == "crystal_clear" || "$VARIANT" == "switch" || "$VARIANT" == "forkop" || "$VARIANT" == "homeproxy_default" ]]; then
-    echo ">>> Variant is '$VARIANT'. Skipping youtubeUnblock update."
+# YTB — поле формы ytb (workflow экспортирует его; без него считаем «да»).
+# Варианты без youtubeUnblock job setup и так приводит к ytb=false.
+if [[ "$VARIANT" == "clear" || "$VARIANT" == "crystal_clear" || "$VARIANT" == "switch" || "$VARIANT" == "forkop" || "${YTB:-true}" != "true" ]]; then
+    echo ">>> Variant '$VARIANT', ytb=${YTB:-true}. Skipping youtubeUnblock update."
 else
     echo "=================================================="
     echo "Блок обновления youtubeUnblock до latest main..."
