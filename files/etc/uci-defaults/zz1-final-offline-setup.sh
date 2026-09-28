@@ -255,8 +255,15 @@ fi
 # homeproxy
 if [ -f "/etc/init.d/homeproxy" ]; then
     log_info "Настройка homeproxy"
-    run_cmd "Отключение dns_hijacked" sed -i "s/const dns_hijacked = uci\.get('dhcp', '@dnsmasq\[0\]', 'dns_redirect') || '0'/const dns_hijacked = '1'/" /etc/homeproxy/scripts/firewall_post.ut
-    patch_check /etc/homeproxy/scripts/firewall_post.ut "const dns_hijacked = '1'" "firewall_post.ut"
+    # dns_hijacked='1' — только в связке с AdGuard Home: DNS клиентов принимает
+    # AGH и сам шлёт его в sing-box (127.0.0.1:5333). Без AGH (поле формы
+    # agh=no) оставляем штатную схему homeproxy: иначе DNS шёл бы мимо sing-box.
+    if [ -x /usr/bin/AdGuardHome ]; then
+        run_cmd "Отключение dns_hijacked" sed -i "s/const dns_hijacked = uci\.get('dhcp', '@dnsmasq\[0\]', 'dns_redirect') || '0'/const dns_hijacked = '1'/" /etc/homeproxy/scripts/firewall_post.ut
+        patch_check /etc/homeproxy/scripts/firewall_post.ut "const dns_hijacked = '1'" "firewall_post.ut"
+    else
+        log_info "AdGuard Home нет — dns_hijacked homeproxy не трогаем"
+    fi
 
     # --- Clash API + панель YACD -----------------------------------------
     # В luci-app-homeproxy опции нет: генератор пишет в experimental только
