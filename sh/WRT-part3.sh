@@ -248,8 +248,9 @@ echo 'CONFIG_BUSYBOX_DEFAULT_ASH_BUILTIN_TEST=y' >> ./.config
 echo 'CONFIG_BUSYBOX_DEFAULT_FEATURE_FAST_TOP=y' >> ./.config
 echo 'CONFIG_BUSYBOX_DEFAULT_FEATURE_USE_INITTAB=y' >> ./.config
 echo ">>> [Heavy packages] Тяжелые пакеты отключены."
-        # Для сборок с homeproxy и podkop/forkop ставим Tiny версию sing-box.
-        if [[ "$VARIANT" == "homeproxy_default" || "$VARIANT" == "homeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "forkop" ]]; then
+        # Для сборок с homeproxy и podkop/forkop ставим Tiny версию sing-box
+        # (если sing-box не отключён полем sb; job setup тогда пишет sb=tiny).
+        if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "forkop" ]] && [ "${SB_MODE:-feed}" != "no" ]; then
             echo ">>> [Heavy packages] Sing-box Tiny for $VARIANT compatibility..."
             sed -i '/sing-box/Id' ./.config
             echo '# CONFIG_PACKAGE_sing-box is not set' >> ./.config
@@ -267,7 +268,7 @@ fi
 # И добавление индивидуальных пакетов
 # =========================================================
 
-# Пакеты SQM. Вырезаются в homeproxy, podkop и forkop; в homeproxy_default остаются.
+# Пакеты SQM. Вырезаются в homeproxy, podkop и forkop.
 SQM_BLOAT=(
 "sqm"
 "sqm-scripts"
@@ -287,13 +288,6 @@ CLEAR_BLOAT=(
 "bandix"
 )
 
-DEFAULT_BLOAT=(
-"adguardhome"
-"youtubeUnblock"
-"avahi-nodbus-daemon"
-"libavahi-nodbus-support"
-"bandix"
-)
 
 CRYSTAL_CLEAR_BLOAT=(
 # "${CLEAR_BLOAT[@]}"
@@ -505,31 +499,6 @@ if [ "$VARIANT" == "forkop" ]; then
     echo "# CONFIG_PACKAGE_luci-i18n-youtubeUnblock-ru is not set" >> ./.config
 fi
 
-# --- ЛОГИКА ДЛЯ homeproxy_default ---
-if [ "$VARIANT" == "homeproxy_default" ]; then
-    echo ">>> [Variant: $VARIANT] Performing cleanup..."
-    # Вычищаем пакеты из конфига
-    for PKG in "${DEFAULT_BLOAT[@]}"; do
-        sed -i "/${PKG}/Id" ./.config
-        echo "# CONFIG_PACKAGE_${PKG} is not set" >> ./.config
-        # LuCI-обвязку достраиваем только для «голых» имён: для luci-app-homeproxy
-        # получилось бы luci-app-luci-app-homeproxy
-        case "$PKG" in
-            luci-*) ;;
-            *)
-                echo "# CONFIG_PACKAGE_luci-app-${PKG} is not set" >> ./.config
-                echo "# CONFIG_PACKAGE_luci-i18n-${PKG}-ru is not set" >> ./.config
-                ;;
-        esac
-    done
-    # Удаляем тяжелые файлы
-    echo "   > Cleaned up binary files (if any were present)"
-    rm -f "./files/usr/bin/AdGuardHome"
-    rm -f "./files/root/apps/speedtest.tar.gz"
-    # Удаляем основной скрипт настройки
-    rm -f "./files/etc/uci-defaults/zz1-final-offline-setup.sh"
-fi
-
 # --- ЛОГИКА ДЛЯ ВАРИАНТА 'clear' ---
 if [ "$VARIANT" == "clear" ]; then
     echo ">>> [Variant: $VARIANT] Performing aggressive cleanup..."
@@ -605,6 +574,52 @@ if [ "$VARIANT" == "switch" ]; then
     sed -i '/CONFIG_PACKAGE_kmod-tcp-bbr=y/d' ./.config
     sed -i '/CONFIG_TCP_CONG_BBR=y/d' ./.config
     echo "# BBR disabled for clear build"
+fi
+
+# =========================================================
+# ВЫБОР КОМПОНЕНТОВ (поля формы agh / sb / ytb / zz)
+# Значения экспортирует workflow, job setup уже согласовал их с вариантом
+# (clear/switch и т.п. вырезают своё выше сами). Без переменных — поведение
+# по умолчанию: всё ставится, как было до появления этих полей.
+# =========================================================
+AGH_MODE="${AGH_MODE:-feed}"
+SB_MODE="${SB_MODE:-feed}"
+YTB="${YTB:-true}"
+ZZ="${ZZ:-true}"
+echo ">>> [Компоненты] agh=$AGH_MODE sb=$SB_MODE ytb=$YTB zz=$ZZ"
+
+# drop_pkgs <шаблон для sed> <пакет>... — убрать все строки с шаблоном
+# (без учёта регистра) и явно выключить перечисленные пакеты
+drop_pkgs() {
+    local pattern="$1"; shift
+    sed -i "/${pattern}/Id" ./.config
+    for _pkg in "$@"; do
+        echo "# CONFIG_PACKAGE_${_pkg} is not set" >> ./.config
+    done
+}
+
+if [ "$AGH_MODE" = "no" ]; then
+    echo "   > AdGuard Home: убираем из прошивки"
+    drop_pkgs adguardhome adguardhome luci-app-adguardhome luci-i18n-adguardhome-ru
+    rm -f ./files/usr/bin/AdGuardHome
+fi
+
+if [ "$SB_MODE" = "no" ]; then
+    echo "   > sing-box: убираем из прошивки"
+    drop_pkgs sing-box sing-box sing-box-tiny
+    rm -f ./files/usr/bin/sing-box
+fi
+
+if [ "$YTB" != "true" ]; then
+    echo "   > youtubeUnblock: убираем из прошивки"
+    drop_pkgs youtubeUnblock youtubeUnblock luci-app-youtubeUnblock luci-i18n-youtubeUnblock-ru
+fi
+
+if [ "$ZZ" != "true" ]; then
+    echo "   > zz1: скрипт первой настройки не кладём"
+    rm -f ./files/etc/uci-defaults/zz1-final-offline-setup.sh
+    # speedtest ставит только zz1 — без него архив бесполезен
+    rm -f ./files/root/apps/speedtest.tar.gz
 fi
 
 # =========================================================
