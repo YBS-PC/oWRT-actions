@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: 'Target Device (combo: R6S-homeproxy-SBv12 + R6S-homeproxy + R6S-forkop + RB5009-clear + RB5009-switch; AGH/sing-box задаёт сам)'
+        description: 'Target Device (combo: R6S-homeproxy-SBv12 + R6S-homeproxy + R6S-forkop + RB5009-clear + RB5009-switch; AGH/sing-box/ytb/zz1 задаёт сам)'
         required: true
         default: 'combo'
         type: choice
@@ -44,12 +44,12 @@ on:
         type: choice
         options:
           - homeproxy
-          - homeproxy_default
           - clear
           - switch
           - crystal_clear
           - podkop
           - forkop
+          - forkop-mod
           - passwall
           - v2raya
           - xray
@@ -63,24 +63,41 @@ on:
           - ubuntu-22.04
           - ubuntu-24.04
 
-      download_binaries_agh:
-        description: 'Download latest AdGuardHome (в combo игнорируется)'
-        required: true
-        type: boolean
-        default: true
-
-      download_binaries_sb:
-        description: 'Download Sing-Box binary (в combo игнорируется)'
+      agh:
+        description: 'AdGuard Home: no — нет, feed — из фида, latest — фид + свежий бинарник (в combo игнорируется)'
         required: true
         type: choice
-        default: 'no'
+        default: 'latest'
         options:
           - 'no'
+          - 'feed'
+          - 'latest'
+
+      sb:
+        description: 'sing-box: no — нет, feed — из фида, версия — фид + скачанный бинарник (в combo игнорируется)'
+        required: true
+        type: choice
+        default: 'feed'
+        options:
+          - 'no'
+          - 'feed'
           - '1.12.x'
           - '1.13.x'
           - '1.14.x'
           - 'latest'
           - 'extended'
+
+      ytb:
+        description: 'youtubeUnblock (в combo игнорируется)'
+        required: true
+        type: boolean
+        default: true
+
+      zz:
+        description: 'Скрипт первой настройки zz1 в uci-defaults (в combo игнорируется)'
+        required: true
+        type: boolean
+        default: true
       
       apply_patches:
         description: 'Применять патчи из patches/ и всех подпапок (в combo задаётся матрицей)'
@@ -110,16 +127,17 @@ env:
 
   TZ: Europe/Moscow
 
-  # Фид для варианта forkop — ПЕРЕКЛЮЧАЕТСЯ ТОЛЬКО ЗДЕСЬ, формат «имя URL;ветка».
-  # Имя фида = имя подпапки с его патчами: patches/feeds/<имя>/ (WRT-part2.sh
-  # применяет подпапку того фида, который реально загружен, остальные
-  # пропускает). Версия пакета берётся из тегов этого же репозитория.
-  #   оригинал: forkop https://github.com/ushan0v/forkop.git;main
-  #             патчи patches/feeds/forkop (25 шт., включая всё рабочее из форка)
-  #   форк:     forkopmod https://github.com/Gavr1024/forkop-mod.git;main
-  #             патч  patches/feeds/forkopmod (001: без него не работает
-  #             генерация конфига sing-box)
-  FORKOP_FEED: "forkop https://github.com/ushan0v/forkop.git;main"
+  # Фиды forkop, формат «имя URL;ветка». Какой из них подключить, выбирает
+  # поле формы Build Variant: forkop — оригинал, forkop-mod — форк (внутри
+  # сборки оба — вариант forkop, различается только фид). Имя фида = имя
+  # подпапки с его патчами: patches/feeds/<имя>/ (WRT-part2.sh применяет
+  # подпапку того фида, который реально загружен, остальные пропускает).
+  # Версия пакета берётся из тегов этого же репозитория.
+  #   патчи patches/feeds/forkop (25 шт., включая всё рабочее из форка)
+  FORKOP_FEED_ORIG: "forkop https://github.com/ushan0v/forkop.git;main"
+  #   патч  patches/feeds/forkopmod (001: без него не работает генерация
+  #   конфига sing-box)
+  FORKOP_FEED_MOD: "forkopmod https://github.com/Gavr1024/forkop-mod.git;main"
 
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
@@ -133,15 +151,22 @@ jobs:
         run: |
           INPUT_TARGET="${{ inputs.target }}"
           INPUT_VARIANT="${{ inputs.variant }}"
-          INPUT_AGH="${{ inputs.download_binaries_agh }}"
-          INPUT_SB="${{ inputs.download_binaries_sb }}"
+          INPUT_AGH="${{ inputs.agh }}"
+          INPUT_SB="${{ inputs.sb }}"
+          INPUT_YTB="${{ inputs.ytb }}"
+          INPUT_ZZ="${{ inputs.zz }}"
           INPUT_PATCHES="${{ inputs.apply_patches }}"
 
           # Каждая сборка матрицы несёт СВОИ настройки:
-          #   agh     — true/false (JSON-булево), скачивать ли AdGuard Home;
-          #   sb      — версия sing-box или "no";
-          #   patches — true/false (JSON-булево), применять ли ЛЮБЫЕ
-          #             пользовательские патчи из patches/ и подпапок.
+          #   agh     — "no" (убрать из прошивки), "feed" (пакет из фида),
+          #             "latest" (пакет + свежий бинарник с GitHub поверх);
+          #   sb      — "no", "feed", "1.12.x".."latest", "extended" (скачанный
+          #             бинарник поверх пакета) или "tiny" (выставляется здесь
+          #             для slateax/ax59u: part3 ставит им sing-box-tiny);
+          #   ytb     — true/false (JSON-булево), ставить ли youtubeUnblock;
+          #   zz      — true/false, класть ли zz1-final-offline-setup.sh;
+          #   patches — true/false, применять ли ЛЮБЫЕ пользовательские
+          #             патчи из patches/ и подпапок.
           #
           # В combo значения заданы здесь и не зависят от полей формы.
           # Специализированные патчи:
@@ -151,26 +176,66 @@ jobs:
           #
           # Все поля должны присутствовать в JSON, иначе fromJson получит
           # невалидную матрицу.
-          entry() { printf '{"target":"%s","variant":"%s","agh":%s,"sb":"%s","patches":%s}' "$1" "$2" "$3" "$4" "$5"; }
+          #
+          # ВНИМАНИЕ: slateax и ax59u — «тонкие» устройства: part3 ставит им
+          # пакет sing-box-tiny из фида и удаляет скачанный бинарник, поэтому
+          # выбор версии sing-box на них не влияет (в матрице sb=tiny). С
+          # патчами homeproxy (patches/packages/luci-app-homeproxy/004, 006)
+          # генератор сам подстраивается под версию из фида (1.13+). Без патчей
+          # генератор несовместим с sing-box 1.13+, и в варианте homeproxy эти
+          # сборки честно упадут на «Check sing-box compatibility» (до
+          # компиляции, остальные продолжатся: fail-fast: false).
+          TINY_TARGETS="slateax ax59u"
+          NOTES=""
+
+          # entry <target> <variant> <agh> <sb> <ytb> <zz> <patches>
+          # Приводит выбор к тому, что вариант реально допускает, чтобы имя
+          # артефакта не врало: clear/crystal_clear/switch вырезают AGH,
+          # sing-box и youtubeUnblock; passwall/v2raya/xray — sing-box;
+          # forkop — youtubeUnblock; crystal_clear — zz1. homeproxy и podkop
+          # без sing-box не работают (podkop ещё и тянет его зависимостью).
+          entry() {
+            local t="$1" v="$2" agh="$3" sb="$4" ytb="$5" zz="$6" pt="$7" orig
+            # vname — имя варианта для людей (имя job и артефакта); fk — фид
+            # forkop. forkop-mod внутри сборки — тот же вариант forkop, только
+            # с фидом форка: part2/part3/zz1 различать их не нужно.
+            local vname="$v" fk=""
+            case "$v" in
+              forkop)     fk=forkop ;;
+              forkop-mod) v=forkop; fk=forkopmod ;;
+            esac
+            orig="agh=$agh sb=$sb ytb=$ytb zz=$zz"
+            case "$v" in
+              clear|crystal_clear|switch) agh=no; sb=no; ytb=false ;;
+              passwall|v2raya|xray)       sb=no ;;
+              forkop)                     ytb=false ;;
+            esac
+            [ "$v" = "crystal_clear" ] && zz=false
+            case "$v" in
+              homeproxy|podkop) [ "$sb" = "no" ] && sb=feed ;;
+            esac
+            case " $TINY_TARGETS " in
+              *" $t "*) case "$v" in homeproxy|podkop|forkop) [ "$sb" != "no" ] && sb=tiny ;; esac ;;
+            esac
+            if [ "$orig" != "agh=$agh sb=$sb ytb=$ytb zz=$zz" ]; then
+              NOTES="${NOTES}${t}/${vname}: ${orig} -> agh=$agh sb=$sb ytb=$ytb zz=$zz\n"
+            fi
+            printf '{"target":"%s","variant":"%s","vname":"%s","fk":"%s","agh":"%s","sb":"%s","ytb":%s,"zz":%s,"patches":%s}' \
+              "$t" "$v" "$vname" "$fk" "$agh" "$sb" "$ytb" "$zz" "$pt"
+          }
 
           if [ "$INPUT_TARGET" == "combo" ]; then
             echo ">>> Generating COMBO matrix..."
-            # false = не применять любые патчи:
+            # Поля: устройство вариант agh sb ytb zz patches.
+            # patches=false:
             #   R6S homeproxy + sing-box 1.12.x
             #   RB5009 clear
             #   RB5009 switch
-            json="{\"include\":[$(entry nanopi-r6s homeproxy true 1.12.x false),$(entry nanopi-r6s homeproxy true latest true),$(entry nanopi-r6s forkop true extended true),$(entry rb5009 clear false no false),$(entry rb5009 switch false no false)]}"
+            # $(entry ...) — подстановка: в ней NOTES не сохраняется, для
+            # combo это и не нужно (значения ниже уже согласованы с вариантами).
+            json="{\"include\":[$(entry nanopi-r6s homeproxy latest 1.12.x true true false),$(entry nanopi-r6s homeproxy latest latest true true true),$(entry nanopi-r6s forkop latest extended false true true),$(entry rb5009 clear no no false true false),$(entry rb5009 switch no no false true false)]}"
           else
             # Все устройства из config/conf/ — при добавлении нового дописать сюда.
-            # ВНИМАНИЕ: slateax и ax59u — «тонкие» устройства: part3 ставит им
-            # пакет sing-box-tiny из фида и удаляет скачанный бинарник, поэтому
-            # download_binaries_sb на них не влияет. С патчами homeproxy
-            # (patches/packages/luci-app-homeproxy/004, 006) генератор сам
-            # подстраивается под версию sing-box из фида (1.13+). Без патчей
-            # (apply_patches=false) генератор несовместим с sing-box 1.13+, и в
-            # вариантах homeproxy* эти сборки честно упадут на «Check sing-box
-            # compatibility» (до компиляции, остальные продолжатся: fail-fast: false).
-            TINY_TARGETS="slateax ax59u"
             targets="nanopi-r6s nanopi-r5s rb5009 slateax ax59u brume2"
             if [ "$INPUT_TARGET" == "all" ]; then
               selected=$targets
@@ -180,7 +245,10 @@ jobs:
             json_parts=""
             for t in $selected; do
               [ -n "$json_parts" ] && json_parts="$json_parts,"
-              json_parts="$json_parts$(entry "$t" "$INPUT_VARIANT" "$INPUT_AGH" "$INPUT_SB" "$INPUT_PATCHES")"
+              # Без подстановки $(...): entry дописывает NOTES, а подоболочка
+              # эти изменения потеряла бы.
+              entry "$t" "$INPUT_VARIANT" "$INPUT_AGH" "$INPUT_SB" "$INPUT_YTB" "$INPUT_ZZ" "$INPUT_PATCHES" > /tmp/entry.json
+              json_parts="$json_parts$(cat /tmp/entry.json)"
             done
             json="{\"include\":[$json_parts]}"
           fi
@@ -196,30 +264,36 @@ jobs:
           echo "=========================================="
           echo "Mode: $INPUT_TARGET"
           echo "Generated Matrix:"
-          echo "$json" | jq -r '.include[] | "  \(.target) / \(.variant) / agh=\(.agh) / sb=\(.sb) / patches=\(.patches)"'
+          echo "$json" | jq -r '.include[] | "  \(.target) / \(.vname) / agh=\(.agh) / sb=\(.sb) / ytb=\(.ytb) / zz=\(.zz) / patches=\(.patches)"'
           echo "=========================================="
+          if [ -n "$NOTES" ]; then
+            echo "Выбор формы приведён к возможностям варианта/устройства:"
+            printf '%b' "$NOTES" | sed 's/^/  /'
+            printf '%b' "$NOTES" | while IFS= read -r n; do
+              [ -n "$n" ] && echo "::notice title=Выбор скорректирован::$n"
+            done
+          fi
 
-          # Заранее предупреждаем о сборках, чей sing-box не выбирается формой.
-          # Нужно только без патчей: с патчами 004/006 homeproxy работает с
-          # sing-box из фида (1.13+).
-          for t in ${TINY_TARGETS:-}; do
-            if echo "$json" | jq -e --arg t "$t" '.include[] | select(.target == $t and (.variant == "homeproxy" or .variant == "homeproxy_default") and .patches == false)' >/dev/null; then
-              echo "::warning title=${t}: homeproxy без патчей::На ${t} ставится sing-box-tiny из фида (1.13+), выбор download_binaries_sb к нему не применяется. Без патчей homeproxy несовместим с sing-box 1.13+, и сборка ${t} остановится на проверке совместимости до компиляции. Включите apply_patches."
-            fi
+          # Заранее предупреждаем о сборках homeproxy без патчей, которые
+          # остановятся на проверке совместимости: без патча 004 генератор
+          # homeproxy принимает только sing-box 1.12. В фиде 25.12 — 1.13.x,
+          # на slateax/ax59u — sing-box-tiny из фида (sb=tiny).
+          echo "$json" | jq -r '.include[] | select(.variant == "homeproxy" and .patches == false and (.sb != "1.12.x")) | "\(.target) \(.sb)"' |
+          while read -r t sbv; do
+            echo "::warning title=${t}: homeproxy без патчей (sb=${sbv})::Без патча 004 homeproxy несовместим с sing-box 1.13+, и сборка ${t} остановится на проверке совместимости до компиляции (если в фиде 1.13+). Включите apply_patches или выберите sb=1.12.x."
           done
 
-          # forkop без патчей (фид — из FORKOP_FEED в env):
+          # forkop без патчей (фид — поле fk матрицы, адреса — в env):
           #   ushan0v/forkop 1.0.5 не стартует на sing-box 1.14 (issue #98);
           #   Gavr1024/forkop-mod без патча 001 не генерирует конфиг sing-box.
-          if echo "$json" | jq -e '.include[] | select(.variant == "forkop" and .patches == false)' >/dev/null; then
-            FK_NAME="${FORKOP_FEED%% *}"
+          for FK_NAME in $(echo "$json" | jq -r '[.include[] | select(.variant == "forkop" and .patches == false) | .fk] | unique | .[]'); do
             case "$FK_NAME" in
               forkop)    FK_WHY="Пока автор не внёс исправления, оригинал ushan0v/forkop несовместим с sing-box 1.14 (issue #98): не скачивайте sing-box 1.14.x/latest/extended для этой сборки" ;;
               forkopmod) FK_WHY="Без патча 001 форк Gavr1024/forkop-mod не генерирует конфиг sing-box (ucode: left-hand side is not a function)" ;;
               *)         FK_WHY="Исправления из patches/feeds/${FK_NAME} не будут применены" ;;
             esac
             echo "::warning title=forkop без патчей::Фид ${FK_NAME} собирается без patches/feeds/${FK_NAME}. ${FK_WHY}. Включите apply_patches."
-          fi
+          done
 
           echo "matrix<<EOF" >> $GITHUB_OUTPUT
           echo "$json" >> $GITHUB_OUTPUT
@@ -235,7 +309,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
     
-    name: ${{ inputs.source }} ${{ inputs.branch }} [${{ matrix.variant }}] - ${{ matrix.target }} (sb:${{ matrix.sb }}, patches:${{ matrix.patches }})
+    name: ${{ inputs.source }} ${{ inputs.branch }} [${{ matrix.vname }}] - ${{ matrix.target }} (agh:${{ matrix.agh }}, sb:${{ matrix.sb }}, ytb:${{ matrix.ytb }}, zz:${{ matrix.zz }}, patches:${{ matrix.patches }})
 
     steps:
     - name: Free up disk space
@@ -280,9 +354,9 @@ jobs:
         echo "=========================================="
 
     - name: Download AdGuardHome
-      # Условие: выполнять только если вариант НЕ switch, НЕ clear, НЕ crystal_clear
-      # и НЕ homeproxy_default (сток-вариант: part3 всё равно вырезает AGH и удаляет бинарник)
-      if: matrix.agh && matrix.variant != 'switch' && matrix.variant != 'clear' && matrix.variant != 'crystal_clear' && matrix.variant != 'homeproxy_default'
+      # Только agh=latest. Для clear/crystal_clear/switch job setup уже
+      # привёл agh к "no", поэтому отдельная проверка варианта не нужна.
+      if: matrix.agh == 'latest'
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
@@ -334,8 +408,9 @@ jobs:
         echo "=========================================="
         
     - name: Download Sing-box
-      # Sing-box не качаем для чистых сборок И для сборок со своими прокси-ядрами
-      if: matrix.sb != 'no' && matrix.variant != 'switch' && matrix.variant != 'clear' && matrix.variant != 'crystal_clear' && matrix.variant != 'passwall' && matrix.variant != 'v2raya' && matrix.variant != 'xray'
+      # Только при выбранной версии. no/feed/tiny — без загрузки; для чистых
+      # сборок и вариантов со своими прокси-ядрами setup уже привёл sb к "no".
+      if: matrix.sb != 'no' && matrix.sb != 'feed' && matrix.sb != 'tiny'
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
@@ -582,12 +657,12 @@ jobs:
         echo "EOF" >> $GITHUB_ENV
         
         # --- Сводка ---------------------------------------------------------
-        # Показываем И выбор пользователя, И то, что реально применилось:
-        # в режиме combo матрица задана жёстко — вариант и настройки загрузки
-        # AGH/sing-box берутся из пресета, поля формы игнорируются; а для
-        # clear/switch загрузка отключается самим вариантом.
+        # Показываем то, что реально применится: в режиме combo матрица
+        # задана жёстко (вариант, AGH, sing-box, ytb, zz1 и патчи — из
+        # пресета, поля формы игнорируются); выбор, который вариант не
+        # допускает, job setup уже привёл в соответствие (см. его лог).
         SUM_MODE="${{ inputs.target }}"
-        SUM_VARIANT="${{ matrix.variant }}"
+        SUM_VARIANT="${{ matrix.vname }}"
         SUM_EXCLUDE="$EXCLUDE_INPUT"
 
         if [ "${{ matrix.patches }}" = "true" ]; then
@@ -604,29 +679,22 @@ jobs:
         SUM_SRC_NOTE=""
         [ "$SUM_MODE" = "combo" ] && SUM_SRC_NOTE="  (пресет combo)"
 
-        case "$SUM_VARIANT" in
-            switch|clear|crystal_clear) SUM_NO_BIN=1 ;;
-            *)                          SUM_NO_BIN=0 ;;
+        case "${{ matrix.agh }}" in
+            no)     SUM_AGH="нет (убирается из прошивки)" ;;
+            feed)   SUM_AGH="пакет из фида" ;;
+            latest) SUM_AGH="пакет из фида + свежий бинарник" ;;
+            *)      SUM_AGH="${{ matrix.agh }}" ;;
         esac
-
-        if [ "$SUM_NO_BIN" = "1" ] || [ "$SUM_VARIANT" = "homeproxy_default" ]; then
-            SUM_AGH="пропуск (вариант $SUM_VARIANT)"
-        elif [ "${{ matrix.agh }}" = "true" ]; then
-            SUM_AGH="да$SUM_SRC_NOTE"
-        else
-            SUM_AGH="нет (не запрошено)$SUM_SRC_NOTE"
-        fi
-
-        case "$SUM_VARIANT" in
-            switch|clear|crystal_clear|passwall|v2raya|xray) SUM_SB="пропуск (вариант $SUM_VARIANT)" ;;
-            *)
-                if [ "${{ matrix.sb }}" = "no" ]; then
-                    SUM_SB="нет (не запрошено)$SUM_SRC_NOTE"
-                else
-                    SUM_SB="${{ matrix.sb }}$SUM_SRC_NOTE"
-                fi
-                ;;
+        case "${{ matrix.sb }}" in
+            no)   SUM_SB="нет (убирается из прошивки)" ;;
+            feed) SUM_SB="пакет из фида" ;;
+            tiny) SUM_SB="sing-box-tiny из фида (тонкое устройство)" ;;
+            *)    SUM_SB="пакет из фида + бинарник ${{ matrix.sb }}" ;;
         esac
+        [ "${{ matrix.ytb }}" = "true" ] && SUM_YTB="да" || SUM_YTB="нет"
+        [ "${{ matrix.zz }}" = "true" ] && SUM_ZZ="да" || SUM_ZZ="нет"
+        SUM_AGH="$SUM_AGH$SUM_SRC_NOTE"
+        SUM_SB="$SUM_SB$SUM_SRC_NOTE"
 
         echo "=========================================="
         echo "       [BUILD SUMMARY]                    "
@@ -644,6 +712,8 @@ jobs:
         echo "------------------------------------------"
         echo "AdGuardHome    : $SUM_AGH"
         echo "Sing-box       : $SUM_SB"
+        echo "youtubeUnblock : $SUM_YTB"
+        echo "zz1            : $SUM_ZZ"
         echo "Патчи          : $SUM_PATCHES"
         echo "Exclude        : ${SUM_EXCLUDE:-(нет)}"
         echo "Device config  : ./config/conf/${{ matrix.target }}"
@@ -765,7 +835,12 @@ jobs:
 
         export VARIANT="${{ matrix.variant }}"
         export CURRENT_MATRIX_TARGET="${{ matrix.target }}"
-        echo ">>> Выбран: Variant=$VARIANT, Target=$CURRENT_MATRIX_TARGET"
+        # Выбор компонентов для part2/part3 (значения уже согласованы в setup)
+        export AGH_MODE="${{ matrix.agh }}"
+        export SB_MODE="${{ matrix.sb }}"
+        export YTB="${{ matrix.ytb }}"
+        export ZZ="${{ matrix.zz }}"
+        echo ">>> Выбран: Variant=$VARIANT, Target=$CURRENT_MATRIX_TARGET, agh=$AGH_MODE, sb=$SB_MODE, ytb=$YTB, zz=$ZZ"
 
         mkdir -p files/etc
         date +'%Y-%m-%d' > files/etc/build_date
@@ -788,9 +863,15 @@ jobs:
         elif [ "$VARIANT" == "podkop" ]; then
             echo -e "\nsrc-git podkop https://github.com/itdoginfo/podkop.git;main" >> feeds.conf.default
         elif [ "$VARIANT" == "forkop" ]; then
-            # Фид задаётся переменной FORKOP_FEED в env в начале файла
-            # (оригинал ushan0v/forkop или форк Gavr1024/forkop-mod). Его патчи —
-            # patches/feeds/<имя фида>, их применяет WRT-part2.sh.
+            # Фид выбран полем формы: forkop — оригинал (FORKOP_FEED_ORIG),
+            # forkop-mod — форк (FORKOP_FEED_MOD); адреса — в env в начале
+            # файла. Патчи фида — patches/feeds/<имя фида>, их применяет
+            # WRT-part2.sh.
+            if [ "${{ matrix.fk }}" = "forkopmod" ]; then
+                FORKOP_FEED="$FORKOP_FEED_MOD"
+            else
+                FORKOP_FEED="$FORKOP_FEED_ORIG"
+            fi
             FK_NAME="${FORKOP_FEED%% *}"
             echo ">>> forkop: фид $FORKOP_FEED"
             echo -e "\nsrc-git $FORKOP_FEED" >> feeds.conf.default
@@ -989,7 +1070,7 @@ jobs:
       # удалит ещё какое-то поле, которое пишет генератор, сборка упадёт здесь.
       # Шаг стоит ДО компиляции: падение здесь экономит ~1.5 часа и не даёт
       # собрать прошивку, в которой прокси не стартует.
-      if: matrix.variant == 'homeproxy' || matrix.variant == 'homeproxy_default'
+      if: matrix.variant == 'homeproxy'
       run: |
         cd openwrt
 
@@ -1129,12 +1210,12 @@ jobs:
             echo ">>> Генератор homeproxy пишет поля, которые sing-box ${SB_VER} не принимает."
             echo ">>> Прошивка собралась бы, но прокси на роутере не запустился бы."
             if [ "$SB_TINY" = "1" ]; then
-                echo ">>> ${{ matrix.target }} использует sing-box-tiny из фида: download_binaries_sb"
+                echo ">>> ${{ matrix.target }} использует sing-box-tiny из фида: поле sb"
                 echo ">>> на него не влияет (part3 удаляет скачанный бинарник ради размера)."
                 echo ">>> Варианты: собрать это устройство в варианте без homeproxy либо"
                 echo ">>> дождаться обновления homeproxy в immortalwrt или sing-box в фиде."
             else
-                echo ">>> Выбери download_binaries_sb с версией, которую проверка пропускает,"
+                echo ">>> Выбери в поле sb версию, которую проверка пропускает,"
                 echo ">>> либо дождись обновления homeproxy в immortalwrt."
             fi
             if [ "${{ matrix.patches }}" != "true" ]; then
@@ -1299,13 +1380,11 @@ jobs:
       if: ${{ always() }}
       uses: actions/upload-artifact@v7
       with:
-        # sb в имени: в combo может быть несколько сборок одного устройства и
-        # варианта с разным sing-box (например homeproxy 1.12.x и latest).
-        # Без него имена совпадали бы (дата — до минуты), и второй артефакт
-        # с тем же именем upload-artifact отверг бы.
-        # _nopatches — сборка с patches=false: иначе её имя совпало бы со
-        # сборкой того же устройства, варианта и sing-box с патчами.
-        name: ${{ inputs.source }}_${{ inputs.branch }}_${{ matrix.variant }}_${{ matrix.target }}_sb-${{ matrix.sb }}${{ matrix.patches == false && '_nopatches' || '' }}_${{ steps.get_date.outputs.date }}
+        # Порядок: устройство, source, ветка, вариант, патчи, agh, sb, ytb,
+        # zz1, дата. Все параметры сборки в имени: в combo бывает несколько
+        # сборок одного устройства и варианта (например homeproxy с 1.12.x и
+        # latest), а дата — до минуты; одинаковое имя upload-artifact отверг бы.
+        name: ${{ matrix.target }}_${{ inputs.source }}_${{ inputs.branch }}_${{ matrix.vname }}_${{ matrix.patches && 'patches' || 'nopatches' }}_agh-${{ matrix.agh }}_sb-${{ matrix.sb }}_${{ matrix.ytb && 'ytb' || 'noytb' }}_${{ matrix.zz && 'zz' || 'nozz' }}_${{ steps.get_date.outputs.date }}
         path: openwrt/bin
         # На ранней ошибке (до создания bin/) не валим джоб красным "no files".
         if-no-files-found: warn
