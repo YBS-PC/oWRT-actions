@@ -1,0 +1,117 @@
+from pathlib import Path
+
+patch = r'''Forkop-Mod current-main update: keep only fixes that are still relevant
+to the current source layout used by YBS-PC/oWRT-actions.
+
+The original patch targeted an older Forkop-Mod layout and therefore became
+non-applicable as a whole after upstream refactoring. This replacement keeps
+the fixes that are still required for the current feed build:
+
+1. Package/forkop/prerm must be POSIX sh because OpenWrt 25.12+ with APK
+   embeds Package/*/prerm into the APK lifecycle script.
+2. config/connections.uc must define routing_engine() before proxy_core()
+   calls it.
+3. service/initd.uc must define release_runtime_dir_lock() before
+   acquire_runtime_dir_lock() calls it.
+
+Apply with:
+  patch -p1 -d feeds/forkopmod
+---
+diff --git a/forkop/Makefile b/forkop/Makefile
+--- a/forkop/Makefile
++++ b/forkop/Makefile
+@@ -39,13 +39,14 @@ endef
+ define Build/Compile
+ endef
+ 
++# Must stay POSIX sh: with CONFIG_USE_APK (OpenWrt 25.12+) the buildroot
++# inlines this body into the /bin/sh pre-deinstall script.
+ define Package/forkop/prerm
+-#!/usr/bin/ucode
+-
+-if (getenv("IPKG_INSTROOT") == null || getenv("IPKG_INSTROOT") == "")
+-	system("/usr/bin/forkop package_prerm " + (ARGV[0] || "") + " >/dev/null 2>&1");
++#!/bin/sh
+ 
+-exit(0);
++[ -n "$${IPKG_INSTROOT}" ] && exit 0
++/usr/bin/forkop package_prerm "$${1:-remove}" >/dev/null 2>&1 || true
++exit 0
+ endef
+ 
+ define Package/forkop/postinst
+diff --git a/forkop/files/usr/lib/config/connections.uc b/forkop/files/usr/lib/config/connections.uc
+--- a/forkop/files/usr/lib/config/connections.uc
++++ b/forkop/files/usr/lib/config/connections.uc
+@@ -309,15 +309,6 @@ function action(section) {
+     return normalize_action(option(section, "action", ""));
+ }
+ 
+-function proxy_core(section) {
+-    let value = lc(as_string(option(section, "proxy_core", "")));
+-    if (value == "xray" || value == "xray-core")
+-        return "xray";
+-    if (value == "sing-box" || value == "singbox")
+-        return "sing-box";
+-    return routing_engine();
+-}
+-
+ function routing_engine() {
+     let value = "";
+     if (uci_core.available() && uci_core.exists(CONFIG_NAME + ".settings.routing_engine"))
+@@ -328,6 +319,15 @@ function routing_engine() {
+     return "sing-box";
+ }
+ 
++function proxy_core(section) {
++    let value = lc(as_string(option(section, "proxy_core", "")));
++    if (value == "xray" || value == "xray-core")
++        return "xray";
++    if (value == "sing-box" || value == "singbox")
++        return "sing-box";
++    return routing_engine();
++}
++
+ function is_xray_primary() {
+     return routing_engine() == "xray";
+ }
+diff --git a/forkop/files/usr/lib/service/initd.uc b/forkop/files/usr/lib/service/initd.uc
+--- a/forkop/files/usr/lib/service/initd.uc
++++ b/forkop/files/usr/lib/service/initd.uc
+@@ -181,6 +181,15 @@ function lock_dir_write_owner(lock_dir, owner_pid) {
+     return write_text_file(as_string(lock_dir) + "/pid", as_string(owner_pid) + "\n");
+ }
+ 
++function release_runtime_dir_lock(lock_dir) {
++    lock_dir = as_string(lock_dir);
++    if (lock_dir == "")
++        return;
++
++    command_success_from_args([ "rm", "-f", lock_dir + "/pid" ]);
++    command_success_from_args([ "rmdir", lock_dir ]);
++}
++
+ function acquire_runtime_dir_lock(lock_dir, owner_pid) {
+     lock_dir = as_string(lock_dir);
+     owner_pid = as_string(owner_pid);
+@@ -210,15 +219,6 @@ function acquire_runtime_dir_lock(lock_dir, owner_pid) {
+     return false;
+ }
+ 
+-function release_runtime_dir_lock(lock_dir) {
+-    lock_dir = as_string(lock_dir);
+-    if (lock_dir == "")
+-        return;
+-
+-    command_success_from_args([ "rm", "-f", lock_dir + "/pid" ]);
+-    command_success_from_args([ "rmdir", lock_dir ]);
+-}
+-
+ function mark_pending_reload(path, reason) {
+     path = as_string(path || PENDING_RELOAD_FILE);
+     reason = as_string(reason || "pending");
+'''
+out=Path('/mnt/data/001-fix-ucode-forward-refs-and-apk-prerm-current-main.patch')
+out.write_text(patch, encoding='utf-8')
+print(out)
+print("bytes:", out.stat().st_size)
