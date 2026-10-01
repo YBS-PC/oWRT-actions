@@ -241,7 +241,7 @@ jobs:
             # $(entry ...) — подстановка: в ней NOTES не сохраняется, для
             # combo это и не нужно (значения ниже уже согласованы с вариантами).
             # $(entry nanopi-r6s homeproxy latest 1.12.x true true false false),$(entry nanopi-r6s forkop latest extended false true true false),
-            json="{\"include\":[$(entry nanopi-r6s homeproxy latest latest true true true false),$(entry rb5009 clear no no false true false false),$(entry rb5009 switch no no false true false false)]}"
+            json="{\"include\":[$(entry nanopi-r6s homeproxy latest latest true true true true),$(entry rb5009 clear no no false true false true),$(entry rb5009 switch no no false true false true)]}"
           else
             # Все устройства из config/conf/ — при добавлении нового дописать сюда.
             targets="nanopi-r6s nanopi-r5s rb5009 slateax ax59u brume2"
