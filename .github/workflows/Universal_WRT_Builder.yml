@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: 'Target Device (combo: R6S-homeproxy-SBv12 + R6S-homeproxy + R6S-forkop + RB5009-clear + RB5009-switch; AGH/sing-box/ytb/zz1 задаёт сам)'
+        description: 'Target Device (combo: R6S-homeproxy + RB5009-clear + RB5009-switch; AGH/sing-box/ytb/zz1 задаёт сам)'
         required: true
         default: 'combo'
         type: choice
@@ -36,7 +36,7 @@ on:
           - master
           - openwrt-24.10
           - openwrt-25.12
-      
+
       variant:
         description: 'Build Variant (в combo игнорируется)'
         required: true
@@ -105,6 +105,12 @@ on:
         type: boolean
         default: true
 
+      rolling_feeds:
+        description: 'Отвязать пакеты от релиза (качать самые свежие коммиты из веток фидов)'
+        required: true
+        type: boolean
+        default: false
+
       exclude_keywords:
         description: 'Exclude Packages (Space separated keywords)'
         required: false
@@ -151,6 +157,7 @@ jobs:
         run: |
           INPUT_TARGET="${{ inputs.target }}"
           INPUT_VARIANT="${{ inputs.variant }}"
+          INPUT_RF="${{ inputs.rolling_feeds }}"
           INPUT_AGH="${{ inputs.agh }}"
           INPUT_SB="${{ inputs.sb }}"
           INPUT_YTB="${{ inputs.ytb }}"
@@ -195,7 +202,7 @@ jobs:
           # forkop — youtubeUnblock; crystal_clear — zz1. homeproxy и podkop
           # без sing-box не работают (podkop ещё и тянет его зависимостью).
           entry() {
-            local t="$1" v="$2" agh="$3" sb="$4" ytb="$5" zz="$6" pt="$7" orig
+            local t="$1" v="$2" agh="$3" sb="$4" ytb="$5" zz="$6" pt="$7" rf="$8" orig
             # vname — имя варианта для людей (имя job и артефакта); fk — фид
             # forkop. forkop-mod внутри сборки — тот же вариант forkop, только
             # с фидом форка: part2/part3/zz1 различать их не нужно.
@@ -220,21 +227,21 @@ jobs:
             if [ "$orig" != "agh=$agh sb=$sb ytb=$ytb zz=$zz" ]; then
               NOTES="${NOTES}${t}/${vname}: ${orig} -> agh=$agh sb=$sb ytb=$ytb zz=$zz\n"
             fi
-            printf '{"target":"%s","variant":"%s","vname":"%s","fk":"%s","agh":"%s","sb":"%s","ytb":%s,"zz":%s,"patches":%s}' \
-              "$t" "$v" "$vname" "$fk" "$agh" "$sb" "$ytb" "$zz" "$pt"
+            printf '{"target":"%s","variant":"%s","vname":"%s","fk":"%s","agh":"%s","sb":"%s","ytb":%s,"zz":%s,"patches":%s,"rf":%s}' \
+              "$t" "$v" "$vname" "$fk" "$agh" "$sb" "$ytb" "$zz" "$pt" "$rf"
           }
 
           if [ "$INPUT_TARGET" == "combo" ]; then
             echo ">>> Generating COMBO matrix..."
-            # Поля: устройство вариант agh sb ytb zz patches.
+            # Поля: устройство вариант agh sb ytb zz patches rolling_feeds.
             # patches=false:
             #   R6S homeproxy + sing-box 1.12.x
             #   RB5009 clear
             #   RB5009 switch
             # $(entry ...) — подстановка: в ней NOTES не сохраняется, для
             # combo это и не нужно (значения ниже уже согласованы с вариантами).
-            # $(entry nanopi-r6s homeproxy latest 1.12.x true true false),$(entry nanopi-r6s forkop latest extended false true true),
-            json="{\"include\":[$(entry nanopi-r6s homeproxy latest latest true true true),$(entry rb5009 clear no no false true false),$(entry rb5009 switch no no false true false)]}"
+            # $(entry nanopi-r6s homeproxy latest 1.12.x true true false false),$(entry nanopi-r6s forkop latest extended false true true false),
+            json="{\"include\":[$(entry nanopi-r6s homeproxy latest latest true true true false),$(entry rb5009 clear no no false true false false),$(entry rb5009 switch no no false true false false)]}"
           else
             # Все устройства из config/conf/ — при добавлении нового дописать сюда.
             targets="nanopi-r6s nanopi-r5s rb5009 slateax ax59u brume2"
@@ -248,7 +255,7 @@ jobs:
               [ -n "$json_parts" ] && json_parts="$json_parts,"
               # Без подстановки $(...): entry дописывает NOTES, а подоболочка
               # эти изменения потеряла бы.
-              entry "$t" "$INPUT_VARIANT" "$INPUT_AGH" "$INPUT_SB" "$INPUT_YTB" "$INPUT_ZZ" "$INPUT_PATCHES" > /tmp/entry.json
+              entry "$t" "$INPUT_VARIANT" "$INPUT_AGH" "$INPUT_SB" "$INPUT_YTB" "$INPUT_ZZ" "$INPUT_PATCHES" "$INPUT_RF" > /tmp/entry.json
               json_parts="$json_parts$(cat /tmp/entry.json)"
             done
             json="{\"include\":[$json_parts]}"
@@ -265,7 +272,7 @@ jobs:
           echo "=========================================="
           echo "Mode: $INPUT_TARGET"
           echo "Generated Matrix:"
-          echo "$json" | jq -r '.include[] | "  \(.target) / \(.vname) / agh=\(.agh) / sb=\(.sb) / ytb=\(.ytb) / zz=\(.zz) / patches=\(.patches)"'
+          echo "$json" | jq -r '.include[] | "  \(.target) / \(.vname) / agh=\(.agh) / sb=\(.sb) / ytb=\(.ytb) / zz=\(.zz) / patches=\(.patches) / rf=\(.rf)"'
           echo "=========================================="
           if [ -n "$NOTES" ]; then
             echo "Выбор формы приведён к возможностям варианта/устройства:"
@@ -310,7 +317,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
     
-    name: ${{ inputs.source }} ${{ inputs.branch }} [${{ matrix.vname }}] - ${{ matrix.target }} (agh:${{ matrix.agh }}, sb:${{ matrix.sb }}, ytb:${{ matrix.ytb }}, zz:${{ matrix.zz }}, patches:${{ matrix.patches }})
+    name: ${{ inputs.source }} ${{ inputs.branch }} [${{ matrix.vname }}] - ${{ matrix.target }} (agh:${{ matrix.agh }}, sb:${{ matrix.sb }}, ytb:${{ matrix.ytb }}, zz:${{ matrix.zz }}, patches:${{ matrix.patches }}, rf:${{ matrix.rf }})
 
     steps:
     - name: Free up disk space
@@ -890,6 +897,13 @@ jobs:
         sed -i 's|https://git.openwrt.org/feed/telephony.git|https://github.com/openwrt/telephony.git|g' feeds.conf.default
         # -------------------------------------
         
+        # --- РАЗБЛОКИРОВКА ФИДОВ (ROLLING FEEDS) ---
+        if [ "${{ matrix.rf }}" == "true" ]; then
+            echo ">>> [Feeds] Rolling feeds ENABLED. Unpinning packages..."
+            # Удаляем ^ и хеш коммита в конце строк (оставляя ;branch если он есть)
+            sed -i 's/\^.*//' feeds.conf.default
+        fi
+        
         ./scripts/feeds update -a
 
         # -------------------------------------------------------------
@@ -1385,7 +1399,7 @@ jobs:
         # zz1, дата. Все параметры сборки в имени: в combo бывает несколько
         # сборок одного устройства и варианта (например homeproxy с 1.12.x и
         # latest), а дата — до минуты; одинаковое имя upload-artifact отверг бы.
-        name: ${{ matrix.target }}_${{ inputs.source }}_${{ inputs.branch }}_${{ matrix.vname }}_${{ matrix.patches && 'patches' || 'nopatches' }}_agh-${{ matrix.agh }}_sb-${{ matrix.sb }}_${{ matrix.ytb && 'ytb' || 'noytb' }}_${{ matrix.zz && 'zz' || 'nozz' }}_${{ steps.get_date.outputs.date }}
+        name: ${{ matrix.target }}_${{ inputs.source }}_${{ inputs.branch }}_${{ matrix.vname }}_${{ matrix.patches && 'patches' || 'nopatches' }}_agh-${{ matrix.agh }}_sb-${{ matrix.sb }}_${{ matrix.ytb && 'ytb' || 'noytb' }}_${{ matrix.zz && 'zz' || 'nozz' }}_rf-${{ matrix.rf }}_${{ steps.get_date.outputs.date }}
         path: openwrt/bin
         # На ранней ошибке (до создания bin/) не валим джоб красным "no files".
         if-no-files-found: warn
