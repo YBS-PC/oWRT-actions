@@ -157,12 +157,12 @@ jobs:
         run: |
           INPUT_TARGET="${{ inputs.target }}"
           INPUT_VARIANT="${{ inputs.variant }}"
-          INPUT_RF="${{ inputs.rolling_feeds }}"
           INPUT_AGH="${{ inputs.agh }}"
           INPUT_SB="${{ inputs.sb }}"
           INPUT_YTB="${{ inputs.ytb }}"
           INPUT_ZZ="${{ inputs.zz }}"
           INPUT_PATCHES="${{ inputs.apply_patches }}"
+          INPUT_RF="${{ inputs.rolling_feeds }}"
 
           # Каждая сборка матрицы несёт СВОИ настройки:
           #   agh     — "no" (убрать из прошивки), "feed" (пакет из фида),
