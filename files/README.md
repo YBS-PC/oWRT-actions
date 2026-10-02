@@ -233,7 +233,7 @@ cp /etc/apk/repositories.d/distfeeds.list.bak /etc/apk/repositories.d/distfeeds.
  Kernel Version: 6.12.74
  Build Variant: homeproxy (2026-03-19, feeds: tag)
 ```
-- `feeds:` — откуда фиды packages/luci/routing/telephony/video: `tag` — коммиты релизного тега, `repo` — коммиты репозитория пакетов (поле `feeds_latest`). Берётся из первой строки `/etc/build_feeds`, там же итоговые коммиты всех фидов сборки; без файла (старые сборки) часть не выводится.
+- `feeds:` — откуда фиды packages/luci/routing/telephony/video: `repo` — хотя бы один заменён на коммит репозитория пакетов (поле `feeds` / `feeds_latest`), иначе `tag` — коммиты релизного тега. Берётся из первой строки `/etc/build_feeds`. Дальше в файле — строки feeds.conf всех фидов сборки с реально скачанными коммитами (годятся как feeds.conf для повторной сборки); без файла (старые сборки) часть не выводится.
 
 **Чтобы откатить:**
 ```sh
