@@ -104,7 +104,7 @@ option group 'root'
 - Создаются группа и пользователь `adguardhome` (uid/gid 853), если их нет
 - `/etc/init.d/adguardhome`: `--logfile syslog` → `--logfile /var/AdGuardHome.log`
 - `/etc/adguardhome/adguardhome.yaml` — upstream DNS зависит от варианта:
-  - `forkop` → `127.0.0.42:53` (DNS forkop sing-box), плюс `forkop.settings.dont_touch_dhcp='1'`
+  - `forkop`, `podkop` → `127.0.0.42:53` (DNS их sing-box), плюс `<вариант>.settings.dont_touch_dhcp='1'` (у forkop ещё `intercept_device_dns='0'`)
   - остальные → `127.0.0.1:5333` (DNS homeproxy sing-box)
 - `/usr/lib/lua/luci/controller/adguardhome_net.lua` — пункт меню `Network → AdGuardHome` (редирект на `http://IP_роутера:8080`)
 
@@ -170,7 +170,7 @@ sed -i 's/ct original packets ge 30 flow offload @ft/flow offload @ft/' /usr/sha
 
 ## 11. Прочие сервисы
 - **Passwall2** (вариант `passwall`, firstboot): `dns_redirect='0'`, `dns_shunt='closed'`, `remote_dns` и `china_dns` = `127.0.0.1:53`, `adblock='0'`, `enabled='1'`
-- **forkop** (если есть `/etc/config/forkop`): `forkop.settings.exclude_ntp='1'` — NTP мимо прокси
+- **forkop, podkop** (если есть `/etc/config/forkop` или `/etc/config/podkop`): `<пакет>.settings.exclude_ntp='1'` — NTP мимо прокси
 - **internet-detector**: сервис отключается, `START=99`
 - **phy-leds**: сервис отключается
 - **SQM** (если установлен):
