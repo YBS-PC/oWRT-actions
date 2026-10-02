@@ -61,7 +61,7 @@ fi
 # УСЛОВНЫЙ БЛОК: Добавление HomeProxy
 # Если в фидах нет репозитория 'immortalwrt/luci'
 # =========================================================
-if [[ "$VARIANT" != "clear" && "$VARIANT" != "crystal_clear" && "$VARIANT" != "switch" && "$VARIANT" != "passwall" && "$VARIANT" != "xray" && "$VARIANT" != "v2raya" && "$VARIANT" != "podkop" && "$VARIANT" != "forkop" ]]; then
+if [[ "$VARIANT" != "clear" && "$VARIANT" != "crystal_clear" && "$VARIANT" != "switch" && "$VARIANT" != "passwall" && "$VARIANT" != "xray" && "$VARIANT" != "v2raya" && "$VARIANT" != "podkop" && "$VARIANT" != "forkop" && "$VARIANT" != "trafira" && "$VARIANT" != "rehomeproxy" ]]; then
     if ! grep -q "immortalwrt/luci" feeds.conf.default; then
         echo ">>> [HomeProxy] В фидах НЕ найден ImmortalWrt LuCI. Считаем, что это Official OpenWrt."
         echo ">>> [HomeProxy] Добавляем HomeProxy вручную..."
@@ -69,6 +69,33 @@ if [[ "$VARIANT" != "clear" && "$VARIANT" != "crystal_clear" && "$VARIANT" != "s
         git clone -b master https://github.com/immortalwrt/homeproxy.git ./package/luci-app-homeproxy/
     else
         echo ">>> [HomeProxy] Обнаружен фид ImmortalWrt LuCI. HomeProxy должен быть встроен."
+    fi
+fi
+
+# =========================================================
+# Re:HomeProxy (вариант rehomeproxy): форк homeproxy от 1andrevich
+# (github.com/1andrevich/homeproxy-hiddify), пакет luci-app-re-homeproxy.
+# Ставит файлы по тем же путям, что luci-app-homeproxy (/etc/config/homeproxy,
+# /etc/init.d/homeproxy ...), поэтому homeproxy в этом варианте вырезается
+# (workflow). Ядро — /usr/bin/sing-box из сборки (или hiddify-core /
+# sing-box-extended, которые приложение ставит само во вкладке Core & Tools).
+# =========================================================
+if [ "$VARIANT" == "rehomeproxy" ]; then
+    REHP_DIR="./package/luci-app-re-homeproxy"
+    echo ">>> [Re:HomeProxy] Клонируем 1andrevich/homeproxy-hiddify..."
+    git clone -b master https://github.com/1andrevich/homeproxy-hiddify.git "$REHP_DIR/"
+    # В Makefile форка PKG_VERSION:=1; его собственные сборки получают версию
+    # <дата коммита>-r<число коммитов>. Делаем так же, чтобы версия пакета
+    # в прошивке показывала, из какого состояния репозитория он собран.
+    if [ -f "$REHP_DIR/Makefile" ]; then
+        REHP_VER=$(git -C "$REHP_DIR" log -1 --format=%cd --date=format:%Y.%m.%d 2>/dev/null)
+        REHP_REL=$(git -C "$REHP_DIR" rev-list --count HEAD 2>/dev/null)
+        if [ -n "$REHP_VER" ] && [ -n "$REHP_REL" ]; then
+            sed -i "s/^PKG_VERSION:=.*/PKG_VERSION:=$REHP_VER/; s/^PKG_RELEASE:=.*/PKG_RELEASE:=$REHP_REL/" "$REHP_DIR/Makefile"
+            echo ">>> [Re:HomeProxy] Версия пакета: $REHP_VER-r$REHP_REL ($(git -C "$REHP_DIR" rev-parse --short HEAD))"
+        fi
+    else
+        echo "::warning title=Re:HomeProxy::Клон homeproxy-hiddify не получен, пакета в прошивке не будет"
     fi
 fi
 
@@ -248,9 +275,9 @@ echo 'CONFIG_BUSYBOX_DEFAULT_ASH_BUILTIN_TEST=y' >> ./.config
 echo 'CONFIG_BUSYBOX_DEFAULT_FEATURE_FAST_TOP=y' >> ./.config
 echo 'CONFIG_BUSYBOX_DEFAULT_FEATURE_USE_INITTAB=y' >> ./.config
 echo ">>> [Heavy packages] Тяжелые пакеты отключены."
-        # Для сборок с homeproxy и podkop/forkop ставим Tiny версию sing-box
+        # Для сборок с homeproxy и podkop/forkop/trafira ставим Tiny версию sing-box
         # (если sing-box не отключён полем sb; job setup тогда пишет sb=tiny).
-        if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "forkop" ]] && [ "${SB_MODE:-feed}" != "no" ]; then
+        if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "rehomeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "forkop" || "$VARIANT" == "trafira" ]] && [ "${SB_MODE:-feed}" != "no" ]; then
             echo ">>> [Heavy packages] Sing-box Tiny for $VARIANT compatibility..."
             sed -i '/sing-box/Id' ./.config
             echo '# CONFIG_PACKAGE_sing-box is not set' >> ./.config
@@ -268,7 +295,7 @@ fi
 # И добавление индивидуальных пакетов
 # =========================================================
 
-# Пакеты SQM. Вырезаются в homeproxy, podkop и forkop.
+# Пакеты SQM. Вырезаются в homeproxy, rehomeproxy, podkop, forkop и trafira.
 SQM_BLOAT=(
 "sqm"
 "sqm-scripts"
@@ -480,8 +507,8 @@ SWITCH_BLOAT=(
 "${CRYSTAL_CLEAR_BLOAT[@]}"
 )
 
-# --- ЛОГИКА ДЛЯ ВАРИАНТОВ 'homeproxy', 'podkop', 'forkop' ---
-if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "forkop" ]]; then
+# --- ЛОГИКА ДЛЯ ВАРИАНТОВ 'homeproxy', 'rehomeproxy', 'podkop', 'forkop', 'trafira' ---
+if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "rehomeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "forkop" || "$VARIANT" == "trafira" ]]; then
     echo ">>> [Variant: $VARIANT] Performing cleanup..."
     # Вычищаем пакеты из конфига. В SQM_BLOAT уже перечислены полные имена
     # (luci-app-sqm, luci-i18n-sqm-ru), поэтому префиксы не добавляем.
@@ -491,8 +518,8 @@ if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "fork
     done
 fi
 
-# forkop дополнительно без youtubeUnblock
-if [ "$VARIANT" == "forkop" ]; then
+# forkop и trafira дополнительно без youtubeUnblock (свои Zapret/ByeDPI)
+if [[ "$VARIANT" == "forkop" || "$VARIANT" == "trafira" ]]; then
     sed -i '/youtubeUnblock/Id' ./.config
     echo "# CONFIG_PACKAGE_youtubeUnblock is not set" >> ./.config
     echo "# CONFIG_PACKAGE_luci-app-youtubeUnblock is not set" >> ./.config
