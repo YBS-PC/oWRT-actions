@@ -1,0 +1,103 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 2 Oct 2026 21:24:09 +0000
+Subject: [PATCH 1/3] Fix ucode forward references in components/action.uc
+
+ensure_install_storage() called sing_box_runtime_output() and
+action_fail(), which were declared further down the file. ucode binds
+names at declaration time, so the call fails at runtime with
+"left-hand side is not a function": every sing-box install/update from
+the Components page crashed before the free-space check, and a real
+out-of-space condition crashed instead of reporting the error.
+
+Move sing_box_runtime_output() and ensure_install_storage() right after
+action_fail(); all their callers are further down. No logic change.
+tests/component_install_storage.sh evaluates the body with node, so it
+could not catch this.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
+---
+ trafira/files/usr/lib/components/action.uc | 52 +++++++++++-----------
+ 1 file changed, 26 insertions(+), 26 deletions(-)
+
+diff --git a/trafira/files/usr/lib/components/action.uc b/trafira/files/usr/lib/components/action.uc
+index 07c20ebc..8cba90b6 100644
+--- a/trafira/files/usr/lib/components/action.uc
++++ b/trafira/files/usr/lib/components/action.uc
+@@ -162,25 +162,6 @@ function install_storage_error(path, available, required) {
+         " MiB required as a safety minimum. Free disk space and retry; installation stopped before proceeding";
+ }
+ 
+-function ensure_install_storage(component, action, staged_bytes) {
+-    let path = file_exists("/overlay") ? "/overlay" : "/";
+-    let storage_action = action;
+-    if (component == "sing_box" && action == "install" && sing_box_runtime_output("variant", []) == "tiny")
+-        storage_action = "install_tiny";
+-    let required = install_storage_required_bytes(component, staged_bytes, storage_action);
+-    let message = install_storage_error(path, filesystem_available_bytes(path), required);
+-    if (message != "")
+-        action_fail(component, action, message);
+-    // Component destinations can be separate filesystems.
+-    for (let target in [ "/usr/bin", "/usr/lib", "/etc", "/opt" ]) {
+-        if (target == "/opt" && ((component != "zapret" && component != "zapret2" && component != "byedpi") || !file_exists(target)))
+-            continue;
+-        message = install_storage_error(target, filesystem_available_bytes(target), required);
+-        if (message != "")
+-            action_fail(component, action, message);
+-    }
+-}
+-
+ function staged_install_bytes(binary, library) {
+     let binary_stat = fs.stat(binary);
+     let library_stat = library != "" ? fs.stat(library) : null;
+@@ -465,6 +446,32 @@ function action_fail(component, action, message, current_version, latest_version
+     exit(1);
+ }
+ 
++function sing_box_runtime_output(mode, args) {
++    let command_args = [ LIB_DIR + "/singbox/runtime.uc", mode ];
++    for (let arg in (type(args) == "array" ? args : []))
++        push(command_args, arg);
++    return trim(module_output(command_args));
++}
++
++function ensure_install_storage(component, action, staged_bytes) {
++    let path = file_exists("/overlay") ? "/overlay" : "/";
++    let storage_action = action;
++    if (component == "sing_box" && action == "install" && sing_box_runtime_output("variant", []) == "tiny")
++        storage_action = "install_tiny";
++    let required = install_storage_required_bytes(component, staged_bytes, storage_action);
++    let message = install_storage_error(path, filesystem_available_bytes(path), required);
++    if (message != "")
++        action_fail(component, action, message);
++    // Component destinations can be separate filesystems.
++    for (let target in [ "/usr/bin", "/usr/lib", "/etc", "/opt" ]) {
++        if (target == "/opt" && ((component != "zapret" && component != "zapret2" && component != "byedpi") || !file_exists(target)))
++            continue;
++        message = install_storage_error(target, filesystem_available_bytes(target), required);
++        if (message != "")
++            action_fail(component, action, message);
++    }
++}
++
+ function run_logged(description, command, capture_install_error) {
+     init_tmp_dir();
+     let output_file = make_tmp_file("command");
+@@ -1665,13 +1672,6 @@ function pkg_install_rollback_files(files) {
+     return true;
+ }
+ 
+-function sing_box_runtime_output(mode, args) {
+-    let command_args = [ LIB_DIR + "/singbox/runtime.uc", mode ];
+-    for (let arg in (type(args) == "array" ? args : []))
+-        push(command_args, arg);
+-    return trim(module_output(command_args));
+-}
+-
+ function sing_box_runtime_success(mode, args) {
+     let command_args = [ LIB_DIR + "/singbox/runtime.uc", mode ];
+     for (let arg in (type(args) == "array" ? args : []))
+-- 
+2.43.0
+
