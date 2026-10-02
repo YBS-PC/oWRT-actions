@@ -10,8 +10,10 @@ echo ">>>>>>>>> WRT-part2 start. Использование: после feeds up
 # --------------------------------------------------------------------------
 # Версии пакетов, собираемых из git
 #
-# Makefile'ы forkop, podkop и luci-theme-proton2025 читают версию из окружения:
+# Makefile'ы forkop, trafira, podkop и luci-theme-proton2025 читают версию
+# из окружения:
 #   forkop/Makefile       FORKOP_VERSION  -> без неё PKG_VERSION=0.0.0
+#   trafira/Makefile      TRAFIRA_VERSION -> без неё PKG_VERSION=0.0.0
 #   podkop/Makefile       PODKOP_VERSION  -> без неё PKG_VERSION=0.<дата>
 #   proton2025/Makefile   PROTON_VERSION  -> без неё зашитый дефолт 1.4.0
 #
@@ -26,8 +28,8 @@ resolve_latest_tag() {
     local _repo="$1" _api _ver _auth=()
 
     # Основной путь: ls-remote. sed срезает refs/tags/ и ведущую v,
-    # grep отбрасывает нечисловые теги (nightly, 1.4.1-rc1) — Makefile
-    # forkop падает с $(error), если версия не в формате x.y.z.
+    # grep отбрасывает нечисловые теги (nightly, 1.4.1-rc1) — Makefile'ы
+    # forkop и trafira падают с $(error), если версия не в формате x.y.z.
     _ver=$(git ls-remote --tags --refs "$_repo" 2>/dev/null \
         | awk '{print $2}' | sed 's|refs/tags/||; s|^v||' \
         | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
@@ -74,6 +76,22 @@ else
     echo ">>> Variant '$VARIANT': forkop не собирается, версия не нужна."
 fi
 
+if [[ "$VARIANT" == "trafira" ]]; then
+    # trafira/Makefile и luci-app-trafira/Makefile: TRAFIRA_VERSION x.y.z
+    # (dev -> PKG_VERSION=0.0.0, иное -> $(error)). Версия видна в LuCI
+    # trafira и в его проверке обновлений.
+    TRAFIRA_REPO=$(awk '$1 == "src-git" && $2 == "trafira" { print $3; exit }' feeds.conf.default 2>/dev/null | sed 's/[;^].*//')
+    [ -n "$TRAFIRA_REPO" ] || TRAFIRA_REPO="https://github.com/petrouspetr-pixel/trafira.git"
+    TRAFIRA_VER=$(resolve_latest_tag "$TRAFIRA_REPO")
+    if [ -n "$TRAFIRA_VER" ]; then
+        export_build_var TRAFIRA_VERSION "$TRAFIRA_VER"
+        echo "✓ trafira: $TRAFIRA_VER ($TRAFIRA_REPO)"
+    else
+        export_build_var TRAFIRA_VERSION "dev"
+        echo "⚠ trafira: тег не определён, ставлю dev (PKG_VERSION=0.0.0)"
+    fi
+fi
+
 if [[ "$VARIANT" == "podkop" ]]; then
     # podkop/Makefile и luci-app-podkop/Makefile: без PODKOP_VERSION версия
     # пакета 0.<дата сборки>, и проверка обновлений в LuCI podkop всегда
@@ -105,7 +123,8 @@ fi
 # Шаг "Apply custom patches" в yml работает ДО feeds update и берёт только
 # patches/*.patch (патчи к дереву openwrt). Патчи к фидам лежат в подпапках,
 # чтобы тот шаг их не трогал, и применяются здесь — после feeds update, до
-# feeds install. Имя подпапки = имя фида из feeds.conf (forkop, forkopmod, podkop).
+# feeds install. Имя подпапки = имя фида из feeds.conf (forkop, forkopmod,
+# trafira, podkop).
 # Подпапки фидов, которые не загружены, пропускаются — поэтому патчи для
 # обоих вариантов forkop могут лежать рядом, а применятся только нужные.
 #
@@ -237,7 +256,7 @@ apply_feed_patches
 
 # YTB — поле формы ytb (workflow экспортирует его; без него считаем «да»).
 # Варианты без youtubeUnblock job setup и так приводит к ytb=false.
-if [[ "$VARIANT" == "clear" || "$VARIANT" == "crystal_clear" || "$VARIANT" == "switch" || "$VARIANT" == "forkop" || "${YTB:-true}" != "true" ]]; then
+if [[ "$VARIANT" == "clear" || "$VARIANT" == "crystal_clear" || "$VARIANT" == "switch" || "$VARIANT" == "forkop" || "$VARIANT" == "trafira" || "${YTB:-true}" != "true" ]]; then
     echo ">>> Variant '$VARIANT', ytb=${YTB:-true}. Skipping youtubeUnblock update."
 else
     echo "=================================================="
