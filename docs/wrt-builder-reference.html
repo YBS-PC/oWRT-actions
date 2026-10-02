@@ -417,10 +417,10 @@
       <li><b>Локальные бинари.</b> sing-box, AdGuardHome и speedtest из <code>/root/apps/</code> ставятся в <code>/usr/bin</code>.</li>
       <li><b>homeproxy</b> (если установлен): форсится <code>dns_hijacked=1</code>, создаётся firewall-хелпер, патчится init, добавляется bypass-чейн nftables; Clash API на <code>:9090</code> и панель YACD (догружается cron-ом, пункт меню в LuCI). Без homeproxy — удаляются его nft-файл и include-секции firewall.</li>
       <li><b>Наборы адресов fw4.</b> Всегда создаются ipset <code>dpi_ips</code>, <code>bypass_ips</code>, <code>bypass_local</code> (с <code>loadfile</code> в <code>/etc/luci-uploads/</code>).</li>
-      <li><b>Прокси под вариант.</b> passwall2 — базовые настройки на first boot; forkop — <code>exclude_ntp=1</code> (NTP мимо прокси). xray, v2rayA и podkop не настраиваются.</li>
+      <li><b>Прокси под вариант.</b> passwall2 — базовые настройки на first boot; forkop и podkop — <code>exclude_ntp=1</code> (NTP мимо прокси). xray и v2rayA не настраиваются.</li>
       <li><b>youtubeUnblock.</b> Запись правил nftables с ipset-байпасами, очередь 537, метка гостевой сети; START=99.</li>
       <li><b>internet-detector / owut.</b> internet-detector выключается (чтобы не висел службой, а активировался при открытии страницы luci), owut настраивается.</li>
-      <li><b>AdGuardHome.</b> dnsmasq переезжает на порт 54, AGH занимает 53; upstream DNS — sing-box homeproxy (<code>127.0.0.1:5333</code>) или forkop (<code>127.0.0.42:53</code>, плюс <code>dont_touch_dhcp=1</code> и <code>intercept_device_dns=0</code>); создаётся LuCI-редирект на <code>:8080</code>, служба запускается.</li>
+      <li><b>AdGuardHome.</b> dnsmasq переезжает на порт 54, AGH занимает 53; upstream DNS — sing-box homeproxy (<code>127.0.0.1:5333</code>) или forkop/podkop (<code>127.0.0.42:53</code>, плюс <code>dont_touch_dhcp=1</code>; у forkop ещё <code>intercept_device_dns=0</code>); создаётся LuCI-редирект на <code>:8080</code>, служба запускается.</li>
       <li><b>SQM и BBR.</b> Если SQM установлен — настраивается CAKE; TCP BBR включается, если модуль есть в ядре.</li>
       <li><b>FullCone NAT</b> — только на ImmortalWrt и только при наличии модуля (на OpenWrt тихо пропускается).</li>
       <li><b>Время и идентичность.</b> Синхронизация RTC/NTP, исправление mtime из будущего, обновление баннера; hostname и commonname — только на first boot.</li>
