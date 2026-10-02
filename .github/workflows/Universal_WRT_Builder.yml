@@ -227,13 +227,14 @@ jobs:
           if [ "$INPUT_TARGET" == "combo" ]; then
             echo ">>> Generating COMBO matrix..."
             # Поля: устройство вариант agh sb ytb zz patches.
-            # patches=false:
-            #   R6S homeproxy + sing-box 1.12.x
-            #   RB5009 clear
-            #   RB5009 switch
+            #   R6S homeproxy: AGH latest, sing-box latest, ytb, zz1, патчи
+            #     (с sing-box 1.13+ homeproxy работает только с патчами 004/006)
+            #   RB5009 clear и RB5009 switch: без AGH/sing-box/ytb, zz1, без патчей
             # $(entry ...) — подстановка: в ней NOTES не сохраняется, для
             # combo это и не нужно (значения ниже уже согласованы с вариантами).
-            # $(entry nanopi-r6s homeproxy latest 1.12.x true true false),$(entry nanopi-r6s forkop latest extended false true true),
+            # Запасные сборки (дописать в include через запятую):
+            #   $(entry nanopi-r6s homeproxy latest 1.12.x true true false)
+            #   $(entry nanopi-r6s forkop latest extended false true true)
             json="{\"include\":[$(entry nanopi-r6s homeproxy latest latest true true true),$(entry rb5009 clear no no false true false),$(entry rb5009 switch no no false true false)]}"
           else
             # Все устройства из config/conf/ — при добавлении нового дописать сюда.
@@ -454,9 +455,8 @@ jobs:
             # Из тега v1.12.25 формируем имя файла: sing-box-1.12.25-linux-arm64.tar.gz
             SB_URL="https://github.com/${SB_REPO}/releases/download/${SB_TAG}/sing-box-${SB_TAG#v}-linux-arm64.tar.gz"
         elif [ "$SB_VERSION_CHOICE" == "extended" ]; then
-            # Тоже через ls-remote, без API: от этой ветки зависит сборка
-            # forkop в combo, и сбой API (лимит, 401) молча подменил бы
-            # выбранный extended на sing-box из фида.
+            # Тоже через ls-remote, без API: сбой API (лимит, 401) молча
+            # подменил бы выбранный extended на sing-box из фида.
             # Стабильные теги: v1.14.1-extended-2.7.2; rc/beta/alpha и
             # служебный тег «version» отсекаются шаблоном.
             SB_REPO="shtorm-7/sing-box-extended"
