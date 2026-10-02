@@ -104,7 +104,7 @@ option group 'root'
 - Создаются группа и пользователь `adguardhome` (uid/gid 853), если их нет
 - `/etc/init.d/adguardhome`: `--logfile syslog` → `--logfile /var/AdGuardHome.log`
 - `/etc/adguardhome/adguardhome.yaml` — upstream DNS зависит от варианта:
-  - `forkop`, `podkop` → `127.0.0.42:53` (DNS их sing-box), плюс `<вариант>.settings.dont_touch_dhcp='1'` (у forkop ещё `intercept_device_dns='0'`)
+  - `forkop`, `trafira`, `podkop` → `127.0.0.42:53` (DNS их sing-box), плюс `<вариант>.settings.dont_touch_dhcp='1'` (у forkop ещё `intercept_device_dns='0'`)
   - остальные → `127.0.0.1:5333` (DNS homeproxy sing-box)
 - `/usr/lib/lua/luci/controller/adguardhome_net.lua` — пункт меню `Network → AdGuardHome` (редирект на `http://IP_роутера:8080`)
 
@@ -116,12 +116,15 @@ rm /usr/lib/lua/luci/controller/adguardhome_net.lua
 ```
 
 ## 7. homeproxy
-**Если установлен (`/etc/init.d/homeproxy`):**
+**Если установлен (`/etc/init.d/homeproxy`, в том числе Re:HomeProxy):**
 - `/etc/homeproxy/scripts/firewall_post.ut`: строка
   `const dns_hijacked = uci.get('dhcp', '@dnsmasq[0]', 'dns_redirect') || '0'`
   заменяется на `const dns_hijacked = '1'` — homeproxy не трогает правила dnsmasq
 - `/etc/homeproxy/scripts/generate_client.uc`: в `config.experimental` добавляется
   `clash_api: { external_controller: '0.0.0.0:9090', external_ui: '/opt/yacd' }`
+  (Re:HomeProxy, вариант `rehomeproxy`: блок `clash_api` у него уже есть с
+  `127.0.0.1:9090` — там адрес меняется на `0.0.0.0:9090` и добавляется
+  `external_ui: '/opt/yacd'`, остальное как у homeproxy)
 - `/etc/homeproxy/scripts/update_firewall_rules.sh` создаётся целиком: в режиме TUN или при включённом Server добавляет в firewall include `fw4_forward.nft` / `fw4_input.nft`, иначе удаляет их
 - `/etc/init.d/homeproxy`: в `start_service()` и `stop_service()` добавляется строка
 ```sh
@@ -170,7 +173,7 @@ sed -i 's/ct original packets ge 30 flow offload @ft/flow offload @ft/' /usr/sha
 
 ## 11. Прочие сервисы
 - **Passwall2** (вариант `passwall`, firstboot): `dns_redirect='0'`, `dns_shunt='closed'`, `remote_dns` и `china_dns` = `127.0.0.1:53`, `adblock='0'`, `enabled='1'`
-- **forkop, podkop** (если есть `/etc/config/forkop` или `/etc/config/podkop`): `<пакет>.settings.exclude_ntp='1'` — NTP мимо прокси
+- **forkop, trafira, podkop** (если есть `/etc/config/forkop`, `/etc/config/trafira` или `/etc/config/podkop`): `<пакет>.settings.exclude_ntp='1'` — NTP мимо прокси
 - **internet-detector**: сервис отключается, `START=99`
 - **phy-leds**: сервис отключается
 - **SQM** (если установлен):
