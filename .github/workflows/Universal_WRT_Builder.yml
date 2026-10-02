@@ -106,7 +106,7 @@ on:
         default: true
 
       feeds_latest:
-        description: 'Фиды packages/luci/routing/telephony/video — коммиты репозитория пакетов (как после apk upgrade), а не тега релиза'
+        description: 'Фиды packages/luci/routing/telephony/video — коммиты репозитория пакетов (как после apk upgrade), а не тега релиза (в combo задаётся матрицей)'
         required: true
         type: boolean
         default: false
@@ -162,6 +162,7 @@ jobs:
           INPUT_YTB="${{ inputs.ytb }}"
           INPUT_ZZ="${{ inputs.zz }}"
           INPUT_PATCHES="${{ inputs.apply_patches }}"
+          INPUT_FEEDS="${{ inputs.feeds_latest }}"
 
           # Каждая сборка матрицы несёт СВОИ настройки:
           #   agh     — "no" (убрать из прошивки), "feed" (пакет из фида),
@@ -172,7 +173,10 @@ jobs:
           #   ytb     — true/false (JSON-булево), ставить ли youtubeUnblock;
           #   zz      — true/false, класть ли zz1-final-offline-setup.sh;
           #   patches — true/false, применять ли ЛЮБЫЕ пользовательские
-          #             патчи из patches/ и подпапок.
+          #             патчи из patches/ и подпапок;
+          #   feeds   — true/false, фиды packages/luci/routing/telephony/video
+          #             на коммитах репозитория пакетов (sh/feeds-from-repo.sh),
+          #             иначе — на коммитах релизного тега.
           #
           # В combo значения заданы здесь и не зависят от полей формы.
           # Специализированные патчи:
@@ -194,14 +198,14 @@ jobs:
           TINY_TARGETS="slateax ax59u"
           NOTES=""
 
-          # entry <target> <variant> <agh> <sb> <ytb> <zz> <patches>
+          # entry <target> <variant> <agh> <sb> <ytb> <zz> <patches> <feeds>
           # Приводит выбор к тому, что вариант реально допускает, чтобы имя
           # артефакта не врало: clear/crystal_clear/switch вырезают AGH,
           # sing-box и youtubeUnblock; passwall/v2raya/xray — sing-box;
           # forkop — youtubeUnblock; crystal_clear — zz1. homeproxy и podkop
           # без sing-box не работают (podkop ещё и тянет его зависимостью).
           entry() {
-            local t="$1" v="$2" agh="$3" sb="$4" ytb="$5" zz="$6" pt="$7" orig
+            local t="$1" v="$2" agh="$3" sb="$4" ytb="$5" zz="$6" pt="$7" fd="$8" orig
             # vname — имя варианта для людей (имя job и артефакта); fk — фид
             # forkop. forkop-mod внутри сборки — тот же вариант forkop, только
             # с фидом форка: part2/part3/zz1 различать их не нужно.
@@ -226,22 +230,24 @@ jobs:
             if [ "$orig" != "agh=$agh sb=$sb ytb=$ytb zz=$zz" ]; then
               NOTES="${NOTES}${t}/${vname}: ${orig} -> agh=$agh sb=$sb ytb=$ytb zz=$zz\n"
             fi
-            printf '{"target":"%s","variant":"%s","vname":"%s","fk":"%s","agh":"%s","sb":"%s","ytb":%s,"zz":%s,"patches":%s}' \
-              "$t" "$v" "$vname" "$fk" "$agh" "$sb" "$ytb" "$zz" "$pt"
+            printf '{"target":"%s","variant":"%s","vname":"%s","fk":"%s","agh":"%s","sb":"%s","ytb":%s,"zz":%s,"patches":%s,"feeds":%s}' \
+              "$t" "$v" "$vname" "$fk" "$agh" "$sb" "$ytb" "$zz" "$pt" "$fd"
           }
 
           if [ "$INPUT_TARGET" == "combo" ]; then
             echo ">>> Generating COMBO matrix..."
-            # Поля: устройство вариант agh sb ytb zz patches.
+            # Поля: устройство вариант agh sb ytb zz patches feeds.
+            # feeds=true — фиды из репозитория пакетов (обновлений после
+            # прошивки почти нет); поставьте false для сборки на коммитах тега.
             #   R6S homeproxy: AGH latest, sing-box latest, ytb, zz1, патчи
             #     (с sing-box 1.13+ homeproxy работает только с патчами 004/006)
             #   RB5009 clear и RB5009 switch: без AGH/sing-box/ytb, zz1, без патчей
             # $(entry ...) — подстановка: в ней NOTES не сохраняется, для
             # combo это и не нужно (значения ниже уже согласованы с вариантами).
             # Запасные сборки (дописать в include через запятую):
-            #   $(entry nanopi-r6s homeproxy latest 1.12.x true true false)
-            #   $(entry nanopi-r6s forkop latest extended false true true)
-            json="{\"include\":[$(entry nanopi-r6s homeproxy latest latest true true true),$(entry rb5009 clear no no false true false),$(entry rb5009 switch no no false true false)]}"
+            #   $(entry nanopi-r6s homeproxy latest 1.12.x true true false true)
+            #   $(entry nanopi-r6s forkop latest extended false true true true)
+            json="{\"include\":[$(entry nanopi-r6s homeproxy latest latest true true true true),$(entry rb5009 clear no no false true false true),$(entry rb5009 switch no no false true false true)]}"
           else
             # Все устройства из config/conf/ — при добавлении нового дописать сюда.
             targets="nanopi-r6s nanopi-r5s rb5009 slateax ax59u brume2"
@@ -255,7 +261,7 @@ jobs:
               [ -n "$json_parts" ] && json_parts="$json_parts,"
               # Без подстановки $(...): entry дописывает NOTES, а подоболочка
               # эти изменения потеряла бы.
-              entry "$t" "$INPUT_VARIANT" "$INPUT_AGH" "$INPUT_SB" "$INPUT_YTB" "$INPUT_ZZ" "$INPUT_PATCHES" > /tmp/entry.json
+              entry "$t" "$INPUT_VARIANT" "$INPUT_AGH" "$INPUT_SB" "$INPUT_YTB" "$INPUT_ZZ" "$INPUT_PATCHES" "$INPUT_FEEDS" > /tmp/entry.json
               json_parts="$json_parts$(cat /tmp/entry.json)"
             done
             json="{\"include\":[$json_parts]}"
@@ -272,7 +278,7 @@ jobs:
           echo "=========================================="
           echo "Mode: $INPUT_TARGET"
           echo "Generated Matrix:"
-          echo "$json" | jq -r '.include[] | "  \(.target) / \(.vname) / agh=\(.agh) / sb=\(.sb) / ytb=\(.ytb) / zz=\(.zz) / patches=\(.patches)"'
+          echo "$json" | jq -r '.include[] | "  \(.target) / \(.vname) / agh=\(.agh) / sb=\(.sb) / ytb=\(.ytb) / zz=\(.zz) / patches=\(.patches) / feeds=\(if .feeds then "repo" else "tag" end)"'
           echo "=========================================="
           if [ -n "$NOTES" ]; then
             echo "Выбор формы приведён к возможностям варианта/устройства:"
@@ -318,7 +324,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
     
-    name: ${{ inputs.source }} ${{ inputs.branch }} [${{ matrix.vname }}] - ${{ matrix.target }} (agh:${{ matrix.agh }}, sb:${{ matrix.sb }}, ytb:${{ matrix.ytb }}, zz:${{ matrix.zz }}, patches:${{ matrix.patches }}, feeds:${{ inputs.feeds_latest && 'repo' || 'tag' }})
+    name: ${{ inputs.source }} ${{ inputs.branch }} [${{ matrix.vname }}] - ${{ matrix.target }} (agh:${{ matrix.agh }}, sb:${{ matrix.sb }}, ytb:${{ matrix.ytb }}, zz:${{ matrix.zz }}, patches:${{ matrix.patches }}, feeds:${{ matrix.feeds && 'repo' || 'tag' }})
 
     steps:
     - name: Free up disk space
@@ -727,7 +733,7 @@ jobs:
         echo "youtubeUnblock : $SUM_YTB"
         echo "zz1            : $SUM_ZZ"
         echo "Патчи          : $SUM_PATCHES"
-        if [ "${{ inputs.feeds_latest }}" = "true" ]; then
+        if [ "${{ matrix.feeds }}" = "true" ]; then
             echo "Фиды           : коммиты репозитория пакетов (packages-${VAR_BRANCH#openwrt-}/${PKG_ARCH:-?})"
         else
             echo "Фиды           : как в теге релиза"
@@ -907,9 +913,9 @@ jobs:
         # -------------------------------------
 
         # Фиды packages/luci/routing/telephony/video на коммитах репозитория
-        # пакетов ветки (поле формы feeds_latest). После замены зеркал: коммит
+        # пакетов ветки (поле feeds матрицы: форма feeds_latest или пресет combo). После замены зеркал: коммит
         # проверяется на том адресе, откуда его возьмёт feeds update.
-        if [ "${{ inputs.feeds_latest }}" = "true" ]; then
+        if [ "${{ matrix.feeds }}" = "true" ]; then
             bash "$GITHUB_WORKSPACE/sh/feeds-from-repo.sh"
         fi
         echo ">>> feeds.conf.default:"
@@ -918,7 +924,7 @@ jobs:
         # баннер zz1) и итоговые коммиты всех фидов — чтобы на роутере было
         # видно, на чём собраны пакеты.
         {
-            if [ "${{ inputs.feeds_latest }}" = "true" ]; then echo "repo"; else echo "tag"; fi
+            if [ "${{ matrix.feeds }}" = "true" ]; then echo "repo"; else echo "tag"; fi
             grep -E '^src-git' feeds.conf.default
         } > files/etc/build_feeds
         
@@ -1417,7 +1423,7 @@ jobs:
         # zz1, фиды (feeds-tag / feeds-repo), дата. Все параметры сборки в имени: в combo бывает несколько
         # сборок одного устройства и варианта (например homeproxy с 1.12.x и
         # latest), а дата — до минуты; одинаковое имя upload-artifact отверг бы.
-        name: ${{ matrix.target }}_${{ inputs.source }}_${{ inputs.branch }}_${{ matrix.vname }}_${{ matrix.patches && 'patches' || 'nopatches' }}_agh-${{ matrix.agh }}_sb-${{ matrix.sb }}_${{ matrix.ytb && 'ytb' || 'noytb' }}_${{ matrix.zz && 'zz' || 'nozz' }}${{ inputs.feeds_latest && '_feeds-repo' || '_feeds-tag' }}_${{ steps.get_date.outputs.date }}
+        name: ${{ matrix.target }}_${{ inputs.source }}_${{ inputs.branch }}_${{ matrix.vname }}_${{ matrix.patches && 'patches' || 'nopatches' }}_agh-${{ matrix.agh }}_sb-${{ matrix.sb }}_${{ matrix.ytb && 'ytb' || 'noytb' }}_${{ matrix.zz && 'zz' || 'nozz' }}${{ matrix.feeds && '_feeds-repo' || '_feeds-tag' }}_${{ steps.get_date.outputs.date }}
         path: openwrt/bin
         # На ранней ошибке (до создания bin/) не валим джоб красным "no files".
         if-no-files-found: warn
