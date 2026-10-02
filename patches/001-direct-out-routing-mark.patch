@@ -1,0 +1,38 @@
+From: YBS-PC/oWRT-actions
+Subject: [PATCH] generate_client: direct-out с routing_mark — запуск на обычном sing-box
+
+Форк перенёс метку self_mark из outbound direct-out в route.default_mark,
+и direct-out стал «пустым» direct. Обычный sing-box (1.12+, в том числе
+пакет sing-box из фида OpenWrt) запрещает такой outbound как detour
+DNS-сервера и не запускается ни в одном готовом режиме, включая режим по
+умолчанию proxy_banned_ru:
+
+  FATAL start service: start dns/udp[default-dns]: detour to an empty
+  direct outbound makes no sense
+
+sing-box-extended и hiddify-core это пропускают, поэтому в форке ошибка
+не видна. routing_mark на direct-out возвращён (как в ImmortalWrt
+homeproxy); значение то же, что у default_mark, маршрутизация не меняется.
+
+Проверено: конфиги режимов proxy_banned_ru, global, bypass_cn, bypass_ir,
+custom из генератора форка запущены (sing-box run) на 1.12.22, 1.14.2 и
+1.14.1-extended-2.7.2.
+---
+diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
+index ad83a93..bf75116 100755
+--- a/root/etc/homeproxy/scripts/generate_client.uc
++++ b/root/etc/homeproxy/scripts/generate_client.uc
+@@ -1178,7 +1178,12 @@ config.endpoints = [];
+ config.outbounds = [
+ 	{
+ 		type: 'direct',
+-		tag: 'direct-out'
++		tag: 'direct-out',
++		/* Same mark as route.default_mark. Stock sing-box (1.12+) refuses a DNS
++		 * server detour to an empty direct outbound ("detour to an empty direct
++		 * outbound makes no sense"), so without it every built-in DNS server made
++		 * the config fail to start on sing-box from the OpenWrt feed. */
++		routing_mark: strToInt(self_mark)
+ 	},
+ 	{
+ 		type: 'block',
