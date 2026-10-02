@@ -318,7 +318,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
     
-    name: ${{ inputs.source }} ${{ inputs.branch }} [${{ matrix.vname }}] - ${{ matrix.target }} (agh:${{ matrix.agh }}, sb:${{ matrix.sb }}, ytb:${{ matrix.ytb }}, zz:${{ matrix.zz }}, patches:${{ matrix.patches }})
+    name: ${{ inputs.source }} ${{ inputs.branch }} [${{ matrix.vname }}] - ${{ matrix.target }} (agh:${{ matrix.agh }}, sb:${{ matrix.sb }}, ytb:${{ matrix.ytb }}, zz:${{ matrix.zz }}, patches:${{ matrix.patches }}, feeds:${{ inputs.feeds_latest && 'repo' || 'tag' }})
 
     steps:
     - name: Free up disk space
@@ -914,6 +914,13 @@ jobs:
         fi
         echo ">>> feeds.conf.default:"
         cat feeds.conf.default
+        # В прошивку: откуда фиды (первая строка tag/repo — её показывает
+        # баннер zz1) и итоговые коммиты всех фидов — чтобы на роутере было
+        # видно, на чём собраны пакеты.
+        {
+            if [ "${{ inputs.feeds_latest }}" = "true" ]; then echo "repo"; else echo "tag"; fi
+            grep -E '^src-git' feeds.conf.default
+        } > files/etc/build_feeds
         
         ./scripts/feeds update -a
 
@@ -1407,10 +1414,10 @@ jobs:
       uses: actions/upload-artifact@v7
       with:
         # Порядок: устройство, source, ветка, вариант, патчи, agh, sb, ytb,
-        # zz1, feeds-repo (только при feeds_latest), дата. Все параметры сборки в имени: в combo бывает несколько
+        # zz1, фиды (feeds-tag / feeds-repo), дата. Все параметры сборки в имени: в combo бывает несколько
         # сборок одного устройства и варианта (например homeproxy с 1.12.x и
         # latest), а дата — до минуты; одинаковое имя upload-artifact отверг бы.
-        name: ${{ matrix.target }}_${{ inputs.source }}_${{ inputs.branch }}_${{ matrix.vname }}_${{ matrix.patches && 'patches' || 'nopatches' }}_agh-${{ matrix.agh }}_sb-${{ matrix.sb }}_${{ matrix.ytb && 'ytb' || 'noytb' }}_${{ matrix.zz && 'zz' || 'nozz' }}${{ inputs.feeds_latest && '_feeds-repo' || '' }}_${{ steps.get_date.outputs.date }}
+        name: ${{ matrix.target }}_${{ inputs.source }}_${{ inputs.branch }}_${{ matrix.vname }}_${{ matrix.patches && 'patches' || 'nopatches' }}_agh-${{ matrix.agh }}_sb-${{ matrix.sb }}_${{ matrix.ytb && 'ytb' || 'noytb' }}_${{ matrix.zz && 'zz' || 'nozz' }}${{ inputs.feeds_latest && '_feeds-repo' || '_feeds-tag' }}_${{ steps.get_date.outputs.date }}
         path: openwrt/bin
         # На ранней ошибке (до создания bin/) не валим джоб красным "no files".
         if-no-files-found: warn
