@@ -1,0 +1,53 @@
+From: YBS-PC/oWRT-actions
+Subject: [PATCH] podkop: домены с заглавными буквами и табуляцией
+
+Порт исправлений netshift (issues #52, #53):
+- LuCI принимает «Example.COM», а бэкенд (is_domain: только [a-z0-9])
+  молча отбрасывал такой домен. Домены приводятся к нижнему регистру в
+  пользовательских и локальных/удалённых текстовых списках.
+- Text List: LuCI делит значения по /[,\s]+/, бэкенд — только по запятой
+  и пробелу; строка с табуляцией становилась одним неверным элементом и
+  терялась целиком. Разделители выровнены (запятая, пробел, \t, \r, \n,
+  \v, \f).
+---
+diff --git a/podkop/files/usr/lib/helpers.sh b/podkop/files/usr/lib/helpers.sh
+index 8261882..93e8f7c 100644
+--- a/podkop/files/usr/lib/helpers.sh
++++ b/podkop/files/usr/lib/helpers.sh
+@@ -353,7 +353,9 @@ parse_domain_or_subnet_string_to_commas_string() {
+     local type="$2"
+ 
+     tmpfile=$(mktemp)
+-    printf "%s\n" "$string" | sed 's/\/\/.*//' | tr ', ' '\n' | grep -v '^$' > "$tmpfile"
++    # Separators are the same as in LuCI (parseValueList splits on /[,\s]+/):
++    # comma, space, tab, CR, LF, VT, FF. Busybox tr has no [:space:] class.
++    printf "%s\n" "$string" | sed 's/\/\/.*//' | tr ', \011\012\013\014\015' '\n' | grep -v '^$' > "$tmpfile"
+ 
+     result="$(parse_domain_or_subnet_file_to_comma_string "$tmpfile" "$type")"
+     rm -f "$tmpfile"
+@@ -382,6 +384,10 @@ parse_domain_or_subnet_file_to_comma_string() {
+ 
+         case "$type" in
+         domains)
++            # "Example.COM" passes the LuCI validator, but is_domain accepts
++            # only lowercase: the domain was silently dropped.
++            # shellcheck disable=SC2018,SC2019
++            line=$(printf '%s' "$line" | tr 'A-Z' 'a-z')
+             if ! is_domain_suffix "$line"; then
+                 log "'$line' is not a valid domain" "debug"
+                 continue
+diff --git a/podkop/files/usr/lib/rulesets.sh b/podkop/files/usr/lib/rulesets.sh
+index ed8c1b4..37e0813 100644
+--- a/podkop/files/usr/lib/rulesets.sh
++++ b/podkop/files/usr/lib/rulesets.sh
+@@ -65,7 +65,9 @@ import_plain_domain_list_to_local_source_ruleset_chunked() {
+     local array count json_array
+     count=0
+     while IFS= read -r line; do
+-        line=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
++        # DNS names are case-insensitive, is_domain accepts only lowercase
++        # shellcheck disable=SC2018,SC2019
++        line=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr 'A-Z' 'a-z')
+ 
+         [ -z "$line" ] && continue
+ 

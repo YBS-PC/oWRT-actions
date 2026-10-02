@@ -1,0 +1,266 @@
+From: YBS-PC/oWRT-actions
+Subject: [PATCH] podkop: гонка start/reload, зависший wget, проброс портов,
+ исключения и FakeIP, адрес без интерфейса lan
+Requires: 002-dns-fixes
+
+- start/stop/reload/restart выполняются по очереди (блокировка mkdir +
+  pid, зависшая блокировка мёртвого процесса снимается, ожидание не
+  больше 180 с). Раньше reload от триггера интерфейса во время start
+  удалял временные файлы первого экземпляра (itdoginfo/podkop#360).
+- wget -T 15 в download_to_file: без таймаута зависшее соединение
+  блокировало list_update и весь «podkop reload» навсегда
+  (itdoginfo/podkop#410).
+- «ct status dnat return» снова первое правило цепочки mangle: «nft
+  insert» правил Fully Routed IPs ставил их выше, ответы проброшенных
+  портов получали метку прокси (itdoginfo/podkop#385).
+- Временные rule-set очищаются при старте, а prepare_source_ruleset
+  добавляет rule-set в конфиг, если файл уже есть, а в конфиге его нет.
+  После аварийной остановки пользовательские домены шли напрямую
+  (itdoginfo/podkop#356).
+- Домены секций «Исключение» получают настоящие IP: отдельное
+  DNS-правило на обычный сервер стоит перед FakeIP, поэтому исключение
+  срабатывает, даже если домен есть в community-списке другой секции.
+  Правило удаляется, если списков-исключений нет (itdoginfo/podkop#350;
+  PR #351 сломан — в нём строки с «++»).
+- Адрес для mixed-прокси и Clash API: если интерфейса «lan» нет
+  (VLAN-схемы), берётся первый IPv4 устройств из
+  source_network_interfaces (itdoginfo/podkop#314).
+
+Проверено: порядок правил nft в отдельном network namespace,
+блокировка (параллельный запуск, зависшая блокировка, SIGTERM),
+sing-box check 1.12.22 и 1.14.2.
+---
+diff --git a/podkop/files/usr/bin/podkop b/podkop/files/usr/bin/podkop
+index 64abc49..3bfe68d 100755
+--- a/podkop/files/usr/bin/podkop
++++ b/podkop/files/usr/bin/podkop
+@@ -125,6 +125,9 @@ start_main() {
+ 
+     mkdir -p "$TMP_SING_BOX_FOLDER"
+     mkdir -p "$TMP_RULESET_FOLDER"
++    # Rule sets of a previous run that was not stopped cleanly (crash, OOM,
++    # kill) would be reused with stale content.
++    rm -f "$TMP_RULESET_FOLDER"/*
+ 
+     # base
+     route_table_rule_mark
+@@ -586,11 +589,34 @@ sing_box_init_config() {
+     sing_box_configure_outbounds
+     sing_box_configure_dns
+     sing_box_configure_route
++    sing_box_remove_empty_exclusion_dns_rule
+     sing_box_configure_experimental
+     sing_box_additional_inbounds
+     sing_box_save_config
+ }
+ 
++# A DNS rule without conditions matches every query: drop the exclusion DNS
++# rule if no exclusion section added a domain rule set to it.
++sing_box_remove_empty_exclusion_dns_rule() {
++    config=$(echo "$config" | jq \
++        --arg service_tag "$SERVICE_TAG" \
++        --arg tag "$SB_EXCLUSION_DNS_RULE_TAG" \
++        '.dns.rules |= map(select(.[$service_tag] != $tag or has("rule_set")))')
++}
++
++# Domain rule sets of proxy/vpn/block sections get FakeIP answers, those of
++# exclusion sections are resolved to real addresses (see sing_box_configure_dns).
++add_domain_ruleset_to_dns_rule() {
++    local route_rule_tag="$1"
++    local ruleset_tag="$2"
++
++    if [ "$route_rule_tag" = "$SB_EXCLUSION_RULE_TAG" ]; then
++        config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_EXCLUSION_DNS_RULE_TAG" "rule_set" "$ruleset_tag")
++    else
++        config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_FAKEIP_DNS_RULE_TAG" "rule_set" "$ruleset_tag")
++    fi
++}
++
+ sing_box_configure_log() {
+     log "Configure the log section of a sing-box JSON configuration"
+ 
+@@ -787,6 +813,11 @@ sing_box_configure_dns() {
+ 
+     config=$(sing_box_cm_add_dns_reject_rule "$config" "query_type" "HTTPS")
+     config=$(sing_box_cm_add_dns_reject_rule "$config" "domain_suffix" '"use-application-dns.net"')
++    # Domains of "exclusion" sections are resolved by the regular DNS server
++    # BEFORE the FakeIP rule, so they get real addresses even when a community
++    # list of another section contains them. The rule is removed again in
++    # sing_box_remove_empty_exclusion_dns_rule when no exclusion list exists.
++    config=$(sing_box_cm_add_dns_route_rule "$config" "$SB_DNS_SERVER_TAG" "$SB_EXCLUSION_DNS_RULE_TAG")
+     config=$(sing_box_cm_add_dns_route_rule "$config" "$SB_FAKEIP_DNS_SERVER_TAG" "$SB_FAKEIP_DNS_RULE_TAG")
+     config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_FAKEIP_DNS_RULE_TAG" "rewrite_ttl" "$rewrite_ttl")
+     # FakeIP answers only A/AAAA. Other query types (SRV, PTR, TXT, MX ...) for
+@@ -1009,7 +1040,7 @@ configure_community_list_handler() {
+ 
+     config=$(sing_box_cm_add_remote_ruleset "$config" "$ruleset_tag" "$format" "$url" "$detour" "$update_interval")
+     config=$(sing_box_cm_patch_route_rule "$config" "$route_rule_tag" "rule_set" "$ruleset_tag")
+-    config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_FAKEIP_DNS_RULE_TAG" "rule_set" "$ruleset_tag")
++    add_domain_ruleset_to_dns_rule "$route_rule_tag" "$ruleset_tag"
+ }
+ 
+ prepare_source_ruleset() {
+@@ -1022,13 +1053,22 @@ prepare_source_ruleset() {
+     ruleset_tag=$(get_ruleset_tag "$section" "$name" "$type")
+     ruleset_filepath="$TMP_RULESET_FOLDER/$ruleset_tag.json"
+     create_source_rule_set "$ruleset_filepath"
+-    case $? in
++    local status=$?
++    # 3 = the file already exists. Several remote lists of one section share
++    # one rule set, so it is normal on the second list; but a file left over
++    # from a crashed instance also returns 3 and the rule set was then missing
++    # from the config (#356). Add it whenever the config has no such rule set.
++    if [ "$status" -eq 3 ] &&
++        ! echo "$config" | jq -e --arg tag "$ruleset_tag" '.route.rule_set // [] | any(.tag == $tag)' > /dev/null; then
++        status=0
++    fi
++    case $status in
+     0)
+         config=$(sing_box_cm_add_local_ruleset "$config" "$ruleset_tag" "source" "$ruleset_filepath")
+         config=$(sing_box_cm_patch_route_rule "$config" "$route_rule_tag" "rule_set" "$ruleset_tag")
+         case "$type" in
+         domains)
+-            config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_FAKEIP_DNS_RULE_TAG" "rule_set" "$ruleset_tag")
++            add_domain_ruleset_to_dns_rule "$route_rule_tag" "$ruleset_tag"
+             ;;
+         subnets) ;;
+         *)
+@@ -1144,7 +1184,7 @@ configure_remote_domain_or_subnet_list_handler() {
+         config=$(sing_box_cm_patch_route_rule "$config" "$route_rule_tag" "rule_set" "$ruleset_tag")
+         case "$type" in
+         domains)
+-            config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_FAKEIP_DNS_RULE_TAG" "rule_set" "$ruleset_tag")
++            add_domain_ruleset_to_dns_rule "$route_rule_tag" "$ruleset_tag"
+             ;;
+         subnets) ;;
+         *) log "Unsupported remote rule set type: $type" "error" ;;
+@@ -1604,6 +1644,18 @@ get_service_listen_address() {
+     local interface="lan"
+     network_get_ipaddr service_listen_address "$interface"
+ 
++    # Routers without a "lan" interface (VLAN setups: mgmt, iot ...): take the
++    # first IPv4 address of the devices podkop serves.
++    if [ -z "$service_listen_address" ]; then
++        local source_network_interfaces device
++        config_get source_network_interfaces "settings" "source_network_interfaces" "br-lan"
++        for device in $source_network_interfaces; do
++            service_listen_address="$(ip -4 -o addr show dev "$device" 2> /dev/null |
++                awk '{ split($4, a, "/"); print a[1]; exit }')"
++            [ -n "$service_listen_address" ] && break
++        done
++    fi
++
+     if [ -z "$service_listen_address" ]; then
+         log "Failed to determine the listening IP address. Please open an issue to report this problem: https://github.com/itdoginfo/podkop/issues" "error"
+         return 1
+@@ -1622,9 +1674,22 @@ nft_list_all_traffic_from_ip() {
+         nft insert rule inet "$NFT_TABLE_NAME" mangle iifname "@$NFT_INTERFACE_SET_NAME" ip saddr "$ip" \
+             meta l4proto udp meta mark set "$NFT_FAKEIP_MARK" counter
+         nft insert rule inet "$NFT_TABLE_NAME" mangle ip saddr "$ip" ip daddr @localv4 return
++        nft_move_dnat_return_to_top
+     fi
+ }
+ 
++# "nft insert" puts the fully routed IP rules above "ct status dnat return",
++# so replies of port-forwarded (DNAT) connections got the proxy mark and port
++# forwarding broke. Keep the DNAT exemption the first rule of the chain.
++nft_move_dnat_return_to_top() {
++    local handle
++    for handle in $(nft -a list chain inet "$NFT_TABLE_NAME" mangle 2> /dev/null |
++        sed -n 's/.*ct status dnat .*# handle \([0-9]*\)$/\1/p'); do
++        nft delete rule inet "$NFT_TABLE_NAME" mangle handle "$handle"
++    done
++    nft insert rule inet "$NFT_TABLE_NAME" mangle ct status dnat return
++}
++
+ # Diagnotics
+ check_proxy() {
+     local sing_box_config_path
+@@ -2687,17 +2752,55 @@ Available commands:
+ EOF
+ }
+ 
++# start/stop/reload/restart must not run concurrently: a reload fired by an
++# interface trigger while "start" is still running deleted the temporary
++# files of the first instance and both failed. mkdir is atomic, the pid file
++# lets the next instance remove the lock of a process that was killed.
++PODKOP_LOCK_DIR="/var/run/podkop.lock"
++
++podkop_lock() {
++    local waited=0 owner
++
++    while ! mkdir "$PODKOP_LOCK_DIR" 2> /dev/null; do
++        owner="$(cat "$PODKOP_LOCK_DIR/pid" 2> /dev/null)"
++        if [ -n "$owner" ] && ! kill -0 "$owner" 2> /dev/null; then
++            log "Removing the stale lock of the finished process $owner" "warn"
++            rm -rf "$PODKOP_LOCK_DIR"
++            continue
++        fi
++        if [ "$waited" -ge 180 ]; then
++            log "Another podkop instance ($owner) has been running for $waited s, continuing without the lock" "warn"
++            return 0
++        fi
++        [ "$waited" -eq 0 ] && log "Waiting for another podkop instance ($owner) to finish"
++        sleep 1
++        waited=$((waited + 1))
++    done
++
++    echo "$$" > "$PODKOP_LOCK_DIR/pid"
++    trap podkop_unlock EXIT
++    trap 'exit 1' INT TERM HUP
++}
++
++podkop_unlock() {
++    [ "$(cat "$PODKOP_LOCK_DIR/pid" 2> /dev/null)" = "$$" ] && rm -rf "$PODKOP_LOCK_DIR"
++}
++
+ case "$1" in
+ start)
++    podkop_lock
+     start
+     ;;
+ stop)
++    podkop_lock
+     stop
+     ;;
+ reload)
++    podkop_lock
+     reload
+     ;;
+ restart)
++    podkop_lock
+     restart
+     ;;
+ main)
+diff --git a/podkop/files/usr/lib/constants.sh b/podkop/files/usr/lib/constants.sh
+index 563ad0c..8c0cd9d 100644
+--- a/podkop/files/usr/lib/constants.sh
++++ b/podkop/files/usr/lib/constants.sh
+@@ -47,6 +47,7 @@ SB_DIRECT_OUTBOUND_TAG="direct-out"
+ # Route
+ SB_REJECT_RULE_TAG="reject-rule-tag"
+ SB_EXCLUSION_RULE_TAG="exclusion-rule-tag"
++SB_EXCLUSION_DNS_RULE_TAG="exclusion-dns-rule-tag"
+ # Experimental
+ SB_CLASH_API_CONTROLLER_PORT=9090
+ 
+diff --git a/podkop/files/usr/lib/helpers.sh b/podkop/files/usr/lib/helpers.sh
+index 73b666c..8261882 100644
+--- a/podkop/files/usr/lib/helpers.sh
++++ b/podkop/files/usr/lib/helpers.sh
+@@ -313,11 +313,13 @@ download_to_file() {
+     local retries="${4:-3}"
+     local wait="${5:-2}"
+ 
++    # -T: without a timeout a stalled connection blocks the download (and the
++    # whole "podkop reload") forever and the retries never happen.
+     for attempt in $(seq 1 "$retries"); do
+         if [ -n "$http_proxy_address" ]; then
+-            http_proxy="http://$http_proxy_address" https_proxy="http://$http_proxy_address" wget -O "$filepath" "$url" && break
++            http_proxy="http://$http_proxy_address" https_proxy="http://$http_proxy_address" wget -T 15 -O "$filepath" "$url" && break
+         else
+-            wget -O "$filepath" "$url" && break
++            wget -T 15 -O "$filepath" "$url" && break
+         fi
+ 
+         log "Attempt $attempt/$retries to download $url failed" "warn"

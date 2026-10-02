@@ -1,0 +1,95 @@
+From: YBS-PC/oWRT-actions
+Subject: [PATCH] podkop: опция «Торренты мимо прокси» (exclude_bittorrent)
+
+По мотивам netshift (issue #56). settings.exclude_bittorrent (по
+умолчанию 0): трафик, который sing-box распознал как BitTorrent, идёт
+через direct-out. Правило стоит сразу после sniff/hijack-dns и раньше
+правил секций. Полезно с Fully Routed IPs: провайдеры VPN блокируют
+подписки за торренты. Без опции в конфиге sing-box конфиг не меняется.
+Переключатель в LuCI: Настройки → «Торренты мимо прокси».
+---
+diff --git a/luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js b/luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js
+index efe3c29..74af0e4 100644
+--- a/luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js
++++ b/luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js
+@@ -270,6 +270,17 @@ function createSettingsContent(section) {
+   o.default = "0";
+   o.rmempty = false;
+ 
++  o = section.option(
++    form.Flag,
++    "exclude_bittorrent",
++    _("Bypass BitTorrent"),
++    _(
++      "BitTorrent traffic recognized by sing-box goes directly, bypassing the proxy. Useful with Fully Routed IPs: many providers ban subscriptions for torrents",
++    ),
++  );
++  o.default = "0";
++  o.rmempty = false;
++
+   o = section.option(
+     form.ListValue,
+     "update_interval",
+diff --git a/luci-app-podkop/po/ru/podkop.po b/luci-app-podkop/po/ru/podkop.po
+index 77a33a4..5126796 100644
+--- a/luci-app-podkop/po/ru/podkop.po
++++ b/luci-app-podkop/po/ru/podkop.po
+@@ -793,3 +793,9 @@ msgstr "Секретный ключ YACD"
+ 
+ msgid "You can select Output Network Interface, by default autodetect"
+ msgstr "Вы можете выбрать выходной сетевой интерфейс, по умолчанию он определяется автоматически."
++
++msgid "Bypass BitTorrent"
++msgstr "Торренты мимо прокси"
++
++msgid "BitTorrent traffic recognized by sing-box goes directly, bypassing the proxy. Useful with Fully Routed IPs: many providers ban subscriptions for torrents"
++msgstr "Распознанный sing-box трафик BitTorrent идёт напрямую, минуя прокси. Полезно вместе с Fully Routed IPs: многие провайдеры VPN блокируют подписку за торренты"
+diff --git a/luci-app-podkop/po/templates/podkop.pot b/luci-app-podkop/po/templates/podkop.pot
+index d96b948..2060f35 100644
+--- a/luci-app-podkop/po/templates/podkop.pot
++++ b/luci-app-podkop/po/templates/podkop.pot
+@@ -1113,3 +1113,9 @@ msgstr ""
+ #: ../luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js:127
+ msgid "You can select Output Network Interface, by default autodetect"
+ msgstr ""
++
++msgid "Bypass BitTorrent"
++msgstr ""
++
++msgid "BitTorrent traffic recognized by sing-box goes directly, bypassing the proxy. Useful with Fully Routed IPs: many providers ban subscriptions for torrents"
++msgstr ""
+diff --git a/podkop/files/etc/config/podkop b/podkop/files/etc/config/podkop
+index 27003cf..dc11e63 100644
+--- a/podkop/files/etc/config/podkop
++++ b/podkop/files/etc/config/podkop
+@@ -11,6 +11,7 @@ config settings 'settings'
+         #option badwan_reload_delay '2000'
+         option enable_yacd '0'
+         option disable_quic '0'
++        option exclude_bittorrent '0'
+         option update_interval '1d'
+         option download_lists_via_proxy '0'
+         option dont_touch_dhcp '0'
+diff --git a/podkop/files/usr/bin/podkop b/podkop/files/usr/bin/podkop
+index 3bfe68d..3a72a89 100755
+--- a/podkop/files/usr/bin/podkop
++++ b/podkop/files/usr/bin/podkop
+@@ -846,6 +846,18 @@ sing_box_configure_route() {
+ 
+     config=$(sing_box_cm_add_hijack_dns_route_rule "$config" "protocol" "dns")
+ 
++    # The rule matches the sniffed protocol, so it has to follow the sniff rule
++    # and precede the section rules: a torrent must never reach the tunnel.
++    local exclude_bittorrent
++    config_get_bool exclude_bittorrent "settings" "exclude_bittorrent" 0
++    if [ "$exclude_bittorrent" -eq 1 ]; then
++        local bittorrent_rule_tag
++        bittorrent_rule_tag="$(gen_id)"
++        config=$(sing_box_cm_add_route_rule "$config" "$bittorrent_rule_tag" "$SB_TPROXY_INBOUND_TAG" \
++            "$SB_DIRECT_OUTBOUND_TAG")
++        config=$(sing_box_cm_patch_route_rule "$config" "$bittorrent_rule_tag" "protocol" "bittorrent")
++    fi
++
+     local disable_quic
+     config_get_bool disable_quic "settings" "disable_quic" 0
+     if [ "$disable_quic" -eq 1 ]; then

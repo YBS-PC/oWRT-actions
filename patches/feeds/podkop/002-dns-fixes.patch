@@ -1,0 +1,96 @@
+From: YBS-PC/oWRT-actions
+Subject: [PATCH] podkop: DNS — диагностика с портом, SRV/PTR мимо FakeIP
+
+- check_dns_available: сервер вида host:port[/path] или [IPv6]:port
+  передаётся в dig как @host -p port, раньше dig получал «host:port» и
+  проверка сразу падала (itdoginfo/podkop#444). Так же для bootstrap DNS.
+- FakeIP отвечает только на A/AAAA. Правило FakeIP теперь ограничено
+  query_type A/AAAA, остальные запросы (SRV, PTR, TXT, MX...) к тем же
+  доменам уходят на обычный DNS-сервер. Убирает спам «only IP queries
+  are supported by fakeip» и SERVFAIL у клиентов (itdoginfo/podkop#416).
+- sing_box_cf_add_dns_server: нечисловой порт в адресе DNS-сервера
+  заменяется портом по умолчанию с предупреждением, а не роняет
+  sing-box check (связано с itdoginfo/podkop#442; tonumber в 0.7.22 уже
+  есть, ошибка «cannot unmarshal string» не воспроизводится).
+---
+diff --git a/podkop/files/usr/bin/podkop b/podkop/files/usr/bin/podkop
+index ba75f1f..64abc49 100755
+--- a/podkop/files/usr/bin/podkop
++++ b/podkop/files/usr/bin/podkop
+@@ -789,6 +789,10 @@ sing_box_configure_dns() {
+     config=$(sing_box_cm_add_dns_reject_rule "$config" "domain_suffix" '"use-application-dns.net"')
+     config=$(sing_box_cm_add_dns_route_rule "$config" "$SB_FAKEIP_DNS_SERVER_TAG" "$SB_FAKEIP_DNS_RULE_TAG")
+     config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_FAKEIP_DNS_RULE_TAG" "rewrite_ttl" "$rewrite_ttl")
++    # FakeIP answers only A/AAAA. Other query types (SRV, PTR, TXT, MX ...) for
++    # the same domains must go to the regular DNS server, otherwise sing-box
++    # logs "only IP queries are supported by fakeip" and the client gets SERVFAIL.
++    config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_FAKEIP_DNS_RULE_TAG" "query_type" '["A","AAAA"]')
+     service_domains=$(comma_string_to_json_array "$FAKEIP_TEST_DOMAIN,$CHECK_PROXY_IP_DOMAIN")
+     config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_FAKEIP_DNS_RULE_TAG" "domain" "$service_domains")
+ }
+@@ -1989,24 +1993,26 @@ check_dns_available() {
+         display_dns_server="dns.nextdns.io/$masked_path"
+     fi
+ 
++    # dns_server may carry a port and, for DoH, a path: "host[:port][/path]",
++    # IPv6 as "[addr]:port". dig needs them as separate arguments.
++    local dns_host dns_port
++    dns_host=$(url_get_host "$dns_server")
++    dns_port=$(url_get_port "$dns_server")
++
+     if [ "$dns_type" = "doh" ]; then
+-        # Check if dns_server already contains a path
+-        local doh_path="/dns-query"
+-        if echo "$dns_server" | grep -q "/"; then
+-            # Path is already present, extract it
+-            doh_path="/$(echo "$dns_server" | cut -d'/' -f2-)"
+-            dns_server="$(echo "$dns_server" | cut -d'/' -f1)"
+-        fi
++        local doh_path
++        doh_path=$(url_get_path "$dns_server")
++        [ -z "$doh_path" ] || [ "$doh_path" = "/" ] && doh_path="/dns-query"
+ 
+-        if dig @"$dns_server" "$domain" +https="$doh_path" +timeout=2 +tries=1 > /dev/null 2>&1; then
++        if dig @"$dns_host" -p "${dns_port:-443}" "$domain" +https="$doh_path" +timeout=2 +tries=1 > /dev/null 2>&1; then
+             dns_status=1
+         fi
+     elif [ "$dns_type" = "dot" ]; then
+-        if dig @"$dns_server" "$domain" +tls +timeout=2 +tries=1 > /dev/null 2>&1; then
++        if dig @"$dns_host" -p "${dns_port:-853}" "$domain" +tls +timeout=2 +tries=1 > /dev/null 2>&1; then
+             dns_status=1
+         fi
+     elif [ "$dns_type" = "udp" ]; then
+-        if dig @"$dns_server" "$domain" +timeout=2 +tries=1 > /dev/null 2>&1; then
++        if dig @"$dns_host" -p "${dns_port:-53}" "$domain" +timeout=2 +tries=1 > /dev/null 2>&1; then
+             dns_status=1
+         fi
+     fi
+@@ -2018,7 +2024,10 @@ check_dns_available() {
+ 
+     # Check bootstrap DNS server
+     if [ -n "$bootstrap_dns_server" ]; then
+-        if dig @"$bootstrap_dns_server" "$domain" +timeout=2 +tries=1 > /dev/null 2>&1; then
++        local bootstrap_port
++        bootstrap_port=$(url_get_port "$bootstrap_dns_server")
++        if dig @"$(url_get_host "$bootstrap_dns_server")" -p "${bootstrap_port:-53}" "$domain" +timeout=2 +tries=1 \
++            > /dev/null 2>&1; then
+             bootstrap_dns_status=1
+         fi
+     fi
+diff --git a/podkop/files/usr/lib/sing_box_config_facade.sh b/podkop/files/usr/lib/sing_box_config_facade.sh
+index 4afec33..4cf9edc 100644
+--- a/podkop/files/usr/lib/sing_box_config_facade.sh
++++ b/podkop/files/usr/lib/sing_box_config_facade.sh
+@@ -13,6 +13,12 @@ sing_box_cf_add_dns_server() {
+     local server_address server_port
+     server_address=$(url_get_host "$server")
+     server_port=$(url_get_port "$server")
++    case "$server_port" in
++    *[!0-9]*)
++        log "Invalid port '$server_port' in DNS server '$server', the default port is used." "warn"
++        server_port=""
++        ;;
++    esac
+ 
+     case "$type" in
+     udp)
