@@ -231,8 +231,9 @@ cp /etc/apk/repositories.d/distfeeds.list.bak /etc/apk/repositories.d/distfeeds.
 - Старые строки `Kernel Version:` и `Build Variant:` заменяются новыми:
 ```
  Kernel Version: 6.12.74
- Build Variant: homeproxy (2026-03-19)
+ Build Variant: homeproxy (2026-03-19, feeds: tag)
 ```
+- `feeds:` — откуда фиды packages/luci/routing/telephony/video: `tag` — коммиты релизного тега, `repo` — коммиты репозитория пакетов (поле `feeds_latest`). Берётся из первой строки `/etc/build_feeds`, там же итоговые коммиты всех фидов сборки; без файла (старые сборки) часть не выводится.
 
 **Чтобы откатить:**
 ```sh
