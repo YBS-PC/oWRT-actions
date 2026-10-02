@@ -901,7 +901,10 @@ else
     fi
 fi
 echo " Kernel Version: $KERNEL_VERSION" >> /etc/banner
-echo " Build Variant: $CURRENT_VARIANT ($DATE_STR)" >> /etc/banner
+# Фиды: tag — коммиты релизного тега, repo — репозитория пакетов
+# (поле feeds_latest); первая строка /etc/build_feeds пишется при сборке.
+FEEDS_STR=$(head -n 1 /etc/build_feeds 2>/dev/null)
+echo " Build Variant: $CURRENT_VARIANT ($DATE_STR${FEEDS_STR:+, feeds: $FEEDS_STR})" >> /etc/banner
 log_ok "Баннер обновлён"
 
 # Имя хоста — только на первой загрузке, чтобы ручной прогон не сбрасывал
