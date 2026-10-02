@@ -1,0 +1,129 @@
+From 008e2788e6e2e7f222476b507550df86fda0e327 Mon Sep 17 00:00:00 2001
+From: Andrevich <47223721+1andrevich@users.noreply.github.com>
+Date: Mon, 27 Jul 2026 23:43:16 +0400
+Subject: [PATCH] Prevent uTLS misuse and uci.set(null)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Add utls_unsupported() and stop emitting uTLS for transports/types that can’t use it (hysteria, hysteria2, tuic, naive, or quic) to avoid startup fatal/dial errors. Expose optional url fields for urltest outbounds. Harden subscription import/update: treat explicit nulls as deletions, skip uci.set() when a value is null to avoid libuci errors and stale values. Changes in generate_client.uc and update_subscriptions.uc.
+
+Порт коммита 008e278 из ветки dev форка (автор сохранён): ещё не в master.
+Без него узел hysteria/hysteria2/tuic/naive или с транспортом QUIC, у
+которого из подписки пришёл отпечаток uTLS, валит sing-box («unsupported
+usage for uTLS» / «uTLS is not supported on naive outbound»), а обновление
+подписки оставляет в UCI устаревшие значения полей. Когда dev попадёт в
+master, патч опознается как «уже есть».
+---
+ root/etc/homeproxy/scripts/generate_client.uc | 27 +++++++++++++++++--
+ .../homeproxy/scripts/update_subscriptions.uc | 17 ++++++++++--
+ 2 files changed, 40 insertions(+), 4 deletions(-)
+
+diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
+index ad83a93..c3f61fa 100755
+--- a/root/etc/homeproxy/scripts/generate_client.uc
++++ b/root/etc/homeproxy/scripts/generate_client.uc
+@@ -396,6 +396,24 @@ function xhttp_padding(v) {
+ 	return (isEmpty(v) || v === '0' || v === '0-0') ? '100-1000' : v;
+ }
+ 
++/* uTLS rewrites the ClientHello of a TCP TLS record stream, so it cannot be carried over
++ * QUIC — sing-box builds a UTLSClientConfig whose STDConfig() is a hard error, and every
++ * QUIC dial path (sing-quic Dial/DialEarly/CreateTransport) goes through STDConfig(). The
++ * result is "unsupported usage for uTLS" on every connection through the node; when such a
++ * node is the one a rule-set downloads through, the *initial* fetch failure is fatal and
++ * the whole service crash-loops. Same for naive, which rejects uTLS outright at config
++ * build time ("uTLS is not supported on naive outbound").
++ *
++ * The LuCI form already hides the fingerprint for hysteria/hysteria2/tuic, but that only
++ * governs what the form writes — subscription importers write UCI directly, so the check
++ * has to live here, where every import path converges.
++ *
++ * ShadowTLS is deliberately NOT included: it implements WithSessionIDGenerator and so
++ * never reaches STDConfig(), making uTLS both valid and useful there. */
++function utls_unsupported(node) {
++	return (node.type in ['hysteria', 'hysteria2', 'tuic', 'naive']) || node.transport === 'quic';
++}
++
+ function generate_outbound(node) {
+ 	if (type(node) !== 'object' || isEmpty(node))
+ 		return null;
+@@ -509,8 +527,9 @@ function generate_outbound(node) {
+ 			 * is a FATAL that crash-loops the whole service; hiddify-core defaults it
+ 			 * silently). So when reality is on we always emit utls, defaulting the
+ 			 * fingerprint to 'edge' if the node (e.g. a sub-imported reality node)
+-			 * didn't carry one. */
+-			utls: (!isEmpty(node.tls_utls) || node.tls_reality === '1') ? {
++			 * didn't carry one — including on a transport that cannot use it, since
++			 * dropping it there would trade a dial-time error for a startup FATAL. */
++			utls: ((!isEmpty(node.tls_utls) && !utls_unsupported(node)) || node.tls_reality === '1') ? {
+ 				enabled: true,
+ 				fingerprint: !isEmpty(node.tls_utls) ? node.tls_utls : 'edge'
+ 			} : null,
+@@ -1194,11 +1213,13 @@ if (!isEmpty(main_node)) {
+ 		const main_urltest_nodes = filter(uci.get(uciconfig, ucimain, 'main_urltest_nodes') || [], (k) => uci.get_all(uciconfig, k) != null);
+ 		const main_urltest_interval = uci.get(uciconfig, ucimain, 'main_urltest_interval');
+ 		const main_urltest_tolerance = uci.get(uciconfig, ucimain, 'main_urltest_tolerance');
++		const main_urltest_url = uci.get(uciconfig, ucimain, 'main_urltest_url');
+ 
+ 		push(config.outbounds, {
+ 			type: 'urltest',
+ 			tag: 'main-out',
+ 			outbounds: map(main_urltest_nodes, (k) => `cfg-${k}-out`),
++			url: main_urltest_url || null,
+ 			interval: strToTime(main_urltest_interval),
+ 			tolerance: strToInt(main_urltest_tolerance),
+ 			idle_timeout: (strToInt(main_urltest_interval) > 1800) ? `${main_urltest_interval * 2}s` : null,
+@@ -1246,11 +1267,13 @@ if (!isEmpty(main_node)) {
+ 		const main_udp_urltest_nodes = filter(uci.get(uciconfig, ucimain, 'main_udp_urltest_nodes') || [], (k) => uci.get_all(uciconfig, k) != null);
+ 		const main_udp_urltest_interval = uci.get(uciconfig, ucimain, 'main_udp_urltest_interval');
+ 		const main_udp_urltest_tolerance = uci.get(uciconfig, ucimain, 'main_udp_urltest_tolerance');
++		const main_udp_urltest_url = uci.get(uciconfig, ucimain, 'main_udp_urltest_url');
+ 
+ 		push(config.outbounds, {
+ 			type: 'urltest',
+ 			tag: 'main-udp-out',
+ 			outbounds: map(main_udp_urltest_nodes, (k) => `cfg-${k}-out`),
++			url: main_udp_urltest_url || null,
+ 			interval: strToTime(main_udp_urltest_interval),
+ 			tolerance: strToInt(main_udp_urltest_tolerance),
+ 			idle_timeout: (strToInt(main_udp_urltest_interval) > 1800) ? `${main_udp_urltest_interval * 2}s` : null,
+diff --git a/root/etc/homeproxy/scripts/update_subscriptions.uc b/root/etc/homeproxy/scripts/update_subscriptions.uc
+index ac285f9..3a1edcf 100755
+--- a/root/etc/homeproxy/scripts/update_subscriptions.uc
++++ b/root/etc/homeproxy/scripts/update_subscriptions.uc
+@@ -1228,8 +1228,16 @@ function main() {
+ 		} else {
+ 			const cached = node_cache[cfg.grouphash][cfg['.name']];
+ 			const user_fields = ['bind_interface'];
++			/* `v in cached` tests KEY presence, and the parsers emit absent fields as
++			 * explicit null keys — so a null must take the delete branch, not the set
++			 * branch. uci.set() with a null value is not a no-op and not a delete: it
++			 * fails (libuci asserts on a NULL value) and leaves the OLD value in place,
++			 * which silently pins any field that goes set -> null forever. Nodes are
++			 * keyed by md5(label), so a node re-served under the same label with fewer
++			 * fields (e.g. reality -> hysteria2, dropping the uTLS fingerprint) would
++			 * keep the stale value and emit an invalid config. */
+ 			map(keys(cfg), (v) => {
+-				if (v in cached)
++				if (v in cached && cached[v] !== null)
+ 					uci.set(uciconfig, cfg['.name'], v, cached[v]);
+ 				else if (!(v in user_fields))
+ 					uci.delete(uciconfig, cfg['.name'], v);
+@@ -1249,7 +1257,12 @@ function main() {
+ 
+ 			const nameHash = md5(node.label);
+ 			uci.set(uciconfig, nameHash, 'node');
+-			map(keys(node), (v) => uci.set(uciconfig, nameHash, v, node[v]));
++			/* Skip nulls: uci.set() rejects a null value (see the update path above), so
++			 * passing one only sets uci error state without writing anything. */
++			map(keys(node), (v) => {
++				if (node[v] !== null)
++					uci.set(uciconfig, nameHash, v, node[v]);
++			});
+ 
+ 			added++;
+ 			log(sprintf('Adding node: %s.', node.label));
+-- 
+2.43.0
+

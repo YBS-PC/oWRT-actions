@@ -1,0 +1,61 @@
+From: YBS-PC/oWRT-actions
+Subject: [PATCH] config: DNS-сервер по умолчанию, который существует
+
+В /etc/config/homeproxy (и в его копии /usr/share/homeproxy/homeproxy.default,
+из которой init восстанавливает пустой конфиг) по умолчанию стоит
+dns.default_server 'local-dns' — такого сервера нет. В режиме custom, пока
+настройки DNS не сохранены в LuCI, sing-box не запускается:
+
+  FATAL start service: default DNS server not found: cfg-local-dns-dns
+
+Теперь 'default-dns' (значение LuCI по умолчанию), существующие конфиги
+мигрируют. Мёртвая опция dns_strategy заменена на default_strategy, которую
+читают LuCI и генератор. Та же ошибка, что в ImmortalWrt homeproxy
+(patches/packages/luci-app-homeproxy/002).
+---
+diff --git a/root/etc/config/homeproxy b/root/etc/config/homeproxy
+index 90f0d38..ff1e302 100644
+--- a/root/etc/config/homeproxy
++++ b/root/etc/config/homeproxy
+@@ -45,8 +45,8 @@ config homeproxy 'routing'
+ 	option default_outbound_dns 'default-dns'
+ 
+ config homeproxy 'dns'
+-	option dns_strategy 'prefer_ipv4'
+-	option default_server 'local-dns'
++	option default_strategy 'prefer_ipv4'
++	option default_server 'default-dns'
+ 	option disable_cache '0'
+ 	option disable_cache_expire '0'
+ 
+diff --git a/root/etc/homeproxy/scripts/migrate_config.uc b/root/etc/homeproxy/scripts/migrate_config.uc
+index d0c7fc2..cdac76a 100755
+--- a/root/etc/homeproxy/scripts/migrate_config.uc
++++ b/root/etc/homeproxy/scripts/migrate_config.uc
+@@ -95,6 +95,11 @@ if (default_dns_server === 'block-dns') {
+ 	uci.set(uciconfig, ucidns, 'default_server', 'default-dns');
+ }
+ 
++/* local-dns never existed: the shipped default made sing-box fail with
++ * "default DNS server not found: cfg-local-dns-dns" in custom mode */
++if (default_dns_server === 'local-dns')
++	uci.set(uciconfig, ucidns, 'default_server', 'default-dns');
++
+ const dns_server_migration = {};
+ /* DNS servers options */
+ uci.foreach(uciconfig, ucidnsserver, (cfg) => {
+diff --git a/root/usr/share/homeproxy/homeproxy.default b/root/usr/share/homeproxy/homeproxy.default
+index 90f0d38..ff1e302 100644
+--- a/root/usr/share/homeproxy/homeproxy.default
++++ b/root/usr/share/homeproxy/homeproxy.default
+@@ -45,8 +45,8 @@ config homeproxy 'routing'
+ 	option default_outbound_dns 'default-dns'
+ 
+ config homeproxy 'dns'
+-	option dns_strategy 'prefer_ipv4'
+-	option default_server 'local-dns'
++	option default_strategy 'prefer_ipv4'
++	option default_server 'default-dns'
+ 	option disable_cache '0'
+ 	option disable_cache_expire '0'
+ 
