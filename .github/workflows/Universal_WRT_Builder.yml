@@ -105,6 +105,12 @@ on:
         type: boolean
         default: true
 
+      feeds_latest:
+        description: 'Фиды packages/luci/routing/telephony/video — коммиты репозитория пакетов (как после apk upgrade), а не тега релиза'
+        required: true
+        type: boolean
+        default: false
+
       exclude_keywords:
         description: 'Exclude Packages (Space separated keywords)'
         required: false
@@ -278,7 +284,8 @@ jobs:
 
           # Заранее предупреждаем о сборках homeproxy без патчей, которые
           # остановятся на проверке совместимости: без патча 004 генератор
-          # homeproxy принимает только sing-box 1.12. В фиде 25.12 — 1.13.x,
+          # homeproxy принимает только sing-box 1.12. В фиде 25.12: в теге
+          # 25.12.5 — 1.12.x, в репозитории пакетов (feeds_latest) — 1.13.x;
           # на slateax/ax59u — sing-box-tiny из фида (sb=tiny).
           echo "$json" | jq -r '.include[] | select(.variant == "homeproxy" and .patches == false and (.sb != "1.12.x")) | "\(.target) \(.sb)"' |
           while read -r t sbv; do
@@ -653,6 +660,10 @@ jobs:
         echo "TARGET_NAME=${TARGET_NAME}" >> $GITHUB_ENV
         echo "CURRENT_MATRIX_TARGET=${{ matrix.target }}" >> $GITHUB_ENV
         echo "KERNEL_PATH=${KERNEL_PATH}" >> $GITHUB_ENV
+        # Архитектура пакетов — для feeds.conf репозитория пакетов
+        # (sh/feeds-from-repo.sh): releases/packages-<ветка>/<arch>/
+        PKG_ARCH=$(printf '%s\n' "$DEVICE_CONFIG_COMMANDS" | sed -n 's/.*CONFIG_TARGET_ARCH_PACKAGES="\([^"]*\)".*/\1/p' | head -n1)
+        echo "PKG_ARCH=${PKG_ARCH}" >> $GITHUB_ENV
         echo "DEVICE_CONFIG_COMMANDS<<EOF" >> $GITHUB_ENV
         echo "${DEVICE_CONFIG_COMMANDS}" >> $GITHUB_ENV
         echo "EOF" >> $GITHUB_ENV
@@ -716,6 +727,11 @@ jobs:
         echo "youtubeUnblock : $SUM_YTB"
         echo "zz1            : $SUM_ZZ"
         echo "Патчи          : $SUM_PATCHES"
+        if [ "${{ inputs.feeds_latest }}" = "true" ]; then
+            echo "Фиды           : коммиты репозитория пакетов (packages-${VAR_BRANCH#openwrt-}/${PKG_ARCH:-?})"
+        else
+            echo "Фиды           : как в теге релиза"
+        fi
         echo "Exclude        : ${SUM_EXCLUDE:-(нет)}"
         echo "Device config  : ./config/conf/${{ matrix.target }}"
         echo "Kernel path    : $KERNEL_PATH"
@@ -889,6 +905,15 @@ jobs:
         sed -i 's|https://git.openwrt.org/feed/routing.git|https://github.com/openwrt/routing.git|g' feeds.conf.default
         sed -i 's|https://git.openwrt.org/feed/telephony.git|https://github.com/openwrt/telephony.git|g' feeds.conf.default
         # -------------------------------------
+
+        # Фиды packages/luci/routing/telephony/video на коммитах репозитория
+        # пакетов ветки (поле формы feeds_latest). После замены зеркал: коммит
+        # проверяется на том адресе, откуда его возьмёт feeds update.
+        if [ "${{ inputs.feeds_latest }}" = "true" ]; then
+            bash "$GITHUB_WORKSPACE/sh/feeds-from-repo.sh"
+        fi
+        echo ">>> feeds.conf.default:"
+        cat feeds.conf.default
         
         ./scripts/feeds update -a
 
@@ -1382,10 +1407,10 @@ jobs:
       uses: actions/upload-artifact@v7
       with:
         # Порядок: устройство, source, ветка, вариант, патчи, agh, sb, ytb,
-        # zz1, дата. Все параметры сборки в имени: в combo бывает несколько
+        # zz1, feeds-repo (только при feeds_latest), дата. Все параметры сборки в имени: в combo бывает несколько
         # сборок одного устройства и варианта (например homeproxy с 1.12.x и
         # latest), а дата — до минуты; одинаковое имя upload-artifact отверг бы.
-        name: ${{ matrix.target }}_${{ inputs.source }}_${{ inputs.branch }}_${{ matrix.vname }}_${{ matrix.patches && 'patches' || 'nopatches' }}_agh-${{ matrix.agh }}_sb-${{ matrix.sb }}_${{ matrix.ytb && 'ytb' || 'noytb' }}_${{ matrix.zz && 'zz' || 'nozz' }}_${{ steps.get_date.outputs.date }}
+        name: ${{ matrix.target }}_${{ inputs.source }}_${{ inputs.branch }}_${{ matrix.vname }}_${{ matrix.patches && 'patches' || 'nopatches' }}_agh-${{ matrix.agh }}_sb-${{ matrix.sb }}_${{ matrix.ytb && 'ytb' || 'noytb' }}_${{ matrix.zz && 'zz' || 'nozz' }}${{ inputs.feeds_latest && '_feeds-repo' || '' }}_${{ steps.get_date.outputs.date }}
         path: openwrt/bin
         # На ранней ошибке (до создания bin/) не валим джоб красным "no files".
         if-no-files-found: warn
