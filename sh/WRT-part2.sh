@@ -10,8 +10,9 @@ echo ">>>>>>>>> WRT-part2 start. Использование: после feeds up
 # --------------------------------------------------------------------------
 # Версии пакетов, собираемых из git
 #
-# Makefile'ы forkop и luci-theme-proton2025 читают версию из окружения:
+# Makefile'ы forkop, podkop и luci-theme-proton2025 читают версию из окружения:
 #   forkop/Makefile       FORKOP_VERSION  -> без неё PKG_VERSION=0.0.0
+#   podkop/Makefile       PODKOP_VERSION  -> без неё PKG_VERSION=0.<дата>
 #   proton2025/Makefile   PROTON_VERSION  -> без неё зашитый дефолт 1.4.0
 #
 # Тег тянем через git ls-remote: не требует ни токена, ни клона. Фолбэк —
@@ -73,6 +74,22 @@ else
     echo ">>> Variant '$VARIANT': forkop не собирается, версия не нужна."
 fi
 
+if [[ "$VARIANT" == "podkop" ]]; then
+    # podkop/Makefile и luci-app-podkop/Makefile: без PODKOP_VERSION версия
+    # пакета 0.<дата сборки>, и проверка обновлений в LuCI podkop всегда
+    # видит «новую версию». Берём последний тег (форма 0.7.22) того репо,
+    # что подключён в feeds.conf.
+    PODKOP_REPO=$(awk '$1 == "src-git" && $2 == "podkop" { print $3; exit }' feeds.conf.default 2>/dev/null | sed 's/[;^].*//')
+    [ -n "$PODKOP_REPO" ] || PODKOP_REPO="https://github.com/itdoginfo/podkop.git"
+    PODKOP_VER=$(resolve_latest_tag "$PODKOP_REPO")
+    if [ -n "$PODKOP_VER" ]; then
+        export_build_var PODKOP_VERSION "$PODKOP_VER"
+        echo "✓ podkop: $PODKOP_VER ($PODKOP_REPO)"
+    else
+        echo "⚠ podkop: тег не определён, останется версия 0.<дата> из Makefile."
+    fi
+fi
+
 PROTON_VER=$(resolve_latest_tag "https://github.com/ChesterGoodiny/luci-theme-proton2025.git")
 if [ -n "$PROTON_VER" ]; then
     export_build_var PROTON_VERSION "$PROTON_VER"
@@ -88,7 +105,7 @@ fi
 # Шаг "Apply custom patches" в yml работает ДО feeds update и берёт только
 # patches/*.patch (патчи к дереву openwrt). Патчи к фидам лежат в подпапках,
 # чтобы тот шаг их не трогал, и применяются здесь — после feeds update, до
-# feeds install. Имя подпапки = имя фида из feeds.conf (forkop, forkopmod).
+# feeds install. Имя подпапки = имя фида из feeds.conf (forkop, forkopmod, podkop).
 # Подпапки фидов, которые не загружены, пропускаются — поэтому патчи для
 # обоих вариантов forkop могут лежать рядом, а применятся только нужные.
 #
