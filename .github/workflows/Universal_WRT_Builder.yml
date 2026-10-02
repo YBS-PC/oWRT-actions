@@ -915,20 +915,39 @@ jobs:
         # Фиды packages/luci/routing/telephony/video на коммитах репозитория
         # пакетов ветки (поле feeds матрицы: форма feeds_latest или пресет combo). После замены зеркал: коммит
         # проверяется на том адресе, откуда его возьмёт feeds update.
+        cp feeds.conf.default /tmp/feeds.conf.tag
         if [ "${{ matrix.feeds }}" = "true" ]; then
             bash "$GITHUB_WORKSPACE/sh/feeds-from-repo.sh"
         fi
         echo ">>> feeds.conf.default:"
         cat feeds.conf.default
-        # В прошивку: откуда фиды (первая строка tag/repo — её показывает
-        # баннер zz1) и итоговые коммиты всех фидов — чтобы на роутере было
-        # видно, на чём собраны пакеты.
-        {
-            if [ "${{ matrix.feeds }}" = "true" ]; then echo "repo"; else echo "tag"; fi
-            grep -E '^src-git' feeds.conf.default
-        } > files/etc/build_feeds
         
         ./scripts/feeds update -a
+
+        # /etc/build_feeds в прошивке. Первая строка — откуда основные фиды:
+        # repo, если sh/feeds-from-repo.sh заменил хотя бы один коммит, иначе
+        # tag (галочка могла быть включена, но тег оказался новее сборки
+        # пакетов). Её показывает баннер zz1. Дальше — строки feeds.conf с
+        # коммитами, которые feeds update реально скачал (у фидов на ветке —
+        # её голова на момент сборки); файл годится как feeds.conf для
+        # повторной сборки на тех же исходниках. Патчи из patches/ меняют
+        # рабочие копии фидов позже и здесь не отражаются.
+        {
+            if cmp -s /tmp/feeds.conf.tag feeds.conf.default; then echo "tag"; else echo "repo"; fi
+            grep -E '^src-git(-full)?[[:space:]]' feeds.conf.default | while read -r f_type f_name f_spec _; do
+                # Только собственный клон фида: иначе git нашёл бы репозиторий
+                # самого OpenWrt (feeds/ лежит внутри него).
+                f_head=""
+                [ -e "feeds/$f_name/.git" ] && f_head=$(git -C "feeds/$f_name" rev-parse HEAD 2>/dev/null)
+                if [ -n "$f_head" ]; then
+                    echo "$f_type $f_name ${f_spec%%[;^]*}^$f_head"
+                else
+                    echo "$f_type $f_name $f_spec"
+                fi
+            done
+        } > files/etc/build_feeds
+        echo ">>> /etc/build_feeds:"
+        cat files/etc/build_feeds
 
         # -------------------------------------------------------------
         # Глобальный переключатель патчей для Part 2 / Part 3.
