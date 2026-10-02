@@ -142,6 +142,26 @@ forkop, строгую проверку ucode и проверку конфиго
 `setup` предупреждает. Патч не обновляет тест `tests/package_lifecycle.sh`
 форка (тест ждёт ucode в `prerm`); на прошивку это не влияет.
 
+### podkop (`patches/feeds/podkop/`, фид `podkop` → itdoginfo/podkop)
+
+Применяется в варианте `podkop`. Написаны для podkop `main` (0.7.22,
+коммит `c0a2736`); исправления из netshift (yandexru45/netshift) перенесены
+с указанием issue. Версию пакета part2 берёт из последнего тега
+(`PODKOP_VERSION`), иначе podkop собирался бы с версией `0.<дата>`.
+
+| Патч | Что делает |
+|---|---|
+| 001 | разбор proxy-ссылок: пароли с `%40`/`%23`/`+` (netshift #50), `@` в пароле trojan, IPv6 `[addr]:port`, VLESS/Trojan без `type`/`security` (#426), транспорты httpupgrade и http (#319), порт `443/` в trojan (#443); xhttp/kcp/quic отклоняются в LuCI с понятным сообщением. `main.js` пересобран из TS |
+| 002 | DNS: диагностика сервера с портом (`dig @host -p port`, #444); FakeIP только для A/AAAA, SRV/PTR и прочие идут на обычный DNS (#416); нечисловой порт DNS — порт по умолчанию (#442) |
+| 003 | start/stop/reload по очереди (#360); `wget -T 15` (#410); `ct status dnat return` первым в mangle — проброс портов при Fully Routed IPs (#385); rule-set после аварийной остановки (#356); исключения получают настоящие IP, а не FakeIP (#350); адрес без интерфейса `lan` (#314); `Requires: 002` |
+| 004 | домены с заглавными буквами и табуляцией в списках (netshift #52, #53) |
+| 005 | настройка «Торренты мимо прокси» (`exclude_bittorrent`, netshift #56) |
+
+Проверено: применение к чистому podkop `main` (повторный прогон — «уже есть»,
+`FEED_PATCH_STRICT=1` проходит), тесты LuCI (vitest 294/294, eslint), функции
+бэкенда в busybox ash, порядок правил nft в network namespace, `sing-box
+check` 1.12.22 и 1.14.2 для конфига с новыми правилами и ссылками.
+
 ## Патчи пакетов: `patches/packages/<пакет>/*.patch`
 
 Для пакетов, которых нет в фидах и которые `WRT-part3.sh` клонирует в
