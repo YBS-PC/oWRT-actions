@@ -1,0 +1,934 @@
+From: YBS-PC/oWRT-actions
+Subject: [PATCH] podkop: разбор proxy-ссылок (пароли со спецсимволами, IPv6,
+ VLESS без type/security, httpupgrade/http, trojan с портом "443/")
+
+Бэкенд (helpers.sh, sing_box_config_facade.sh, sing_box_config_manager.sh):
+- Ссылка больше не декодируется целиком до разбора. Раньше %40 и %23 в
+  пароле становились структурными '@' и '#': пароль обрезался, сервер
+  «уезжал», а '+' превращался в пробел (ломался base64 у shadowsocks).
+  Теперь каждый компонент декодируется отдельно (url_decode_component,
+  '+' сохраняется), значения query-параметров декодируются в
+  url_get_query_param после выделения границ. Порт исправления из
+  netshift (issue #50, f942a9b), доработанный для socks5: логин и пароль
+  делятся по сырому ':' и только потом декодируются.
+- userinfo отделяется по последнему '@' перед query: пароль trojan с
+  незакодированным '@' работает (в LuCI тоже).
+- IPv6-адреса в скобках: vless://uuid@[2001:db8::1]:443.
+- VLESS/Trojan без "type" — это tcp, без "security" — none, как в Xray
+  (itdoginfo/podkop#426). Раньше в журнале была ошибка Unknown security ''.
+- Добавлены транспорты httpupgrade и http (h2) (itdoginfo/podkop#319).
+  Для xhttp/splithttp/kcp/quic понятная ошибка «не поддерживается sing-box»
+  вместо «Unknown transport».
+
+LuCI (fe-app-podkop, main.js пересобран tsup из исходников):
+- validateTrojanUrl: порт "443/" больше не «invalid port number»
+  (itdoginfo/podkop#443), '@' в пароле, IPv6.
+- validateVlessUrl: type и security необязательны (#426), IPv6.
+- Ссылки с транспортами, которые sing-box не умеет (xhttp, splithttp,
+  kcp, quic, udp), отклоняются с понятным сообщением: раньше они
+  принимались, и получался неработающий outbound (#319).
+
+Проверено: vitest 294/294, eslint, sing-box check 1.12.22 и 1.14.2 для
+конфига с такими ссылками, функции бэкенда в busybox ash.
+---
+diff --git a/fe-app-podkop/src/helpers/index.ts b/fe-app-podkop/src/helpers/index.ts
+index 06baeb7..be2f9c4 100644
+--- a/fe-app-podkop/src/helpers/index.ts
++++ b/fe-app-podkop/src/helpers/index.ts
+@@ -11,3 +11,4 @@ export * from './preserveScrollForPage';
+ export * from './parseQueryString';
+ export * from './svgEl';
+ export * from './insertIf';
++export * from './parseHostPort';
+diff --git a/fe-app-podkop/src/helpers/parseHostPort.ts b/fe-app-podkop/src/helpers/parseHostPort.ts
+new file mode 100644
+index 0000000..de9cf17
+--- /dev/null
++++ b/fe-app-podkop/src/helpers/parseHostPort.ts
+@@ -0,0 +1,46 @@
++/**
++ * Splits the "host:port" part of a proxy link (the text between the last
++ * "@" and the query string). Accepts IPv6 literals in brackets
++ * ("[2001:db8::1]:443") and ignores a trailing path ("host:443/").
++ */
++export function parseHostPort(hostPortPart: string): {
++  host: string;
++  port: string;
++} {
++  const authority = hostPortPart.split('/')[0];
++
++  if (authority.startsWith('[')) {
++    const end = authority.indexOf(']');
++
++    if (end === -1) return { host: '', port: '' };
++
++    const host = authority.slice(1, end);
++    const rest = authority.slice(end + 1);
++
++    return { host, port: rest.startsWith(':') ? rest.slice(1) : '' };
++  }
++
++  const colon = authority.lastIndexOf(':');
++
++  if (colon === -1) return { host: authority, port: '' };
++
++  return { host: authority.slice(0, colon), port: authority.slice(colon + 1) };
++}
++
++/**
++ * Splits "userinfo@host:port" on the LAST "@": a password may contain an
++ * unescaped "@", the host never does.
++ */
++export function splitUserHost(userHostPort: string): {
++  userPart: string;
++  hostPortPart: string;
++} {
++  const at = userHostPort.lastIndexOf('@');
++
++  if (at === -1) return { userPart: '', hostPortPart: '' };
++
++  return {
++    userPart: userHostPort.slice(0, at),
++    hostPortPart: userHostPort.slice(at + 1),
++  };
++}
+diff --git a/fe-app-podkop/src/validators/tests/validateTrojanUrl.test.js b/fe-app-podkop/src/validators/tests/validateTrojanUrl.test.js
+index 7f1281d..f9adacb 100644
+--- a/fe-app-podkop/src/validators/tests/validateTrojanUrl.test.js
++++ b/fe-app-podkop/src/validators/tests/validateTrojanUrl.test.js
+@@ -24,12 +24,6 @@ const validUrls = [
+     'trojan://90caP481ay@127.0.0.1:59708?type=tcp&security=tls&fp=chrome&alpn=h2%2Chttp%2F1.1&ech=AF3%2BDQBZAAAgACC2y%2BAe4dqthLNpfvmtE6g%2BnaJ%2FciK6P%2BREbRLkR%2Fg%2FEgAkAAEAAQABAAIAAQADAAIAAQACAAIAAgADAAMAAQADAAIAAwADAApnb29nbGUuY29tAAA%3D&sni=google.com#trojan-tcp-tls-ech',
+   ],
+ 
+-  // mKCP
+-  [
+-    'mKCP + none',
+-    'trojan://N5v7iIOe9G@127.0.0.1:36319?type=kcp&headerType=none&seed=P91wFIfjzZ&security=none#trojan-mKCP',
+-  ],
+-
+   // WebSocket
+   [
+     'ws + none',
+@@ -88,14 +82,25 @@ const validUrls = [
+     'trojan://ou8pLSyx9N@127.0.0.1:17737?type=httpupgrade&path=%2Fhttpupgradepath&host=google.com&security=tls&fp=chrome&alpn=h2%2Chttp%2F1.1&ech=AF3%2BDQBZAAAgACB%2FlkIkit%2BblFzE7PtbYDVF3NXK8olXJ5a7YwY%2Biy9QQwAkAAEAAQABAAIAAQADAAIAAQACAAIAAgADAAMAAQADAAIAAwADAApnb29nbGUuY29tAAA%3D&sni=google.com#trojan-httpupgrade-tls-ech',
+   ],
+ 
+-  // XHTTP
+   [
+-    'xhttp + none',
+-    'trojan://VEetltxLtw@127.0.0.1:59072?type=xhttp&path=%2Fxhttppath&host=google.com&mode=auto&security=none#trojan-xhttp',
++    'port followed by slash',
++    'trojan://pass@example.com:443/?security=tls&sni=example.com#t',
+   ],
++  ['password with @', 'trojan://p@ss@example.com:443?security=tls#t'],
++  ['IPv6 host', 'trojan://pass@[2001:db8::1]:443?security=tls#t'],
++  ['no query string', 'trojan://pass@example.com:443'],
+ ];
+ 
+ const invalidUrls = [
++  [
++    'mKCP + none (unsupported by sing-box)',
++    'trojan://N5v7iIOe9G@127.0.0.1:36319?type=kcp&headerType=none&seed=P91wFIfjzZ&security=none#trojan-mKCP',
++  ],
++  [
++    'xhttp + none (unsupported by sing-box)',
++    'trojan://VEetltxLtw@127.0.0.1:59072?type=xhttp&path=%2Fxhttppath&host=google.com&mode=auto&security=none#trojan-xhttp',
++  ],
++  ['unknown type', 'trojan://pass@127.0.0.1:443?type=foo&security=tls'],
+   ['No prefix', 'uuid@host:443?type=tcp&security=tls'],
+   ['No password', 'trojan://@127.0.0.1:443?type=tcp&security=tls'],
+   ['No host', 'trojan://pass@:443?type=tcp&security=tls'],
+diff --git a/fe-app-podkop/src/validators/tests/validateVlessUrl.test.js b/fe-app-podkop/src/validators/tests/validateVlessUrl.test.js
+index 114cb22..fb9e70b 100644
+--- a/fe-app-podkop/src/validators/tests/validateVlessUrl.test.js
++++ b/fe-app-podkop/src/validators/tests/validateVlessUrl.test.js
+@@ -15,11 +15,6 @@ const validUrls = [
+     'tcp + tls',
+     'vless://2e9e8288-060e-4da2-8b9f-a1c81826feb7@127.0.0.1:19316?type=tcp&encryption=none&security=tls&fp=chrome&alpn=h2%2Chttp%2F1.1&sni=google.com#vless-tcp-tls',
+   ],
+-  // mKCP
+-  [
+-    'mKCP + none',
+-    'vless://72e201d7-7841-4a32-b266-4aa3eb776d51@127.0.0.1:17270?type=kcp&encryption=none&headerType=none&seed=AirziWi4ng&security=none#vless-mKCP',
+-  ],
+   // WebSocket
+   [
+     'ws + none',
+@@ -47,21 +42,39 @@ const validUrls = [
+     'httpupgrade + tls',
+     'vless://76dbd0ff-1a35-4f0c-a9ba-3c5890b7dea6@127.0.0.1:50639?type=httpupgrade&encryption=none&path=%2Fhttpupgradepath&host=google.com&security=tls&sni=google.com#vless-httpupgrade-tls',
+   ],
+-  // XHTTP
+   [
+-    'xhttp + none',
+-    'vless://c2841505-ec32-4b8d-b6dd-3e19d648c321@127.0.0.1:45507?type=xhttp&encryption=none&path=%2Fxhttppath&host=xhttp&mode=auto&security=none#vless-xhttp',
++    'IPv6 host',
++    'vless://94792286-7bbe-4f33-8b36-18d1bbf70723@[2001:db8::1]:443?type=tcp&security=none#v6',
++  ],
++  [
++    'port followed by slash',
++    'vless://94792286-7bbe-4f33-8b36-18d1bbf70723@example.com:443/?type=ws&path=%2Fws&security=tls&sni=example.com',
++  ],
++  [
++    'no query string',
++    'vless://94792286-7bbe-4f33-8b36-18d1bbf70723@example.com:443#plain',
+   ],
++  ['Without type', 'vless://uuid@127.0.0.1:443?security=tls'],
++  ['Without security', 'vless://uuid@127.0.0.1:443?type=tcp'],
+ ];
+ 
+ const invalidUrls = [
++  [
++    'mKCP + none (unsupported by sing-box)',
++    'vless://72e201d7-7841-4a32-b266-4aa3eb776d51@127.0.0.1:17270?type=kcp&encryption=none&headerType=none&seed=AirziWi4ng&security=none#vless-mKCP',
++  ],
++  [
++    'xhttp + none (unsupported by sing-box)',
++    'vless://c2841505-ec32-4b8d-b6dd-3e19d648c321@127.0.0.1:45507?type=xhttp&encryption=none&path=%2Fxhttppath&host=xhttp&mode=auto&security=none#vless-xhttp',
++  ],
++  ['splithttp', 'vless://uuid@127.0.0.1:443?type=splithttp&security=tls'],
++  ['unknown type', 'vless://uuid@127.0.0.1:443?type=foo&security=tls'],
++  ['unknown security', 'vless://uuid@127.0.0.1:443?type=tcp&security=xtls'],
+   ['No prefix', 'uuid@host:443?type=tcp&security=tls'],
+   ['No uuid', 'vless://@127.0.0.1:443?type=tcp&security=tls'],
+   ['No host', 'vless://uuid@:443?type=tcp&security=tls'],
+   ['No port', 'vless://uuid@127.0.0.1?type=tcp&security=tls'],
+   ['Invalid port', 'vless://uuid@127.0.0.1:abc?type=tcp&security=tls'],
+-  ['Missing type', 'vless://uuid@127.0.0.1:443?security=tls'],
+-  ['Missing security', 'vless://uuid@127.0.0.1:443?type=tcp'],
+   [
+     'reality without pbk',
+     'vless://uuid@127.0.0.1:443?type=tcp&security=reality&fp=chrome',
+diff --git a/fe-app-podkop/src/validators/unsupportedTransports.ts b/fe-app-podkop/src/validators/unsupportedTransports.ts
+new file mode 100644
+index 0000000..36adf71
+--- /dev/null
++++ b/fe-app-podkop/src/validators/unsupportedTransports.ts
+@@ -0,0 +1,20 @@
++// Xray transports that sing-box (and therefore podkop) cannot use.
++// A link with one of them would produce an outbound that never connects.
++export const UNSUPPORTED_TRANSPORTS = [
++  'xhttp',
++  'splithttp',
++  'kcp',
++  'mkcp',
++  'quic',
++  'udp',
++];
++
++export const SUPPORTED_TRANSPORTS = [
++  'tcp',
++  'raw',
++  'ws',
++  'grpc',
++  'httpupgrade',
++  'http',
++  'h2',
++];
+diff --git a/fe-app-podkop/src/validators/validateTrojanUrl.ts b/fe-app-podkop/src/validators/validateTrojanUrl.ts
+index 052aef8..bb1fdce 100644
+--- a/fe-app-podkop/src/validators/validateTrojanUrl.ts
++++ b/fe-app-podkop/src/validators/validateTrojanUrl.ts
+@@ -1,4 +1,10 @@
+ import { ValidationResult } from './types';
++import { parseQueryString } from '../helpers/parseQueryString';
++import { parseHostPort, splitUserHost } from '../helpers/parseHostPort';
++import {
++  SUPPORTED_TRANSPORTS,
++  UNSUPPORTED_TRANSPORTS,
++} from './unsupportedTransports';
+ 
+ export function validateTrojanUrl(url: string): ValidationResult {
+   try {
+@@ -18,9 +24,7 @@ export function validateTrojanUrl(url: string): ValidationResult {
+ 
+     const body = url.slice('trojan://'.length);
+     const [mainPart] = body.split('#');
+-    const [userHostPort] = mainPart.split('?');
+-
+-    const [userPart, hostPortPart] = userHostPort.split('@');
++    const [userHostPort, queryString] = mainPart.split('?');
+ 
+     if (!userHostPort)
+       return {
+@@ -28,6 +32,8 @@ export function validateTrojanUrl(url: string): ValidationResult {
+         message: 'Invalid Trojan URL: missing credentials and host',
+       };
+ 
++    const { userPart, hostPortPart } = splitUserHost(userHostPort);
++
+     if (!userPart)
+       return { valid: false, message: 'Invalid Trojan URL: missing password' };
+ 
+@@ -37,7 +43,7 @@ export function validateTrojanUrl(url: string): ValidationResult {
+         message: 'Invalid Trojan URL: missing hostname and port',
+       };
+ 
+-    const [host, port] = hostPortPart.split(':');
++    const { host, port } = parseHostPort(hostPortPart);
+ 
+     if (!host)
+       return { valid: false, message: 'Invalid Trojan URL: missing hostname' };
+@@ -52,6 +58,20 @@ export function validateTrojanUrl(url: string): ValidationResult {
+         valid: false,
+         message: 'Invalid Trojan URL: invalid port number',
+       };
++
++    const type = parseQueryString(queryString || '').type || 'tcp';
++
++    if (UNSUPPORTED_TRANSPORTS.includes(type))
++      return {
++        valid: false,
++        message: `Invalid Trojan URL: transport ${type} is not supported by sing-box`,
++      };
++
++    if (!SUPPORTED_TRANSPORTS.includes(type))
++      return {
++        valid: false,
++        message: 'Invalid Trojan URL: unsupported type',
++      };
+   } catch (_e) {
+     return { valid: false, message: _('Invalid Trojan URL: parsing failed') };
+   }
+diff --git a/fe-app-podkop/src/validators/validateVlessUrl.ts b/fe-app-podkop/src/validators/validateVlessUrl.ts
+index 8db37d2..daffadb 100644
+--- a/fe-app-podkop/src/validators/validateVlessUrl.ts
++++ b/fe-app-podkop/src/validators/validateVlessUrl.ts
+@@ -1,5 +1,10 @@
+ import { ValidationResult } from './types';
+ import { parseQueryString } from '../helpers/parseQueryString';
++import { parseHostPort, splitUserHost } from '../helpers/parseHostPort';
++import {
++  SUPPORTED_TRANSPORTS,
++  UNSUPPORTED_TRANSPORTS,
++} from './unsupportedTransports';
+ 
+ export function validateVlessUrl(url: string): ValidationResult {
+   try {
+@@ -27,7 +32,7 @@ export function validateVlessUrl(url: string): ValidationResult {
+         message: 'Invalid VLESS URL: missing host and UUID',
+       };
+ 
+-    const [userPart, hostPortPart] = userHostPort.split('@');
++    const { userPart, hostPortPart } = splitUserHost(userHostPort);
+ 
+     if (!userPart)
+       return { valid: false, message: 'Invalid VLESS URL: missing UUID' };
+@@ -35,7 +40,7 @@ export function validateVlessUrl(url: string): ValidationResult {
+     if (!hostPortPart)
+       return { valid: false, message: 'Invalid VLESS URL: missing server' };
+ 
+-    const [host, port] = hostPortPart.split(':');
++    const { host, port } = parseHostPort(hostPortPart);
+ 
+     if (!host)
+       return { valid: false, message: 'Invalid VLESS URL: missing hostname' };
+@@ -43,48 +48,39 @@ export function validateVlessUrl(url: string): ValidationResult {
+     if (!port)
+       return { valid: false, message: 'Invalid VLESS URL: missing port' };
+ 
+-    const cleanedPort = port.replace('/', '');
+-    const portNum = Number(cleanedPort);
++    const portNum = Number(port);
+     if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535)
+       return {
+         valid: false,
+         message: 'Invalid VLESS URL: invalid port number',
+       };
+ 
+-    if (!queryString)
++    // "type" and "security" are optional: Xray treats a missing type as
++    // tcp and a missing security as none.
++    const params = parseQueryString(queryString || '');
++    const type = params.type || 'tcp';
++    const security = params.security || 'none';
++    const validSecurities = ['tls', 'reality', 'none'];
++
++    if (UNSUPPORTED_TRANSPORTS.includes(type))
+       return {
+         valid: false,
+-        message: 'Invalid VLESS URL: missing query parameters',
++        message: `Invalid VLESS URL: transport ${type} is not supported by sing-box`,
+       };
+ 
+-    const params = parseQueryString(queryString);
+-
+-    const validTypes = [
+-      'tcp',
+-      'raw',
+-      'udp',
+-      'grpc',
+-      'http',
+-      'httpupgrade',
+-      'xhttp',
+-      'ws',
+-      'kcp',
+-    ];
+-    const validSecurities = ['tls', 'reality', 'none'];
+-
+-    if (!params.type || !validTypes.includes(params.type))
++    if (!SUPPORTED_TRANSPORTS.includes(type))
+       return {
+         valid: false,
+-        message: 'Invalid VLESS URL: unsupported or missing type',
++        message: 'Invalid VLESS URL: unsupported type',
+       };
+ 
+-    if (!params.security || !validSecurities.includes(params.security))
++    if (!validSecurities.includes(security))
+       return {
+         valid: false,
+-        message: 'Invalid VLESS URL: unsupported or missing security',
++        message: 'Invalid VLESS URL: unsupported security',
+       };
+ 
+-    if (params.security === 'reality') {
++    if (security === 'reality') {
+       if (!params.pbk)
+         return {
+           valid: false,
+diff --git a/luci-app-podkop/htdocs/luci-static/resources/view/podkop/main.js b/luci-app-podkop/htdocs/luci-static/resources/view/podkop/main.js
+index 009c1ae..b52d400 100644
+--- a/luci-app-podkop/htdocs/luci-static/resources/view/podkop/main.js
++++ b/luci-app-podkop/htdocs/luci-static/resources/view/podkop/main.js
+@@ -234,6 +234,48 @@ function parseQueryString(query) {
+   );
+ }
+ 
++// src/helpers/parseHostPort.ts
++function parseHostPort(hostPortPart) {
++  const authority = hostPortPart.split("/")[0];
++  if (authority.startsWith("[")) {
++    const end = authority.indexOf("]");
++    if (end === -1) return { host: "", port: "" };
++    const host = authority.slice(1, end);
++    const rest = authority.slice(end + 1);
++    return { host, port: rest.startsWith(":") ? rest.slice(1) : "" };
++  }
++  const colon = authority.lastIndexOf(":");
++  if (colon === -1) return { host: authority, port: "" };
++  return { host: authority.slice(0, colon), port: authority.slice(colon + 1) };
++}
++function splitUserHost(userHostPort) {
++  const at = userHostPort.lastIndexOf("@");
++  if (at === -1) return { userPart: "", hostPortPart: "" };
++  return {
++    userPart: userHostPort.slice(0, at),
++    hostPortPart: userHostPort.slice(at + 1)
++  };
++}
++
++// src/validators/unsupportedTransports.ts
++var UNSUPPORTED_TRANSPORTS = [
++  "xhttp",
++  "splithttp",
++  "kcp",
++  "mkcp",
++  "quic",
++  "udp"
++];
++var SUPPORTED_TRANSPORTS = [
++  "tcp",
++  "raw",
++  "ws",
++  "grpc",
++  "httpupgrade",
++  "http",
++  "h2"
++];
++
+ // src/validators/validateVlessUrl.ts
+ function validateVlessUrl(url) {
+   try {
+@@ -255,52 +297,42 @@ function validateVlessUrl(url) {
+         valid: false,
+         message: "Invalid VLESS URL: missing host and UUID"
+       };
+-    const [userPart, hostPortPart] = userHostPort.split("@");
++    const { userPart, hostPortPart } = splitUserHost(userHostPort);
+     if (!userPart)
+       return { valid: false, message: "Invalid VLESS URL: missing UUID" };
+     if (!hostPortPart)
+       return { valid: false, message: "Invalid VLESS URL: missing server" };
+-    const [host, port] = hostPortPart.split(":");
++    const { host, port } = parseHostPort(hostPortPart);
+     if (!host)
+       return { valid: false, message: "Invalid VLESS URL: missing hostname" };
+     if (!port)
+       return { valid: false, message: "Invalid VLESS URL: missing port" };
+-    const cleanedPort = port.replace("/", "");
+-    const portNum = Number(cleanedPort);
++    const portNum = Number(port);
+     if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535)
+       return {
+         valid: false,
+         message: "Invalid VLESS URL: invalid port number"
+       };
+-    if (!queryString)
++    const params = parseQueryString(queryString || "");
++    const type = params.type || "tcp";
++    const security = params.security || "none";
++    const validSecurities = ["tls", "reality", "none"];
++    if (UNSUPPORTED_TRANSPORTS.includes(type))
+       return {
+         valid: false,
+-        message: "Invalid VLESS URL: missing query parameters"
++        message: `Invalid VLESS URL: transport ${type} is not supported by sing-box`
+       };
+-    const params = parseQueryString(queryString);
+-    const validTypes = [
+-      "tcp",
+-      "raw",
+-      "udp",
+-      "grpc",
+-      "http",
+-      "httpupgrade",
+-      "xhttp",
+-      "ws",
+-      "kcp"
+-    ];
+-    const validSecurities = ["tls", "reality", "none"];
+-    if (!params.type || !validTypes.includes(params.type))
++    if (!SUPPORTED_TRANSPORTS.includes(type))
+       return {
+         valid: false,
+-        message: "Invalid VLESS URL: unsupported or missing type"
++        message: "Invalid VLESS URL: unsupported type"
+       };
+-    if (!params.security || !validSecurities.includes(params.security))
++    if (!validSecurities.includes(security))
+       return {
+         valid: false,
+-        message: "Invalid VLESS URL: unsupported or missing security"
++        message: "Invalid VLESS URL: unsupported security"
+       };
+-    if (params.security === "reality") {
++    if (security === "reality") {
+       if (!params.pbk)
+         return {
+           valid: false,
+@@ -351,13 +383,13 @@ function validateTrojanUrl(url) {
+     }
+     const body = url.slice("trojan://".length);
+     const [mainPart] = body.split("#");
+-    const [userHostPort] = mainPart.split("?");
+-    const [userPart, hostPortPart] = userHostPort.split("@");
++    const [userHostPort, queryString] = mainPart.split("?");
+     if (!userHostPort)
+       return {
+         valid: false,
+         message: "Invalid Trojan URL: missing credentials and host"
+       };
++    const { userPart, hostPortPart } = splitUserHost(userHostPort);
+     if (!userPart)
+       return { valid: false, message: "Invalid Trojan URL: missing password" };
+     if (!hostPortPart)
+@@ -365,7 +397,7 @@ function validateTrojanUrl(url) {
+         valid: false,
+         message: "Invalid Trojan URL: missing hostname and port"
+       };
+-    const [host, port] = hostPortPart.split(":");
++    const { host, port } = parseHostPort(hostPortPart);
+     if (!host)
+       return { valid: false, message: "Invalid Trojan URL: missing hostname" };
+     if (!port)
+@@ -376,6 +408,17 @@ function validateTrojanUrl(url) {
+         valid: false,
+         message: "Invalid Trojan URL: invalid port number"
+       };
++    const type = parseQueryString(queryString || "").type || "tcp";
++    if (UNSUPPORTED_TRANSPORTS.includes(type))
++      return {
++        valid: false,
++        message: `Invalid Trojan URL: transport ${type} is not supported by sing-box`
++      };
++    if (!SUPPORTED_TRANSPORTS.includes(type))
++      return {
++        valid: false,
++        message: "Invalid Trojan URL: unsupported type"
++      };
+   } catch (_e) {
+     return { valid: false, message: _("Invalid Trojan URL: parsing failed") };
+   }
+@@ -4919,11 +4962,13 @@ return baseclass.extend({
+   logger,
+   maskIP,
+   onMount,
++  parseHostPort,
+   parseQueryString,
+   parseValueList,
+   preserveScrollForPage,
+   socket,
+   splitProxyString,
++  splitUserHost,
+   store,
+   svgEl,
+   validateDNS,
+diff --git a/podkop/files/usr/lib/helpers.sh b/podkop/files/usr/lib/helpers.sh
+index c25edb8..73b666c 100644
+--- a/podkop/files/usr/lib/helpers.sh
++++ b/podkop/files/usr/lib/helpers.sh
+@@ -119,10 +119,28 @@ comma_string_to_json_array() {
+     echo "[\"$replaced\"]"
+ }
+ 
+-# Decodes a URL-encoded string
+-url_decode() {
++# Decodes the '%XX' escapes of a single, already-split URI component.
++# A '%' NOT followed by two hex digits is data and is left untouched, and a
++# literal backslash is doubled so printf cannot read it as an escape sequence.
++_url_percent_decode() {
+     local encoded="$1"
+-    printf '%b' "$(echo "$encoded" | sed 's/+/ /g; s/%/\\x/g')"
++
++    printf '%b' "$(printf '%s' "$encoded" | sed 's/\\/\\\\/g; s/%\([0-9A-Fa-f][0-9A-Fa-f]\)/\\x\1/g')"
++}
++
++# Decodes a URL-encoded string using application/x-www-form-urlencoded rules,
++# where '+' means a space (the convention proxy clients use for query values).
++url_decode() {
++    _url_percent_decode "$(printf '%s' "$1" | sed 's/+/ /g')"
++}
++
++# Decodes a single URI component (RFC 3986 percent-encoding). Unlike url_decode,
++# a literal '+' is preserved: in userinfo/password '+' is data, not a space.
++# The caller must split the link into components first and decode them one by
++# one: decoding the whole link turns an escaped '%40'/'%23' inside a password
++# into a structural '@'/'#'.
++url_decode_component() {
++    _url_percent_decode "$1"
+ }
+ 
+ # Returns the scheme (protocol) part of a URL
+@@ -131,32 +149,64 @@ url_get_scheme() {
+     echo "${url%%://*}"
+ }
+ 
+-# Extracts the userinfo (username[:password]) part from a URL
+-url_get_userinfo() {
++# Returns the part of a URL between "scheme://" and the query/fragment
++_url_get_prefix() {
+     local url="$1"
+-    echo "$url" | sed -n -e 's#^[^:/?]*://##' -e '/@/!d' -e 's/@.*//p'
++
++    url="${url#*://}"
++    echo "${url%%[?#]*}"
++}
++
++# Extracts the userinfo (username[:password]) part from a URL.
++# The LAST '@' before the query is the delimiter: a password may contain an
++# unescaped '@' (and '/'), a host never does.
++url_get_userinfo() {
++    local prefix
++    prefix=$(_url_get_prefix "$1")
++
++    case "$prefix" in
++    *@*) echo "${prefix%@*}" ;;
++    *) echo "" ;;
++    esac
++}
++
++# Returns "host[:port]" of a URL (without userinfo, path, query and fragment)
++_url_get_hostport() {
++    local url
++    url=$(_url_get_prefix "$1")
++
++    url="${url##*@}"
++    echo "${url%%/*}"
+ }
+ 
+ # Extracts the host part from a URL
+ url_get_host() {
+-    local url="$1"
+-
+-    url="${url#*://}"
+-    url="${url#*@}"
+-    url="${url%%[/?#]*}"
++    local url
++    url=$(_url_get_hostport "$1")
++
++    # IPv6 literal: [2001:db8::1]:443
++    case "$url" in
++    \[*\]*)
++        url="${url#\[}"
++        echo "${url%%\]*}"
++        return
++        ;;
++    esac
+ 
+     echo "${url%%:*}"
+ }
+ 
+ # Extracts the port number from a URL
+ url_get_port() {
+-    local url="$1"
++    local url
++    url=$(_url_get_hostport "$1")
+ 
+-    url="${url#*://}"
+-    url="${url#*@}"
+-    url="${url%%[/?#]*}"
++    # IPv6 literal: the port follows the closing bracket
++    case "$url" in
++    \[*\]*) url="${url#*\]}" ;;
++    esac
+ 
+-    [[ "$url" == *:* ]] && echo "${url#*:}" || echo ""
++    [[ "$url" == *:* ]] && echo "${url##*:}" || echo ""
+ }
+ 
+ # Extracts the path from a URL (without query or fragment; returns "/" if empty)
+@@ -165,7 +215,7 @@ url_get_path() {
+     echo "$url" | sed -n -e 's#^[^:/?]*://##' -e 's#^[^/]*##' -e 's#\([^?]*\).*#\1#p'
+ }
+ 
+-# Extracts the value of a specific query parameter from a URL
++# Extracts the value of a specific query parameter from a RAW (still encoded) URL
+ url_get_query_param() {
+     local url="$1"
+     local param="$2"
+@@ -175,7 +225,9 @@ url_get_query_param() {
+ 
+     [ -z "$raw" ] && echo "" && return
+ 
+-    echo "$raw"
++    # The value is decoded only after its boundaries are known, so an escaped
++    # '&' or '#' inside it is no longer mistaken for a delimiter.
++    url_decode "$raw"
+ }
+ 
+ # Extracts the basename (filename without extension) from a URL
+diff --git a/podkop/files/usr/lib/sing_box_config_facade.sh b/podkop/files/usr/lib/sing_box_config_facade.sh
+index 7641673..4afec33 100644
+--- a/podkop/files/usr/lib/sing_box_config_facade.sh
++++ b/podkop/files/usr/lib/sing_box_config_facade.sh
+@@ -61,24 +61,34 @@ sing_box_cf_add_proxy_outbound() {
+     local url="$3"
+     local udp_over_tcp="$4"
+ 
+-    url=$(url_decode "$url")
++    # The link is split into components FIRST and each component is decoded
++    # separately. Decoding the whole link up front turned an escaped '%40'/'%23'
++    # inside a password into a structural '@'/'#' and rewrote '+' into a space.
++    # Query values are decoded by url_get_query_param().
+     url=$(url_strip_fragment "$url")
+ 
+     local scheme
+     scheme="$(url_get_scheme "$url")"
++
++    local url_host url_port url_userinfo
++    url_host=$(url_decode_component "$(url_get_host "$url")")
++    url_port=$(url_decode_component "$(url_get_port "$url")")
++    url_userinfo=$(url_decode_component "$(url_get_userinfo "$url")")
+     case "$scheme" in
+     socks4 | socks4a | socks5)
+         local tag host port version userinfo username password udp_over_tcp
+ 
+         tag=$(get_outbound_tag_by_section "$section")
+-        host=$(url_get_host "$url")
+-        port=$(url_get_port "$url")
++        host="$url_host"
++        port="$url_port"
+         version="${scheme#socks}"
+         if [ "$scheme" = "socks5" ]; then
++            # Split on the raw ':' first, then decode: an escaped '%3A' belongs
++            # to the username or password.
+             userinfo=$(url_get_userinfo "$url")
+             if [ -n "$userinfo" ]; then
+-                username="${userinfo%%:*}"
+-                password="${userinfo#*:}"
++                username=$(url_decode_component "${userinfo%%:*}")
++                password=$(url_decode_component "${userinfo#*:}")
+             fi
+         fi
+         config="$(sing_box_cm_add_socks_outbound \
+@@ -96,9 +106,9 @@ sing_box_cf_add_proxy_outbound() {
+     vless)
+         local tag host port uuid flow packet_encoding
+         tag=$(get_outbound_tag_by_section "$section")
+-        host=$(url_get_host "$url")
+-        port=$(url_get_port "$url")
+-        uuid=$(url_get_userinfo "$url")
++        host="$url_host"
++        port="$url_port"
++        uuid="$url_userinfo"
+         flow=$(url_get_query_param "$url" "flow")
+         packet_encoding=$(url_get_query_param "$url" "packetEncoding")
+ 
+@@ -109,7 +119,7 @@ sing_box_cf_add_proxy_outbound() {
+     ss)
+         local userinfo tag host port method password udp_over_tcp
+ 
+-        userinfo=$(url_get_userinfo "$url")
++        userinfo="$url_userinfo"
+         if ! is_shadowsocks_userinfo_format "$userinfo"; then
+             userinfo=$(base64_decode "$userinfo")
+             if [ $? -ne 0 ]; then
+@@ -119,8 +129,8 @@ sing_box_cf_add_proxy_outbound() {
+         fi
+ 
+         tag=$(get_outbound_tag_by_section "$section")
+-        host=$(url_get_host "$url")
+-        port=$(url_get_port "$url")
++        host="$url_host"
++        port="$url_port"
+         method="${userinfo%%:*}"
+         password="${userinfo#*:}"
+ 
+@@ -139,9 +149,9 @@ sing_box_cf_add_proxy_outbound() {
+     trojan)
+         local tag host port password
+         tag=$(get_outbound_tag_by_section "$section")
+-        host=$(url_get_host "$url")
+-        port=$(url_get_port "$url")
+-        password=$(url_get_userinfo "$url")
++        host="$url_host"
++        port="$url_port"
++        password="$url_userinfo"
+ 
+         config=$(sing_box_cm_add_trojan_outbound "$config" "$tag" "$host" "$port" "$password")
+         config=$(_add_outbound_security "$config" "$tag" "$url")
+@@ -150,9 +160,9 @@ sing_box_cf_add_proxy_outbound() {
+     hysteria2 | hy2)
+         local tag host port password obfuscator_type obfuscator_password upload_mbps download_mbps
+         tag=$(get_outbound_tag_by_section "$section")
+-        host=$(url_get_host "$url")
+-        port="$(url_get_port "$url")"
+-        password=$(url_get_userinfo "$url")
++        host="$url_host"
++        port="$url_port"
++        password="$url_userinfo"
+         obfuscator_type=$(url_get_query_param "$url" "obfs")
+         obfuscator_password=$(url_get_query_param "$url" "obfs-password")
+         upload_mbps=$(url_get_query_param "$url" "upmbps")
+@@ -212,7 +222,7 @@ _add_outbound_security() {
+                 "$short_id"
+         )
+         ;;
+-    none) ;;
++    "" | none) ;; # no "security" in the link means no TLS
+     *)
+         log "Unknown security '$security' detected." "error"
+         ;;
+@@ -241,7 +251,7 @@ _add_outbound_transport() {
+     local transport
+     transport=$(url_get_query_param "$url" "type")
+     case "$transport" in
+-    tcp | raw) ;;
++    "" | tcp | raw) ;; # VLESS/Trojan links without "type" default to TCP
+     ws)
+         local ws_path ws_host ws_early_data
+         ws_path=$(url_get_query_param "$url" "path")
+@@ -261,6 +271,27 @@ _add_outbound_transport() {
+             sing_box_cm_set_grpc_transport_for_outbound "$config" "$outbound_tag" "$grpc_service_name"
+         )
+         ;;
++    httpupgrade)
++        local hu_path hu_host
++        hu_path=$(url_get_query_param "$url" "path")
++        hu_host=$(url_get_query_param "$url" "host")
++
++        config=$(
++            sing_box_cm_set_httpupgrade_transport_for_outbound "$config" "$outbound_tag" "$hu_path" "$hu_host"
++        )
++        ;;
++    http | h2)
++        local http_path http_host
++        http_path=$(url_get_query_param "$url" "path")
++        http_host=$(url_get_query_param "$url" "host")
++
++        config=$(
++            sing_box_cm_set_http_transport_for_outbound "$config" "$outbound_tag" "$http_path" "$http_host"
++        )
++        ;;
++    xhttp | splithttp | kcp | mkcp | quic)
++        log "Transport '$transport' is not supported by sing-box. The outbound will not work, use a link with tcp, ws, grpc, httpupgrade or http transport." "error"
++        ;;
+     *)
+         log "Unknown transport '$transport' detected." "error"
+         ;;
+diff --git a/podkop/files/usr/lib/sing_box_config_manager.sh b/podkop/files/usr/lib/sing_box_config_manager.sh
+index c1a2943..dd3f10b 100644
+--- a/podkop/files/usr/lib/sing_box_config_manager.sh
++++ b/podkop/files/usr/lib/sing_box_config_manager.sh
+@@ -833,6 +833,80 @@ sing_box_cm_set_ws_transport_for_outbound() {
+         )'
+ }
+ 
++#######################################
++# Set HTTPUpgrade transport settings for an outbound in a sing-box JSON configuration.
++# Arguments:
++#   config: string (JSON), sing-box configuration to modify
++#   tag: string, identifier of the outbound to modify
++#   path: string, HTTP request path (optional)
++#   host: string, Host header (optional)
++# Outputs:
++#   Writes updated JSON configuration to stdout
++# Example:
++#   CONFIG=$(sing_box_cm_set_httpupgrade_transport_for_outbound "$CONFIG" "vless-out" "/path" "example.com")
++#######################################
++sing_box_cm_set_httpupgrade_transport_for_outbound() {
++    local config="$1"
++    local tag="$2"
++    local path="$3"
++    local host="$4"
++
++    echo "$config" | jq \
++        --arg tag "$tag" \
++        --arg path "$path" \
++        --arg host "$host" \
++        '.outbounds |= map(
++            if .tag == $tag then
++                . + {
++                    transport: (
++                        { type: "httpupgrade" }
++                        + (if $path != "" then {path: $path} else {} end)
++                        + (if $host != "" then {host: $host} else {} end)
++                    )
++                }
++            else
++                .
++            end
++        )'
++}
++
++#######################################
++# Set HTTP (h2) transport settings for an outbound in a sing-box JSON configuration.
++# Arguments:
++#   config: string (JSON), sing-box configuration to modify
++#   tag: string, identifier of the outbound to modify
++#   path: string, HTTP request path (optional)
++#   host: string, comma-separated list of hosts (optional)
++# Outputs:
++#   Writes updated JSON configuration to stdout
++# Example:
++#   CONFIG=$(sing_box_cm_set_http_transport_for_outbound "$CONFIG" "vless-out" "/path" "example.com")
++#######################################
++sing_box_cm_set_http_transport_for_outbound() {
++    local config="$1"
++    local tag="$2"
++    local path="$3"
++    local host="$4"
++
++    echo "$config" | jq \
++        --arg tag "$tag" \
++        --arg path "$path" \
++        --arg host "$host" \
++        '.outbounds |= map(
++            if .tag == $tag then
++                . + {
++                    transport: (
++                        { type: "http" }
++                        + (if $path != "" then {path: $path} else {} end)
++                        + (if $host != "" then {host: ($host | split(",") | map(select(. != "")))} else {} end)
++                    )
++                }
++            else
++                .
++            end
++        )'
++}
++
+ #######################################
+ # Set TLS settings for an outbound in a sing-box JSON configuration.
+ # Arguments:
