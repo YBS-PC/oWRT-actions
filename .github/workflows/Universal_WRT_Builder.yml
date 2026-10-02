@@ -44,12 +44,14 @@ on:
         type: choice
         options:
           - homeproxy
+          - rehomeproxy
           - clear
           - switch
           - crystal_clear
           - podkop
           - forkop
           - forkop-mod
+          - trafira
           - passwall
           - v2raya
           - xray
@@ -145,6 +147,14 @@ env:
   #   конфига sing-box)
   FORKOP_FEED_MOD: "forkopmod https://github.com/Gavr1024/forkop-mod.git;main"
 
+  # Фид trafira (продолжение forkop: Alice Mode, DoH mTLS, Zapret/Zapret2/
+  # ByeDPI в секциях). Отдельный вариант trafira, свой конфиг
+  # /etc/config/trafira. Патчи patches/feeds/trafira (001 — без него
+  # установка sing-box со страницы «Компоненты» падает; 002 — правило fw4
+  # для TPROXY в образе прошивки; 003 — Exclude BitTorrent). Версия пакета —
+  # из тегов этого репозитория (TRAFIRA_VERSION).
+  TRAFIRA_FEED: "trafira https://github.com/petrouspetr-pixel/trafira.git;main"
+
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -202,8 +212,11 @@ jobs:
           # Приводит выбор к тому, что вариант реально допускает, чтобы имя
           # артефакта не врало: clear/crystal_clear/switch вырезают AGH,
           # sing-box и youtubeUnblock; passwall/v2raya/xray — sing-box;
-          # forkop — youtubeUnblock; crystal_clear — zz1. homeproxy и podkop
-          # без sing-box не работают (podkop ещё и тянет его зависимостью).
+          # forkop и trafira — youtubeUnblock (у них свой Zapret/ByeDPI на
+          # nfqueue); crystal_clear — zz1. homeproxy, rehomeproxy
+          # и podkop без sing-box не работают (podkop ещё и тянет его
+          # зависимостью); rehomeproxy (Re:HomeProxy) умеет и hiddify-core,
+          # но его приложение ставит само уже на роутере.
           entry() {
             local t="$1" v="$2" agh="$3" sb="$4" ytb="$5" zz="$6" pt="$7" fd="$8" orig
             # vname — имя варианта для людей (имя job и артефакта); fk — фид
@@ -218,14 +231,14 @@ jobs:
             case "$v" in
               clear|crystal_clear|switch) agh=no; sb=no; ytb=false ;;
               passwall|v2raya|xray)       sb=no ;;
-              forkop)                     ytb=false ;;
+              forkop|trafira)             ytb=false ;;
             esac
             [ "$v" = "crystal_clear" ] && zz=false
             case "$v" in
-              homeproxy|podkop) [ "$sb" = "no" ] && sb=feed ;;
+              homeproxy|rehomeproxy|podkop) [ "$sb" = "no" ] && sb=feed ;;
             esac
             case " $TINY_TARGETS " in
-              *" $t "*) case "$v" in homeproxy|podkop|forkop) [ "$sb" != "no" ] && sb=tiny ;; esac ;;
+              *" $t "*) case "$v" in homeproxy|rehomeproxy|podkop|forkop|trafira) [ "$sb" != "no" ] && sb=tiny ;; esac ;;
             esac
             if [ "$orig" != "agh=$agh sb=$sb ytb=$ytb zz=$zz" ]; then
               NOTES="${NOTES}${t}/${vname}: ${orig} -> agh=$agh sb=$sb ytb=$ytb zz=$zz\n"
@@ -298,6 +311,15 @@ jobs:
             echo "::warning title=${t}: homeproxy без патчей (sb=${sbv})::Без патча 004 homeproxy несовместим с sing-box 1.13+, и сборка ${t} остановится на проверке совместимости до компиляции (если в фиде 1.13+). Включите apply_patches или выберите sb=1.12.x."
           done
 
+          # Re:HomeProxy без патчей: генератор форка пишет DNS-серверам detour
+          # на пустой direct-out — обычный sing-box (фид, 1.12.x..latest, tiny)
+          # такой конфиг не запускает ни в одном режиме; работает только
+          # sing-box-extended (и hiddify-core). Патч 001 это исправляет.
+          echo "$json" | jq -r '.include[] | select(.variant == "rehomeproxy" and .patches == false and .sb != "extended") | "\(.target) \(.sb)"' |
+          while read -r t sbv; do
+            echo "::warning title=${t}: Re:HomeProxy без патчей (sb=${sbv})::Без патча 001 (patches/packages/luci-app-re-homeproxy) Re:HomeProxy не запускается на обычном sing-box: «detour to an empty direct outbound makes no sense». Включите apply_patches или выберите sb=extended."
+          done
+
           # forkop без патчей (фид — поле fk матрицы, адреса — в env):
           #   ushan0v/forkop 1.0.5 не стартует на sing-box 1.14 (issue #98);
           #   Gavr1024/forkop-mod без патча 001 не генерирует конфиг sing-box.
@@ -308,6 +330,15 @@ jobs:
               *)         FK_WHY="Исправления из patches/feeds/${FK_NAME} не будут применены" ;;
             esac
             echo "::warning title=forkop без патчей::Фид ${FK_NAME} собирается без patches/feeds/${FK_NAME}. ${FK_WHY}. Включите apply_patches."
+          done
+
+          # trafira без патчей: собирается, но установка/обновление sing-box со
+          # страницы «Компоненты» падает (ucode: left-hand side is not a
+          # function, патч 001), а в образе нет правила fw4 для TPROXY —
+          # гостевые зоны с input=REJECT режут проксируемый трафик (патч 002).
+          echo "$json" | jq -r '.include[] | select(.variant == "trafira" and .patches == false) | .target' |
+          while read -r t; do
+            echo "::warning title=${t}: trafira без патчей::Без патчей patches/feeds/trafira установка и обновление sing-box из LuCI trafira падают с ошибкой ucode (001), в прошивке нет правила fw4 для TPROXY — зоны с input=REJECT (гостевые) режут проксируемый трафик (002), нет настройки Exclude BitTorrent (003). Включите apply_patches."
           done
 
           echo "matrix<<EOF" >> $GITHUB_OUTPUT
@@ -903,6 +934,10 @@ jobs:
             elif ! ls "$GITHUB_WORKSPACE/patches/feeds/${FK_NAME}"/*.patch >/dev/null 2>&1; then
                 echo "::warning title=forkop: нет патчей для фида::Для фида ${FK_NAME} нет patches/feeds/${FK_NAME}/*.patch — пакет соберётся без исправлений."
             fi
+        elif [ "$VARIANT" == "trafira" ]; then
+            # Адрес — TRAFIRA_FEED в env; патчи — patches/feeds/trafira (part2).
+            echo ">>> trafira: фид $TRAFIRA_FEED"
+            echo -e "\nsrc-git $TRAFIRA_FEED" >> feeds.conf.default
         fi
 
         # --- ЗАМЕНА ЗЕРКАЛ (FIX 503 ERROR) Меняем git.openwrt.org на github.com---
@@ -1021,7 +1056,10 @@ jobs:
             sed -i '/sing-box/Id' ./.config
         fi
         
-        if [[ "$VARIANT" == "podkop" || "$VARIANT" == "forkop" ]]; then
+        if [[ "$VARIANT" == "podkop" || "$VARIANT" == "forkop" || "$VARIANT" == "trafira" || "$VARIANT" == "rehomeproxy" ]]; then
+            # rehomeproxy: luci-app-re-homeproxy ставит файлы по тем же путям,
+            # что luci-app-homeproxy, вместе их ставить нельзя. Его строки
+            # добавляются ниже, уже после этой чистки.
             echo ">>> Removing HomeProxy for $VARIANT compatibility..."
             sed -i '/homeproxy/d' ./.config
         fi
@@ -1076,6 +1114,23 @@ jobs:
             echo 'CONFIG_PACKAGE_forkop=y' >> ./.config
             echo 'CONFIG_PACKAGE_luci-app-forkop=y' >> ./.config
             echo 'CONFIG_PACKAGE_luci-i18n-forkop-ru=y' >> ./.config
+
+        elif [ "$VARIANT" == "trafira" ]; then
+            # Все зависимости trafira (kmod-tun, kmod-nft-tproxy, kmod-inet-diag,
+            # bind-dig, coreutils-base64, ucode-mod-uci ...) уже есть в
+            # WRT.config; конфликтующих (https-dns-proxy, nextdns, podkop,
+            # passwall) там нет. sing-box ставит part3/фид, как для forkop.
+            echo 'CONFIG_PACKAGE_trafira=y' >> ./.config
+            echo 'CONFIG_PACKAGE_luci-app-trafira=y' >> ./.config
+            echo 'CONFIG_PACKAGE_luci-i18n-trafira-ru=y' >> ./.config
+
+        elif [ "$VARIANT" == "rehomeproxy" ]; then
+            # Пакет клонирует WRT-part3.sh в package/luci-app-re-homeproxy.
+            # kmod-nft-tproxy, kmod-tun, kmod-nft-queue (Zapret), ucode-mod-digest
+            # и curl уже включены в WRT.config: в Makefile форка их нет, его
+            # установщик докачивает их на роутере, а здесь они встроены в образ.
+            echo 'CONFIG_PACKAGE_luci-app-re-homeproxy=y' >> ./.config
+            echo 'CONFIG_PACKAGE_luci-i18n-re-homeproxy-ru=y' >> ./.config
         
         fi
         
@@ -1116,7 +1171,7 @@ jobs:
         echo "Variant selected: $VARIANT"
         echo "Checking key packages in .config:"
         # Проверяем наличие ключевых пакетов для уверенности
-        grep -E "CONFIG_PACKAGE_(luci-app-homeproxy|sing-box|luci-app-passwall2|luci-app-v2raya|xray-core|luci-app-podkop|luci-app-forkop)=" .config || echo "None found"
+        grep -E "CONFIG_PACKAGE_(luci-app-homeproxy|sing-box|luci-app-passwall2|luci-app-v2raya|xray-core|luci-app-podkop|luci-app-forkop|luci-app-trafira|luci-app-re-homeproxy)=" .config || echo "None found"
         echo "=========================================="
 
     - name: Check sing-box compatibility (homeproxy)
