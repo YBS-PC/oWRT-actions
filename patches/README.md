@@ -142,6 +142,26 @@ forkop, строгую проверку ucode и проверку конфиго
 `setup` предупреждает. Патч не обновляет тест `tests/package_lifecycle.sh`
 форка (тест ждёт ucode в `prerm`); на прошивку это не влияет.
 
+### trafira (`patches/feeds/trafira/`, фид `trafira` → petrouspetr-pixel/trafira)
+
+Применяется, только если в форме выбран вариант `trafira`. trafira —
+продолжение forkop: исправления, которые для forkop дают патчи 001–022, в нём
+уже есть (кроме 016), а «Исключённые устройства» и «Перехватывать DNS
+устройств» (024, 025) заменяет его Alice Mode. Проверено на 2.1.0
+(`b3832a92`): полный набор тестов trafira проходит (кроме
+`installer_owner`, который падает и без патчей — зависит от окружения).
+
+| Патч | Что делает |
+|---|---|
+| 001 | `components/action.uc`: `ensure_install_storage()` вызывала `sing_box_runtime_output()` и `action_fail()`, объявленные ниже по файлу. В ucode это ошибка выполнения `left-hand side is not a function`: установка и обновление sing-box со вкладки «Компоненты» падали до проверки места, а нехватка места вместо сообщения роняла скрипт. Функции перенесены выше, логика не менялась. Тест форка `component_install_storage.sh` проверяет тело функции через node и такую ошибку не видит |
+| 002 | правило fw4 для TPROXY в образе прошивки: перенос патча 016 forkop. trafira создаёт include fw4 (`meta mark … accept` в `input`) только в `postinst`, а тот при сборке образа (`IPKG_INSTROOT`) сразу выходит — в прошивке правила не было, и зоны с `input=REJECT` (гостевые) резали TPROXY. Добавлен `/etc/uci-defaults/60_trafira-firewall` (`trafira package_firewall`), сбой перезагрузки firewall больше не роняет установку пакета |
+| 003 | «Исключить BitTorrent» (`settings.exclude_bittorrent`, по умолчанию выкл.): перенос патча 023 forkop. Трафик BitTorrent/DHT после sniff уходит в `bypass-out` раньше правил секций; опция входит в сигнатуру конфига sing-box. Оба русских каталога (`po/ru` и `fe-app-trafira/locales`) обновлены одинаково, сгенерированные `calls.json` и `.pot` не трогаются — в пакет идёт только `po/ru`. Проверено `tests/exclude_bittorrent.sh` и `sing-box check` (1.12.22, 1.14.2, 1.14.1-extended) |
+
+Без патчей (`apply_patches=false`) trafira собирается, но падает установщик
+sing-box в LuCI (001), а в образе нет правила fw4 для TPROXY (002) — job
+`setup` предупреждает. Версия
+пакета — последний тег `x.y.z` репозитория (`TRAFIRA_VERSION`, part2).
+
 ### podkop (`patches/feeds/podkop/`, фид `podkop` → itdoginfo/podkop)
 
 Применяется в варианте `podkop`. Написаны для podkop `main` (0.7.22,
@@ -165,7 +185,7 @@ check` 1.12.22 и 1.14.2 для конфига с новыми правилам�
 ## Патчи пакетов: `patches/packages/<пакет>/*.patch`
 
 Для пакетов, которых нет в фидах и которые `WRT-part3.sh` клонирует в
-`package/` (сейчас это HomeProxy из `immortalwrt/homeproxy`). На этапе патчей
+`package/` (сейчас это HomeProxy из `immortalwrt/homeproxy` и Re:HomeProxy из `1andrevich/homeproxy-hiddify`). На этапе патчей
 фидов их ещё нет, поэтому применяются они в part3, сразу после клонирования.
 Имя подпапки — имя каталога пакета. Каталог ищется в `package/<пакет>`, затем
 в фидах: на ImmortalWrt HomeProxy лежит в `feeds/luci/applications/`, и
@@ -231,6 +251,25 @@ check` 1.12.22 и 1.14.2 для конфига с новыми правилам�
 | `004-sing-box-1.13-sniff-rule.patch` | Поддержка sing-box 1.13+ (в т.ч. 1.14 и extended). 1.13 удалил поля `sniff`/`sniff_override_destination` у входящих подключений, и любой конфиг клиента отвергался. Генератор спрашивает версию у `/usr/bin/sing-box`: ниже 1.13 конфиг прежний (байт в байт), с 1.13 или при неизвестной версии — правило маршрута `action: sniff` сразу после перехвата DNS. «Override destination» на 1.13+ не действует (в новой схеме такой возможности нет). Проверено на 1.12.25, 1.13.21, 1.14.2 (`check` + `run`, режимы custom, основной узел, URLTest; маршрутизация по найденному sniff домену). На 1.14 остаются только предупреждения об устаревании (удаление — в 1.16): `independent_cache`, `store_rdrc`, адресные фильтры и `strategy` в DNS-правилах режима «bypass mainland China». |
 | `005-dev-typo-fixes.patch` | Три коммита из ветки `dev` immortalwrt/homeproxy (автор сохранён): ссылки подписок `socks5://` не распознавались (`socsk5` в коде), опечатки в LuCI. В `master` homeproxy уже есть (на OpenWrt — «уже есть»), в фиде luci ImmortalWrt — ещё нет, там нужен. |
 | `006-sing-box-1.14-dns-cache.patch` | Опции кэша DNS для sing-box 1.14+ (продолжение 004, без него не применяется). 1.14 объявил устаревшими `dns.independent_cache` (убран без замены) и `cache_file.store_rdrc` (заменён на `store_dns`, который 1.12/1.13 отвергают). Ниже 1.14 конфиг прежний; с 1.14 флаг «Store RDRC» пишется как `store_dns`, `independent_cache` не пишется; при неизвестной версии не пишется ни то, ни другое. Убирает предупреждения проверки совместимости `store_rdrc`/`independent_cache ... deprecated in sing-box 1.14.0`. |
+
+### Re:HomeProxy (`patches/packages/luci-app-re-homeproxy/`)
+
+Вариант `rehomeproxy`: `WRT-part3.sh` клонирует `1andrevich/homeproxy-hiddify`
+(master) в `package/luci-app-re-homeproxy`, патчи ложатся туда. Проверено
+02.10.2026 на master `a9e3596` (строгий режим, повторный прогон — «уже есть»)
+и на ветке `dev` `008e278` (001, 002 применяются, 003 «уже есть»).
+Генератор форка запускался в песочнице ucode на конфиге по умолчанию в режимах
+`proxy_banned_ru`, `global`, `bypass_cn`, `bypass_ir`, `custom`; результат
+проверялся `sing-box run` на 1.12.22, 1.14.2 и 1.14.1-extended-2.7.2.
+
+| Файл | Что исправляет |
+|---|---|
+| `001-direct-out-routing-mark.patch` | Форк перенёс метку `self_mark` из outbound `direct-out` в `route.default_mark`, и `direct-out` стал пустым. Обычный sing-box (1.12+, в том числе пакет из фида и sing-box-tiny) запрещает такой outbound как detour DNS-сервера и не запускается ни в одном режиме, включая режим по умолчанию: `detour to an empty direct outbound makes no sense`. sing-box-extended и hiddify-core это пропускают. `routing_mark` на `direct-out` возвращён (как в ImmortalWrt homeproxy), значение то же — маршрутизация не меняется. |
+| `002-dns-default-server.patch` | Та же ошибка, что в homeproxy (там патч 002): DNS-сервер по умолчанию `local-dns` не существует, режим custom не запускается (`default DNS server not found: cfg-local-dns-dns`). Исправлены `/etc/config/homeproxy` и его копия `/usr/share/homeproxy/homeproxy.default` (из неё init восстанавливает пустой конфиг), существующие конфиги мигрируют. |
+| `003-dev-utls-and-null-fields.patch` | Коммит `008e278` из ветки `dev` форка (автор сохранён): uTLS не пишется для hysteria/hysteria2/tuic/naive и транспорта QUIC (иначе ошибки соединения через такой узел, а если через него качаются rule-set — sing-box не стартует), при обновлении подписки поля со значением null удаляются, а не застревают старыми. Когда `dev` попадёт в master, опознается как «уже есть». |
+
+Без патчей (`apply_patches=false`) вариант работает только с `sb=extended` —
+job `setup` об этом предупреждает.
 
 ## Как сделать новый патч
 
