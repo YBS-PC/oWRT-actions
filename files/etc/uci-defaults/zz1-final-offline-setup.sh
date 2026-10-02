@@ -637,35 +637,41 @@ EOF
     patch_check /etc/init.d/adguardhome '--logfile /var/AdGuardHome.log' "adguardhome init"
     # --- Upstream DNS в AGH yaml ------------------------------------------
     # Зависит от варианта сборки:
-    #   homeproxy  → 127.0.0.1:5333 (DNS-порт sing-box homeproxy)
-    #   forkop     → 127.0.0.42:53  (DNS inbound forkop sing-box)
+    #   homeproxy       → 127.0.0.1:5333 (DNS-порт sing-box homeproxy)
+    #   forkop, podkop  → 127.0.0.42:53  (DNS inbound их sing-box)
     # Правим yaml напрямую: AGH хранит upstream только там, не в UCI.
     # AGH должен быть остановлен в этот момент (выше есть stop).
     AGH_YAML="/etc/adguardhome/adguardhome.yaml"
     if [ -f "$AGH_YAML" ]; then
-        if [ "$CURRENT_VARIANT" = "forkop" ]; then
-            # forkop: убираем ссылку на homeproxy sing-box, ставим forkop sing-box
+        if [ "$CURRENT_VARIANT" = "forkop" ] || [ "$CURRENT_VARIANT" = "podkop" ]; then
+            # Убираем ссылку на homeproxy sing-box, ставим sing-box forkop/podkop
             sed -i 's|127\.0\.0\.1:5333|127.0.0.42:53|g' "$AGH_YAML"
-            # forkop управляет dnsmasq сам через dont_touch_dhcp,
-            # но нам нужно чтобы он не трогал: выставляем флаг
-            uci -q set forkop.settings.dont_touch_dhcp='1' 2>/dev/null \
-                && uci commit forkop 2>/dev/null \
-                && log_ok "forkop: dont_touch_dhcp=1 (AGH остаётся хозяином на :53)"
-            # Аналог dns_hijacked='1' для homeproxy (патч 025): forkop не
-            # перехватывает DNS исключённых устройств и устройств из фильтров
-            # секций, поэтому AGH видит каждого клиента. Их трафик к FakeIP
-            # forkop всё равно направляет правильно (исключённые — напрямую).
-            # Без патча 025 опция ни на что не влияет.
-            uci -q set forkop.settings.intercept_device_dns='0' 2>/dev/null \
-                && uci commit forkop 2>/dev/null \
-                && log_ok "forkop: intercept_device_dns=0 (DNS всех клиентов идёт через AGH)"
-            log_ok "AGH upstream → forkop sing-box (127.0.0.42:53)"
+            # Оба по умолчанию сами перенастраивают dnsmasq на 127.0.0.42
+            # (dont_touch_dhcp=0). Хозяин :53 — AGH, dnsmasq на :54 — поэтому
+            # выставляем флаг, чтобы они dnsmasq не трогали.
+            uci -q set "$CURRENT_VARIANT".settings.dont_touch_dhcp='1' 2>/dev/null \
+                && uci commit "$CURRENT_VARIANT" 2>/dev/null \
+                && log_ok "$CURRENT_VARIANT: dont_touch_dhcp=1 (AGH остаётся хозяином на :53)"
+            if [ "$CURRENT_VARIANT" = "forkop" ]; then
+                # Аналог dns_hijacked='1' для homeproxy (патч 025): forkop не
+                # перехватывает DNS исключённых устройств и устройств из фильтров
+                # секций, поэтому AGH видит каждого клиента. Их трафик к FakeIP
+                # forkop всё равно направляет правильно (исключённые — напрямую).
+                # Без патча 025 опция ни на что не влияет.
+                uci -q set forkop.settings.intercept_device_dns='0' 2>/dev/null \
+                    && uci commit forkop 2>/dev/null \
+                    && log_ok "forkop: intercept_device_dns=0 (DNS всех клиентов идёт через AGH)"
+            fi
+            log_ok "AGH upstream → $CURRENT_VARIANT sing-box (127.0.0.42:53)"
         else
             # homeproxy (и все остальные варианты с AGH): homeproxy sing-box DNS
             sed -i 's|127\.0\.0\.42:53|127.0.0.1:5333|g' "$AGH_YAML"
             log_ok "AGH upstream → homeproxy sing-box (127.0.0.1:5333)"
         fi
-        _AGH_EXPECTED="$( [ "$CURRENT_VARIANT" = "forkop" ] && echo '127.0.0.42:53' || echo '127.0.0.1:5333' )"
+        case "$CURRENT_VARIANT" in
+            forkop|podkop) _AGH_EXPECTED='127.0.0.42:53' ;;
+            *)             _AGH_EXPECTED='127.0.0.1:5333' ;;
+        esac
         patch_check "$AGH_YAML" "$_AGH_EXPECTED" "adguardhome.yaml upstream DNS"
     else
         log_info "AGH yaml не найден ($AGH_YAML) — upstream DNS не настроен автоматически"
@@ -713,19 +719,20 @@ if ls "$LUCI_CTRL_SRC"/*.lua >/dev/null 2>&1; then
     fi
 fi
 
-# forkop: NTP мимо прокси. Штатная опция вставляет «udp dport 123 return» в
-# цепочки mangle (клиенты) и mangle_output (сам роутер) таблицы ForkopTable.
+# forkop/podkop: NTP мимо прокси. Штатная опция вставляет «udp dport 123
+# return» в цепочку mangle их nft-таблицы (у forkop и в mangle_output).
 # Иначе NTP к адресам из списков прокси уходил бы в TPROXY — та же проблема,
 # что была с ntpd на homeproxy.
-if [ -f /etc/config/forkop ]; then
-    if [ "$(uci -q get forkop.settings.exclude_ntp)" = "1" ]; then
-        log_ok "forkop: exclude_ntp уже включён"
-    elif uci -q set forkop.settings.exclude_ntp='1' && uci commit forkop; then
-        log_ok "forkop: exclude_ntp=1 (NTP роутера и клиентов мимо прокси)"
+for _pk in forkop podkop; do
+    [ -f "/etc/config/$_pk" ] || continue
+    if [ "$(uci -q get "$_pk".settings.exclude_ntp)" = "1" ]; then
+        log_ok "$_pk: exclude_ntp уже включён"
+    elif uci -q set "$_pk".settings.exclude_ntp='1' && uci commit "$_pk"; then
+        log_ok "$_pk: exclude_ntp=1 (NTP мимо прокси)"
     else
-        log_err "forkop: не удалось выставить exclude_ntp"
+        log_err "$_pk: не удалось выставить exclude_ntp"
     fi
-fi
+done
 
 # SQM (исправленный патч)
 if [ -f "/usr/lib/sqm/run.sh" ]; then
