@@ -1,0 +1,258 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 2 Oct 2026 21:24:09 +0000
+Subject: [PATCH 3/3] Add Exclude BitTorrent setting
+
+Port of the forkop setting (forkop #72, also in Gavr1024/forkop-mod).
+
+New settings.exclude_bittorrent (default off). When enabled, sniffed
+BitTorrent/DHT traffic is routed to bypass-out right after sniffing and
+before any section rule, so torrent clients keep working without being
+proxied. HTTP/HTTPS trackers still follow section rules. The option is
+part of the sing-box runtime signature, so toggling it regenerates the
+config.
+
+Both Russian catalogs (po/ru and fe-app-trafira/locales) get the new
+strings and stay identical; generated calls.json and .pot templates are
+not touched (the LuCI package only builds po/ru).
+
+Checked with sing-box 1.12.22, 1.14.2 and 1.14.1-extended
+(`sing-box check`, tests/exclude_bittorrent.sh).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
+---
+ fe-app-trafira/locales/trafira.ru.po          |  6 ++
+ .../resources/view/trafira/settings.js        | 11 +++
+ luci-app-trafira/po/ru/trafira.po             |  6 ++
+ tests/exclude_bittorrent.sh                   | 80 +++++++++++++++++++
+ tests/runtime_state_predicates.sh             |  3 +
+ trafira/files/etc/config/trafira              |  1 +
+ trafira/files/usr/lib/service/state.uc        |  1 +
+ trafira/files/usr/lib/singbox/route.uc        |  8 ++
+ 8 files changed, 116 insertions(+)
+ create mode 100755 tests/exclude_bittorrent.sh
+
+diff --git a/fe-app-trafira/locales/trafira.ru.po b/fe-app-trafira/locales/trafira.ru.po
+index b71b20c6..2dddd20f 100644
+--- a/fe-app-trafira/locales/trafira.ru.po
++++ b/fe-app-trafira/locales/trafira.ru.po
+@@ -731,6 +731,9 @@ msgstr "HWID, который будет отправляться при запр
+ msgid "Enter the subscription URL"
+ msgstr "Введите URL подписки"
+ 
++msgid "Exclude BitTorrent"
++msgstr "Исключить BitTorrent"
++
+ msgid "Exclude by proxy parameters"
+ msgstr "Исключить по параметрам прокси"
+ 
+@@ -1808,6 +1811,9 @@ msgstr "Выбранная секция"
+ msgid "Selector and URLTest outbounds must contain a non-empty outbounds array"
+ msgstr "Selector и URLTest outbound должны содержать непустой массив outbounds"
+ 
++msgid "Send BitTorrent and DHT traffic directly, bypassing Trafira. Trackers over HTTP/HTTPS may still follow section rules."
++msgstr "Отправлять трафик BitTorrent и DHT напрямую, в обход Trafira. HTTP/HTTPS-трекеры могут по-прежнему идти по правилам секции."
++
+ msgid "Server"
+ msgstr "Сервер"
+ 
+diff --git a/luci-app-trafira/htdocs/luci-static/resources/view/trafira/settings.js b/luci-app-trafira/htdocs/luci-static/resources/view/trafira/settings.js
+index 4fb29fdb..4693c204 100644
+--- a/luci-app-trafira/htdocs/luci-static/resources/view/trafira/settings.js
++++ b/luci-app-trafira/htdocs/luci-static/resources/view/trafira/settings.js
+@@ -526,6 +526,17 @@ function createSettingsContent(section, capabilities) {
+   o.default = "0";
+   o.rmempty = false;
+ 
++  o = section.option(
++    form.Flag,
++    "exclude_bittorrent",
++    _("Exclude BitTorrent"),
++    _(
++      "Send BitTorrent and DHT traffic directly, bypassing Trafira. Trackers over HTTP/HTTPS may still follow section rules.",
++    ),
++  );
++  o.default = "0";
++  o.rmempty = false;
++
+   o = section.option(
+     form.Flag,
+     "list_update_enabled",
+diff --git a/luci-app-trafira/po/ru/trafira.po b/luci-app-trafira/po/ru/trafira.po
+index b71b20c6..2dddd20f 100644
+--- a/luci-app-trafira/po/ru/trafira.po
++++ b/luci-app-trafira/po/ru/trafira.po
+@@ -731,6 +731,9 @@ msgstr "HWID, который будет отправляться при запр
+ msgid "Enter the subscription URL"
+ msgstr "Введите URL подписки"
+ 
++msgid "Exclude BitTorrent"
++msgstr "Исключить BitTorrent"
++
+ msgid "Exclude by proxy parameters"
+ msgstr "Исключить по параметрам прокси"
+ 
+@@ -1808,6 +1811,9 @@ msgstr "Выбранная секция"
+ msgid "Selector and URLTest outbounds must contain a non-empty outbounds array"
+ msgstr "Selector и URLTest outbound должны содержать непустой массив outbounds"
+ 
++msgid "Send BitTorrent and DHT traffic directly, bypassing Trafira. Trackers over HTTP/HTTPS may still follow section rules."
++msgstr "Отправлять трафик BitTorrent и DHT напрямую, в обход Trafira. HTTP/HTTPS-трекеры могут по-прежнему идти по правилам секции."
++
+ msgid "Server"
+ msgstr "Сервер"
+ 
+diff --git a/tests/exclude_bittorrent.sh b/tests/exclude_bittorrent.sh
+new file mode 100755
+index 00000000..25abdfdf
+--- /dev/null
++++ b/tests/exclude_bittorrent.sh
+@@ -0,0 +1,80 @@
++#!/usr/bin/env bash
++set -eo pipefail
++
++ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
++TRAFIRA_LIB="$ROOT_DIR/trafira/files/usr/lib"
++GENERATOR="$TRAFIRA_LIB/singbox/generator.uc"
++WORK_DIR="$(mktemp -d)"
++
++cleanup() {
++  rm -rf "$WORK_DIR"
++}
++trap cleanup EXIT
++
++fail() {
++  printf 'FAIL: %s\n' "$1" >&2
++  exit 1
++}
++
++generate() {
++  local flag="$1" output="$2"
++  cat >"$WORK_DIR/fixture-$flag.json" <<JSON
++{
++  "settings": {
++    ".name": "settings",
++    ".type": "settings",
++    "config_path": "/tmp/sing-box/config.json",
++    "dns_server": "1.1.1.1",
++    "bootstrap_dns_server": "1.1.1.1",
++    "service_listen_address": "127.0.0.1",
++    "exclude_bittorrent": "$flag"
++  },
++  "section": [
++    {
++      ".name": "proxy",
++      ".type": "section",
++      "enabled": "1",
++      "action": "outbound",
++      "outbound_json": "{\"type\":\"socks\",\"server\":\"127.0.0.1\",\"server_port\":1080,\"version\":\"5\"}",
++      "domain_suffix": [ "example.org" ]
++    }
++  ]
++}
++JSON
++  mkdir -p "$output.section-cache" "$output.rulesets"
++  ucode -L "$TRAFIRA_LIB" "$GENERATOR" generate-config-fixture \
++    "$WORK_DIR/fixture-$flag.json" "$output" "127.0.0.1"
++}
++
++check() {
++  ucode -e '
++let config = json(require("fs").readfile(ARGV[0]));
++let rules = config.route.rules;
++let torrent = null, sniff = null, section = null;
++for (let i = 0; i < length(rules); i++) {
++    if (rules[i].action == "sniff") sniff = i;
++    if (rules[i].protocol == "bittorrent") torrent = i;
++    if (section == null && rules[i].outbound == "proxy-out") section = i;
++}
++if (ARGV[1] == "1") {
++    if (torrent == null || rules[torrent].outbound != "bypass-out")
++        die("BitTorrent must be routed to bypass-out\n");
++    if (!(sniff < torrent && torrent < section))
++        die("BitTorrent rule must follow sniffing and precede section rules\n");
++}
++else if (torrent != null)
++    die("BitTorrent rule must be absent when the option is off\n");
++' "$1" "$2"
++}
++
++generate 1 "$WORK_DIR/on.json"
++check "$WORK_DIR/on.json" 1 || fail "exclude_bittorrent=1"
++generate 0 "$WORK_DIR/off.json"
++check "$WORK_DIR/off.json" 0 || fail "exclude_bittorrent=0"
++
++for bin in ${TRAFIRA_TEST_SING_BOX_112:-} ${TRAFIRA_TEST_SING_BOX_113:-} ${TRAFIRA_TEST_SING_BOX_114:-} ${TRAFIRA_TEST_SING_BOX_EXTENDED:-}; do
++  [ -x "$bin" ] || continue
++  "$bin" check -c "$WORK_DIR/on.json" || fail "sing-box check rejected the BitTorrent rule ($bin)"
++done
++
++printf 'BitTorrent exclusion checks passed\n'
+diff --git a/tests/runtime_state_predicates.sh b/tests/runtime_state_predicates.sh
+index 8acc40d0..8dc4b297 100644
+--- a/tests/runtime_state_predicates.sh
++++ b/tests/runtime_state_predicates.sh
+@@ -419,6 +419,7 @@ cat >"$WORK_DIR/sing-box-signature.json" <<'JSON'
+     "dns_rewrite_ttl": "120",
+     "output_network_interface": "wan",
+     "disable_quic": "on",
++    "exclude_bittorrent": "1",
+     "list_update_enabled": "1",
+     "update_interval": "2h",
+     "cache_path": "/tmp/cache.db",
+@@ -586,6 +587,8 @@ prefer_ipv6
+ wan
+ [settings.disable_quic]
+ 1
++[settings.exclude_bittorrent]
++1
+ [settings.update_interval]
+ 2h
+ [settings.cache_path]
+diff --git a/trafira/files/etc/config/trafira b/trafira/files/etc/config/trafira
+index 452dd5a1..4da60a4d 100644
+--- a/trafira/files/etc/config/trafira
++++ b/trafira/files/etc/config/trafira
+@@ -29,6 +29,7 @@ config settings 'settings'
+         #option badwan_reload_delay '2000'
+         option enable_yacd '0'
+         option disable_quic '0'
++        option exclude_bittorrent '0'
+         option list_update_enabled '1'
+         option update_interval '1d'
+         option component_update_check_enabled '1'
+diff --git a/trafira/files/usr/lib/service/state.uc b/trafira/files/usr/lib/service/state.uc
+index 8c4ce963..777826ad 100644
+--- a/trafira/files/usr/lib/service/state.uc
++++ b/trafira/files/usr/lib/service/state.uc
+@@ -1422,6 +1422,7 @@ function sing_box_signature_body(settings, sections, servers, mwan3_active) {
+     body = signature_add_value(body, "settings.dns_rewrite_ttl", option(settings, "dns_rewrite_ttl", "60"));
+     body = signature_add_value(body, "settings.output_network_interface", option(settings, "output_network_interface", ""));
+     body = signature_add_value(body, "settings.disable_quic", bool_option_value(settings, "disable_quic", false));
++    body = signature_add_value(body, "settings.exclude_bittorrent", bool_option_value(settings, "exclude_bittorrent", false));
+     if (sing_box_signature_has_remote_ruleset_sources(sections))
+         body = signature_add_value(body, "settings.update_interval", settings_update_interval(settings));
+     body = signature_add_value(body, "settings.cache_path", option(settings, "cache_path", "/tmp/sing-box/cache.db"));
+diff --git a/trafira/files/usr/lib/singbox/route.uc b/trafira/files/usr/lib/singbox/route.uc
+index c67212db..668a475f 100644
+--- a/trafira/files/usr/lib/singbox/route.uc
++++ b/trafira/files/usr/lib/singbox/route.uc
+@@ -45,6 +45,14 @@ function config(settings, runtime) {
+     if (bool_option(settings, "disable_quic", false))
+         push(result.rules, { action: "reject", inbound: runtime_constants.TPROXY_INBOUND_TAG, protocol: "quic" });
+ 
++    // Sniffed BitTorrent/DHT goes direct before any section rule (#72).
++    if (bool_option(settings, "exclude_bittorrent", false))
++        push(result.rules, {
++            action: "route",
++            protocol: "bittorrent",
++            outbound: runtime_constants.BYPASS_OUTBOUND_TAG
++        });
++
+     return result;
+ }
+ 
+-- 
+2.43.0
+

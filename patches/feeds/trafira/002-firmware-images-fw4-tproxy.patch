@@ -1,0 +1,148 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 2 Oct 2026 21:30:15 +0000
+Subject: [PATCH 2/3] Install the fw4 TPROXY input include on firmware images
+ too
+
+Port of the forkop fix for #84 (forkop PR #107, second part).
+
+The fw4 include that lets TPROXY-marked input through the firewall is
+only created from package_postinst, which returns early when
+IPKG_INSTROOT is set. Packages baked into a firmware image
+(buildroot/ImageBuilder) therefore never got the rule, and zones with
+input=REJECT (guest networks) kept dropping TPROXY traffic.
+
+- Ship /etc/uci-defaults/60_trafira-firewall, which runs
+  `service/package.uc ensure-tproxy-firewall` on first boot (and after a
+  regular install via default_postinst). It is idempotent.
+- Do not fail the whole package install when the firewall reload
+  fails; log it and let the uci-defaults script retry.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
+---
+ .github/workflows/shellcheck.yml                   | 1 +
+ build.sh                                           | 4 +++-
+ tests/shell_inventory.sh                           | 8 ++++++++
+ trafira/Makefile                                   | 3 +++
+ trafira/files/etc/uci-defaults/60_trafira-firewall | 6 ++++++
+ trafira/files/usr/bin/trafira                      | 1 +
+ trafira/files/usr/lib/service/package.uc           | 4 +++-
+ 7 files changed, 25 insertions(+), 2 deletions(-)
+ create mode 100644 trafira/files/etc/uci-defaults/60_trafira-firewall
+
+diff --git a/.github/workflows/shellcheck.yml b/.github/workflows/shellcheck.yml
+index fbbb8cd9..9666e471 100644
+--- a/.github/workflows/shellcheck.yml
++++ b/.github/workflows/shellcheck.yml
+@@ -49,6 +49,7 @@ jobs:
+             find . -type f \
+               \( -name '*.sh' -o -path './build.sh' -o -path './install.sh' \
+                  -o -path './trafira/files/etc/init.d/*' \
++                 -o -path './trafira/files/etc/uci-defaults/*' \
+                  -o -path './luci-app-trafira/root/etc/uci-defaults/*' \) \
+               -print0
+           )
+diff --git a/build.sh b/build.sh
+index 868a2d0a..28e56bb4 100755
+--- a/build.sh
++++ b/build.sh
+@@ -171,6 +171,8 @@ build_backend_root() {
+   make_dir "$output_root/usr/lib/trafira"
+ 
+   install -m 0755 "$ROOT_DIR/trafira/files/etc/init.d/trafira" "$output_root/etc/init.d/trafira"
++  make_dir "$output_root/etc/uci-defaults"
++  install -m 0755 "$ROOT_DIR/trafira/files/etc/uci-defaults/60_trafira-firewall" "$output_root/etc/uci-defaults/60_trafira-firewall"
+   install -m 0644 "$ROOT_DIR/trafira/files/etc/config/trafira" "$output_root/etc/config/trafira"
+   install -m 0755 "$ROOT_DIR/trafira/files/usr/bin/trafira" "$output_root/usr/bin/trafira"
+   cp -a "$ROOT_DIR/trafira/files/usr/lib/." "$output_root/usr/lib/trafira/"
+@@ -179,7 +181,7 @@ build_backend_root() {
+     "$output_root/usr/lib/trafira/core/constants.uc"
+ 
+   normalize_package_root_modes "$output_root"
+-  chmod 0755 "$output_root/etc/init.d/trafira" "$output_root/usr/bin/trafira"
++  chmod 0755 "$output_root/etc/init.d/trafira" "$output_root/usr/bin/trafira" "$output_root/etc/uci-defaults/60_trafira-firewall"
+ }
+ 
+ build_app_root() {
+diff --git a/tests/shell_inventory.sh b/tests/shell_inventory.sh
+index c5cd46b7..63be4f0c 100644
+--- a/tests/shell_inventory.sh
++++ b/tests/shell_inventory.sh
+@@ -44,6 +44,7 @@ shell_scripts="$(
+ expected_shell_scripts="$(
+   printf '%s\n' \
+     'luci-app-trafira/root/etc/uci-defaults/50_luci-trafira' \
++    'trafira/files/etc/uci-defaults/60_trafira-firewall' \
+     'trafira/files/etc/init.d/trafira' |
+     LC_ALL=C sort
+ )"
+@@ -87,4 +88,11 @@ if grep -n -E '(^|[^[:alnum:]_])(uci|rm|logger|rpcd|killall|jsonfilter|config_lo
+   fail "LuCI uci-defaults must not own cache, rpcd, logging, or UCI logic"
+ fi
+ 
++TRAFIRA_FIREWALL_DEFAULTS="$ROOT_DIR/trafira/files/etc/uci-defaults/60_trafira-firewall"
++grep -Fq '/usr/bin/trafira package_firewall' "$TRAFIRA_FIREWALL_DEFAULTS" ||
++  fail "backend uci-defaults must delegate firewall setup to ucode"
++if grep -n -E '(^|[^[:alnum:]_])(uci|nft|fw4|rm|logger|ucode)([[:space:]]|$)' "$TRAFIRA_FIREWALL_DEFAULTS" >/dev/null 2>&1; then
++  fail "backend uci-defaults must not own firewall or UCI logic"
++fi
++
+ printf 'shell inventory checks passed\n'
+diff --git a/trafira/Makefile b/trafira/Makefile
+index 10335d00..c1faa082 100644
+--- a/trafira/Makefile
++++ b/trafira/Makefile
+@@ -64,6 +64,9 @@ define Package/trafira/install
+ 	$(INSTALL_DIR) $(1)/etc/init.d
+ 	$(INSTALL_BIN) ./files/etc/init.d/trafira $(1)/etc/init.d/trafira
+ 
++	$(INSTALL_DIR) $(1)/etc/uci-defaults
++	$(INSTALL_BIN) ./files/etc/uci-defaults/60_trafira-firewall $(1)/etc/uci-defaults/60_trafira-firewall
++
+ 	$(INSTALL_DIR) $(1)/etc/config
+ 	$(INSTALL_CONF) ./files/etc/config/trafira $(1)/etc/config/trafira
+ 
+diff --git a/trafira/files/etc/uci-defaults/60_trafira-firewall b/trafira/files/etc/uci-defaults/60_trafira-firewall
+new file mode 100644
+index 00000000..598d242d
+--- /dev/null
++++ b/trafira/files/etc/uci-defaults/60_trafira-firewall
+@@ -0,0 +1,6 @@
++#!/bin/sh
++# Allow TPROXY-marked input through the firewall (#84). package_postinst does this
++# on a live install; firmware images skip postinst and run this instead.
++
++/usr/bin/trafira package_firewall >/dev/null 2>&1 || true
++exit 0
+diff --git a/trafira/files/usr/bin/trafira b/trafira/files/usr/bin/trafira
+index 94c9db53..060e6fb9 100755
+--- a/trafira/files/usr/bin/trafira
++++ b/trafira/files/usr/bin/trafira
+@@ -195,6 +195,7 @@ function command_spec(command) {
+         validate_byedpi_strategy_json: [ "providers/byedpi/validator.uc", "validate-json", 1 ],
+         package_prerm: [ "service/package.uc", "prerm", 1 ],
+         package_postinst: [ "service/package.uc", "postinst", 0 ],
++        package_firewall: [ "service/package.uc", "ensure-tproxy-firewall", 0 ],
+         luci_postinst: [ "service/package.uc", "luci-postinst", 0 ]
+     };
+ 
+diff --git a/trafira/files/usr/lib/service/package.uc b/trafira/files/usr/lib/service/package.uc
+index 104b50f7..4b153a26 100644
+--- a/trafira/files/usr/lib/service/package.uc
++++ b/trafira/files/usr/lib/service/package.uc
+@@ -258,8 +258,10 @@ function postinst_restore() {
+     if (env("IPKG_INSTROOT", "") != "")
+         return true;
+ 
++    // A firewall reload failure must not fail the package install; the
++    // include is retried by /etc/uci-defaults/60_trafira-firewall.
+     if (!ensure_tproxy_firewall_include())
+-        return false;
++        warn("trafira: could not install the fw4 TPROXY input include\n");
+ 
+     if (!path_exists(PACKAGE_UPGRADE_STATE))
+         return true;
+-- 
+2.43.0
+
