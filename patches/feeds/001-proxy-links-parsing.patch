@@ -1,0 +1,154 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 3 Oct 2026 08:34:51 +0000
+Subject: [PATCH 1/2] netshift: proxy links - socks5 credentials,
+ httpupgrade/http, empty type/security
+
+- socks5: user and password were split AFTER percent-decoding, so an
+  escaped ':' moved into the wrong field ('us%3Aer:p%3Aass' became user
+  'us', password 'er:p:ass'). Split on the raw ':' first, then decode
+  each half.
+- VLESS/Trojan: httpupgrade and http (h2) transports. LuCI accepts them,
+  but the backend logged "Unknown transport" and kept the outbound
+  without its transport - a node that validates but never connects.
+  sing_box_cm_set_httpupgrade_transport_for_outbound is new; http reuses
+  the existing VMess helper.
+- kcp/mkcp/quic (also accepted by LuCI, unknown to sing-box): the link is
+  skipped with a clear error, like an XHTTP link on stock sing-box.
+- No "type" means tcp and no "security" means none (as in Xray): the
+  config was already right, but every such link logged an error.
+
+Checked with busybox ash + jq and `sing-box check` (1.12.22, 1.14.2) on
+VLESS/Trojan/Hysteria2/SS/SOCKS links with these cases.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
+---
+ .../files/usr/lib/sing_box_config_facade.sh   | 40 ++++++++++++++++---
+ .../files/usr/lib/sing_box_config_manager.sh  | 37 +++++++++++++++++
+ 2 files changed, 72 insertions(+), 5 deletions(-)
+
+diff --git a/netshift/files/usr/lib/sing_box_config_facade.sh b/netshift/files/usr/lib/sing_box_config_facade.sh
+index a841a80..26a901d 100644
+--- a/netshift/files/usr/lib/sing_box_config_facade.sh
++++ b/netshift/files/usr/lib/sing_box_config_facade.sh
+@@ -99,10 +99,14 @@ sing_box_cf_add_proxy_outbound() {
+         port="$url_port"
+         version="${scheme#socks}"
+         if [ "$scheme" = "socks5" ]; then
+-            userinfo="$url_userinfo"
++            # Split on the RAW ':' first, then decode each half: an escaped
++            # '%3A' belongs to the username or the password. Splitting the
++            # already decoded url_userinfo moved it into the wrong field
++            # ('us%3Aer:p%3Aass' became user 'us', password 'er:p:ass').
++            userinfo=$(url_get_userinfo "$url")
+             if [ -n "$userinfo" ]; then
+-                username="${userinfo%%:*}"
+-                password="${userinfo#*:}"
++                username=$(url_decode_component "${userinfo%%:*}")
++                password=$(url_decode_component "${userinfo#*:}")
+             fi
+         fi
+         config="$(sing_box_cm_add_socks_outbound \
+@@ -368,7 +372,7 @@ _add_outbound_security() {
+                 "$short_id"
+         )
+         ;;
+-    none) ;;
++    "" | none) ;; # no "security" in the link means no TLS (as in Xray)
+     *)
+         log "Unknown security '$security' detected." "error"
+         ;;
+@@ -397,7 +401,7 @@ _add_outbound_transport() {
+     local transport
+     transport=$(url_get_query_param "$url" "type")
+     case "$transport" in
+-    tcp | raw) ;;
++    "" | tcp | raw) ;; # VLESS/Trojan links without "type" default to TCP
+     ws)
+         local ws_path ws_host ws_early_data
+         ws_path=$(url_get_query_param "$url" "path")
+@@ -438,6 +442,32 @@ _add_outbound_transport() {
+         xhttp_mode=$(url_get_query_param "$url" "mode")
+         config=$(sing_box_cm_set_xhttp_transport_for_outbound "$config" "$outbound_tag" "$xhttp_path" "$xhttp_host" "$xhttp_mode")
+         ;;
++    httpupgrade)
++        local hu_path hu_host
++        hu_path=$(url_get_query_param "$url" "path")
++        hu_host=$(url_get_query_param "$url" "host")
++
++        config=$(
++            sing_box_cm_set_httpupgrade_transport_for_outbound "$config" "$outbound_tag" "$hu_path" "$hu_host"
++        )
++        ;;
++    http | h2)
++        local http_path http_host
++        http_path=$(url_get_query_param "$url" "path")
++        http_host=$(url_get_query_param "$url" "host")
++
++        config=$(
++            sing_box_cm_set_http_transport_for_outbound "$config" "$outbound_tag" "$http_path" "$http_host"
++        )
++        ;;
++    kcp | mkcp | quic)
++        # LuCI accepts these Xray transports, but sing-box has none of them:
++        # drop the link like an XHTTP link on stock sing-box, instead of
++        # keeping a node that validates but can never connect.
++        log "Transport '$transport' is not supported by sing-box; skipping the link. Use a link with tcp, ws, grpc, httpupgrade, http or xhttp transport." "error"
++        echo "$config"
++        return 1
++        ;;
+     *)
+         log "Unknown transport '$transport' detected." "error"
+         ;;
+diff --git a/netshift/files/usr/lib/sing_box_config_manager.sh b/netshift/files/usr/lib/sing_box_config_manager.sh
+index 462058a..717f212 100644
+--- a/netshift/files/usr/lib/sing_box_config_manager.sh
++++ b/netshift/files/usr/lib/sing_box_config_manager.sh
+@@ -963,6 +963,43 @@ sing_box_cm_set_http_transport_for_outbound() {
+         )'
+ }
+ 
++#######################################
++# Set HTTPUpgrade transport settings for an outbound in a sing-box JSON configuration.
++# Arguments:
++#   config: string (JSON), sing-box configuration to modify
++#   tag: string, identifier of the outbound to modify
++#   path: string, HTTP path (optional)
++#   host: string, Host header (optional)
++# Outputs:
++#   Writes updated JSON configuration to stdout
++# Example:
++#   CONFIG=$(sing_box_cm_set_httpupgrade_transport_for_outbound "$CONFIG" "vless-out" "/path" "example.com")
++#######################################
++sing_box_cm_set_httpupgrade_transport_for_outbound() {
++    local config="$1"
++    local tag="$2"
++    local path="$3"
++    local host="$4"
++
++    echo "$config" | jq \
++        --arg tag "$tag" \
++        --arg path "$path" \
++        --arg host "$host" \
++        '.outbounds |= map(
++            if .tag == $tag then
++                . + {
++                    transport: (
++                        { type: "httpupgrade" }
++                        + (if $path != "" then {path: $path} else {} end)
++                        + (if $host != "" then {host: $host} else {} end)
++                    )
++                }
++            else
++                .
++            end
++        )'
++}
++
+ #######################################
+ # Set XHTTP transport settings for an outbound in a sing-box JSON configuration.
+ # Requires sing-box-extended on the router.
+-- 
+2.43.0
+
