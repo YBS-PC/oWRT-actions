@@ -492,7 +492,7 @@ EOF
 fi
 
 # Версия sing-box — вне вариантных блоков: бинарник ставится и в podkop,
-# forkop, trafira, passwall, где homeproxy нет.
+# netshift, forkop, trafira, passwall, где homeproxy нет.
 if [ -x /usr/bin/sing-box ]; then
     SB_version=$(/usr/bin/sing-box version 2>/dev/null | grep -oP -m 1 'v?\K[\d.]+')
     [ -n "$SB_version" ] && log_ok "Версия sing-box: $SB_version" || log_info "sing-box есть, версию определить не удалось"
@@ -646,15 +646,16 @@ EOF
     # --- Upstream DNS в AGH yaml ------------------------------------------
     # Зависит от варианта сборки:
     #   homeproxy       → 127.0.0.1:5333 (DNS-порт sing-box homeproxy)
-    #   forkop, trafira, podkop → 127.0.0.42:53 (DNS inbound их sing-box)
+    #   forkop, trafira, podkop, netshift → 127.0.0.42:53 (DNS inbound их sing-box)
     # Правим yaml напрямую: AGH хранит upstream только там, не в UCI.
     # AGH должен быть остановлен в этот момент (выше есть stop).
     AGH_YAML="/etc/adguardhome/adguardhome.yaml"
     if [ -f "$AGH_YAML" ]; then
-        if [ "$CURRENT_VARIANT" = "forkop" ] || [ "$CURRENT_VARIANT" = "trafira" ] || [ "$CURRENT_VARIANT" = "podkop" ]; then
-            # Убираем ссылку на homeproxy sing-box, ставим sing-box forkop/trafira/podkop
+        case "$CURRENT_VARIANT" in forkop|trafira|podkop|netshift) _SB42=1 ;; *) _SB42=0 ;; esac
+        if [ "$_SB42" = 1 ]; then
+            # Убираем ссылку на homeproxy sing-box, ставим sing-box forkop/trafira/podkop/netshift
             sed -i 's|127\.0\.0\.1:5333|127.0.0.42:53|g' "$AGH_YAML"
-            # Все три по умолчанию сами перенастраивают dnsmasq на 127.0.0.42
+            # Все они по умолчанию сами перенастраивают dnsmasq на 127.0.0.42
             # (dont_touch_dhcp=0). Хозяин :53 — AGH, dnsmasq на :54 — поэтому
             # выставляем флаг, чтобы они dnsmasq не трогали.
             uci -q set "$CURRENT_VARIANT".settings.dont_touch_dhcp='1' 2>/dev/null \
@@ -682,7 +683,7 @@ EOF
             log_ok "AGH upstream → homeproxy sing-box (127.0.0.1:5333)"
         fi
         case "$CURRENT_VARIANT" in
-            forkop|trafira|podkop) _AGH_EXPECTED='127.0.0.42:53' ;;
+            forkop|trafira|podkop|netshift) _AGH_EXPECTED='127.0.0.42:53' ;;
             *)             _AGH_EXPECTED='127.0.0.1:5333' ;;
         esac
         patch_check "$AGH_YAML" "$_AGH_EXPECTED" "adguardhome.yaml upstream DNS"
@@ -732,11 +733,11 @@ if ls "$LUCI_CTRL_SRC"/*.lua >/dev/null 2>&1; then
     fi
 fi
 
-# forkop/trafira/podkop: NTP мимо прокси. Штатная опция вставляет «udp dport
+# forkop/trafira/podkop/netshift: NTP мимо прокси. Штатная опция вставляет «udp dport
 # 123 return» в цепочку mangle их nft-таблицы (у forkop и в mangle_output).
 # Иначе NTP к адресам из списков прокси уходил бы в TPROXY — та же проблема,
 # что была с ntpd на homeproxy.
-for _pk in forkop trafira podkop; do
+for _pk in forkop trafira podkop netshift; do
     [ -f "/etc/config/$_pk" ] || continue
     if [ "$(uci -q get "$_pk".settings.exclude_ntp)" = "1" ]; then
         log_ok "$_pk: exclude_ntp уже включён"
