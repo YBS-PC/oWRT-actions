@@ -10,11 +10,13 @@ echo ">>>>>>>>> WRT-part2 start. Использование: после feeds up
 # --------------------------------------------------------------------------
 # Версии пакетов, собираемых из git
 #
-# Makefile'ы forkop, trafira, podkop и luci-theme-proton2025 читают версию
+# Makefile'ы forkop, trafira, podkop, netshift и luci-theme-proton2025 читают версию
 # из окружения:
 #   forkop/Makefile       FORKOP_VERSION  -> без неё PKG_VERSION=0.0.0
 #   trafira/Makefile      TRAFIRA_VERSION -> без неё PKG_VERSION=0.0.0
 #   podkop/Makefile       PODKOP_VERSION  -> без неё PKG_VERSION=0.<дата>
+#   netshift/Makefile     NETSHIFT_VERSION -> без неё зашитая 0.9.9 (а у
+#                         luci-app-netshift — 0.<дата>)
 #   proton2025/Makefile   PROTON_VERSION  -> без неё зашитый дефолт 1.4.0
 #
 # Тег тянем через git ls-remote: не требует ни токена, ни клона. Фолбэк —
@@ -108,6 +110,21 @@ if [[ "$VARIANT" == "podkop" ]]; then
     fi
 fi
 
+if [[ "$VARIANT" == "netshift" ]]; then
+    # netshift/Makefile: без NETSHIFT_VERSION — зашитая версия, которая
+    # отстаёт от тегов; luci-app-netshift — 0.<дата сборки>, и проверка
+    # обновлений в LuCI всегда видела бы «новую версию».
+    NETSHIFT_REPO=$(awk '$1 == "src-git" && $2 == "netshift" { print $3; exit }' feeds.conf.default 2>/dev/null | sed 's/[;^].*//')
+    [ -n "$NETSHIFT_REPO" ] || NETSHIFT_REPO="https://github.com/yandexru45/netshift.git"
+    NETSHIFT_VER=$(resolve_latest_tag "$NETSHIFT_REPO")
+    if [ -n "$NETSHIFT_VER" ]; then
+        export_build_var NETSHIFT_VERSION "$NETSHIFT_VER"
+        echo "✓ netshift: $NETSHIFT_VER ($NETSHIFT_REPO)"
+    else
+        echo "⚠ netshift: тег не определён, останется версия из Makefile."
+    fi
+fi
+
 PROTON_VER=$(resolve_latest_tag "https://github.com/ChesterGoodiny/luci-theme-proton2025.git")
 if [ -n "$PROTON_VER" ]; then
     export_build_var PROTON_VERSION "$PROTON_VER"
@@ -124,7 +141,7 @@ fi
 # patches/*.patch (патчи к дереву openwrt). Патчи к фидам лежат в подпапках,
 # чтобы тот шаг их не трогал, и применяются здесь — после feeds update, до
 # feeds install. Имя подпапки = имя фида из feeds.conf (forkop, forkopmod,
-# trafira, podkop).
+# trafira, podkop, netshift).
 # Подпапки фидов, которые не загружены, пропускаются — поэтому патчи для
 # обоих вариантов forkop могут лежать рядом, а применятся только нужные.
 #
