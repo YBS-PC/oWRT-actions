@@ -61,7 +61,7 @@ fi
 # УСЛОВНЫЙ БЛОК: Добавление HomeProxy
 # Если в фидах нет репозитория 'immortalwrt/luci'
 # =========================================================
-if [[ "$VARIANT" != "clear" && "$VARIANT" != "crystal_clear" && "$VARIANT" != "switch" && "$VARIANT" != "passwall" && "$VARIANT" != "xray" && "$VARIANT" != "v2raya" && "$VARIANT" != "podkop" && "$VARIANT" != "forkop" && "$VARIANT" != "trafira" && "$VARIANT" != "rehomeproxy" ]]; then
+if [[ "$VARIANT" != "clear" && "$VARIANT" != "crystal_clear" && "$VARIANT" != "switch" && "$VARIANT" != "passwall" && "$VARIANT" != "xray" && "$VARIANT" != "v2raya" && "$VARIANT" != "podkop" && "$VARIANT" != "netshift" && "$VARIANT" != "forkop" && "$VARIANT" != "trafira" && "$VARIANT" != "rehomeproxy" ]]; then
     if ! grep -q "immortalwrt/luci" feeds.conf.default; then
         echo ">>> [HomeProxy] В фидах НЕ найден ImmortalWrt LuCI. Считаем, что это Official OpenWrt."
         echo ">>> [HomeProxy] Добавляем HomeProxy вручную..."
@@ -275,9 +275,9 @@ echo 'CONFIG_BUSYBOX_DEFAULT_ASH_BUILTIN_TEST=y' >> ./.config
 echo 'CONFIG_BUSYBOX_DEFAULT_FEATURE_FAST_TOP=y' >> ./.config
 echo 'CONFIG_BUSYBOX_DEFAULT_FEATURE_USE_INITTAB=y' >> ./.config
 echo ">>> [Heavy packages] Тяжелые пакеты отключены."
-        # Для сборок с homeproxy и podkop/forkop/trafira ставим Tiny версию sing-box
+        # Для сборок с homeproxy и podkop/netshift/forkop/trafira ставим Tiny версию sing-box
         # (если sing-box не отключён полем sb; job setup тогда пишет sb=tiny).
-        if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "rehomeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "forkop" || "$VARIANT" == "trafira" ]] && [ "${SB_MODE:-feed}" != "no" ]; then
+        if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "rehomeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "netshift" || "$VARIANT" == "forkop" || "$VARIANT" == "trafira" ]] && [ "${SB_MODE:-feed}" != "no" ]; then
             echo ">>> [Heavy packages] Sing-box Tiny for $VARIANT compatibility..."
             sed -i '/sing-box/Id' ./.config
             echo '# CONFIG_PACKAGE_sing-box is not set' >> ./.config
@@ -295,7 +295,7 @@ fi
 # И добавление индивидуальных пакетов
 # =========================================================
 
-# Пакеты SQM. Вырезаются в homeproxy, rehomeproxy, podkop, forkop и trafira.
+# Пакеты SQM. Вырезаются в homeproxy, rehomeproxy, podkop, netshift, forkop и trafira.
 SQM_BLOAT=(
 "sqm"
 "sqm-scripts"
@@ -507,8 +507,8 @@ SWITCH_BLOAT=(
 "${CRYSTAL_CLEAR_BLOAT[@]}"
 )
 
-# --- ЛОГИКА ДЛЯ ВАРИАНТОВ 'homeproxy', 'rehomeproxy', 'podkop', 'forkop', 'trafira' ---
-if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "rehomeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "forkop" || "$VARIANT" == "trafira" ]]; then
+# --- ЛОГИКА ДЛЯ ВАРИАНТОВ 'homeproxy', 'rehomeproxy', 'podkop', 'netshift', 'forkop', 'trafira' ---
+if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "rehomeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "netshift" || "$VARIANT" == "forkop" || "$VARIANT" == "trafira" ]]; then
     echo ">>> [Variant: $VARIANT] Performing cleanup..."
     # Вычищаем пакеты из конфига. В SQM_BLOAT уже перечислены полные имена
     # (luci-app-sqm, luci-i18n-sqm-ru), поэтому префиксы не добавляем.
