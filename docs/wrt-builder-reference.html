@@ -108,6 +108,7 @@
   .steps .badge{font-family:var(--mono); font-size:10.5px; color:var(--green); border:1px solid #2c4a33; border-radius:4px; padding:1px 6px; margin-right:6px; vertical-align:1px}
   .steps li.tag-sw{border-color:#2a3556}
   .steps li.tag-sw::before{color:#9aa6ff; border-color:#2a3556; background:rgba(107,120,255,.1)}
+  .steps.plain li::before{content:"="}
   .steps li.tag-sw .badge{color:#9aa6ff; border-color:#2a3556}
   .steps li.tag-fk{border-color:#4a3a2a}
   .steps li.tag-fk::before{color:var(--amber); border-color:#5a4526; background:rgba(236,184,70,.08)}
@@ -412,8 +413,17 @@
     <div class="note warn">
       <span class="ic">◆</span>
       <p><b>rehomeproxy (Re:HomeProxy): что важно знать.</b> Форк homeproxy от 1andrevich (<code>1andrevich/homeproxy-hiddify</code>, пакет <code>luci-app-re-homeproxy</code>): ядро hiddify-core или sing-box-extended, встроенный обход DPI (ByeDPI и Zapret 2, nfqws2), правила маршрутизации для России, страница «Core &amp; Tools» для установки ядер и компонентов. <code>WRT-part3.sh</code> клонирует ветку master в <code>package/luci-app-re-homeproxy</code> и ставит версию пакета как у сборок автора: <code>&lt;дата коммита&gt;-r&lt;число коммитов&gt;</code>. Пакет ставит файлы по тем же путям, что luci-app-homeproxy (<code>/etc/config/homeproxy</code>, <code>/etc/init.d/homeproxy</code>), поэтому homeproxy в этом варианте вырезается. Ядро — <code>/usr/bin/sing-box</code> из сборки (поле <code>sb</code>, рекомендуется <code>extended</code>); hiddify-core, ByeDPI и Zapret 2 приложение может доставить само на роутере. Модули <code>kmod-nft-tproxy</code>, <code>kmod-tun</code>, <code>kmod-nft-queue</code> уже в образе. zz1 настраивает его как homeproxy (dns_hijacked при AGH, DNS-порт 5333, обход по метке <code>0x64</code>, YACD), а Clash API включает в существующем блоке форка. Без патча 001 форк на обычном sing-box (фид, <code>1.12.x</code>…<code>latest</code>, tiny) не запускается ни в одном режиме — job <code>setup</code> предупреждает. Проверки совместимости sing-box, как у homeproxy, для него нет: генератор форка сам выбирает поля под ядро.</p>
+    </div>
+    <div class="note warn">
+      <span class="ic">◆</span>
       <p><b>forkop: что важно знать.</b> Пакеты <code>forkop</code>, <code>luci-app-forkop</code>, <code>luci-i18n-forkop-ru</code> в варианте <code>forkop</code> собираются из оригинала <code>ushan0v/forkop</code> 1.0.5 с 25 патчами (в варианте <code>forkop-mod</code> — из форка <code>Gavr1024/forkop-mod</code> с патчем 001: есть Xray и другие функции форка, но нет наших доработок ниже): 17 исправлений из открытых PR репозитория (авторы сохранены), исправления вызовов ucode до объявления, скрипта удаления для apk, совместимости с sing-box 1.14, зависания загрузки списков и показа доменов в LuCI, а также две настройки из forkop-mod в доработанном виде — «Исключить BitTorrent» и «Исключённые устройства» (по IP, подсети или MAC) — и настройка «Перехватывать DNS устройств». <code>zz1-final-offline-setup.sh</code> выключает её (<code>intercept_device_dns=0</code>, аналог <code>dns_hijacked</code> для homeproxy): DNS всех клиентов идёт через AdGuard Home, и он видит каждое устройство, а трафик исключённых устройств к FakeIP forkop отправляет напрямую. Для ядра sing-box в образ собирается пакет из фида (25.12: 1.13.x), а скачанный бинарь кладётся через <code>files/</code> поверх него в <code>/usr/bin/sing-box</code>. Менеджер пакетов при этом считает установленной версию из фида, поэтому <code>apk upgrade</code> может вернуть её вместо extended — обновляйте sing-box через вкладку «Компоненты» forkop.</p>
+    </div>
+    <div class="note warn">
+      <span class="ic">◆</span>
       <p><b>netshift: что важно знать.</b> Пакеты <code>netshift</code>, <code>luci-app-netshift</code>, <code>luci-i18n-netshift-ru</code> собираются из <code>yandexru45/netshift</code> — активно развиваемого форка podkop (бета). Устроен как podkop: shell + jq, DNS sing-box на <code>127.0.0.42:53</code>, youtubeUnblock совместим. Сверх podkop: несколько подписок в секции с фильтрами и группами по странам и автовыбором самого быстрого сервера, переключение ядра sing-box ↔ sing-box-extended (транспорт xhttp) прямо из LuCI, IPv6, блокировка DoH, «Торренты мимо прокси», EDNS Client Subnet, самообновление из LuCI. Конфиг — <code>/etc/config/netshift</code> (старый <code>/etc/config/podkop</code> переносится автоматически). Патчи <code>patches/feeds/netshift</code>: 001 — ссылки socks5 с <code>:</code> в логине или пароле и VLESS/Trojan с транспортом httpupgrade/http давали нерабочий узел, kcp/quic теперь пропускаются с понятной ошибкой; 002 — запросы SRV/PTR/TXT к доменам из списков оставались без ответа (FakeIP отвечает только на A/AAAA), диагностика считала недоступным DNS-сервер, заданный с портом. <code>zz1-final-offline-setup.sh</code> делает то же, что для podkop: AGH upstream <code>127.0.0.42:53</code>, <code>dont_touch_dhcp=1</code>, <code>exclude_ntp=1</code>. Самообновление netshift из LuCI ставит релиз автора поверх пакета из прошивки — патчи при этом теряются до следующей прошивки.</p>
+    </div>
+    <div class="note warn">
+      <span class="ic">◆</span>
       <p><b>trafira: что важно знать.</b> Пакеты <code>trafira</code>, <code>luci-app-trafira</code>, <code>luci-i18n-trafira-ru</code> собираются из <code>petrouspetr-pixel/trafira</code> — активно развиваемого продолжения forkop со своими тестами. В нём уже есть почти все исправления, которые для forkop дают наши патчи, а сверх них — Alice Mode (какие устройства идут через trafira, а какие мимо: по IP, MAC, интерфейсу, с настоящим DNS для обходящих), DoH с mTLS, Zapret/Zapret2/ByeDPI как действие секции, серверные inbound (VLESS Reality, MTProto, Tailscale). Xray, как в forkop-mod, нет. Конфиг — <code>/etc/config/trafira</code>, пакет конфликтует с forkop и podkop. Патчи <code>patches/feeds/trafira</code>: 001 — без него установка и обновление sing-box со вкладки «Компоненты» падают с ошибкой ucode; 002 — правило fw4, пропускающее TPROXY-трафик во <code>input</code>, ставится и в образе прошивки (<code>/etc/uci-defaults/60_trafira-firewall</code>, как патч 016 forkop), иначе гостевые зоны с <code>input=REJECT</code> режут проксируемый трафик; 003 — «Исключить BitTorrent» (как патч 023 forkop). Настройки «Исключённые устройства» и «Перехватывать DNS устройств» из наших патчей forkop здесь заменяет Alice Mode. <code>zz1-final-offline-setup.sh</code> делает для trafira то же, что для forkop: AGH upstream <code>127.0.0.42:53</code>, <code>dont_touch_dhcp=1</code>, <code>exclude_ntp=1</code>. По умолчанию trafira DNS клиентов не перехватывает, и AGH видит каждое устройство. Если включить Alice Mode, DNS устройств «в обход» пойдёт в DNS trafira мимо AGH. youtubeUnblock в варианте нет (обход DPI — Zapret/ByeDPI самого trafira). sing-box — как у forkop: пакет из фида плюс скачанный бинарник при выборе версии в <code>sb</code>; обновлять его лучше со вкладки «Компоненты».</p>
     </div>
   </section>
@@ -421,7 +431,7 @@
   <!-- 04 FIRST BOOT -->
   <section id="firstboot">
     <div class="sec-head"><span class="sec-num">04</span><h2>Первый старт после прошивки</h2></div>
-    <p class="sec-sub">Скрипт <code>zz1-final-offline-setup.sh</code> лежит в <code>/etc/uci-defaults/</code> и выполняется при первой загрузке роутера (режим <b>firstboot</b>, лог <code>/root/setup_log.txt</code>). Сохранённую копию можно запустить вручную, например после <code>apk upgrade</code> (режим <b>maintenance</b>, лог <code>/root/setup_log_maintenance.txt</code>): тогда hostname, customfeeds и настройки first boot не трогаются. Многие шаги выполняются с учётом выбранного варианта. Скрипта нет в варианте <code>crystal_clear</code> и в любой сборке с полем <code>zz</code> = нет — тогда раздел к ней не относится. Полный список изменений — в <code>files/README.md</code>.</p>
+    <p class="sec-sub">Скрипт <code>zz1-final-offline-setup.sh</code> лежит в <code>/etc/uci-defaults/</code> и выполняется при первой загрузке роутера (режим <b>firstboot</b>, лог <code>/root/setup_log.txt</code>). Сохранённую копию можно запустить вручную, например после <code>apk upgrade</code> (режим <b>maintenance</b>, лог <code>/root/setup_log_maintenance.txt</code>): тогда hostname, customfeeds и настройки first boot не трогаются — подробно в подразделе <a class="anchor" href="#zz1-modes">«Режимы firstboot и maintenance»</a>. Многие шаги выполняются с учётом выбранного варианта. Скрипта нет в варианте <code>crystal_clear</code> и в любой сборке с полем <code>zz</code> = нет — тогда раздел к ней не относится. Полный список изменений — в <code>files/README.md</code>.</p>
     <ol class="steps">
       <li><b>Инициализация.</b> Логирование, определение версии ядра, архитектуры, модели роутера и текущего варианта сборки.</li>
       <li><b>База.</b> Часовой пояс (Europe/Moscow), очистка строки FullCone, сохранение system.</li>
@@ -439,6 +449,54 @@
       <li class="tag-sw"><span class="badge">switch</span><b>Режим L2-коммутатора.</b> Только для <code>switch</code>: все порты собираются в <code>br-lan</code>, DHCP-клиент, firewall-зоны и WAN отключаются.</li>
       <li><b>Перезагрузка.</b> Отложенный ребут через 120 секунд в фоне — чтобы применить sysctl, AGH и остальное.</li>
     </ol>
+
+    <h3 class="sub" id="zz1-modes">Режимы firstboot и maintenance</h3>
+    <p>Режим определяется одним файлом-признаком <code>/etc/zz1_setup_completed</code>: его нет — <b>firstboot</b>, он есть — <b>maintenance</b>. Скрипт создаёт его в самом конце в обоих режимах. Файл лежит в <code>/etc</code>, а не в <code>/root</code>: <code>/root</code> часто целиком вписан в <code>/etc/sysupgrade.conf</code>, исключений этот файл не поддерживает, и признак переживал бы прошивку. В бэкап и при прошивке с сохранением настроек он не попадает. Старый признак <code>/root/.setup_completed</code> скрипт удаляет.</p>
+
+    <div class="card scroll" style="margin-top:14px">
+      <table class="pt stack">
+        <thead><tr><th style="width:30%">Ситуация</th><th style="width:18%">Режим</th><th style="width:52%">Почему</th></tr></thead>
+        <tbody>
+          <tr><td class="feat">Прошивка без сохранения настроек</td><td data-l="Режим"><b>firstboot</b></td><td data-l="Почему"><p>Чистая система, признака нет.</p></td></tr>
+          <tr><td class="feat">Прошивка с сохранением настроек</td><td data-l="Режим"><b>firstboot</b></td><td data-l="Почему"><p>Признак в <code>/etc</code> не сохраняется. Старые конфиги возвращаются <b>до</b> запуска zz1, и он работает поверх них.</p></td></tr>
+          <tr><td class="feat">Чистая прошивка + «Восстановить» из бэкапа</td><td data-l="Режим"><b>firstboot</b>, затем бэкап</td><td data-l="Почему"><p>zz1 отрабатывает на чистых конфигах, потом бэкап их перезаписывает (hostname и customfeeds вернутся свои). После смены варианта так делать нельзя: вернутся настройки AGH и прочее от старого варианта.</p></td></tr>
+          <tr><td class="feat">Ручной запуск копии скрипта (например, после <code>apk upgrade</code>)</td><td data-l="Режим"><b>maintenance</b></td><td data-l="Почему"><p>Признак уже создан прошлым запуском на этой прошивке.</p></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p style="margin-top:18px"><b>Что отличается.</b> От режима зависят только эти пять мест — всё остальное выполняется одинаково:</p>
+    <div class="card scroll">
+      <table class="pt stack">
+        <thead><tr><th style="width:26%">Шаг</th><th style="width:44%">firstboot</th><th style="width:30%">maintenance</th></tr></thead>
+        <tbody>
+          <tr><td class="feat">Лог</td><td data-l="firstboot"><code>/root/setup_log.txt</code></td><td data-l="maintenance"><code>/root/setup_log_maintenance.txt</code></td></tr>
+          <tr><td class="feat"><code>customfeeds.list</code> (свои репозитории apk)</td><td data-l="firstboot"><span class="cond">перезаписывается</span> пустым шаблоном</td><td data-l="maintenance"><span class="yes">не трогается</span>, добавленные фиды сохраняются</td></tr>
+          <tr><td class="feat">hostname и <code>uhttpd.defaults.commonname</code></td><td data-l="firstboot"><span class="cond">ставятся по шаблону</span>: <code>R6S-oWRT</code>, <code>R6S-iWRT</code>; для switch — <code>RB5009-switch</code></td><td data-l="maintenance"><span class="yes">не трогаются</span></td></tr>
+          <tr><td class="feat">passwall2 (вариант <code>passwall</code>)</td><td data-l="firstboot"><span class="cond">настраивается</span> DNS и включается</td><td data-l="maintenance"><span class="yes">не трогается</span></td></tr>
+          <tr><td class="feat">Режим коммутатора (вариант <code>switch</code>)</td><td data-l="firstboot"><span class="cond">перестраивается сеть</span>: удаляются lan/wan/wan6, все порты в мост <code>br-lan</code> (DHCP-клиент), отключаются DHCP и odhcpd, переписывается firewall</td><td data-l="maintenance"><span class="yes">не трогается</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p style="margin-top:18px"><b>Что одинаково в обоих режимах.</b> Эти шаги можно повторять: они проверяют, сделано ли уже, или приводят состояние к нужному.</p>
+    <ul class="steps plain">
+      <li><b>Система:</b> часовой пояс; строка FullCone удаляется (и <code>fullcone=1</code> возвращается, если модуль есть в ядре); TCP BBR в <code>sysctl.conf</code>.</li>
+      <li><b>Пакетный менеджер:</b> архитектура apk, очистка <code>distfeeds.list</code> от лишних фидов, строка kmods под текущее ядро (копия <code>distfeeds.list.bak</code> делается один раз); ключи <code>/root/apps/*.pem</code>.</li>
+      <li><b>Локальные бинарники:</b> sing-box, AdGuardHome, speedtest из <code>/root/apps</code>.</li>
+      <li><b>homeproxy:</b> <code>dns_hijacked</code> (при AGH), Clash API и YACD (заглушка — только если панели ещё нет), правка init, <code>bypass_homeproxy_ips.nft</code>. Без homeproxy — удаление его хвостов.</li>
+      <li><b>Firewall:</b> наборы <code>dpi_ips</code>, <code>bypass_ips</code>, <code>bypass_local</code> (создаются, если их нет), правка <code>ruleset.uc</code> для flow offload.</li>
+      <li><b>youtubeUnblock:</b> правила nft очереди 537 (или их удаление, если пакета нет).</li>
+      <li><b>AdGuard Home:</b> рабочий каталог, dnsmasq на порт 54, upstream под вариант (<code>127.0.0.1:5333</code> или <code>127.0.0.42:53</code> + <code>dont_touch_dhcp=1</code>); <code>exclude_ntp=1</code> для forkop, trafira, podkop, netshift.</li>
+      <li><b>SQM:</b> патч <code>run.sh</code>; свой <code>/opt/sqm_custom.conf</code> не перезаписывается.</li>
+      <li><b>Прочее:</b> internet-detector, owut, phy-leds; свои контроллеры LuCI из <code>/root/apps/luci-controllers</code> (уже существующие не затираются); меню файлового менеджера; время и RTC, mtime из будущего; строки баннера.</li>
+      <li><b>В конце:</b> создаётся <code>/etc/zz1_setup_completed</code>, через 120 секунд перезагрузка.</li>
+    </ul>
+
+    <div class="note">
+      <span class="ic" style="color:var(--accent)">i</span>
+      <p>Коротко: <b>maintenance</b> = <b>firstboot</b> без перезаписи <code>customfeeds.list</code>, hostname и commonname и без первичной настройки passwall2 и режима коммутатора. После прошивки с сохранением настроек zz1 идёт как <b>firstboot</b>: переименованный роутер снова получит имя по шаблону, а свои фиды в <code>customfeeds.list</code> придётся вписать заново.</p>
+    </div>
 
     <h3 class="sub">Что получаешь на роутере (вариант homeproxy)</h3>
     <div class="grid">
