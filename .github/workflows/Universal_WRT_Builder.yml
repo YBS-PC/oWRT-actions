@@ -160,7 +160,8 @@ env:
   # автовыбором, переключение sing-box ↔ sing-box-extended (xhttp) из LuCI,
   # IPv6, блокировка DoH). Как podkop: shell + jq, конфиг /etc/config/netshift,
   # DNS 127.0.0.42:53, youtubeUnblock совместим. Патчи patches/feeds/netshift
-  # (001 — разбор ссылок: socks5, httpupgrade/http; 002 — SRV/PTR мимо FakeIP,
+  # (001 — разбор ссылок: socks5, транспорт http, синтаксис jq 1.7 для 24.10;
+  # 002 — SRV/PTR мимо FakeIP,
   # диагностика DNS с портом). Версия — из тегов (NETSHIFT_VERSION).
   NETSHIFT_FEED: "netshift https://github.com/yandexru45/netshift.git;main"
 
@@ -350,12 +351,13 @@ jobs:
             echo "::warning title=${t}: trafira без патчей::Без патчей patches/feeds/trafira установка и обновление sing-box из LuCI trafira падают с ошибкой ucode (001), в прошивке нет правила fw4 для TPROXY — зоны с input=REJECT (гостевые) режут проксируемый трафик (002), нет настройки Exclude BitTorrent (003). Включите apply_patches."
           done
 
-          # netshift без патчей: ссылки socks5 с ':' в логине/пароле и
-          # VLESS/Trojan с транспортом httpupgrade/http дают нерабочий узел,
+          # netshift без патчей: ссылки socks5 с ':' в логине/пароле дают
+          # нерабочий узел, VLESS/Trojan с транспортом http пропускаются, на
+          # 24.10 (jq 1.7) не строятся узлы с TLS/Reality и подписки,
           # SRV/PTR/TXT к доменам из списков остаются без ответа.
           echo "$json" | jq -r '.include[] | select(.variant == "netshift" and .patches == false) | .target' |
           while read -r t; do
-            echo "::warning title=${t}: netshift без патчей::Без patches/feeds/netshift ссылки с транспортом httpupgrade/http и socks5 с ':' в логине или пароле дают нерабочий узел (001), DNS-запросы SRV/PTR/TXT к доменам из списков остаются без ответа (002). Включите apply_patches."
+            echo "::warning title=${t}: netshift без патчей::Без patches/feeds/netshift ссылки socks5 с ':' в логине или пароле дают нерабочий узел, ссылки с транспортом http пропускаются, а на OpenWrt 24.10 (jq 1.7) не создаются узлы с TLS/Reality и не работают подписки (001); DNS-запросы SRV/PTR/TXT к доменам из списков остаются без ответа (002). Включите apply_patches."
           done
 
           echo "matrix<<EOF" >> $GITHUB_OUTPUT
