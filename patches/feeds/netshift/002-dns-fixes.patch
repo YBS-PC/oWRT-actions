@@ -1,15 +1,14 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
-Date: Sat, 3 Oct 2026 08:37:22 +0000
+Date: Sun, 4 Oct 2026 19:18:46 +0000
 Subject: [PATCH 2/2] netshift: DNS - SRV/PTR/TXT past FakeIP, diagnostics for
  servers with a port
 
 - FakeIP answers only A/AAAA. The FakeIP DNS rule now carries
   query_type A/AAAA, so other query types for the same domains (SRV,
-  PTR, TXT, MX ...) go to the regular DNS server. Before, sing-box
-  answered nothing and clients waited for a timeout (checked with
-  sing-box 1.12.22 and 1.14.2: SRV/TXT timed out, now answered by the
-  upstream; A still gets a FakeIP address).
+  PTR, TXT, MX ...) go on to the DNS sections, the pool and the final
+  server. Before, sing-box answered nothing and clients waited for a
+  timeout (checked with sing-box 1.12.22 and 1.14.2).
 - check_dns_available: a server "host:port[/path]" or "[v6]:port" is
   passed to dig as @host -p port. "@host:port" never resolves, so the
   diagnostics reported such a DNS/bootstrap server as unavailable
@@ -22,21 +21,21 @@ Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
  1 file changed, 30 insertions(+), 5 deletions(-)
 
 diff --git a/netshift/files/usr/bin/netshift b/netshift/files/usr/bin/netshift
-index 2ad5caa..e418b1b 100755
+index 4ddb768..801cb7a 100755
 --- a/netshift/files/usr/bin/netshift
 +++ b/netshift/files/usr/bin/netshift
-@@ -3675,6 +3675,10 @@ sing_box_configure_dns() {
+@@ -4401,6 +4401,10 @@ sing_box_configure_dns() {
      config=$(sing_box_cm_add_dns_reject_rule "$config" "domain_suffix" '"use-application-dns.net"')
      config=$(sing_box_cm_add_dns_route_rule "$config" "$SB_FAKEIP_DNS_SERVER_TAG" "$SB_FAKEIP_DNS_RULE_TAG")
      config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_FAKEIP_DNS_RULE_TAG" "rewrite_ttl" "$rewrite_ttl")
 +    # FakeIP can only answer A/AAAA. Other query types for the same domains
-+    # (SRV, PTR, TXT, MX ...) fall through to the regular DNS server instead
-+    # of failing with "only IP queries are supported by fakeip" (SERVFAIL).
++    # (SRV, PTR, TXT, MX ...) fall through to the rules below (DNS sections,
++    # pool, final server) instead of being left without an answer.
 +    config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_FAKEIP_DNS_RULE_TAG" "query_type" '["A","AAAA"]')
      service_domains=$(comma_string_to_json_array "$FAKEIP_TEST_DOMAIN,$CHECK_PROXY_IP_DOMAIN")
      config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_FAKEIP_DNS_RULE_TAG" "domain" "$service_domains")
- }
-@@ -5285,6 +5289,20 @@ get_status() {
+ 
+@@ -6855,6 +6859,20 @@ get_status() {
      echo "{\"enabled\":$enabled,\"status\":\"$status\"}"
  }
  
@@ -57,7 +56,7 @@ index 2ad5caa..e418b1b 100755
  check_dns_available() {
      local dns_type dns_server bootstrap_dns_server
      config_get dns_type "settings" "dns_type"
-@@ -5309,24 +5327,29 @@ check_dns_available() {
+@@ -6879,24 +6897,29 @@ check_dns_available() {
          display_dns_server="dns.nextdns.io/$masked_path"
      fi
  
@@ -91,7 +90,7 @@ index 2ad5caa..e418b1b 100755
              dns_status=1
          fi
      fi
-@@ -5338,7 +5361,9 @@ check_dns_available() {
+@@ -6908,7 +6931,9 @@ check_dns_available() {
  
      # Check bootstrap DNS server
      if [ -n "$bootstrap_dns_server" ]; then
