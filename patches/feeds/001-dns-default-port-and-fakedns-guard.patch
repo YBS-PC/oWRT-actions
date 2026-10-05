@@ -1,0 +1,65 @@
+From f76fc1be3ec9fc38f417f4b50cf15eb1c9614d2f Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 5 Oct 2026 18:27:49 +0000
+Subject: [PATCH] DNS без порта: порт 53 по умолчанию; FakeDNS без доменов не роняет генератор
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+В форме Fast/Secure/Default DNS и «Resolve Domain via DNS» можно указать
+адрес без порта (8.8.8.8). parse_ip_port для IPv4 возвращал при этом
+port 0, для IPv6 в dns_direct_servers — null:
+- правила маршрутизации Fast DNS (напрямую) и Secure DNS (через прокси)
+  получали port "0" и не срабатывали — запросы шли по общим правилам;
+- в nft-наборе обхода прямого DNS (tp_spec_dp4_bp / dp6_bp) оказывалось
+  «1.1.1.1 . 0» или «… . null» (nft читает null как порт 9), запросы к
+  :53 не совпадали, и прямой DNS для имени сервера уходил в tproxy —
+  в тот самый сервер, имя которого ещё не разрешено.
+
+Секция FakeDNS без доменов (правка UCI мимо формы) роняла генератор
+«(null) is not iterable», config.json получался пустым, Xray не стартовал.
+---
+ core/root/usr/share/xray/feature/dns.mjs      | 7 +++++--
+ core/root/usr/share/xray/feature/fake_dns.mjs | 2 +-
+ 2 files changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/core/root/usr/share/xray/feature/dns.mjs b/core/root/usr/share/xray/feature/dns.mjs
+index c33335a..412a18a 100644
+--- a/core/root/usr/share/xray/feature/dns.mjs
++++ b/core/root/usr/share/xray/feature/dns.mjs
+@@ -14,9 +14,12 @@ function parse_ip_port(val, port_default) {
+     const split_dot = split(val, ".");
+     if (length(split_dot) > 1) {
+         const split_ipv4 = split(val, ":");
++        // Адрес без порта (форма это разрешает: ip4addr) давал port 0:
++        // правила маршрутизации Fast/Secure DNS не срабатывали, а в nft
++        // обход прямого DNS получал «ip . 0» и не совпадал с портом 53.
+         return {
+             ip: split_ipv4[0],
+-            port: int(split_ipv4[1])
++            port: int(split_ipv4[1]) || port_default
+         };
+     }
+     const split_ipv6_port = split(val, "]:");
+@@ -281,7 +284,7 @@ export function dns_direct_servers(config) {
+         }
+         if (server["domain_resolve_dns"]) {
+             if (index(server["domain_resolve_dns_method"], "local") > 1) {
+-                push(result, parse_ip_port(server["domain_resolve_dns"]));
++                push(result, parse_ip_port(server["domain_resolve_dns"], 53));
+             }
+         }
+     }
+diff --git a/core/root/usr/share/xray/feature/fake_dns.mjs b/core/root/usr/share/xray/feature/fake_dns.mjs
+index 0de8582..ca9f1a6 100644
+--- a/core/root/usr/share/xray/feature/fake_dns.mjs
++++ b/core/root/usr/share/xray/feature/fake_dns.mjs
+@@ -5,7 +5,7 @@ import { balancer } from "./system.mjs";
+ export function fake_dns_domains(fakedns) {
+     let domains = [];
+     for (let f in fakedns) {
+-        push(domains, ...f["fake_dns_domain_names"]);
++        push(domains, ...(f["fake_dns_domain_names"] || []));
+     }
+     if (length(domains) === 0) {
+         return [];
