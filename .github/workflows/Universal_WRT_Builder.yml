@@ -1114,20 +1114,28 @@ jobs:
             echo 'CONFIG_PACKAGE_xray-core=y' >> ./.config
             echo 'CONFIG_PACKAGE_geoview=y' >> ./.config
             echo 'CONFIG_PACKAGE_v2ray-plugin=y' >> ./.config
-            echo 'CONFIG_PACKAGE_v2ray-geodata=y' >> ./.config
+            echo 'CONFIG_PACKAGE_v2ray-geoip=y' >> ./.config
+            echo 'CONFIG_PACKAGE_v2ray-geosite=y' >> ./.config
             
         elif [ "$VARIANT" == "v2raya" ]; then
             echo 'CONFIG_PACKAGE_xray-core=y' >> ./.config
             echo 'CONFIG_PACKAGE_v2rayA=y' >> ./.config
-            echo 'CONFIG_PACKAGE_v2ray-geodata=y' >> ./.config
+            echo 'CONFIG_PACKAGE_v2ray-geoip=y' >> ./.config
+            echo 'CONFIG_PACKAGE_v2ray-geosite=y' >> ./.config
             echo 'CONFIG_PACKAGE_luci-app-v2raya=y' >> ./.config
             echo 'CONFIG_PACKAGE_luci-i18n-v2raya-ru=y' >> ./.config
             
         elif [ "$VARIANT" == "xray" ]; then
             echo 'CONFIG_PACKAGE_luci-app-xray=y' >> ./.config
             echo 'CONFIG_PACKAGE_xray-core=y' >> ./.config
-            echo 'CONFIG_PACKAGE_v2ray-geodata=y' >> ./.config
-            echo 'CONFIG_PACKAGE_geoview=y' >> ./.config
+            # geoip.dat / geosite.dat в /usr/share/xray: без них luci-app-xray
+            # молча отбрасывает все правила geoip:/geosite: (GeoIP Direct,
+            # Bypassed/Forwarded domain rules) и шлёт в прокси всё подряд.
+            # Пакета «v2ray-geodata» нет — это лишь виртуальное PROVIDES
+            # пакетов v2ray-geoip и v2ray-geosite, строка с ним в .config
+            # ничего не включала. geoview (фид passwall_packages) xray не нужен.
+            echo 'CONFIG_PACKAGE_v2ray-geoip=y' >> ./.config
+            echo 'CONFIG_PACKAGE_v2ray-geosite=y' >> ./.config
         
         elif [ "$VARIANT" == "podkop" ]; then
             echo 'CONFIG_PACKAGE_podkop=y' >> ./.config
@@ -1203,7 +1211,7 @@ jobs:
         echo "Variant selected: $VARIANT"
         echo "Checking key packages in .config:"
         # Проверяем наличие ключевых пакетов для уверенности
-        grep -E "CONFIG_PACKAGE_(luci-app-homeproxy|sing-box|luci-app-passwall2|luci-app-v2raya|xray-core|luci-app-podkop|luci-app-netshift|luci-app-forkop|luci-app-trafira|luci-app-re-homeproxy)=" .config || echo "None found"
+        grep -E "CONFIG_PACKAGE_(luci-app-homeproxy|sing-box|luci-app-passwall2|luci-app-v2raya|luci-app-xray|xray-core|v2ray-geoip|v2ray-geosite|luci-app-podkop|luci-app-netshift|luci-app-forkop|luci-app-trafira|luci-app-re-homeproxy)=" .config || echo "None found"
         echo "=========================================="
 
     - name: Check sing-box compatibility (homeproxy)
