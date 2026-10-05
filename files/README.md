@@ -177,7 +177,7 @@ sed -i 's/ct original packets ge 30 flow offload @ft/flow offload @ft/' /usr/sha
 
 ## 11. Прочие сервисы
 - **Passwall2** (вариант `passwall`, firstboot): `dns_redirect='0'`, `dns_shunt='closed'`, `remote_dns` и `china_dns` = `127.0.0.1:53`, `adblock='0'`, `enabled='1'`
-- **forkop, trafira, podkop, netshift** (если есть `/etc/config/forkop`, `/etc/config/trafira`, `/etc/config/podkop` или `/etc/config/netshift`): `<пакет>.settings.exclude_ntp='1'` — NTP мимо прокси
+- **forkop, trafira, podkop, netshift** (если есть `/etc/config/forkop`, `/etc/config/trafira`, `/etc/config/podkop` или `/etc/config/netshift`): `<пакет>.settings.exclude_ntp='1'` — NTP мимо прокси; если установлен youtubeUnblock — ещё `<пакет>.settings.disable_quic='1'`: QUIC клиента к адресам FakeIP (198.18.0.0/15) не попадает под правило `reject` youtubeUnblock и шёл бы через sing-box в очередь 537, а так sing-box его отклоняет и браузер идёт по TCP
 - **internet-detector**: сервис отключается, `START=99`
 - **phy-leds**: сервис отключается
 - **SQM** (если установлен):
