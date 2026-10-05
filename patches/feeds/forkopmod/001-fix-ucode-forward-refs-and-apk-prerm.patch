@@ -1,13 +1,19 @@
-From: YBS-PC/oWRT-actions
-Subject: [PATCH] forkop-mod 1.0.8: вызовы ucode-функций до объявления и prerm для apk
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 5 Oct 2026 11:59:56 +0000
+Subject: [PATCH] forkop-mod 1.0.9: вызовы ucode-функций до объявления и prerm для apk
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
 ucode связывает имя функции в момент её объявления. Если функция A
 вызывает функцию B, объявленную ниже в том же файле, A получает null и
-падает с «left-hand side is not a function». В 1.0.8 таких мест 15:
+падает с «left-hand side is not a function». В 1.0.9 таких мест 14
+(routing_engine в config/connections.uc автор исправил сам):
 
-  config/connections.uc  routing_engine        — генерация конфига sing-box,
-                                                 если у секции не выбрано ядро
-  singbox/generator.uc   single_or_array (+3)  — исключения устройств
+  singbox/generator.uc   single_or_array, ips_from_dhcp_lease_name —
+                         исключённые устройства (routing_excluded_ips)
+  nft/apply.uc           apply_ips_from_lease_name
   service/ui.uc          xray_running, file_executable, release_dir_lock
   service/initd.uc       owner_pid_value, release_runtime_dir_lock
   service/state.uc       release_runtime_dir_lock
@@ -16,23 +22,45 @@ ucode связывает имя функции в момент её объявл
                          предварительное объявление let)
   config/validator.uc    uci_core
   server/service.uc      safe_filename_string
-  nft/apply.uc           apply_ips_from_lease_name (+3)
+
+Проверено на генераторе: с routing_excluded_ips 1.0.9 ловит
+«add_global_routing_exclusions apply: left-hand side is not a function»
+и молча не создаёт правило маршрута «напрямую» для исключённого
+устройства (его трафик идёт через прокси) и часть DNS-правил. С патчем
+правила на месте, конфиг проходит sing-box check 1.12.22, 1.14.2 и
+1.14.1-extended.
 
 Функции перенесены выше первого вызова без изменения кода. После патча
 вызовов до объявления нет (кроме filter() в routing/list_cache.uc — это
-встроенная функция ucode, так и задумано); ucode -S проходит.
+встроенная функция ucode), все 68 модулей компилируются (ucode -S).
 
 prerm: с apk (OpenWrt 25.12+) тело Package/forkop/prerm встраивается в
 общий /bin/sh-скрипт pre-deinstall, поэтому ucode-код там — синтаксическая
 ошибка, и «apk del forkop» падал. Переписан на POSIX sh, логика прежняя.
 
-Тесты проекта: 57 -> 61 проходят; package_lifecycle теперь падает, потому
-что проверяет ucode в prerm — именно это и исправлено.
+Тесты проекта: провалы те же, что у 1.0.9 без патча (тесты автора
+расходятся с кодом), кроме package_lifecycle — он проверяет ucode в
+prerm, именно это и исправлено.
 
-Заменяет прежние 001 (для 1.0.7) и 002 (частичный, для 1.0.8).
+Заменяет 001 для 1.0.8.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
+ forkop/Makefile                            | 12 +++----
+ forkop/files/usr/lib/components/action.uc  |  8 +++--
+ forkop/files/usr/lib/components/updates.uc | 42 +++++++++++-----------
+ forkop/files/usr/lib/config/validator.uc   | 12 +++----
+ forkop/files/usr/lib/nft/apply.uc          | 10 +++---
+ forkop/files/usr/lib/server/service.uc     | 20 +++++------
+ forkop/files/usr/lib/service/initd.uc      | 28 +++++++--------
+ forkop/files/usr/lib/service/state.uc      | 18 +++++-----
+ forkop/files/usr/lib/service/ui.uc         | 42 +++++++++++-----------
+ forkop/files/usr/lib/singbox/generator.uc  | 38 ++++++++++----------
+ 10 files changed, 117 insertions(+), 113 deletions(-)
+
 diff --git a/forkop/Makefile b/forkop/Makefile
-index 8218f63..4a6f142 100644
+index 8218f63e..4a6f1428 100644
 --- a/forkop/Makefile
 +++ b/forkop/Makefile
 @@ -40,12 +40,12 @@ define Build/Compile
@@ -55,7 +83,7 @@ index 8218f63..4a6f142 100644
  
  define Package/forkop/postinst
 diff --git a/forkop/files/usr/lib/components/action.uc b/forkop/files/usr/lib/components/action.uc
-index 5210a31..45f91c8 100644
+index 5210a316..45f91c8c 100644
 --- a/forkop/files/usr/lib/components/action.uc
 +++ b/forkop/files/usr/lib/components/action.uc
 @@ -1557,6 +1557,10 @@ function fail_package_sing_box_install(action, tiny, reason, current_version, la
@@ -88,11 +116,11 @@ index 5210a31..45f91c8 100644
  function install_package_sing_box(action, tiny) {
      let package_name = tiny ? "sing-box-tiny" : "sing-box";
 diff --git a/forkop/files/usr/lib/components/updates.uc b/forkop/files/usr/lib/components/updates.uc
-index dd3a939..e1a79c9 100644
+index a18a753b..f215c6b5 100644
 --- a/forkop/files/usr/lib/components/updates.uc
 +++ b/forkop/files/usr/lib/components/updates.uc
-@@ -2489,6 +2489,10 @@ function write_list_update_timestamp(timestamp) {
-     write_file(LIST_UPDATE_STATE_FILE, as_string(timestamp) + "\n");
+@@ -2495,6 +2495,10 @@ function finish_list_update(ok) {
+     exit(ok ? 0 : 1);
  }
  
 +function mark_pending_reload(reason) {
@@ -102,7 +130,7 @@ index dd3a939..e1a79c9 100644
  function list_update() {
      log_message("Starting lists update", "info");
      if (!list_update_pid_begin())
-@@ -2636,23 +2640,6 @@ function selected_lists_ready() {
+@@ -2653,23 +2657,6 @@ function selected_lists_ready() {
      return true;
  }
  
@@ -126,7 +154,7 @@ index dd3a939..e1a79c9 100644
  function list_update_if_due() {
      let interval = settings_update_interval(uci_settings());
      if (interval == "")
-@@ -2680,6 +2667,23 @@ function list_update_if_due() {
+@@ -2697,6 +2684,23 @@ function list_update_if_due() {
      exit(1);
  }
  
@@ -150,7 +178,7 @@ index dd3a939..e1a79c9 100644
  function stop_list_update() {
      let pid = trim(as_string(fs.readfile(LIST_UPDATE_PID_FILE) || ""));
      if (pid != "" && runtime_pid_running(pid)) {
-@@ -2768,10 +2772,6 @@ function write_current_reload_state_clean() {
+@@ -2785,10 +2789,6 @@ function write_current_reload_state_clean() {
      ]);
  }
  
@@ -161,44 +189,8 @@ index dd3a939..e1a79c9 100644
  function run_pending_reload_if_requested() {
      service_state_success([ "run-pending-reload-if-requested", PENDING_RELOAD_FILE, SERVICE_INIT ]);
  }
-diff --git a/forkop/files/usr/lib/config/connections.uc b/forkop/files/usr/lib/config/connections.uc
-index 873575c..15e2bcc 100644
---- a/forkop/files/usr/lib/config/connections.uc
-+++ b/forkop/files/usr/lib/config/connections.uc
-@@ -309,15 +309,6 @@ function action(section) {
-     return normalize_action(option(section, "action", ""));
- }
- 
--function proxy_core(section) {
--    let value = lc(as_string(option(section, "proxy_core", "")));
--    if (value == "xray" || value == "xray-core")
--        return "xray";
--    if (value == "sing-box" || value == "singbox")
--        return "sing-box";
--    return routing_engine();
--}
--
- function routing_engine() {
-     let value = "";
-     if (uci_core.available() && uci_core.exists(CONFIG_NAME + ".settings.routing_engine"))
-@@ -328,6 +319,15 @@ function routing_engine() {
-     return "sing-box";
- }
- 
-+function proxy_core(section) {
-+    let value = lc(as_string(option(section, "proxy_core", "")));
-+    if (value == "xray" || value == "xray-core")
-+        return "xray";
-+    if (value == "sing-box" || value == "singbox")
-+        return "sing-box";
-+    return routing_engine();
-+}
-+
- function is_xray_primary() {
-     return routing_engine() == "xray";
- }
 diff --git a/forkop/files/usr/lib/config/validator.uc b/forkop/files/usr/lib/config/validator.uc
-index b724ca3..911f3fa 100644
+index 18f856dc..189d3bbd 100644
 --- a/forkop/files/usr/lib/config/validator.uc
 +++ b/forkop/files/usr/lib/config/validator.uc
 @@ -698,6 +698,12 @@ function mwan3_has_enabled_interface() {
@@ -228,10 +220,10 @@ index b724ca3..911f3fa 100644
      let value = object_or_empty(fixture_uci_data)[type_name];
      if (type(value) == "array")
 diff --git a/forkop/files/usr/lib/nft/apply.uc b/forkop/files/usr/lib/nft/apply.uc
-index ffb63ed..fbb6064 100644
+index 00ce068e..af4fcb38 100644
 --- a/forkop/files/usr/lib/nft/apply.uc
 +++ b/forkop/files/usr/lib/nft/apply.uc
-@@ -2146,11 +2146,6 @@ function apply_hostname_key(value) {
+@@ -2147,11 +2147,6 @@ function apply_hostname_key(value) {
      return value;
  }
  
@@ -243,7 +235,7 @@ index ffb63ed..fbb6064 100644
  function apply_lease_paths() {
      return [
          "/tmp/dhcp.leases",
-@@ -2213,6 +2208,11 @@ function apply_ips_from_lease_name(name) {
+@@ -2214,6 +2209,11 @@ function apply_ips_from_lease_name(name) {
      return index.name_to_ips[wanted];
  }
  
@@ -256,7 +248,7 @@ index ffb63ed..fbb6064 100644
      value = trim(as_string(value));
      let result = [];
 diff --git a/forkop/files/usr/lib/server/service.uc b/forkop/files/usr/lib/server/service.uc
-index a3b9b3e..59ad97b 100644
+index a3b9b3ed..59ad97b2 100644
 --- a/forkop/files/usr/lib/server/service.uc
 +++ b/forkop/files/usr/lib/server/service.uc
 @@ -919,6 +919,16 @@ function server_prepare_legacy_user_defaults(section, protocol) {
@@ -294,7 +286,7 @@ index a3b9b3e..59ad97b 100644
      let protocol = config_get(section, "protocol", "vless");
      if (!(protocol == "shadowsocks" || protocol == "socks" || protocol == "vmess" || protocol == "vless" ||
 diff --git a/forkop/files/usr/lib/service/initd.uc b/forkop/files/usr/lib/service/initd.uc
-index 164a19c..8f14c84 100644
+index 164a19c3..8f14c841 100644
 --- a/forkop/files/usr/lib/service/initd.uc
 +++ b/forkop/files/usr/lib/service/initd.uc
 @@ -181,6 +181,15 @@ function lock_dir_write_owner(lock_dir, owner_pid) {
@@ -354,7 +346,7 @@ index 164a19c..8f14c84 100644
      let data = command_output_from_args([ BIN_PATH, "get_status" ]);
      try {
 diff --git a/forkop/files/usr/lib/service/state.uc b/forkop/files/usr/lib/service/state.uc
-index 9d6801a..62b9b11 100644
+index 1f4d2b29..dc46e67c 100644
 --- a/forkop/files/usr/lib/service/state.uc
 +++ b/forkop/files/usr/lib/service/state.uc
 @@ -286,6 +286,15 @@ function lock_dir_write_owner(lock_dir, owner_pid) {
@@ -390,7 +382,7 @@ index 9d6801a..62b9b11 100644
      if (!ensure_parent_dir(path))
          exit(1);
 diff --git a/forkop/files/usr/lib/service/ui.uc b/forkop/files/usr/lib/service/ui.uc
-index 3d6df53..b43ce3f 100644
+index 0d69b081..84dfb6bc 100644
 --- a/forkop/files/usr/lib/service/ui.uc
 +++ b/forkop/files/usr/lib/service/ui.uc
 @@ -290,6 +290,22 @@ function print_service_status_text(running, enabled) {
@@ -471,10 +463,10 @@ index 3d6df53..b43ce3f 100644
      return module_success(LIB_DIR + "/service/state.uc", [
          "forkop-stably-running",
 diff --git a/forkop/files/usr/lib/singbox/generator.uc b/forkop/files/usr/lib/singbox/generator.uc
-index 520fa41..3ee95b1 100644
+index f976af51..7f5b4ec0 100644
 --- a/forkop/files/usr/lib/singbox/generator.uc
 +++ b/forkop/files/usr/lib/singbox/generator.uc
-@@ -2949,11 +2949,6 @@ function ip_from_hosts_line(line, wanted) {
+@@ -2872,11 +2872,6 @@ function ip_from_hosts_line(line, wanted) {
      return "";
  }
  
@@ -486,7 +478,7 @@ index 520fa41..3ee95b1 100644
  function lease_lookup_paths() {
      return [
          "/tmp/dhcp.leases",
-@@ -2965,16 +2960,6 @@ function lease_lookup_paths() {
+@@ -2888,16 +2883,6 @@ function lease_lookup_paths() {
      ];
  }
  
@@ -503,7 +495,7 @@ index 520fa41..3ee95b1 100644
  function note_lease_pair(ip_to_name, name_to_ips, ip, name) {
      ip = trim(as_string(ip));
      name = hostname_key(name);
-@@ -3029,6 +3014,21 @@ function ips_from_dhcp_lease_name(name) {
+@@ -2952,6 +2937,21 @@ function ips_from_dhcp_lease_name(name) {
      return index.name_to_ips[wanted];
  }
  
@@ -525,7 +517,7 @@ index 520fa41..3ee95b1 100644
  function expanded_ips_for_source_value(value) {
      value = trim(as_string(value));
      let result = [];
-@@ -3250,6 +3250,10 @@ function excluded_non_fakeip_rule(inbound, source) {
+@@ -3173,6 +3173,10 @@ function excluded_non_fakeip_rule(inbound, source) {
      };
  }
  
@@ -536,7 +528,7 @@ index 520fa41..3ee95b1 100644
  function add_global_routing_exclusions(config) {
      let excluded = [];
      try {
-@@ -3415,10 +3419,6 @@ function section_dns_server(section) {
+@@ -3338,10 +3342,6 @@ function section_dns_server(section) {
          : runtime_constants.FAKEIP_DNS_SERVER_TAG;
  }
  
@@ -547,3 +539,6 @@ index 520fa41..3ee95b1 100644
  function copy_dns_matchers(matchers) {
      let copy = {};
      for (let key, value in matchers)
+-- 
+2.43.0
+
