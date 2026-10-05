@@ -144,8 +144,8 @@ env:
   # Версия пакета берётся из тегов этого же репозитория.
   #   патчи patches/feeds/forkop (25 шт., включая всё рабочее из форка)
   FORKOP_FEED_ORIG: "forkop https://github.com/ushan0v/forkop.git;main"
-  #   патч  patches/feeds/forkopmod (001: без него не работает генерация
-  #   конфига sing-box)
+  #   патч  patches/feeds/forkopmod (001, для 1.0.9: без него исключённые
+  #   устройства не получают правил «напрямую», «apk del forkop» падает)
   FORKOP_FEED_MOD: "forkopmod https://github.com/Gavr1024/forkop-mod.git;main"
 
   # Фид trafira (продолжение forkop: Alice Mode, DoH mTLS, Zapret/Zapret2/
@@ -332,11 +332,12 @@ jobs:
 
           # forkop без патчей (фид — поле fk матрицы, адреса — в env):
           #   ushan0v/forkop 1.0.5 не стартует на sing-box 1.14 (issue #98);
-          #   Gavr1024/forkop-mod без патча 001 не генерирует конфиг sing-box.
+          #   Gavr1024/forkop-mod без патча 001 — вызовы ucode до объявления
+          #   (исключённые устройства идут через прокси) и prerm на ucode (apk).
           for FK_NAME in $(echo "$json" | jq -r '[.include[] | select(.variant == "forkop" and .patches == false) | .fk] | unique | .[]'); do
             case "$FK_NAME" in
               forkop)    FK_WHY="Пока автор не внёс исправления, оригинал ushan0v/forkop несовместим с sing-box 1.14 (issue #98): не скачивайте sing-box 1.14.x/latest/extended для этой сборки" ;;
-              forkopmod) FK_WHY="Без патча 001 форк Gavr1024/forkop-mod не генерирует конфиг sing-box (ucode: left-hand side is not a function)" ;;
+              forkopmod) FK_WHY="Без патча 001 в форке Gavr1024/forkop-mod исключённые устройства (routing_excluded_ips) не получают правил «напрямую» и идут через прокси (ucode: left-hand side is not a function), а «apk del forkop» падает на prerm" ;;
               *)         FK_WHY="Исправления из patches/feeds/${FK_NAME} не будут применены" ;;
             esac
             echo "::warning title=forkop без патчей::Фид ${FK_NAME} собирается без patches/feeds/${FK_NAME}. ${FK_WHY}. Включите apply_patches."
