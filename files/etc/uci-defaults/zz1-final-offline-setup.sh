@@ -756,6 +756,29 @@ for _pk in forkop trafira podkop netshift; do
     fi
 done
 
+# forkop/trafira/podkop/netshift + youtubeUnblock: QUIC мимо sing-box не пускаем.
+# Эти пакеты отдают доменам из своих списков (и из секций «Исключение» — в
+# netshift они тоже идут через FakeIP) адреса FakeIP 198.18.0.0/15. Правило
+# youtubeUnblock «ip daddr @dpi_ips udp dport 443 reject» видит только настоящие
+# адреса, поэтому QUIC клиента к FakeIP проходил бы в sing-box, а оттуда — в
+# очередь 537 как обычный UDP, и видео (googlevideo) могло тормозить. Штатная
+# опция disable_quic ставит в sing-box правило reject для QUIC на входе tproxy:
+# браузер сразу переходит на TCP, который youtubeUnblock обрабатывает. HTTP/3
+# при этом не используется и для сайтов через VPS — для прокси это обычно лучше.
+# Без youtubeUnblock (forkop, trafira — у них свой Zapret) опцию не трогаем.
+if [ -x /usr/bin/youtubeUnblock ]; then
+    for _pk in forkop trafira podkop netshift; do
+        [ -f "/etc/config/$_pk" ] || continue
+        if [ "$(uci -q get "$_pk".settings.disable_quic)" = "1" ]; then
+            log_ok "$_pk: disable_quic уже включён"
+        elif uci -q set "$_pk".settings.disable_quic='1' && uci commit "$_pk"; then
+            log_ok "$_pk: disable_quic=1 (QUIC через FakeIP отклоняется, браузер идёт по TCP для youtubeUnblock)"
+        else
+            log_err "$_pk: не удалось выставить disable_quic"
+        fi
+    done
+fi
+
 # SQM (исправленный патч)
 if [ -f "/usr/lib/sqm/run.sh" ]; then
     log_info "Настройка SQM"
