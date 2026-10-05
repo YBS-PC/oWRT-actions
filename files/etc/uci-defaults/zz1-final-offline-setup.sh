@@ -499,6 +499,37 @@ EOF
     run_cmd "Включение passwall2" /etc/init.d/passwall2 enable
 fi
 
+# luci-app-xray: заводские настройки пакета рассчитаны на Китай — напрямую
+# идут только адреса GeoIP «cn», «Fast DNS» по умолчанию 223.5.5.5 (Alibaba),
+# напрямую через него разрешаются geosite:cn. На роутере в России это значит:
+# весь российский трафик — через сервер, DNS имени сервера — через китайский
+# резолвер. Меняем только нетронутые заводские значения и только на первой
+# загрузке: напрямую — GeoIP «ru» и домены geosite:category-ru (их же
+# разрешает Яндекс DNS напрямую), остальное — по правилам пакета.
+# Нужны geoip.dat/geosite.dat (пакеты v2ray-geoip, v2ray-geosite в сборке):
+# без них luci-app-xray молча отбрасывает все geoip:/geosite: правила.
+if [ ! -f "$LOCK_FILE" ] && [ "$CURRENT_VARIANT" = "xray" ] && [ -f /etc/config/xray_core ]; then
+    if [ "$(uci -q get xray_core.@general[0].geoip_direct_code_list)" = "cn" ] \
+        && [ "$(uci -q get xray_core.@general[0].bypassed_domain_rules)" = "geosite:cn" ] \
+        && [ -z "$(uci -q get xray_core.@general[0].fast_dns)" ]; then
+        uci -q batch <<-EOF
+            delete xray_core.@general[0].geoip_direct_code_list
+            add_list xray_core.@general[0].geoip_direct_code_list='ru'
+            delete xray_core.@general[0].geoip_direct_code_list_v6
+            add_list xray_core.@general[0].geoip_direct_code_list_v6='ru'
+            delete xray_core.@general[0].bypassed_domain_rules
+            add_list xray_core.@general[0].bypassed_domain_rules='geosite:category-ru'
+            set xray_core.@general[0].fast_dns='77.88.8.8:53'
+            commit xray_core
+EOF
+        _RC=$?; [ $_RC -eq 0 ] && log_ok "xray_core: напрямую GeoIP ru и geosite:category-ru, Fast DNS 77.88.8.8" || log_err "Ошибка uci batch xray_core (exit: $_RC)"
+    else
+        log_info "xray_core уже настроен вручную — заводские правила не меняем"
+    fi
+    [ -s /usr/share/xray/geosite.dat ] && [ -s /usr/share/xray/geoip.dat ] \
+        || log_err "xray: нет /usr/share/xray/geoip.dat или geosite.dat — правила geoip:/geosite: работать не будут"
+fi
+
 # Версия sing-box — вне вариантных блоков: бинарник ставится и в podkop,
 # netshift, forkop, trafira, passwall, где homeproxy нет.
 if [ -x /usr/bin/sing-box ]; then
@@ -653,16 +684,25 @@ EOF
     patch_check /etc/init.d/adguardhome '--logfile /var/AdGuardHome.log' "adguardhome init"
     # --- Upstream DNS в AGH yaml ------------------------------------------
     # Зависит от варианта сборки:
-    #   homeproxy       → 127.0.0.1:5333 (DNS-порт sing-box homeproxy)
     #   forkop, trafira, podkop, netshift → 127.0.0.42:53 (DNS inbound их sing-box)
-    # Правим yaml напрямую: AGH хранит upstream только там, не в UCI.
+    #   xray            → 127.0.0.1:5300 (DNS-вход Xray luci-app-xray: FakeDNS,
+    #                     Fast/Secure DNS и правила доменов работают в нём)
+    #   homeproxy и остальные → 127.0.0.1:5333 (DNS-порт sing-box homeproxy)
+    # Любой из этих адресов, оставшийся от прошлого варианта, заменяется на
+    # нужный. Правим yaml напрямую: AGH хранит upstream только там, не в UCI.
     # AGH должен быть остановлен в этот момент (выше есть stop).
     AGH_YAML="/etc/adguardhome/adguardhome.yaml"
     if [ -f "$AGH_YAML" ]; then
-        case "$CURRENT_VARIANT" in forkop|trafira|podkop|netshift) _SB42=1 ;; *) _SB42=0 ;; esac
-        if [ "$_SB42" = 1 ]; then
-            # Убираем ссылку на homeproxy sing-box, ставим sing-box forkop/trafira/podkop/netshift
-            sed -i 's|127\.0\.0\.1:5333|127.0.0.42:53|g' "$AGH_YAML"
+        case "$CURRENT_VARIANT" in
+            forkop|trafira|podkop|netshift) _AGH_EXPECTED='127.0.0.42:53' ;;
+            xray)          _AGH_EXPECTED='127.0.0.1:5300' ;;
+            *)             _AGH_EXPECTED='127.0.0.1:5333' ;;
+        esac
+        for _agh_old in 127.0.0.1:5333 127.0.0.42:53 127.0.0.1:5300; do
+            [ "$_agh_old" = "$_AGH_EXPECTED" ] && continue
+            sed -i "s|$(echo "$_agh_old" | sed 's/\./\\./g')|$_AGH_EXPECTED|g" "$AGH_YAML"
+        done
+        if [ "$_AGH_EXPECTED" = '127.0.0.42:53' ]; then
             # Все они по умолчанию сами перенастраивают dnsmasq на 127.0.0.42
             # (dont_touch_dhcp=0). Хозяин :53 — AGH, dnsmasq на :54 — поэтому
             # выставляем флаг, чтобы они dnsmasq не трогали.
@@ -684,16 +724,16 @@ EOF
             # AGH видит каждого. С включённым Alice Mode DNS клиентов «в обход»
             # уходит в DNS trafira мимо AGH (статистика/фильтры AGH для них
             # не работают) — это его штатное поведение, здесь не меняется.
-            log_ok "AGH upstream → $CURRENT_VARIANT sing-box (127.0.0.42:53)"
+            log_ok "AGH upstream → $CURRENT_VARIANT sing-box ($_AGH_EXPECTED)"
+        elif [ "$CURRENT_VARIANT" = "xray" ]; then
+            # luci-app-xray сам кладёт dnsmasq «server=127.0.0.1#5300»; при AGH
+            # dnsmasq живёт на :54 и клиентский DNS не видит, поэтому AGH
+            # обращается к DNS-входу Xray напрямую. Локальные имена (PTR, .lan)
+            # dnsmasq по-прежнему отдаёт сам.
+            log_ok "AGH upstream → Xray DNS ($_AGH_EXPECTED)"
         else
-            # homeproxy (и все остальные варианты с AGH): homeproxy sing-box DNS
-            sed -i 's|127\.0\.0\.42:53|127.0.0.1:5333|g' "$AGH_YAML"
-            log_ok "AGH upstream → homeproxy sing-box (127.0.0.1:5333)"
+            log_ok "AGH upstream → homeproxy sing-box ($_AGH_EXPECTED)"
         fi
-        case "$CURRENT_VARIANT" in
-            forkop|trafira|podkop|netshift) _AGH_EXPECTED='127.0.0.42:53' ;;
-            *)             _AGH_EXPECTED='127.0.0.1:5333' ;;
-        esac
         patch_check "$AGH_YAML" "$_AGH_EXPECTED" "adguardhome.yaml upstream DNS"
     else
         log_info "AGH yaml не найден ($AGH_YAML) — upstream DNS не настроен автоматически"
