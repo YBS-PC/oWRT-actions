@@ -11,10 +11,10 @@ Subject: [PATCH] podkop: домены с заглавными буквами и 
   \v, \f).
 ---
 diff --git a/podkop/files/usr/lib/helpers.sh b/podkop/files/usr/lib/helpers.sh
-index 8261882..93e8f7c 100644
+index 41b2130..1d31f04 100644
 --- a/podkop/files/usr/lib/helpers.sh
 +++ b/podkop/files/usr/lib/helpers.sh
-@@ -353,7 +353,9 @@ parse_domain_or_subnet_string_to_commas_string() {
+@@ -370,7 +370,9 @@ parse_domain_or_subnet_string_to_commas_string() {
      local type="$2"
  
      tmpfile=$(mktemp)
@@ -25,7 +25,7 @@ index 8261882..93e8f7c 100644
  
      result="$(parse_domain_or_subnet_file_to_comma_string "$tmpfile" "$type")"
      rm -f "$tmpfile"
-@@ -382,6 +384,10 @@ parse_domain_or_subnet_file_to_comma_string() {
+@@ -399,6 +401,10 @@ parse_domain_or_subnet_file_to_comma_string() {
  
          case "$type" in
          domains)
