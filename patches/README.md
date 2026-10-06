@@ -185,23 +185,25 @@ sing-box в LuCI (001), а в образе нет правила fw4 для TPRO
 
 ### podkop (`patches/feeds/podkop/`, фид `podkop` → itdoginfo/podkop)
 
-Применяется в варианте `podkop`. Написаны для podkop `main` (0.7.22,
-коммит `c0a2736`); исправления из netshift (yandexru45/netshift) перенесены
+Применяется в варианте `podkop`. Написаны для podkop `main` (0.7.23,
+коммит `c2ce4c3`); исправления из netshift (yandexru45/netshift) перенесены
 с указанием issue. Версию пакета part2 берёт из последнего тега
 (`PODKOP_VERSION`), иначе podkop собирался бы с версией `0.<дата>`.
 
 | Патч | Что делает |
 |---|---|
-| 001 | разбор proxy-ссылок: пароли с `%40`/`%23`/`+` (netshift #50), `@` в пароле trojan, IPv6 `[addr]:port`, VLESS/Trojan без `type`/`security` (#426), транспорты httpupgrade и http (#319), порт `443/` в trojan (#443); xhttp/kcp/quic отклоняются в LuCI с понятным сообщением. `main.js` пересобран из TS |
+| 001 | разбор proxy-ссылок: пароли с `%40`/`%23`/`+` (netshift #50), `@` в пароле trojan, IPv6 `[addr]:port`, VLESS/Trojan без `type`/`security` (#426), транспорты httpupgrade и http (#319), порт `443/` в trojan (#443); kcp/quic отклоняются в LuCI с понятным сообщением, xhttp/splithttp допускаются — с 0.7.23 их разбирает сам sing-box (`tools decode-link`, ядро podkop-engine r11+; с обычным sing-box podkop останавливается с понятной ошибкой). `main.js` пересобран из TS |
 | 002 | DNS: диагностика сервера с портом (`dig @host -p port`, #444); FakeIP только для A/AAAA, SRV/PTR и прочие идут на обычный DNS (#416); нечисловой порт DNS — порт по умолчанию (#442) |
 | 003 | start/stop/reload по очереди (#360); `wget -T 15` (#410); `ct status dnat return` первым в mangle — проброс портов при Fully Routed IPs (#385); rule-set после аварийной остановки (#356); исключения получают настоящие IP, а не FakeIP (#350); адрес без интерфейса `lan` (#314); `Requires: 002` |
 | 004 | домены с заглавными буквами и табуляцией в списках (netshift #52, #53) |
 | 005 | настройка «Торренты мимо прокси» (`exclude_bittorrent`, netshift #56) |
 
-Проверено: применение к чистому podkop `main` (повторный прогон — «уже есть»,
-`FEED_PATCH_STRICT=1` проходит), тесты LuCI (vitest 294/294, eslint), функции
-бэкенда в busybox ash, порядок правил nft в network namespace, `sing-box
-check` 1.12.22 и 1.14.2 для конфига с новыми правилами и ссылками.
+Проверено: применение к чистому podkop 0.7.23 (повторный прогон — «уже
+есть», `FEED_PATCH_STRICT=1` проходит), тесты LuCI (vitest 297/297, eslint,
+prettier), `main.js` совпадает со сборкой tsup, функции бэкенда в busybox ash
+(в том числе ссылки xhttp с podkop-engine и без него), порядок правил nft в
+network namespace, `sing-box check` 1.12.22 и 1.14.2 для конфига с новыми
+правилами и ссылками.
 
 ### luci-app-xray (`patches/feeds/luciappxray/`, фид `luciappxray` → yichya/luci-app-xray)
 
