@@ -110,6 +110,12 @@ on:
         type: boolean
         default: true
 
+      stop_outdated_patches:
+        description: 'Останавливать сборку, если патч устарел: у автора изменился файл, к которому он применяется (уведомление в Telegram; снять — патч пропускается с предупреждением)'
+        required: true
+        type: boolean
+        default: true
+
       feeds_latest:
         description: 'Фиды packages/luci/routing/telephony/video — коммиты репозитория пакетов (как после apk upgrade), а не тега релиза (в combo задаётся матрицей)'
         required: true
@@ -137,6 +143,14 @@ env:
   DIY_P3_SH: ./sh/WRT-part3.sh
 
   TZ: Europe/Moscow
+
+  # Сверка исходников с патчами (sh/patch-drift.sh): если у автора фида или
+  # пакета изменился файл, к которому применяется наш патч, эта сборка
+  # останавливается до компиляции и в Telegram приходит список патчей,
+  # которые надо обновить. Включается галочкой формы stop_outdated_patches
+  # (по умолчанию включена; действует и в combo). "0" — без сверки: прежнее
+  # поведение (патч, который не ложится, пропускается с предупреждением).
+  PATCH_DRIFT_CHECK: ${{ inputs.stop_outdated_patches && '1' || '0' }}
 
   # Фиды forkop, формат «имя URL;ветка». Какой из них подключить, выбирает
   # поле формы Build Variant: forkop — оригинал, forkop-mod — форк (внутри
@@ -886,6 +900,9 @@ jobs:
         echo "youtubeUnblock : $SUM_YTB"
         echo "zz1            : $SUM_ZZ"
         echo "Патчи          : $SUM_PATCHES"
+        if [ "$SUM_PATCHES" = "да" ]; then
+            [ "$PATCH_DRIFT_CHECK" = "1" ] && echo "Устаревшие     : стоп сборки + Telegram" || echo "Устаревшие     : пропуск с предупреждением"
+        fi
         if [ "${{ matrix.feeds }}" = "true" ]; then
             echo "Фиды           : коммиты репозитория пакетов (packages-${VAR_BRANCH#openwrt-}/${PKG_ARCH:-?})"
         else
@@ -1163,6 +1180,17 @@ jobs:
             chmod +x $GITHUB_WORKSPACE/$DIY_P3_SH
             $GITHUB_WORKSPACE/$DIY_P3_SH
         fi
+
+        # Патчи, файлы которых изменились у автора (part2 и part3 собирают их
+        # в patch_drift.txt, а не останавливаются на первом — так в отчёт
+        # попадают все). Компилировать с ними нельзя: патч не применён, а
+        # прошивка без исправления — не та, что ждёшь. Уведомление — в
+        # следующем шаге.
+        if [ -s "$GITHUB_WORKSPACE/patch_drift.txt" ]; then
+            echo "::error title=Патчи надо обновить::Сборка остановлена до компиляции: у авторов изменились файлы, к которым применяются патчи (список ниже и в Telegram)"
+            sed 's/^/    /' "$GITHUB_WORKSPACE/patch_drift.txt"
+            exit 1
+        fi
         
         # === ОПТИМИЗАЦИЯ РАЗМЕРА СБОРКИ ===
         # Критично для OpenWrt + Passwall
@@ -1315,6 +1343,50 @@ jobs:
         # Проверяем наличие ключевых пакетов для уверенности
         grep -E "CONFIG_PACKAGE_(luci-app-homeproxy|sing-box|luci-app-passwall2|luci-app-v2raya|luci-app-xray|xray-core|v2ray-geoip|v2ray-geosite|luci-app-podkop|luci-app-netshift|luci-app-forkop|luci-app-trafira|luci-app-re-homeproxy)=" .config || echo "None found"
         echo "=========================================="
+
+    - name: Telegram — патчи надо обновить
+      # Только для сборки, которую остановила сверка патчей (patch_drift.txt
+      # пишут part2/part3). Остальные сборки матрицы продолжаются
+      # (fail-fast: false); общий итог запуска придёт как обычно.
+      if: failure() && hashFiles('patch_drift.txt') != ''
+      env:
+        TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        BUILD_NAME: ${{ inputs.source }} ${{ inputs.branch }} · ${{ matrix.vname }} · ${{ matrix.target }}
+      run: |
+        if [ -z "$TG_TOKEN" ] || [ -z "$TG_CHAT" ]; then
+          echo "::notice::Секреты TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID не заданы — уведомление пропущено."
+          exit 0
+        fi
+        esc() { sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }
+        # Telegram принимает до 4096 символов: не больше 15 строк по 180
+        # символов (sed в UTF-8 режет по символам, не по байтам — иначе
+        # разрезанная буква сделала бы текст невалидным для Telegram)
+        TOTAL=$(grep -c . "$GITHUB_WORKSPACE/patch_drift.txt")
+        LIST=$(head -n 15 "$GITHUB_WORKSPACE/patch_drift.txt" | LC_ALL=C.UTF-8 sed -E 's/^(.{180}).+$/\1…/; s/^/• /')
+        if [ "$TOTAL" -gt 15 ]; then
+          LIST=$(printf '%s\n… и ещё %s — полный список в журнале сборки' "$LIST" "$((TOTAL - 15))")
+        fi
+        {
+          printf '<b>⛔ Патчи надо обновить</b>\n'
+          printf '%s\n\n' "$BUILD_NAME" | esc
+          printf 'Сборка остановлена до компиляции: у авторов изменились файлы, к которым применяются эти патчи. Остальные сборки запуска продолжаются.\n\n'
+          printf '%s\n\n' "$LIST" | esc
+          printf '<a href="%s">Открыть запуск</a>' "$RUN_URL"
+        } > /tmp/tg_drift.txt
+        HTTP=$(curl -sS -o /tmp/tg.json -w '%{http_code}' --max-time 20 \
+          "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+          --data-urlencode "chat_id=${TG_CHAT}" \
+          --data-urlencode "text=$(cat /tmp/tg_drift.txt)" \
+          --data-urlencode "parse_mode=HTML" \
+          --data-urlencode "disable_web_page_preview=true" 2>/dev/null) || HTTP="000"
+        if [ "$HTTP" = "200" ]; then
+          echo ">>> Уведомление в Telegram отправлено."
+        else
+          echo "::warning::Telegram API ответил HTTP $HTTP: $(jq -r '.description // "нет ответа"' /tmp/tg.json 2>/dev/null)"
+        fi
+        rm -f /tmp/tg.json /tmp/tg_drift.txt
 
     - name: Check sing-box compatibility (homeproxy)
       # Проверяем ФАКТИЧЕСКУЮ совместимость, а не номер версии: генератор
