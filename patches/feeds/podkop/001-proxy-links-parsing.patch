@@ -17,19 +17,25 @@ Subject: [PATCH] podkop: разбор proxy-ссылок (пароли со сп
 - VLESS/Trojan без "type" — это tcp, без "security" — none, как в Xray
   (itdoginfo/podkop#426). Раньше в журнале была ошибка Unknown security ''.
 - Добавлены транспорты httpupgrade и http (h2) (itdoginfo/podkop#319).
-  Для xhttp/splithttp/kcp/quic понятная ошибка «не поддерживается sing-box»
-  вместо «Unknown transport».
+  Для kcp/quic понятная ошибка «не поддерживается sing-box» вместо
+  «Unknown transport». Ссылки xhttp/splithttp с 0.7.23 разбирает сам
+  sing-box (tools decode-link, podkop-engine r11+) ещё до нашего разбора —
+  их ветка автора не тронута.
 
 LuCI (fe-app-podkop, main.js пересобран tsup из исходников):
 - validateTrojanUrl: порт "443/" больше не «invalid port number»
   (itdoginfo/podkop#443), '@' в пароле, IPv6.
 - validateVlessUrl: type и security необязательны (#426), IPv6.
-- Ссылки с транспортами, которые sing-box не умеет (xhttp, splithttp,
-  kcp, quic, udp), отклоняются с понятным сообщением: раньше они
-  принимались, и получался неработающий outbound (#319).
+- Ссылки с транспортами, которые sing-box не умеет (kcp, quic, udp),
+  отклоняются с понятным сообщением: раньше они принимались, и получался
+  неработающий outbound (#319). xhttp/splithttp допустимы: их разбирает
+  sing-box (podkop-engine), без него бэкенд останавливается с понятной
+  ошибкой.
 
-Проверено: vitest 294/294, eslint, sing-box check 1.12.22 и 1.14.2 для
-конфига с такими ссылками, функции бэкенда в busybox ash.
+Перенесён на podkop 0.7.23. Проверено: vitest 297/297, eslint, prettier,
+main.js совпадает со сборкой tsup, sing-box check 1.12.22 и 1.14.2 для
+конфига с такими ссылками, функции бэкенда в busybox ash (в том числе
+xhttp с podkop-engine и без него).
 ---
 diff --git a/fe-app-podkop/src/helpers/index.ts b/fe-app-podkop/src/helpers/index.ts
 index 06baeb7..be2f9c4 100644
@@ -93,7 +99,7 @@ index 0000000..de9cf17
 +  };
 +}
 diff --git a/fe-app-podkop/src/validators/tests/validateTrojanUrl.test.js b/fe-app-podkop/src/validators/tests/validateTrojanUrl.test.js
-index 7f1281d..f9adacb 100644
+index 7f1281d..2f46f1f 100644
 --- a/fe-app-podkop/src/validators/tests/validateTrojanUrl.test.js
 +++ b/fe-app-podkop/src/validators/tests/validateTrojanUrl.test.js
 @@ -24,12 +24,6 @@ const validUrls = [
@@ -109,20 +115,22 @@ index 7f1281d..f9adacb 100644
    // WebSocket
    [
      'ws + none',
-@@ -88,14 +82,25 @@ const validUrls = [
+@@ -88,7 +82,13 @@ const validUrls = [
      'trojan://ou8pLSyx9N@127.0.0.1:17737?type=httpupgrade&path=%2Fhttpupgradepath&host=google.com&security=tls&fp=chrome&alpn=h2%2Chttp%2F1.1&ech=AF3%2BDQBZAAAgACB%2FlkIkit%2BblFzE7PtbYDVF3NXK8olXJ5a7YwY%2Biy9QQwAkAAEAAQABAAIAAQADAAIAAQACAAIAAgADAAMAAQADAAIAAwADAApnb29nbGUuY29tAAA%3D&sni=google.com#trojan-httpupgrade-tls-ech',
    ],
  
 -  // XHTTP
-   [
--    'xhttp + none',
--    'trojan://VEetltxLtw@127.0.0.1:59072?type=xhttp&path=%2Fxhttppath&host=google.com&mode=auto&security=none#trojan-xhttp',
++  [
 +    'port followed by slash',
 +    'trojan://pass@example.com:443/?security=tls&sni=example.com#t',
-   ],
++  ],
 +  ['password with @', 'trojan://p@ss@example.com:443?security=tls#t'],
 +  ['IPv6 host', 'trojan://pass@[2001:db8::1]:443?security=tls#t'],
 +  ['no query string', 'trojan://pass@example.com:443'],
+   [
+     'xhttp + none',
+     'trojan://VEetltxLtw@127.0.0.1:59072?type=xhttp&path=%2Fxhttppath&host=google.com&mode=auto&security=none#trojan-xhttp',
+@@ -96,6 +96,11 @@ const validUrls = [
  ];
  
  const invalidUrls = [
@@ -130,16 +138,12 @@ index 7f1281d..f9adacb 100644
 +    'mKCP + none (unsupported by sing-box)',
 +    'trojan://N5v7iIOe9G@127.0.0.1:36319?type=kcp&headerType=none&seed=P91wFIfjzZ&security=none#trojan-mKCP',
 +  ],
-+  [
-+    'xhttp + none (unsupported by sing-box)',
-+    'trojan://VEetltxLtw@127.0.0.1:59072?type=xhttp&path=%2Fxhttppath&host=google.com&mode=auto&security=none#trojan-xhttp',
-+  ],
 +  ['unknown type', 'trojan://pass@127.0.0.1:443?type=foo&security=tls'],
    ['No prefix', 'uuid@host:443?type=tcp&security=tls'],
    ['No password', 'trojan://@127.0.0.1:443?type=tcp&security=tls'],
    ['No host', 'trojan://pass@:443?type=tcp&security=tls'],
 diff --git a/fe-app-podkop/src/validators/tests/validateVlessUrl.test.js b/fe-app-podkop/src/validators/tests/validateVlessUrl.test.js
-index 114cb22..fb9e70b 100644
+index 114cb22..043a9dc 100644
 --- a/fe-app-podkop/src/validators/tests/validateVlessUrl.test.js
 +++ b/fe-app-podkop/src/validators/tests/validateVlessUrl.test.js
 @@ -15,11 +15,6 @@ const validUrls = [
@@ -159,9 +163,7 @@ index 114cb22..fb9e70b 100644
      'vless://76dbd0ff-1a35-4f0c-a9ba-3c5890b7dea6@127.0.0.1:50639?type=httpupgrade&encryption=none&path=%2Fhttpupgradepath&host=google.com&security=tls&sni=google.com#vless-httpupgrade-tls',
    ],
 -  // XHTTP
-   [
--    'xhttp + none',
--    'vless://c2841505-ec32-4b8d-b6dd-3e19d648c321@127.0.0.1:45507?type=xhttp&encryption=none&path=%2Fxhttppath&host=xhttp&mode=auto&security=none#vless-xhttp',
++  [
 +    'IPv6 host',
 +    'vless://94792286-7bbe-4f33-8b36-18d1bbf70723@[2001:db8::1]:443?type=tcp&security=none#v6',
 +  ],
@@ -172,9 +174,14 @@ index 114cb22..fb9e70b 100644
 +  [
 +    'no query string',
 +    'vless://94792286-7bbe-4f33-8b36-18d1bbf70723@example.com:443#plain',
-   ],
++  ],
 +  ['Without type', 'vless://uuid@127.0.0.1:443?security=tls'],
 +  ['Without security', 'vless://uuid@127.0.0.1:443?type=tcp'],
+   [
+     'xhttp + none',
+     'vless://c2841505-ec32-4b8d-b6dd-3e19d648c321@127.0.0.1:45507?type=xhttp&encryption=none&path=%2Fxhttppath&host=xhttp&mode=auto&security=none#vless-xhttp',
+   ],
++  ['splithttp', 'vless://uuid@127.0.0.1:443?type=splithttp&security=tls'],
  ];
  
  const invalidUrls = [
@@ -182,11 +189,6 @@ index 114cb22..fb9e70b 100644
 +    'mKCP + none (unsupported by sing-box)',
 +    'vless://72e201d7-7841-4a32-b266-4aa3eb776d51@127.0.0.1:17270?type=kcp&encryption=none&headerType=none&seed=AirziWi4ng&security=none#vless-mKCP',
 +  ],
-+  [
-+    'xhttp + none (unsupported by sing-box)',
-+    'vless://c2841505-ec32-4b8d-b6dd-3e19d648c321@127.0.0.1:45507?type=xhttp&encryption=none&path=%2Fxhttppath&host=xhttp&mode=auto&security=none#vless-xhttp',
-+  ],
-+  ['splithttp', 'vless://uuid@127.0.0.1:443?type=splithttp&security=tls'],
 +  ['unknown type', 'vless://uuid@127.0.0.1:443?type=foo&security=tls'],
 +  ['unknown security', 'vless://uuid@127.0.0.1:443?type=tcp&security=xtls'],
    ['No prefix', 'uuid@host:443?type=tcp&security=tls'],
@@ -201,20 +203,16 @@ index 114cb22..fb9e70b 100644
      'vless://uuid@127.0.0.1:443?type=tcp&security=reality&fp=chrome',
 diff --git a/fe-app-podkop/src/validators/unsupportedTransports.ts b/fe-app-podkop/src/validators/unsupportedTransports.ts
 new file mode 100644
-index 0000000..36adf71
+index 0000000..20bb776
 --- /dev/null
 +++ b/fe-app-podkop/src/validators/unsupportedTransports.ts
-@@ -0,0 +1,20 @@
+@@ -0,0 +1,18 @@
 +// Xray transports that sing-box (and therefore podkop) cannot use.
 +// A link with one of them would produce an outbound that never connects.
-+export const UNSUPPORTED_TRANSPORTS = [
-+  'xhttp',
-+  'splithttp',
-+  'kcp',
-+  'mkcp',
-+  'quic',
-+  'udp',
-+];
++// xhttp/splithttp are not here: podkop decodes such links with
++// "sing-box tools decode-link" (podkop-engine r11+), and with another
++// sing-box the backend stops with a clear message.
++export const UNSUPPORTED_TRANSPORTS = ['kcp', 'mkcp', 'quic', 'udp'];
 +
 +export const SUPPORTED_TRANSPORTS = [
 +  'tcp',
@@ -224,6 +222,8 @@ index 0000000..36adf71
 +  'httpupgrade',
 +  'http',
 +  'h2',
++  'xhttp',
++  'splithttp',
 +];
 diff --git a/fe-app-podkop/src/validators/validateTrojanUrl.ts b/fe-app-podkop/src/validators/validateTrojanUrl.ts
 index 052aef8..bb1fdce 100644
@@ -388,10 +388,10 @@ index 8db37d2..daffadb 100644
          return {
            valid: false,
 diff --git a/luci-app-podkop/htdocs/luci-static/resources/view/podkop/main.js b/luci-app-podkop/htdocs/luci-static/resources/view/podkop/main.js
-index 009c1ae..b52d400 100644
+index 76e75ae..018ad6f 100644
 --- a/luci-app-podkop/htdocs/luci-static/resources/view/podkop/main.js
 +++ b/luci-app-podkop/htdocs/luci-static/resources/view/podkop/main.js
-@@ -234,6 +234,48 @@ function parseQueryString(query) {
+@@ -234,6 +234,43 @@ function parseQueryString(query) {
    );
  }
  
@@ -419,14 +419,7 @@ index 009c1ae..b52d400 100644
 +}
 +
 +// src/validators/unsupportedTransports.ts
-+var UNSUPPORTED_TRANSPORTS = [
-+  "xhttp",
-+  "splithttp",
-+  "kcp",
-+  "mkcp",
-+  "quic",
-+  "udp"
-+];
++var UNSUPPORTED_TRANSPORTS = ["kcp", "mkcp", "quic", "udp"];
 +var SUPPORTED_TRANSPORTS = [
 +  "tcp",
 +  "raw",
@@ -434,13 +427,15 @@ index 009c1ae..b52d400 100644
 +  "grpc",
 +  "httpupgrade",
 +  "http",
-+  "h2"
++  "h2",
++  "xhttp",
++  "splithttp"
 +];
 +
  // src/validators/validateVlessUrl.ts
  function validateVlessUrl(url) {
    try {
-@@ -255,52 +297,42 @@ function validateVlessUrl(url) {
+@@ -255,52 +292,42 @@ function validateVlessUrl(url) {
          valid: false,
          message: "Invalid VLESS URL: missing host and UUID"
        };
@@ -507,7 +502,7 @@ index 009c1ae..b52d400 100644
        if (!params.pbk)
          return {
            valid: false,
-@@ -351,13 +383,13 @@ function validateTrojanUrl(url) {
+@@ -351,13 +378,13 @@ function validateTrojanUrl(url) {
      }
      const body = url.slice("trojan://".length);
      const [mainPart] = body.split("#");
@@ -523,7 +518,7 @@ index 009c1ae..b52d400 100644
      if (!userPart)
        return { valid: false, message: "Invalid Trojan URL: missing password" };
      if (!hostPortPart)
-@@ -365,7 +397,7 @@ function validateTrojanUrl(url) {
+@@ -365,7 +392,7 @@ function validateTrojanUrl(url) {
          valid: false,
          message: "Invalid Trojan URL: missing hostname and port"
        };
@@ -532,7 +527,7 @@ index 009c1ae..b52d400 100644
      if (!host)
        return { valid: false, message: "Invalid Trojan URL: missing hostname" };
      if (!port)
-@@ -376,6 +408,17 @@ function validateTrojanUrl(url) {
+@@ -376,6 +403,17 @@ function validateTrojanUrl(url) {
          valid: false,
          message: "Invalid Trojan URL: invalid port number"
        };
@@ -550,7 +545,7 @@ index 009c1ae..b52d400 100644
    } catch (_e) {
      return { valid: false, message: _("Invalid Trojan URL: parsing failed") };
    }
-@@ -4919,11 +4962,13 @@ return baseclass.extend({
+@@ -4939,11 +4977,13 @@ return baseclass.extend({
    logger,
    maskIP,
    onMount,
@@ -565,7 +560,7 @@ index 009c1ae..b52d400 100644
    svgEl,
    validateDNS,
 diff --git a/podkop/files/usr/lib/helpers.sh b/podkop/files/usr/lib/helpers.sh
-index c25edb8..73b666c 100644
+index 87d93b0..8041160 100644
 --- a/podkop/files/usr/lib/helpers.sh
 +++ b/podkop/files/usr/lib/helpers.sh
 @@ -119,10 +119,28 @@ comma_string_to_json_array() {
@@ -599,8 +594,8 @@ index c25edb8..73b666c 100644
 +    _url_percent_decode "$1"
  }
  
- # Returns the scheme (protocol) part of a URL
-@@ -131,32 +149,64 @@ url_get_scheme() {
+ # Prints the features the installed sing-box reports in the "Features:" line of
+@@ -148,32 +166,64 @@ url_get_scheme() {
      echo "${url%%://*}"
  }
  
@@ -678,7 +673,7 @@ index c25edb8..73b666c 100644
  }
  
  # Extracts the path from a URL (without query or fragment; returns "/" if empty)
-@@ -165,7 +215,7 @@ url_get_path() {
+@@ -182,7 +232,7 @@ url_get_path() {
      echo "$url" | sed -n -e 's#^[^:/?]*://##' -e 's#^[^/]*##' -e 's#\([^?]*\).*#\1#p'
  }
  
@@ -687,7 +682,7 @@ index c25edb8..73b666c 100644
  url_get_query_param() {
      local url="$1"
      local param="$2"
-@@ -175,7 +225,9 @@ url_get_query_param() {
+@@ -192,7 +242,9 @@ url_get_query_param() {
  
      [ -z "$raw" ] && echo "" && return
  
@@ -699,12 +694,12 @@ index c25edb8..73b666c 100644
  
  # Extracts the basename (filename without extension) from a URL
 diff --git a/podkop/files/usr/lib/sing_box_config_facade.sh b/podkop/files/usr/lib/sing_box_config_facade.sh
-index 7641673..4afec33 100644
+index af91fa4..d10a3c5 100644
 --- a/podkop/files/usr/lib/sing_box_config_facade.sh
 +++ b/podkop/files/usr/lib/sing_box_config_facade.sh
-@@ -61,24 +61,34 @@ sing_box_cf_add_proxy_outbound() {
-     local url="$3"
-     local udp_over_tcp="$4"
+@@ -74,24 +74,34 @@ sing_box_cf_add_proxy_outbound() {
+         ;;
+     esac
  
 -    url=$(url_decode "$url")
 +    # The link is split into components FIRST and each component is decoded
@@ -742,7 +737,7 @@ index 7641673..4afec33 100644
              fi
          fi
          config="$(sing_box_cm_add_socks_outbound \
-@@ -96,9 +106,9 @@ sing_box_cf_add_proxy_outbound() {
+@@ -109,9 +119,9 @@ sing_box_cf_add_proxy_outbound() {
      vless)
          local tag host port uuid flow packet_encoding
          tag=$(get_outbound_tag_by_section "$section")
@@ -755,7 +750,7 @@ index 7641673..4afec33 100644
          flow=$(url_get_query_param "$url" "flow")
          packet_encoding=$(url_get_query_param "$url" "packetEncoding")
  
-@@ -109,7 +119,7 @@ sing_box_cf_add_proxy_outbound() {
+@@ -122,7 +132,7 @@ sing_box_cf_add_proxy_outbound() {
      ss)
          local userinfo tag host port method password udp_over_tcp
  
@@ -764,7 +759,7 @@ index 7641673..4afec33 100644
          if ! is_shadowsocks_userinfo_format "$userinfo"; then
              userinfo=$(base64_decode "$userinfo")
              if [ $? -ne 0 ]; then
-@@ -119,8 +129,8 @@ sing_box_cf_add_proxy_outbound() {
+@@ -132,8 +142,8 @@ sing_box_cf_add_proxy_outbound() {
          fi
  
          tag=$(get_outbound_tag_by_section "$section")
@@ -775,7 +770,7 @@ index 7641673..4afec33 100644
          method="${userinfo%%:*}"
          password="${userinfo#*:}"
  
-@@ -139,9 +149,9 @@ sing_box_cf_add_proxy_outbound() {
+@@ -152,9 +162,9 @@ sing_box_cf_add_proxy_outbound() {
      trojan)
          local tag host port password
          tag=$(get_outbound_tag_by_section "$section")
@@ -788,7 +783,7 @@ index 7641673..4afec33 100644
  
          config=$(sing_box_cm_add_trojan_outbound "$config" "$tag" "$host" "$port" "$password")
          config=$(_add_outbound_security "$config" "$tag" "$url")
-@@ -150,9 +160,9 @@ sing_box_cf_add_proxy_outbound() {
+@@ -163,9 +173,9 @@ sing_box_cf_add_proxy_outbound() {
      hysteria2 | hy2)
          local tag host port password obfuscator_type obfuscator_password upload_mbps download_mbps
          tag=$(get_outbound_tag_by_section "$section")
@@ -801,7 +796,7 @@ index 7641673..4afec33 100644
          obfuscator_type=$(url_get_query_param "$url" "obfs")
          obfuscator_password=$(url_get_query_param "$url" "obfs-password")
          upload_mbps=$(url_get_query_param "$url" "upmbps")
-@@ -212,7 +222,7 @@ _add_outbound_security() {
+@@ -264,7 +274,7 @@ _add_outbound_security() {
                  "$short_id"
          )
          ;;
@@ -810,7 +805,7 @@ index 7641673..4afec33 100644
      *)
          log "Unknown security '$security' detected." "error"
          ;;
-@@ -241,7 +251,7 @@ _add_outbound_transport() {
+@@ -293,7 +303,7 @@ _add_outbound_transport() {
      local transport
      transport=$(url_get_query_param "$url" "type")
      case "$transport" in
@@ -819,7 +814,7 @@ index 7641673..4afec33 100644
      ws)
          local ws_path ws_host ws_early_data
          ws_path=$(url_get_query_param "$url" "path")
-@@ -261,6 +271,27 @@ _add_outbound_transport() {
+@@ -313,6 +323,27 @@ _add_outbound_transport() {
              sing_box_cm_set_grpc_transport_for_outbound "$config" "$outbound_tag" "$grpc_service_name"
          )
          ;;
@@ -841,14 +836,14 @@ index 7641673..4afec33 100644
 +            sing_box_cm_set_http_transport_for_outbound "$config" "$outbound_tag" "$http_path" "$http_host"
 +        )
 +        ;;
-+    xhttp | splithttp | kcp | mkcp | quic)
-+        log "Transport '$transport' is not supported by sing-box. The outbound will not work, use a link with tcp, ws, grpc, httpupgrade or http transport." "error"
++    kcp | mkcp | quic)
++        log "Transport '$transport' is not supported by sing-box. The outbound will not work, use a link with tcp, ws, grpc, httpupgrade, http or xhttp transport." "error"
 +        ;;
      *)
          log "Unknown transport '$transport' detected." "error"
          ;;
 diff --git a/podkop/files/usr/lib/sing_box_config_manager.sh b/podkop/files/usr/lib/sing_box_config_manager.sh
-index c1a2943..dd3f10b 100644
+index 8ef2c3d..4e26c93 100644
 --- a/podkop/files/usr/lib/sing_box_config_manager.sh
 +++ b/podkop/files/usr/lib/sing_box_config_manager.sh
 @@ -833,6 +833,80 @@ sing_box_cm_set_ws_transport_for_outbound() {
