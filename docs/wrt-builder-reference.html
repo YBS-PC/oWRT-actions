@@ -170,6 +170,7 @@
     <a href="#params">параметры</a>
     <a href="#pipeline">сборка</a>
     <a href="#variants">варианты</a>
+    <a href="#ranking">рейтинг</a>
     <a href="#firstboot">первый старт</a>
   </span>
 </nav>
@@ -183,7 +184,7 @@
     <div class="chips">
       <span class="chip"><b>2</b> исходника · openwrt / immortalwrt</span>
       <span class="chip"><b>6</b> устройств</span>
-      <span class="chip"><b>10</b> вариантов</span>
+      <span class="chip"><b>13</b> вариантов</span>
       <span class="chip">apk · 25.12 / master &nbsp;|&nbsp; opkg · 24.10</span>
       <span class="chip"><b>2</b> уровня патчей · дерево / фиды</span>
     </div>
@@ -426,6 +427,30 @@
       <span class="ic">◆</span>
       <p><b>trafira: что важно знать.</b> Пакеты <code>trafira</code>, <code>luci-app-trafira</code>, <code>luci-i18n-trafira-ru</code> собираются из <code>petrouspetr-pixel/trafira</code> — активно развиваемого продолжения forkop со своими тестами. В нём уже есть почти все исправления, которые для forkop дают наши патчи, а сверх них — Alice Mode (какие устройства идут через trafira, а какие мимо: по IP, MAC, интерфейсу, с настоящим DNS для обходящих), DoH с mTLS, Zapret/Zapret2/ByeDPI как действие секции, серверные inbound (VLESS Reality, MTProto, Tailscale). Xray, как в forkop-mod, нет. Конфиг — <code>/etc/config/trafira</code>, пакет конфликтует с forkop и podkop. Патчи <code>patches/feeds/trafira</code>: 001 — без него установка и обновление sing-box со вкладки «Компоненты» падают с ошибкой ucode; 002 — правило fw4, пропускающее TPROXY-трафик во <code>input</code>, ставится и в образе прошивки (<code>/etc/uci-defaults/60_trafira-firewall</code>, как патч 016 forkop), иначе гостевые зоны с <code>input=REJECT</code> режут проксируемый трафик; 003 — «Исключить BitTorrent» (как патч 023 forkop). Настройки «Исключённые устройства» и «Перехватывать DNS устройств» из наших патчей forkop здесь заменяет Alice Mode. <code>zz1-final-offline-setup.sh</code> делает для trafira то же, что для forkop: AGH upstream <code>127.0.0.42:53</code>, <code>dont_touch_dhcp=1</code>, <code>exclude_ntp=1</code>. По умолчанию trafira DNS клиентов не перехватывает, и AGH видит каждое устройство. Если включить Alice Mode, DNS устройств «в обход» пойдёт в DNS trafira мимо AGH. youtubeUnblock в варианте нет (обход DPI — Zapret/ByeDPI самого trafira). sing-box — как у forkop: пакет из фида плюс скачанный бинарник при выборе версии в <code>sb</code>; обновлять его лучше со вкладки «Компоненты».</p>
     </div>
+
+    <h3 class="sub" id="ranking">Рейтинг вариантов для NanoPi R6S</h3>
+    <p>Оценка для R6S в роли главного роутера с AdGuard Home на :53 и youtubeUnblock. Критерии: надёжность связки с AGH, сколько патчей нужно и живо ли развитие у автора, удобство настройки. Это экспертная оценка по коду и патчам, а не результат замеров. Во всех прокси-вариантах есть zz1, TCP BBR и AdGuard Home (dnsmasq переезжает на :54) и нет SQM — в таблице только различия.</p>
+    <div class="card scroll" style="margin-top:14px">
+      <table class="pt stack">
+        <thead><tr><th style="width:15%">Место</th><th style="width:30%">Есть</th><th style="width:22%">Нет</th><th style="width:33%">Почему здесь</th></tr></thead>
+        <tbody>
+          <tr><td class="feat">1. <code>homeproxy</code></td><td data-l="Есть"><p>sing-box (последняя версия), LuCI-приложение ImmortalWrt, youtubeUnblock, Clash API и панель YACD, 6 патчей (sing-box 1.13–1.14, DNS, права rpcd)</p></td><td data-l="Нет"><p>готовых российских списков (наборы правил добавляются вручную), подписок в стиле podkop</p></td><td data-l="Почему здесь"><p>Самая отлаженная связка с AGH (<code>127.0.0.1:5333</code>, zz1 включает <code>dns_hijacked</code>), официальный пакет, поддерживается командой ImmortalWrt.</p></td></tr>
+          <tr><td class="feat">2. <code>podkop</code></td><td data-l="Есть"><p>sing-box, готовые российские списки по ссылке с автообновлением, вставка ссылок <code>vless://</code> и других, FakeIP, youtubeUnblock, 5 патчей (разбор ссылок, DNS, гонка при старте, торренты мимо прокси)</p></td><td data-l="Нет"><p>гибких секций по устройствам, как в forkop/trafira; встроенного обхода DPI</p></td><td data-l="Почему здесь"><p>Проще всего для схемы «напрямую всё, кроме заблокированного», большое сообщество, связка с AGH проверена (<code>127.0.0.42:53</code>, <code>dont_touch_dhcp</code>). Минус — автор давно не выпускал обновлений.</p></td></tr>
+          <tr><td class="feat">3. <code>netshift</code></td><td data-l="Есть"><p>то же, что в podkop, плюс свежие исправления автора (транспорт <code>httpupgrade</code> и другие), youtubeUnblock, 2 патча</p></td><td data-l="Нет"><p>того же, чего нет в podkop; сообщество меньше</p></td><td data-l="Почему здесь"><p>Активно развивается, нужно меньше правок. Но проект моложе, и формат конфига может меняться.</p></td></tr>
+          <tr><td class="feat">4. <code>trafira</code></td><td data-l="Есть"><p>sing-box и Xray на выбор, секции с отдельными правилами, FakeIP, Alice Mode, встроенный обход DPI (Zapret/ByeDPI), исключённые устройства, страница «Компоненты», 3 патча</p></td><td data-l="Нет"><p>youtubeUnblock (вырезается: у trafira свой обход DPI)</p></td><td data-l="Почему здесь"><p>Самый функциональный из «сложных» и активно поддерживается. Настраивать сложнее; с включённым Alice Mode DNS части клиентов идёт мимо AGH, и фильтры и статистика AGH для них не работают.</p></td></tr>
+          <tr><td class="feat">5. <code>forkop-mod</code></td><td data-l="Есть"><p>семейство forkop/trafira, форк Gavr1024 со свежими релизами, 1 патч</p></td><td data-l="Нет"><p>youtubeUnblock</p></td><td data-l="Почему здесь"><p>Форк одного человека. Без патча исключённые устройства идут через прокси; часть тестов автора падает и без патча.</p></td></tr>
+          <tr><td class="feat">6. <code>forkop</code></td><td data-l="Есть"><p>всё семейство forkop (оригинал ushan0v), 25 патчей</p></td><td data-l="Нет"><p>youtubeUnblock, свежих обновлений автора</p></td><td data-l="Почему здесь"><p>Автор не выпускает обновлений, без патчей не работает с sing-box 1.14. Держится на 25 исправлениях из <code>patches/feeds/forkop</code>.</p></td></tr>
+          <tr><td class="feat">7. <code>rehomeproxy</code></td><td data-l="Есть"><p>homeproxy с поддержкой hiddify-core и sing-box-extended, 3 патча</p></td><td data-l="Нет"><p>совместимости с обычным homeproxy (ставятся по одним путям), свежих обновлений автора</p></td><td data-l="Почему здесь"><p>Имеет смысл, только если нужны протоколы hiddify/extended. Без патча 001 не запускается на обычном sing-box.</p></td></tr>
+          <tr><td class="feat">8. <code>xray</code></td><td data-l="Есть"><p>Xray (VLESS/REALITY/XHTTP), luci-app-xray, geoip/geosite, youtubeUnblock, русские правила по умолчанию от zz1, AGH → DNS Xray <code>127.0.0.1:5300</code>, 1 патч</p></td><td data-l="Нет"><p>sing-box, подписок и вставки ссылок, российских списков по URL</p></td><td data-l="Почему здесь"><p>Лёгкий и надёжный, но серверы вводятся вручную по полям, а правила опираются на файлы geoip/geosite.</p></td></tr>
+          <tr><td class="feat">9. <code>passwall</code></td><td data-l="Есть"><p>passwall2: Xray, много протоколов, geoip/geosite, youtubeUnblock</p></td><td data-l="Нет"><p>sing-box, российских списков (заточен под Китай)</p></td><td data-l="Почему здесь"><p>Тяжёлый. Связка с AGH не настроена: zz1 направляет AGH на <code>127.0.0.1:5333</code>, где в этом варианте никто не слушает.</p></td></tr>
+          <tr><td class="feat">10. <code>v2raya</code></td><td data-l="Есть"><p>Xray, отдельная веб-панель v2rayA, geoip/geosite, youtubeUnblock</p></td><td data-l="Нет"><p>sing-box, интеграции в LuCI (панель на своём порту)</p></td><td data-l="Почему здесь"><p>Та же проблема с AGH, что у passwall, а панель живёт отдельно от LuCI.</p></td></tr>
+          <tr><td class="feat">11. <code>clear</code></td><td data-l="Есть"><p>чистый роутер с SQM (CAKE), zz1</p></td><td data-l="Нет"><p>прокси, AGH, youtubeUnblock, BBR</p></td><td data-l="Почему здесь"><p>Вариант для другой задачи — простой роутер без обхода блокировок.</p></td></tr>
+          <tr><td class="feat">12. <code>switch</code></td><td data-l="Есть"><p>zz1 переводит устройство в режим L2-коммутатора</p></td><td data-l="Нет"><p>функций роутера, прокси, AGH</p></td><td data-l="Почему здесь"><p>Для R6S в роли главного роутера бесполезен.</p></td></tr>
+          <tr><td class="feat">13. <code>crystal_clear</code></td><td data-l="Есть"><p>голая прошивка с настройками пакетов по умолчанию</p></td><td data-l="Нет"><p>zz1, прокси, AGH, SQM</p></td><td data-l="Почему здесь"><p>Всё настраивается вручную; подходит только как базовая прошивка.</p></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:14px"><b>Итог.</b> Для схемы с AGH и youtubeUnblock лучший выбор — <code>homeproxy</code>. Нужны готовые российские списки без ручной настройки правил — <code>podkop</code> или <code>netshift</code>. Нужны гибкие правила по устройствам и встроенный обход DPI — <code>trafira</code>.</p>
   </section>
 
   <!-- 04 FIRST BOOT -->
