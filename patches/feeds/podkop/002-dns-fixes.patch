@@ -14,10 +14,10 @@ Subject: [PATCH] podkop: DNS — диагностика с портом, SRV/PTR
   есть, ошибка «cannot unmarshal string» не воспроизводится).
 ---
 diff --git a/podkop/files/usr/bin/podkop b/podkop/files/usr/bin/podkop
-index ba75f1f..64abc49 100755
+index b5eb455..245e6e5 100755
 --- a/podkop/files/usr/bin/podkop
 +++ b/podkop/files/usr/bin/podkop
-@@ -789,6 +789,10 @@ sing_box_configure_dns() {
+@@ -817,6 +817,10 @@ sing_box_configure_dns() {
      config=$(sing_box_cm_add_dns_reject_rule "$config" "domain_suffix" '"use-application-dns.net"')
      config=$(sing_box_cm_add_dns_route_rule "$config" "$SB_FAKEIP_DNS_SERVER_TAG" "$SB_FAKEIP_DNS_RULE_TAG")
      config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_FAKEIP_DNS_RULE_TAG" "rewrite_ttl" "$rewrite_ttl")
@@ -28,7 +28,7 @@ index ba75f1f..64abc49 100755
      service_domains=$(comma_string_to_json_array "$FAKEIP_TEST_DOMAIN,$CHECK_PROXY_IP_DOMAIN")
      config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_FAKEIP_DNS_RULE_TAG" "domain" "$service_domains")
  }
-@@ -1989,24 +1993,26 @@ check_dns_available() {
+@@ -2023,24 +2027,26 @@ check_dns_available() {
          display_dns_server="dns.nextdns.io/$masked_path"
      fi
  
@@ -65,7 +65,7 @@ index ba75f1f..64abc49 100755
              dns_status=1
          fi
      fi
-@@ -2018,7 +2024,10 @@ check_dns_available() {
+@@ -2052,7 +2058,10 @@ check_dns_available() {
  
      # Check bootstrap DNS server
      if [ -n "$bootstrap_dns_server" ]; then
@@ -78,7 +78,7 @@ index ba75f1f..64abc49 100755
          fi
      fi
 diff --git a/podkop/files/usr/lib/sing_box_config_facade.sh b/podkop/files/usr/lib/sing_box_config_facade.sh
-index 4afec33..4cf9edc 100644
+index d10a3c5..ca94e39 100644
 --- a/podkop/files/usr/lib/sing_box_config_facade.sh
 +++ b/podkop/files/usr/lib/sing_box_config_facade.sh
 @@ -13,6 +13,12 @@ sing_box_cf_add_dns_server() {
