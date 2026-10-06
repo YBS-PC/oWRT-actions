@@ -108,10 +108,22 @@ fi
 # (a/htdocs/..., a/root/...). Правила те же, что у patches/feeds:
 # уже есть в исходниках — пропуск, не подходит — ::warning и сборка
 # дальше (FEED_PATCH_STRICT=1 — остановка).
+# Сверка с исходниками (sh/patch-drift.sh) — только для пакетов, которые
+# клонированы из репозитория автора в package/: патчи сняты с него. Пакет
+# из чужого фида (luci-app-homeproxy в ImmortalWrt LuCI) — отдельная копия
+# со своей историей, сравнение с эталонами давало бы ложные остановки;
+# для него прежнее поведение.
 # =========================================================
+# shellcheck source=sh/patch-drift.sh
+if ! . "$GITHUB_WORKSPACE/sh/patch-drift.sh" 2>/dev/null; then
+    echo "::warning::sh/patch-drift.sh не найден — сверка патчей пакетов с исходниками выключена"
+    PATCH_DRIFT_CHECK=0
+fi
+
 apply_package_patches() {
     local _dir _name _pkg _p _pp _patch _applied _present _failed _failed_names _ok
-    local _f _q _tmp _later _still _rev
+    local _f _q _tmp _later _still _rev _d _skipf
+    local -A _drift
 
     for _dir in "$GITHUB_WORKSPACE"/patches/packages/*/; do
         [ -d "$_dir" ] || continue
@@ -127,16 +139,26 @@ apply_package_patches() {
             continue
         fi
 
-        _applied=0; _present=0; _failed=0; _failed_names=""; _ok=" "
+        _applied=0; _present=0; _failed=0; _failed_names=""; _ok=" "; _drift=(); _skipf=""
         _pp="/tmp/pkgpatch.$$.patch"
         for _p in "$_dir"*.patch; do
             [ -f "$_p" ] || continue
             _patch=$(basename "$_p" .patch)
             sed 's/\r$//' "$_p" > "$_pp"
 
+            _d=""
+            if [ "${PATCH_DRIFT_CHECK:-1}" = "1" ] && [ "$_pkg" = "package/$_name" ]; then
+                _d=$(patch_drift "$_pp" "$_pkg" "$_skipf")
+            fi
             if patch -p1 -d "$_pkg" -R -F 0 -f -s --dry-run < "$_pp" >/dev/null 2>&1; then
                 echo "✓ $_name: $_patch уже есть в исходниках, пропуск"
                 _ok="$_ok$_patch "; _present=$((_present + 1))
+            elif [ -n "$_d" ]; then
+                # Файлы патча изменились у автора — не применяем (см. patch-drift.sh)
+                _drift[$_patch]="$_d"
+                _skipf="$_skipf$(patch_files "$_pp")
+"
+                _failed=$((_failed + 1)); _failed_names="$_failed_names $_patch"
             elif patch -p1 -d "$_pkg" -F 0 -f -s --dry-run < "$_pp" >/dev/null 2>&1 &&
                 patch -p1 -d "$_pkg" -F 0 -f -s --no-backup-if-mismatch < "$_pp" >/dev/null; then
                 echo "✓ $_name: применён $_patch"
@@ -176,6 +198,10 @@ apply_package_patches() {
             rm -rf "$_tmp"
         done
         for _f in $_still; do
+            if [ -n "${_drift[$_f]:-}" ]; then
+                patch_drift_record "пакет" "$_name" "$_f" "${_drift[$_f]}"
+                continue
+            fi
             echo "::warning::$_name: $_f не применяется (код пакета изменился или исправление уже внесено в другом виде), пропущен"
         done
         _failed_names=" $_still"
