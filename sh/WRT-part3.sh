@@ -295,7 +295,8 @@ fi
 # И добавление индивидуальных пакетов
 # =========================================================
 
-# Пакеты SQM. Вырезаются в homeproxy, rehomeproxy, podkop, netshift, forkop и trafira.
+# Пакеты SQM. Вырезаются во всех прокси-вариантах (homeproxy, rehomeproxy, podkop,
+# netshift, forkop, trafira, xray, passwall, v2raya); SQM остаётся только в clear.
 SQM_BLOAT=(
 "sqm"
 "sqm-scripts"
@@ -507,8 +508,10 @@ SWITCH_BLOAT=(
 "${CRYSTAL_CLEAR_BLOAT[@]}"
 )
 
-# --- ЛОГИКА ДЛЯ ВАРИАНТОВ 'homeproxy', 'rehomeproxy', 'podkop', 'netshift', 'forkop', 'trafira', 'xray' ---
-if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "rehomeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "netshift" || "$VARIANT" == "forkop" || "$VARIANT" == "forkop-mod" || "$VARIANT" == "trafira" || "$VARIANT" == "xray" || "$VARIANT" == "passwall" || "$VARIANT" == "v2raya" ]]; then
+# --- ЛОГИКА ДЛЯ ПРОКСИ-ВАРИАНТОВ: без SQM ---
+# forkop-mod сюда приходит как VARIANT=forkop (setup в workflow), отдельно
+# его перечислять не нужно.
+if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "rehomeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "netshift" || "$VARIANT" == "forkop" || "$VARIANT" == "trafira" || "$VARIANT" == "xray" || "$VARIANT" == "passwall" || "$VARIANT" == "v2raya" ]]; then
     echo ">>> [Variant: $VARIANT] Performing cleanup..."
     # Вычищаем пакеты из конфига. В SQM_BLOAT уже перечислены полные имена
     # (luci-app-sqm, luci-i18n-sqm-ru), поэтому префиксы не добавляем.
