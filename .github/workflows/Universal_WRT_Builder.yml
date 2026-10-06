@@ -120,7 +120,7 @@ on:
         description: 'Фиды packages/luci/routing/telephony/video — коммиты репозитория пакетов (как после apk upgrade), а не тега релиза (в combo задаётся матрицей)'
         required: true
         type: boolean
-        default: false
+        default: true
 
       exclude_keywords:
         description: 'Exclude Packages (Space separated keywords)'
