@@ -155,11 +155,24 @@ fi
 #   - иначе                             -> пропуск с предупреждением.
 # Каждый патч применяется целиком или не применяется вовсе.
 # FEED_PATCH_STRICT=1 — остановить сборку, если какой-то патч не применился.
+#
+# Сверка с исходниками (sh/patch-drift.sh): перед применением патча файлы,
+# которые он правит, сравниваются по git-хешу с теми, на которые патч
+# написан. Изменились у автора — патч не применяется и попадает в
+# patch_drift.txt, workflow после part3 останавливает эту сборку и шлёт
+# уведомление в Telegram. PATCH_DRIFT_CHECK=0 — без сверки.
 # --------------------------------------------------------------------------
 
+# shellcheck source=sh/patch-drift.sh
+if ! . "$GITHUB_WORKSPACE/sh/patch-drift.sh" 2>/dev/null; then
+    echo "::warning::sh/patch-drift.sh не найден — сверка патчей с исходниками выключена"
+    PATCH_DRIFT_CHECK=0
+fi
+
 apply_feed_patches() {
-    local _dir _feed _p _pp _name _req _missing _ok _applied _present _failed _failed_names _nomatch
-    local -A _why
+    local _dir _feed _p _pp _name _req _missing _ok _applied _present _failed _failed_names _nomatch _d
+    local _skipf _drifted _dreq
+    local -A _why _drift
 
     for _dir in "$GITHUB_WORKSPACE"/patches/feeds/*/; do
         [ -d "$_dir" ] || continue
@@ -169,7 +182,7 @@ apply_feed_patches() {
             continue
         fi
 
-        _ok=" "; _applied=0; _present=0; _failed=0; _failed_names=""; _nomatch=" "; _why=()
+        _ok=" "; _applied=0; _present=0; _failed=0; _failed_names=""; _nomatch=" "; _why=(); _drift=(); _skipf=""; _drifted=" "
         for _p in "$_dir"*.patch; do
             [ -f "$_p" ] || continue
             _name=$(basename "$_p" .patch)
@@ -193,11 +206,37 @@ apply_feed_patches() {
                 esac
             done
             if [ -n "$_missing" ]; then
+                # Нужный патч пропущен как устаревший — этот тоже в отчёт:
+                # перевыпускать их надо вместе.
+                _dreq=""
+                for _req in $_missing; do
+                    case "$_drifted" in *" $_req "*) _dreq="$_dreq $_req" ;; esac
+                done
+                if [ -n "$_dreq" ]; then
+                    _drift[$_name]="(требует устаревший патч:$_dreq)"
+                    _drifted="$_drifted$_name "
+                    _skipf="$_skipf$(patch_files "$_pp")
+"
+                fi
                 # Предупреждение — после уточнения ниже: нужный патч может
                 # найтись в исходниках под более поздним патчем.
                 _why[$_name]="$_missing"
                 _failed=$((_failed + 1)); _failed_names="$_failed_names $_name"
                 continue
+            fi
+
+            # Файлы патча изменились у автора — патч не применяем, даже если
+            # он ещё ложится со сдвигом: правка могла попасть не туда.
+            if [ "${PATCH_DRIFT_CHECK:-1}" = "1" ]; then
+                _d=$(patch_drift "$_pp" "feeds/$_feed" "$_skipf")
+                if [ -n "$_d" ]; then
+                    _drift[$_name]="$_d"
+                    _drifted="$_drifted$_name "
+                    _skipf="$_skipf$(patch_files "$_pp")
+"
+                    _failed=$((_failed + 1)); _failed_names="$_failed_names $_name"
+                    continue
+                fi
             fi
 
             if patch -p1 -d "feeds/$_feed" -F 0 -f -s --dry-run < "$_pp" >/dev/null 2>&1 &&
@@ -243,6 +282,10 @@ apply_feed_patches() {
             rm -rf "$_tmp"
         done
         for _f in $_still; do
+            if [ -n "${_drift[$_f]:-}" ]; then
+                patch_drift_record "фид" "$_feed" "$_f" "${_drift[$_f]}"
+                continue
+            fi
             case "$_nomatch" in
             *" $_f "*) echo "::warning::$_feed: $_f не применяется (код фида изменился или исправление уже внесено в другом виде), пропущен" ;;
             *) [ -n "${_why[$_f]:-}" ] && echo "::warning::$_feed: $_f пропущен — не применён нужный ему патч:${_why[$_f]}" ;;
