@@ -17,9 +17,8 @@ Claude-Session: https://claude.ai/code/session_01HEQfjBzS7Wos7AvTk18TDQ
 ---
  htdocs/luci-static/resources/view/homeproxy/client.js | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
-
 diff --git a/htdocs/luci-static/resources/view/homeproxy/client.js b/htdocs/luci-static/resources/view/homeproxy/client.js
-index f012fdd..5daad68 100644
+index 08bbc18..0f9d971 100644
 --- a/htdocs/luci-static/resources/view/homeproxy/client.js
 +++ b/htdocs/luci-static/resources/view/homeproxy/client.js
 @@ -533,7 +533,7 @@ return view.extend({
@@ -31,6 +30,3 @@ index f012fdd..5daad68 100644
  				if (parseInt(value) > parseInt(idle_timeout))
  					return _('Test interval must be less or equal than idle timeout.');
  			}
--- 
-2.43.0
-
