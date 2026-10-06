@@ -89,6 +89,8 @@ on:
           - '1.14.x'
           - 'latest'
           - 'extended'
+          - 'podkop-engine'
+          - 'podkop-engine-full'
 
       ytb:
         description: 'youtubeUnblock (в combo игнорируется)'
@@ -188,8 +190,11 @@ jobs:
           #   agh     — "no" (убрать из прошивки), "feed" (пакет из фида),
           #             "latest" (пакет + свежий бинарник с GitHub поверх);
           #   sb      — "no", "feed", "1.12.x".."latest", "extended" (скачанный
-          #             бинарник поверх пакета) или "tiny" (выставляется здесь
-          #             для slateax/ax59u: part3 ставит им sing-box-tiny);
+          #             бинарник поверх пакета), "podkop-engine" /
+          #             "podkop-engine-full" (FiyeroT/podkop-engine: бинарник и
+          #             файлы пакета поверх sing-box из фида; только podkop и
+          #             netshift) или "tiny" (выставляется здесь для
+          #             slateax/ax59u: part3 ставит им sing-box-tiny);
           #   ytb     — true/false (JSON-булево), ставить ли youtubeUnblock;
           #   zz      — true/false, класть ли zz1-final-offline-setup.sh;
           #   patches — true/false, применять ли ЛЮБЫЕ пользовательские
@@ -246,6 +251,19 @@ jobs:
             [ "$v" = "crystal_clear" ] && zz=false
             case "$v" in
               homeproxy|rehomeproxy|podkop|netshift) [ "$sb" = "no" ] && sb=feed ;;
+            esac
+            # podkop-engine — sing-box под podkop: входы только tproxy, direct и
+            # mixed, без TUN и redirect (их берут homeproxy и rehomeproxy), а
+            # forkop и trafira ставят ядро сами со страницы «Компоненты». Поэтому
+            # только podkop и netshift. netshift пишет и выходы vmess/http,
+            # которые есть лишь в podkop-engine-full.
+            case "$sb" in
+              podkop-engine|podkop-engine-full)
+                case "$v" in
+                  podkop)   ;;
+                  netshift) sb=podkop-engine-full ;;
+                  *)        sb=feed ;;
+                esac ;;
             esac
             case " $TINY_TARGETS " in
               *" $t "*) case "$v" in homeproxy|rehomeproxy|podkop|netshift|forkop|trafira) [ "$sb" != "no" ] && sb=tiny ;; esac ;;
@@ -536,6 +554,89 @@ jobs:
             # Имя ассета по той же схеме, что у SagerNet:
             # sing-box-1.14.1-extended-2.7.2-linux-arm64.tar.gz
             SB_URL="https://github.com/${SB_REPO}/releases/download/${SB_TAG}/sing-box-${SB_TAG#v}-linux-arm64.tar.gz"
+        elif [ "$SB_VERSION_CHOICE" == "podkop-engine" ] || [ "$SB_VERSION_CHOICE" == "podkop-engine-full" ]; then
+            # FiyeroT/podkop-engine: sing-box с патчами под podkop (REALITY для
+            # Xray 26.9+, xhttp, tools decode-link, резервные выходы urltest,
+            # failsafe). Выпускается пакетами под каждую pkgarch, а не архивом
+            # arm64, и кроме бинарника несёт свои init-скрипты, хуки и
+            # /etc/config/sing-box — их тоже кладём в files/, поверх пакета
+            # sing-box из фида (podkop зависит от него, пользователь и права
+            # остаются его). Берём .ipk (tar.gz) и для 25.12: содержимое то же,
+            # что в .apk, бинарник — под тот же musl 1.2.5.
+            SB_REPO="FiyeroT/podkop-engine"
+            PE_PKG="$SB_VERSION_CHOICE"
+            PE_ARCH=$(sed -n 's/.*CONFIG_TARGET_ARCH_PACKAGES="\([^"]*\)".*/\1/p' "./config/conf/${{ matrix.target }}" | head -n1)
+            if [ -z "$PE_ARCH" ]; then
+                echo "::warning title=podkop-engine пропущен::Не найдена архитектура пакетов в config/conf/${{ matrix.target }}. Будет использован sing-box из фида."
+                exit 0
+            fi
+            # Теги v<sing-box>-r<ревизия>: последний по версии sing-box и ревизии.
+            SB_TAG=$(git ls-remote --tags --refs "https://github.com/${SB_REPO}.git" 2>/dev/null \
+                | awk '{print $2}' | sed 's|refs/tags/||' \
+                | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-r[0-9]+$' | sort -V | tail -n1)
+            if [ -z "$SB_TAG" ]; then
+                echo ">>> WARNING: Could not find any podkop-engine release. Skipping."
+                echo ">>> Sing-box from OpenWrt feed will be used instead."
+                exit 0
+            fi
+            PE_ASSET="${PE_PKG}_${SB_TAG#v}_openwrt_${PE_ARCH}.ipk"
+            SB_URL="https://github.com/${SB_REPO}/releases/download/${SB_TAG}/${PE_ASSET}"
+            if ! curl -fsSL --retry 3 -o pe.ipk "$SB_URL" || [ ! -s pe.ipk ]; then
+                echo "::warning title=podkop-engine пропущен::Не удалось скачать $SB_URL. Будет использован sing-box из фида."
+                rm -f pe.ipk
+                exit 0
+            fi
+            if ! bash ./sh/verify-sha256.sh pe.ipk "$SB_REPO" "$SB_TAG" "$PE_ASSET" \
+                    "https://github.com/${SB_REPO}/releases/download/${SB_TAG}/SHA256SUMS"; then
+                echo ">>> WARNING: podkop-engine checksum mismatch. Skipping."
+                echo ">>> Sing-box from OpenWrt feed will be used instead."
+                rm -f pe.ipk
+                exit 0
+            fi
+            PE_UNPACK=$(mktemp -d)
+            if ! tar -xzf pe.ipk -C "$PE_UNPACK" || ! mkdir -p "$PE_UNPACK/data" \
+                    || ! tar -xzf "$PE_UNPACK/data.tar.gz" -C "$PE_UNPACK/data" \
+                    || [ ! -f "$PE_UNPACK/data/usr/bin/sing-box" ]; then
+                echo "::warning title=podkop-engine пропущен::$PE_ASSET не распаковался или в нём нет usr/bin/sing-box. Будет использован sing-box из фида."
+                rm -rf pe.ipk "$PE_UNPACK"
+                exit 0
+            fi
+            SB_INTERP=$(readelf -l "$PE_UNPACK/data/usr/bin/sing-box" 2>/dev/null | sed -n 's/.*interpreter: \(.*\)]/\1/p')
+            if [ -n "$SB_INTERP" ] && [[ "$SB_INTERP" != *ld-musl* ]]; then
+                echo "::warning title=podkop-engine не для musl::$PE_ASSET собран под $SB_INTERP. Будет использован sing-box из фида."
+                rm -rf pe.ipk "$PE_UNPACK"
+                exit 0
+            fi
+            # Весь пакет — в files/ с сохранением путей и прав: бинарник,
+            # /etc/init.d/sing-box (лимит дескрипторов, term_timeout, переменные
+            # хуков), /etc/init.d/podkop-engine (failsafe), uci-defaults,
+            # /usr/libexec/podkop-engine, /etc/config/sing-box, keep.d.
+            mkdir -p ./files
+            cp -a "$PE_UNPACK/data/." ./files/
+            # Службы из files/ сами не включаются (это делает postinst пакета,
+            # а его здесь нет): failsafe включаем ссылкой, как /etc/init.d/x enable.
+            # START=95 — из самого скрипта.
+            PE_START=$(sed -n 's/^START=\([0-9]*\).*/\1/p' ./files/etc/init.d/podkop-engine)
+            mkdir -p ./files/etc/rc.d
+            ln -sf ../init.d/podkop-engine "./files/etc/rc.d/S${PE_START:-95}podkop-engine"
+            rm -rf pe.ipk "$PE_UNPACK"
+            echo "SB_DOWNLOADED_TAG=$SB_TAG" >> $GITHUB_ENV
+            echo "SB_DOWNLOADED_REPO=$SB_REPO" >> $GITHUB_ENV
+            echo "=========================================="
+            echo "       [SING-BOX DOWNLOAD SUMMARY]        "
+            echo "=========================================="
+            echo "Version choice : $SB_VERSION_CHOICE"
+            echo "Repository     : $SB_REPO"
+            echo "Downloaded tag : $SB_TAG"
+            echo "Asset          : $PE_ASSET"
+            echo "Linkage        : ${SB_INTERP:-static}"
+            echo "Files in destination:"
+            find ./files/usr/bin/sing-box ./files/etc/init.d/sing-box ./files/etc/init.d/podkop-engine \
+                ./files/etc/rc.d/S*podkop-engine ./files/etc/config/sing-box ./files/etc/sing-box \
+                ./files/etc/uci-defaults/99-podkop-engine ./files/usr/libexec/podkop-engine \
+                ./files/lib/upgrade/keep.d/podkop-engine* -maxdepth 1 2>/dev/null | xargs ls -ld
+            echo "=========================================="
+            exit 0
         else
             echo "::error::Неизвестный выбор версии sing-box: '$SB_VERSION_CHOICE'"
             exit 1
@@ -758,6 +859,7 @@ jobs:
             no)   SUM_SB="нет (убирается из прошивки)" ;;
             feed) SUM_SB="пакет из фида" ;;
             tiny) SUM_SB="sing-box-tiny из фида (тонкое устройство)" ;;
+            podkop-engine*) SUM_SB="пакет из фида + ${{ matrix.sb }} (бинарник, init-скрипты и failsafe)" ;;
             *)    SUM_SB="пакет из фида + бинарник ${{ matrix.sb }}" ;;
         esac
         [ "${{ matrix.ytb }}" = "true" ] && SUM_YTB="да" || SUM_YTB="нет"
