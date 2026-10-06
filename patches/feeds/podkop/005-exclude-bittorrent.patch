@@ -31,10 +31,10 @@ index efe3c29..74af0e4 100644
      form.ListValue,
      "update_interval",
 diff --git a/luci-app-podkop/po/ru/podkop.po b/luci-app-podkop/po/ru/podkop.po
-index 77a33a4..5126796 100644
+index 954b760..0e271bb 100644
 --- a/luci-app-podkop/po/ru/podkop.po
 +++ b/luci-app-podkop/po/ru/podkop.po
-@@ -793,3 +793,9 @@ msgstr "Секретный ключ YACD"
+@@ -817,3 +817,9 @@ msgstr "Секретный ключ YACD"
  
  msgid "You can select Output Network Interface, by default autodetect"
  msgstr "Вы можете выбрать выходной сетевой интерфейс, по умолчанию он определяется автоматически."
@@ -45,10 +45,10 @@ index 77a33a4..5126796 100644
 +msgid "BitTorrent traffic recognized by sing-box goes directly, bypassing the proxy. Useful with Fully Routed IPs: many providers ban subscriptions for torrents"
 +msgstr "Распознанный sing-box трафик BitTorrent идёт напрямую, минуя прокси. Полезно вместе с Fully Routed IPs: многие провайдеры VPN блокируют подписку за торренты"
 diff --git a/luci-app-podkop/po/templates/podkop.pot b/luci-app-podkop/po/templates/podkop.pot
-index d96b948..2060f35 100644
+index 468b8aa..141c47c 100644
 --- a/luci-app-podkop/po/templates/podkop.pot
 +++ b/luci-app-podkop/po/templates/podkop.pot
-@@ -1113,3 +1113,9 @@ msgstr ""
+@@ -1146,3 +1146,9 @@ msgstr ""
  #: ../luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js:127
  msgid "You can select Output Network Interface, by default autodetect"
  msgstr ""
@@ -71,10 +71,10 @@ index 27003cf..dc11e63 100644
          option download_lists_via_proxy '0'
          option dont_touch_dhcp '0'
 diff --git a/podkop/files/usr/bin/podkop b/podkop/files/usr/bin/podkop
-index 3bfe68d..3a72a89 100755
+index 4970535..ceb612c 100755
 --- a/podkop/files/usr/bin/podkop
 +++ b/podkop/files/usr/bin/podkop
-@@ -846,6 +846,18 @@ sing_box_configure_route() {
+@@ -874,6 +874,18 @@ sing_box_configure_route() {
  
      config=$(sing_box_cm_add_hijack_dns_route_rule "$config" "protocol" "dns")
  
