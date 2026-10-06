@@ -18,9 +18,8 @@ master, патч опознается как «уже есть».
  root/etc/homeproxy/scripts/generate_client.uc | 27 +++++++++++++++++--
  .../homeproxy/scripts/update_subscriptions.uc | 17 ++++++++++--
  2 files changed, 40 insertions(+), 4 deletions(-)
-
 diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
-index ad83a93..c3f61fa 100755
+index bf75116..1638ca5 100755
 --- a/root/etc/homeproxy/scripts/generate_client.uc
 +++ b/root/etc/homeproxy/scripts/generate_client.uc
 @@ -396,6 +396,24 @@ function xhttp_padding(v) {
@@ -60,7 +59,7 @@ index ad83a93..c3f61fa 100755
  				enabled: true,
  				fingerprint: !isEmpty(node.tls_utls) ? node.tls_utls : 'edge'
  			} : null,
-@@ -1194,11 +1213,13 @@ if (!isEmpty(main_node)) {
+@@ -1199,11 +1218,13 @@ if (!isEmpty(main_node)) {
  		const main_urltest_nodes = filter(uci.get(uciconfig, ucimain, 'main_urltest_nodes') || [], (k) => uci.get_all(uciconfig, k) != null);
  		const main_urltest_interval = uci.get(uciconfig, ucimain, 'main_urltest_interval');
  		const main_urltest_tolerance = uci.get(uciconfig, ucimain, 'main_urltest_tolerance');
@@ -74,7 +73,7 @@ index ad83a93..c3f61fa 100755
  			interval: strToTime(main_urltest_interval),
  			tolerance: strToInt(main_urltest_tolerance),
  			idle_timeout: (strToInt(main_urltest_interval) > 1800) ? `${main_urltest_interval * 2}s` : null,
-@@ -1246,11 +1267,13 @@ if (!isEmpty(main_node)) {
+@@ -1251,11 +1272,13 @@ if (!isEmpty(main_node)) {
  		const main_udp_urltest_nodes = filter(uci.get(uciconfig, ucimain, 'main_udp_urltest_nodes') || [], (k) => uci.get_all(uciconfig, k) != null);
  		const main_udp_urltest_interval = uci.get(uciconfig, ucimain, 'main_udp_urltest_interval');
  		const main_udp_urltest_tolerance = uci.get(uciconfig, ucimain, 'main_udp_urltest_tolerance');
@@ -124,6 +123,3 @@ index ac285f9..3a1edcf 100755
  
  			added++;
  			log(sprintf('Adding node: %s.', node.label));
--- 
-2.43.0
-
