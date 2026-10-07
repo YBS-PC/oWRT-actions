@@ -171,6 +171,7 @@
     <a href="#pipeline">сборка</a>
     <a href="#variants">варианты</a>
     <a href="#ranking">рейтинг</a>
+    <a href="#sbcores">ядра sing-box</a>
     <a href="#firstboot">первый старт</a>
   </span>
 </nav>
@@ -461,6 +462,52 @@
       </table>
     </div>
     <p style="margin-top:14px"><b>Итог.</b> Для схемы с AGH и youtubeUnblock лучший выбор — <code>homeproxy</code>. Нужны готовые российские списки без ручной настройки правил — <code>podkop</code> или <code>netshift</code>. Нужны гибкие правила по устройствам и встроенный обход DPI — <code>trafira</code>.</p>
+    <h3 class="sub" id="sbcores">Ядра sing-box: sing-box-extended и podkop-engine</h3>
+    <p>Обе сборки — форки sing-box под лицензией GPL-3.0, ставятся в <code>/usr/bin/sing-box</code> вместо обычного ядра и выбираются полем <code>sb</code>. Задачи у них противоположные: <b>sing-box-extended</b> (<code>shtorm-7</code>) добавляет к sing-box десятки протоколов и служб, <b>podkop-engine</b> (<code>FiyeroT</code>) убирает всё, что не нужно podkop, и исправляет то, что ломается на роутере. Данные на 07.10.2026: extended <code>1.14.1-extended-2.7.2</code> (20.09.2026), podkop-engine <code>1.14.2-r12</code> (07.10.2026).</p>
+    <div class="card scroll" style="margin-top:14px">
+      <table class="pt stack">
+        <thead><tr><th style="width:18%">Что сравниваем</th><th style="width:41%">sing-box-extended</th><th style="width:41%">podkop-engine</th></tr></thead>
+        <tbody>
+          <tr><td class="key">Суть</td><td data-l="extended"><p>«Комбайн»: sing-box плюс протоколы и службы, которых нет в оригинале. Для роутеров, ПК и серверов.</p></td><td data-l="podkop-engine"><p>Ядро под одну задачу — podkop на OpenWrt: урезанный состав и 35 исправлений для роутера.</p></td></tr>
+          <tr><td class="key">База sing-box</td><td data-l="extended"><p>1.14.1. Ветка разработки регулярно сливается с оригиналом, но исправлений из 1.14.2 в релизе пока нет.</p></td><td data-l="podkop-engine"><p>1.14.2 плюс исправления из stable-ветки после 1.14.2. Параллельно выходят сборки на 1.13.21 и 1.12.25.</p></td></tr>
+          <tr><td class="key">Что добавлено</td><td data-l="extended"><p>Протоколы WARP, MASQUE, Mieru, TrustTunnel, Sudoku, MTProxy, SSH, туннель через видеозвонки (VK, Телемост и другие), Bond. Транспорты XHTTP и mKCP, шифрование VLESS (как в Xray), AmneziaWG 3.1, DNSCrypt. Группы fallback и failover, подписки-провайдеры, разбор ссылок, лимитеры, веб-панель и API управления.</p></td><td data-l="podkop-engine"><ul><li>REALITY для серверов Xray 26.9+ и отпечатки uTLS как в Xray.</li><li>Транспорт XHTTP (имена опций как в extended) и <code>sing-box tools decode-link</code>.</li><li>Резервные выходы и проверка загрузки в URLTest; внеочередная проверка, если сервер молчит.</li><li>Резервный DNS провайдера и UDP-сокет на каждый DNS-запрос; DoH и DoT не рвутся.</li><li>Таблица FakeIP в памяти; старт без списков с докачкой; лимит памяти Go до OOM-killer.</li><li>Защита от падения на кривом QUIC-пакете; служба failsafe; строка <code>Features:</code> в <code>sing-box version</code>.</li></ul></td></tr>
+          <tr><td class="key">Чего нет</td><td data-l="extended"><p>Исправлений podkop-engine для DNS, URLTest и памяти. Есть только то, что в оригинале.</p></td><td data-l="podkop-engine"><p>TUN, входа redirect, серверных входов (кроме tproxy, direct, mixed), WireGuard и Tailscale внутри sing-box, DoQ/DoH3, ACME, <code>sing-box api</code>. В <code>podkop-engine</code> также нет выходов http, vmess, anytls, shadowtls, naive и других: они в <code>podkop-engine-full</code>.</p></td></tr>
+          <tr><td class="key">Размер (arm64)</td><td data-l="extended"><p>Архив около 39,5 МБ, бинарь около 100 МБ (amd64 — 107 МБ). В прошивке сжимается squashfs. Для устройств с маленькой флешкой не подходит.</p></td><td data-l="podkop-engine"><p>Пакет 8,5 МБ, бинарь 22,8 МБ; <code>-full</code> — пакет 13,9 МБ.</p></td></tr>
+          <tr><td class="key">Как поставляется</td><td data-l="extended"><p>Архив <code>tar.gz</code> со статическим бинарём (CGO выключен). Пакета OpenWrt нет: бинарь кладётся поверх пакета <code>sing-box</code>.</p></td><td data-l="podkop-engine"><p>Пакеты <code>.ipk</code> и <code>.apk</code> под каждую архитектуру OpenWrt, собранные в SDK 24.10/25.12 (musl), плюс <code>SHA256SUMS</code>. В пакете init-скрипт (65536 дескрипторов, остановка до 15 с), failsafe и <code>/etc/config/sing-box</code>.</p></td></tr>
+          <tr><td class="key">REALITY и Xray 26.9.8+</td><td data-l="extended"><p>Опция <code>support_x25519mlkem768</code>, по умолчанию выключена. Работает, только если приложение её пишет (netshift — опция <code>reality_mlkem</code>).</p></td><td data-l="podkop-engine"><p>Включено всегда, настраивать ничего не нужно. Исключение: Xray-сервер ≤ 25.4.30 с сайтом-прикрытием на X25519MLKEM768 — там нужно обновить Xray на сервере.</p></td></tr>
+          <tr><td class="key">Как его узнают приложения</td><td data-l="extended"><p>По <code>-extended-</code> в <code>sing-box version</code> (<code>1.14.1-extended-2.7.2</code>): так проверяют netshift, trafira и Re:HomeProxy.</p></td><td data-l="podkop-engine"><p>По <code>-pdk-rN</code> и строке <code>Features:</code> (<code>urltest.fallbacks</code>, <code>urltest.download_url</code>, <code>transport.xhttp</code>, <code>tools.decode-link</code>): так проверяет podkop 0.7.23. Другие приложения считают его обычным sing-box.</p></td></tr>
+          <tr><td class="key">Развитие</td><td data-l="extended"><p>С июня 2025; 58 стабильных релизов, новый раз в 1–3 недели. Большое сообщество (Telegram-чат), есть сторонние урезанные «lite»-сборки (например <code>yandexru45/sing-box-extended-lite</code> для netshift).</p></td><td data-l="podkop-engine"><p>С 26.09.2026; 12 ревизий за 11 дней, один автор. У каждого исправления есть замеры на стенде. Темп высокий, бывают регрессии: в r11 XHTTP переставал работать после переподключения WAN, исправлено в r12.</p></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p style="margin-top:18px"><b>Совместимость с приложениями.</b> В таблице — что получится, если поставить то или иное ядро.</p>
+    <div class="card scroll" style="margin-top:10px">
+      <table class="pt stack">
+        <thead><tr><th style="width:16%">Приложение</th><th style="width:30%">sing-box-extended</th><th style="width:30%">podkop-engine</th><th style="width:24%">Что выбрать</th></tr></thead>
+        <tbody>
+          <tr><td class="key">podkop</td><td data-l="extended"><p>Работает как обычный sing-box 1.14. Ссылки XHTTP podkop отклоняет (нужен <code>decode-link</code>), резервных выходов и проверки загрузки в LuCI нет. XHTTP возможен только JSON-ом в «Outbound Config».</p></td><td data-l="podkop-engine"><p>Всё работает: XHTTP по ссылке, резервные выходы, failsafe, резервный DNS.</p></td><td data-l="Что выбрать"><p><code>podkop-engine</code> (<code>-full</code> — если в «Outbound Config» нужны vmess, http, anytls, naive).</p></td></tr>
+          <tr><td class="key">netshift</td><td data-l="extended"><p>Всё работает: XHTTP, <code>reality_mlkem</code>, шифрование VLESS, переключение ядра из LuCI.</p></td><td data-l="podkop-engine"><p>Только <code>-full</code> (netshift пишет выходы vmess и http). netshift считает его обычным sing-box и прячет XHTTP. REALITY к Xray 26.9.8+ при этом работает, а исправления DNS и памяти сохраняются.</p></td><td data-l="Что выбрать"><p><code>extended</code>, если нужен XHTTP. Иначе <code>podkop-engine-full</code>.</p></td></tr>
+          <tr><td class="key">homeproxy</td><td data-l="extended"><p>Работает как sing-box 1.14.1. Дополнительные протоколы homeproxy не использует.</p></td><td data-l="podkop-engine"><p>Не работает: нет TUN и входа redirect. Сборщик заменяет на <code>feed</code>.</p></td><td data-l="Что выбрать"><p><code>feed</code> или <code>latest</code>.</p></td></tr>
+          <tr><td class="key">rehomeproxy</td><td data-l="extended"><p>Рекомендуемое ядро: форк сам включает поля extended.</p></td><td data-l="podkop-engine"><p>Не работает (как у homeproxy). Сборщик заменяет на <code>feed</code>.</p></td><td data-l="Что выбрать"><p><code>extended</code>.</p></td></tr>
+          <tr><td class="key">forkop, forkop-mod, trafira</td><td data-l="extended"><p>Поддерживается: ядро (stable, extended, tiny) ставится и меняется во вкладке «Компоненты».</p></td><td data-l="podkop-engine"><p>Не предусмотрен. Сборщик заменяет на <code>feed</code>.</p></td><td data-l="Что выбрать"><p>Вкладка «Компоненты» приложения. У оригинального forkop нельзя ставить 1.14.x и extended (см. выше).</p></td></tr>
+          <tr><td class="key">xray, passwall, v2raya</td><td colspan="3" data-l="Оба"><p>Ядро — Xray, sing-box не нужен (<code>sb</code> всегда <code>no</code>).</p></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:14px"><b>Можно ли менять одно на другое.</b> Путь (<code>/usr/bin/sing-box</code>) и базовый формат конфига у них общие, поэтому обычный конфиг sing-box 1.14 запустится на обоих. Ограничения:</p>
+    <ul>
+      <li>На podkop-engine не пройдёт <code>sing-box check</code> конфиг с TUN, redirect, WireGuard, серверными входами или протоколами только из extended. Ошибка понятная, например «… is not included in this build».</li>
+      <li>На extended не пройдёт конфиг с <code>fallbacks</code> или <code>download_url</code> в URLTest: таких полей в нём нет.</li>
+    </ul>
+    <p>podkop, netshift и trafira пересобирают конфиг при каждом перезапуске и смотрят на строку версии. Поэтому ядро можно заменить и перезапустить службу: опции под новое ядро выставятся сами. Конфиги homeproxy и Re:HomeProxy на podkop-engine не запустятся.</p>
+    <p><b>Итог.</b></p>
+    <ul>
+      <li><b>Возможности:</b> sing-box-extended далеко впереди.</li>
+      <li><b>Свежесть базы:</b> впереди podkop-engine (1.14.2 против 1.14.1).</li>
+      <li><b>Для роутера с podkop:</b> podkop-engine надёжнее — в 4 раза меньше, исправлены именно сбои DNS, URLTest, FakeIP и памяти, failsafe. Но проект молодой и часто выпускает ревизии, поэтому сборщик берёт последнюю.</li>
+      <li><b>Для netshift с XHTTP, Re:HomeProxy и протоколов вроде WARP, MASQUE, AmneziaWG</b> — sing-box-extended: у него история с 2025 года и большое сообщество. Новые протоколы в нём экспериментальные, но на обычный трафик не влияют.</li>
+    </ul>
   </section>
 
   <!-- 04 FIRST BOOT -->
