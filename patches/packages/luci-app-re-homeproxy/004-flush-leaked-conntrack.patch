@@ -1,0 +1,51 @@
+From: YBS-PC/oWRT-actions
+Subject: [PATCH] init: сброс соединений LAN, ушедших мимо прокси во время перезапуска
+
+Перезапуск (сохранение в LuCI, переподключение WAN) снимает правила в
+stop_service и возвращает их в конце start_service. TCP-соединение
+клиента LAN, открытое в этом промежутке, уходит в WAN напрямую через
+masquerade, и conntrack держит этот NAT до конца соединения: redirect,
+появившийся позже, к нему уже не применяется. Браузеры и приложения ТВ
+долго держат такие соединения HTTP/2 — заблокированные сайты не
+открываются минутами.
+
+После возврата правил удаляются записи conntrack TCP с masquerade.
+Следующий пакет такого соединения отслеживается заново и попадает в
+redirect: соединение сбрасывается, клиент переподключается через ядро.
+Соединение, которое и должно идти напрямую, подхватывается с середины
+(tcp_loose) и продолжает идти через masquerade. Соединения через
+redirect (DNAT) и собственные соединения роутера (ядро, ByeDPI, nfqws)
+под --src-nat не попадают.
+
+Проверено в сетевых пространствах имён с conntrack-tools 1.4.8.
+---
+ root/etc/init.d/homeproxy | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/root/etc/init.d/homeproxy b/root/etc/init.d/homeproxy
+index 9082356..6369b77 100755
+--- a/root/etc/init.d/homeproxy
++++ b/root/etc/init.d/homeproxy
+@@ -256,6 +256,19 @@ start_service() {
+ 		/etc/init.d/cron restart >"/dev/null" 2>&1
+ 	fi
+ 
++	# A restart takes the rules down (stop_service) and puts them back above.
++	# A LAN connection opened in between went straight to WAN, and conntrack
++	# keeps its masquerade for as long as it lives: the redirect never applies
++	# to it, and to a blocked site it hangs for minutes. Drop the masqueraded
++	# TCP entries. The next packet of such a connection is tracked anew and
++	# meets the rules: a proxied one is reset (the core has no state for it)
++	# and the client reconnects, a direct one goes on through masquerade.
++	# Redirected connections are DNAT and the router's own ones (the core,
++	# ByeDPI, nfqws) are not translated, so none of them is touched.
++	if command -v conntrack >"/dev/null"; then
++		conntrack -D -p tcp --src-nat >"/dev/null" 2>&1
++	fi
++
+ 	log "$(basename $PROG) started."
+ }
+ 
+-- 
+2.43.0
+
