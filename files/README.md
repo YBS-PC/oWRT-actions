@@ -110,8 +110,9 @@ option group 'root'
 - `/etc/adguardhome/adguardhome.yaml` — upstream DNS зависит от варианта:
   - `forkop`, `trafira`, `podkop`, `netshift` → `127.0.0.42:53` (DNS их sing-box), плюс `<вариант>.settings.dont_touch_dhcp='1'` (у forkop ещё `intercept_device_dns='0'`)
   - `xray` → `127.0.0.1:5300` (DNS-вход Xray luci-app-xray)
+  - `passwall`, `v2raya` → `127.0.0.1:54` (dnsmasq): passwall2 при `dns_redirect=0` вписывает в dnsmasq свои правила (по умолчанию — DNS-вход своего Xray, порт которого выбирается при каждом запуске); v2rayA при занятом AGH порте 53 свой DNS не поднимает
   - остальные → `127.0.0.1:5333` (DNS homeproxy sing-box)
-  - адрес, оставшийся от другого варианта (любой из трёх), заменяется
+  - адрес, оставшийся от другого варианта (любой из четырёх), заменяется. Меняется только пункт списка `upstream_dns` целиком: `local_ptr_upstreams` и правило `[/lan/arpa/local/]127.0.0.1:54` не трогаются
 - `/usr/lib/lua/luci/controller/adguardhome_net.lua` — пункт меню `Network → AdGuardHome` (редирект на `http://IP_роутера:8080`)
 
 **Чтобы откатить:**
@@ -178,7 +179,7 @@ sed -i 's/ct original packets ge 30 flow offload @ft/flow offload @ft/' /usr/sha
 ```
 
 ## 11. Прочие сервисы
-- **Passwall2** (вариант `passwall`, firstboot): `dns_redirect='0'`, `dns_shunt='closed'`, `remote_dns` и `china_dns` = `127.0.0.1:53`, `adblock='0'`, `enabled='1'`
+- **Passwall2** (вариант `passwall`, firstboot): `dns_redirect='0'`, `enabled='1'`. В обоих режимах: `remote_dns='127.0.0.1:53'`, который ставили прежние версии zz1, меняется на `1.1.1.1` (удалённый DNS ходит через узел, адрес роутера там недоступен), опции passwall 1 `dns_shunt`, `china_dns`, `adblock` удаляются
 - **luci-app-xray** (вариант `xray`, firstboot, только если в `xray_core` остались заводские «китайские» значения: GeoIP direct `cn`, bypassed `geosite:cn`, Fast DNS не задан): напрямую — GeoIP `ru` (IPv4 и IPv6) и домены `geosite:category-ru`, Fast DNS `77.88.8.8:53`; Forwarded/Blocked domain rules не трогаются. Если нет `/usr/share/xray/geoip.dat` или `geosite.dat`, в лог пишется ошибка
 - **forkop, trafira, podkop, netshift** (если есть `/etc/config/forkop`, `/etc/config/trafira`, `/etc/config/podkop` или `/etc/config/netshift`): `<пакет>.settings.exclude_ntp='1'` — NTP мимо прокси; если установлен youtubeUnblock — ещё `<пакет>.settings.disable_quic='1'`: QUIC клиента к адресам FakeIP (198.18.0.0/15) не попадает под правило `reject` youtubeUnblock и шёл бы через sing-box в очередь 537, а так sing-box его отклоняет и браузер идёт по TCP
 - **internet-detector**: сервис отключается, `START=99`
