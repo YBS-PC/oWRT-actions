@@ -1,0 +1,58 @@
+From ec897ab8b937d963bb140e5e2096ea48829c86e2 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 7 Oct 2026 15:04:38 +0000
+Subject: [PATCH] fix(init): drop LAN connections that leaked while rules were down
+
+A restart (any save in LuCI, a WAN reconnect) takes the firewall rules
+down in stop_service and puts them back at the end of start_service.
+A LAN TCP connection opened in between goes straight to WAN through
+masquerade, and conntrack keeps that NAT for the life of the
+connection: the redirect added afterwards never applies to it. Browsers
+and TV apps keep such HTTP/2 connections open, so blocked sites stay
+unreachable for minutes after the restart.
+
+Once the rules are back, delete the masqueraded TCP entries. The next
+packet of a leaked connection is tracked anew and hits the redirect:
+it is reset and the client reconnects through sing-box. A connection
+that is meant to go direct is picked up mid-stream (tcp_loose) and goes
+on through masquerade. Redirected connections (DNAT) and the router's
+own connections (not translated) are not matched by --src-nat.
+
+Checked in network namespaces with conntrack-tools 1.4.8: a connection
+opened before the redirect kept reaching the server, after the delete
+it was reset and the reconnect went to the redirect port; a direct, a
+redirected and a router-originated connection carried on.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
+---
+ root/etc/init.d/homeproxy | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/root/etc/init.d/homeproxy b/root/etc/init.d/homeproxy
+index 3167775..a89a49f 100755
+--- a/root/etc/init.d/homeproxy
++++ b/root/etc/init.d/homeproxy
+@@ -250,6 +250,19 @@ start_service() {
+ 	[ "$outbound_node" = "nil" ] || utpl -S "$HP_DIR/scripts/firewall_post.ut" > "$RUN_DIR/fw4_post.nft"
+ 	fw4 reload >"/dev/null" 2>&1
+ 
++	# A restart takes the rules down (stop_service) and puts them back above.
++	# A LAN connection opened in between went straight to WAN, and conntrack
++	# keeps its masquerade for as long as it lives: the redirect never applies
++	# to it, and to a blocked site it hangs for minutes. Drop the masqueraded
++	# TCP entries. The next packet of such a connection is tracked anew and
++	# meets the rules: a proxied one is reset (sing-box has no state for it)
++	# and the client reconnects, a direct one goes on through masquerade.
++	# Redirected connections are DNAT and the router's own ones are not
++	# translated, so neither is touched.
++	if [ "$outbound_node" != "nil" ] && command -v conntrack >"/dev/null"; then
++		conntrack -D -p tcp --src-nat >"/dev/null" 2>&1
++	fi
++
+ 	log "sing-box $(sing-box version -n) started."
+ }
+ 
+-- 
+2.43.0
+
