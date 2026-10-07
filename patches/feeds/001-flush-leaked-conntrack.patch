@@ -1,0 +1,49 @@
+From: Claude <noreply@anthropic.com>
+Subject: [PATCH] passwall2: сброс соединений LAN, ушедших мимо прокси во время перезапуска
+
+Перезапуск passwall2 снимает правила (stop) и ставит их заново в start.
+TCP-соединение клиента LAN, открытое в этом промежутке, уходит в WAN
+напрямую через masquerade, и conntrack держит этот NAT до конца
+соединения: redirect, появившийся позже, к нему не применяется, и
+заблокированный сайт не открывается минутами.
+
+После установки правил удаляются записи conntrack TCP с masquerade.
+Следующий пакет такого соединения отслеживается заново: в режиме
+redirect (по умолчанию) он попадает в redirect, соединение сбрасывается
+и клиент переподключается через прокси; прямое соединение подхватывается
+с середины (tcp_loose) и продолжает идти через masquerade. Соединения
+через redirect (DNAT) и собственные соединения роутера под --src-nat не
+попадают. В режиме TPROXY passwall2 помечает только SYN, и такое
+соединение останется прямым до закрытия — как и без патча.
+
+Проверено в сетевых пространствах имён с conntrack-tools 1.4.8.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
+---
+ luci-app-passwall2/root/usr/share/passwall2/app.sh | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/luci-app-passwall2/root/usr/share/passwall2/app.sh b/luci-app-passwall2/root/usr/share/passwall2/app.sh
+index f11e870..f084f71 100755
+--- a/luci-app-passwall2/root/usr/share/passwall2/app.sh
++++ b/luci-app-passwall2/root/usr/share/passwall2/app.sh
+@@ -921,6 +921,15 @@ start() {
+ 		else
+ 			source $APP_PATH/${USE_TABLES}.sh start
+ 			set_cache_var "USE_TABLES" "$USE_TABLES"
++			# A restart takes the rules down (stop) and puts them back here. A LAN
++			# TCP connection opened in between went straight to WAN, and conntrack
++			# keeps its masquerade for as long as it lives, so the redirect never
++			# applies to it and a blocked site hangs for minutes. Drop the
++			# masqueraded TCP entries: the next packet of such a connection is
++			# tracked anew, a proxied one is reset and the client reconnects, a
++			# direct one goes on through masquerade. Redirected connections (DNAT)
++			# and the router's own ones (not translated) are not matched.
++			command -v conntrack >/dev/null && conntrack -D -p tcp --src-nat >/dev/null 2>&1
+ 		fi
+ 	}
+ 	if [ "$ENABLED_DEFAULT_ACL" == 1 ] || [ "$ENABLED_ACLS" == 1 ]; then
+-- 
+2.43.0
+
