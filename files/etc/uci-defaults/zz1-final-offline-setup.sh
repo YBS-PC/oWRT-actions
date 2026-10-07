@@ -487,16 +487,31 @@ if [ ! -f "$LOCK_FILE" ] && [ "$CURRENT_VARIANT" = "passwall" ] && [ -f "/etc/in
 
     uci -q batch <<-EOF
         set passwall2.@global[0].dns_redirect='0'
-        set passwall2.@global[0].dns_shunt='closed'
-        set passwall2.@global[0].remote_dns='127.0.0.1:53'
-        set passwall2.@global[0].china_dns='127.0.0.1:53'
-        set passwall2.@global[0].adblock='0'
         set passwall2.@global[0].enabled='1'
         commit passwall2
 EOF
     _RC=$?; [ $_RC -eq 0 ] && log_ok "Конфигурация passwall2 обновлена" || log_err "Ошибка uci batch passwall2 (exit: $_RC)"
 
     run_cmd "Включение passwall2" /etc/init.d/passwall2 enable
+fi
+# dns_redirect=0: passwall2 не перехватывает DNS клиентов, а вписывает свои
+# правила в dnsmasq (:54), к которому обращается AGH (см. блок AdGuardHome).
+# Удалённый DNS passwall2 ходит через узел (remote_dns_detour=remote), поэтому
+# адрес роутера 127.0.0.1:53, который раньше ставил сюда zz1, через узел
+# недоступен, а с AGH → dnsmasq → Xray дал бы петлю. Возвращаем значение
+# passwall2 по умолчанию; dns_shunt, china_dns и adblock — опции passwall 1,
+# в passwall2 их нет.
+if [ "$CURRENT_VARIANT" = "passwall" ] && [ -f "/etc/config/passwall2" ]; then
+    _PW2_CHANGED=0
+    if [ "$(uci -q get passwall2.@global[0].remote_dns)" = "127.0.0.1:53" ]; then
+        uci -q set passwall2.@global[0].remote_dns='1.1.1.1' && _PW2_CHANGED=1
+    fi
+    for _o in dns_shunt china_dns adblock; do
+        uci -q get "passwall2.@global[0].$_o" >/dev/null && uci -q delete "passwall2.@global[0].$_o" && _PW2_CHANGED=1
+    done
+    if [ "$_PW2_CHANGED" = "1" ]; then
+        uci -q commit passwall2 && log_ok "passwall2: удалённый DNS 1.1.1.1 через узел, лишние опции убраны"
+    fi
 fi
 
 # luci-app-xray: заводские настройки пакета рассчитаны на Китай — напрямую
@@ -687,21 +702,52 @@ EOF
     #   forkop, trafira, podkop, netshift → 127.0.0.42:53 (DNS inbound их sing-box)
     #   xray            → 127.0.0.1:5300 (DNS-вход Xray luci-app-xray: FakeDNS,
     #                     Fast/Secure DNS и правила доменов работают в нём)
+    #   passwall, v2raya → 127.0.0.1:54 (dnsmasq). passwall2 при
+    #                     dns_redirect=0 вписывает в dnsmasq свои правила:
+    #                     по умолчанию — DNS-вход своего Xray (порт выбирается
+    #                     при каждом запуске), адреса узлов — DNS провайдера.
+    #                     v2rayA свой DNS на :53 при AGH не поднимает (порт
+    #                     занят), а трафик всё равно разводит по сниффингу.
     #   homeproxy и остальные → 127.0.0.1:5333 (DNS-порт sing-box homeproxy)
     # Любой из этих адресов, оставшийся от прошлого варианта, заменяется на
     # нужный. Правим yaml напрямую: AGH хранит upstream только там, не в UCI.
     # AGH должен быть остановлен в этот момент (выше есть stop).
+    # Меняется только пункт списка upstream_dns целиком: 127.0.0.1:54 стоит
+    # ещё в local_ptr_upstreams и в правиле [/lan/arpa/local/]127.0.0.1:54,
+    # их трогать нельзя. Повтор нужного адреса в списке не оставляется.
     AGH_YAML="/etc/adguardhome/adguardhome.yaml"
     if [ -f "$AGH_YAML" ]; then
         case "$CURRENT_VARIANT" in
             forkop|trafira|podkop|netshift) _AGH_EXPECTED='127.0.0.42:53' ;;
             xray)          _AGH_EXPECTED='127.0.0.1:5300' ;;
+            passwall|v2raya) _AGH_EXPECTED='127.0.0.1:54' ;;
             *)             _AGH_EXPECTED='127.0.0.1:5333' ;;
         esac
-        for _agh_old in 127.0.0.1:5333 127.0.0.42:53 127.0.0.1:5300; do
-            [ "$_agh_old" = "$_AGH_EXPECTED" ] && continue
-            sed -i "s|$(echo "$_agh_old" | sed 's/\./\\./g')|$_AGH_EXPECTED|g" "$AGH_YAML"
-        done
+        # $1: файл; new — адрес для замены (пусто — только проверить наличие)
+        agh_upstream() {
+            awk -v new="$2" -v want="$_AGH_EXPECTED" -v q="'" '
+                function val(s) { sub(/^[[:space:]]*-[[:space:]]*/, "", s); gsub(/[" \t]/, "", s); gsub(q, "", s); return s }
+                /^[[:space:]]*upstream_dns:[[:space:]]*$/ { inb = 1; print; next }
+                inb && /^[[:space:]]*-/ {
+                    v = val($0)
+                    if (new != "" && (v == "127.0.0.1:5333" || v == "127.0.0.42:53" || v == "127.0.0.1:5300" || v == "127.0.0.1:54")) {
+                        if (done) next
+                        sub(/-.*/, "- " new); v = new; done = 1
+                    }
+                    if (new == "" && v == want) found = 1
+                    print; next
+                }
+                inb && !/^[[:space:]]*$/ { inb = 0 }
+                { print }
+                END { if (new == "") exit !found }
+            ' "$1"
+        }
+        if agh_upstream "$AGH_YAML" "$_AGH_EXPECTED" > "$AGH_YAML.zz1" && [ -s "$AGH_YAML.zz1" ]; then
+            cat "$AGH_YAML.zz1" > "$AGH_YAML"   # cat, а не mv: права и владелец файла остаются
+        else
+            log_err "adguardhome.yaml: не удалось заменить upstream DNS"
+        fi
+        rm -f "$AGH_YAML.zz1"
         if [ "$_AGH_EXPECTED" = '127.0.0.42:53' ]; then
             # Все они по умолчанию сами перенастраивают dnsmasq на 127.0.0.42
             # (dont_touch_dhcp=0). Хозяин :53 — AGH, dnsmasq на :54 — поэтому
@@ -731,10 +777,16 @@ EOF
             # обращается к DNS-входу Xray напрямую. Локальные имена (PTR, .lan)
             # dnsmasq по-прежнему отдаёт сам.
             log_ok "AGH upstream → Xray DNS ($_AGH_EXPECTED)"
+        elif [ "$_AGH_EXPECTED" = '127.0.0.1:54' ]; then
+            log_ok "AGH upstream → dnsmasq ($_AGH_EXPECTED): DNS-правила $CURRENT_VARIANT"
         else
             log_ok "AGH upstream → homeproxy sing-box ($_AGH_EXPECTED)"
         fi
-        patch_check "$AGH_YAML" "$_AGH_EXPECTED" "adguardhome.yaml upstream DNS"
+        if agh_upstream "$AGH_YAML" "" >/dev/null; then
+            log_ok "adguardhome.yaml upstream DNS: $_AGH_EXPECTED на месте"
+        else
+            log_err "adguardhome.yaml upstream DNS: $_AGH_EXPECTED не найден в upstream_dns"
+        fi
     else
         log_info "AGH yaml не найден ($AGH_YAML) — upstream DNS не настроен автоматически"
     fi
