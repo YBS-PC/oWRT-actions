@@ -33,7 +33,6 @@ Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
  .../files/usr/lib/sing_box_config_facade.sh   | 30 +++++++++++++++----
  .../files/usr/lib/sing_box_config_manager.sh  |  6 ++--
  2 files changed, 28 insertions(+), 8 deletions(-)
-
 diff --git a/netshift/files/usr/lib/sing_box_config_facade.sh b/netshift/files/usr/lib/sing_box_config_facade.sh
 index f76b67f..63e11d7 100644
 --- a/netshift/files/usr/lib/sing_box_config_facade.sh
@@ -105,7 +104,7 @@ index f76b67f..63e11d7 100644
              outbounds: [$resolved.out[].outbound],
              tags: [$resolved.out[].tag],
 diff --git a/netshift/files/usr/lib/sing_box_config_manager.sh b/netshift/files/usr/lib/sing_box_config_manager.sh
-index efa3ecd..4e20b02 100644
+index 2afac3a..357b981 100644
 --- a/netshift/files/usr/lib/sing_box_config_manager.sh
 +++ b/netshift/files/usr/lib/sing_box_config_manager.sh
 @@ -1291,12 +1291,14 @@ sing_box_cm_set_tls_for_outbound() {
@@ -125,6 +124,3 @@ index efa3ecd..4e20b02 100644
                          } else {} end)
                      )
                  }
--- 
-2.43.0
-
