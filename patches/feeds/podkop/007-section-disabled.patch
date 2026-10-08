@@ -1,0 +1,269 @@
+From: YBS-PC/oWRT-actions
+Subject: [PATCH] podkop: опция «Отключить секцию» (disabled)
+
+По мотивам netshift (5ed3835). Секцию можно выключить, не удаляя её
+настроек: флажок «Отключить секцию» в форме секции или
+uci set podkop.<секция>.disabled='1'. Выключенная секция полностью
+игнорируется: нет outbound, маршрутизации, списков, задания cron,
+mixed-прокси и записи на дашборде и в диагностике. disabled '0' или
+отсутствие опции (все существующие конфиги) — секция работает как раньше.
+
+Сделано одним местом: drop_disabled_sections сразу после config_load
+убирает такие секции из списка, по которому идёт config_foreach, поэтому
+их пропускают все обходы секций, в том числе будущие. Поиск секций
+«Блокировка» и «Исключение» по типу подключения переведён с `uci show`
+на config_foreach, чтобы тоже не видеть выключенные.
+
+Если выключена секция, выбранная для загрузки списков, списки и
+rule-set качаются напрямую (с предупреждением в журнале): иначе
+sing-box check проходил, но каждая загрузка падала с «outbound not
+found». В списке выбора этой секции в настройках выключенные секции
+не показываются.
+---
+diff --git a/fe-app-podkop/src/podkop/methods/custom/getDashboardSections.ts b/fe-app-podkop/src/podkop/methods/custom/getDashboardSections.ts
+index 650f741..f0df14e 100644
+--- a/fe-app-podkop/src/podkop/methods/custom/getDashboardSections.ts
++++ b/fe-app-podkop/src/podkop/methods/custom/getDashboardSections.ts
+@@ -31,7 +31,8 @@ export async function getDashboardSections(): Promise<IGetDashboardSectionsRespo
+       (section) =>
+         section.connection_type !== 'block' &&
+         section.connection_type !== 'exclusion' &&
+-        section['.type'] !== 'settings',
++        section['.type'] !== 'settings' &&
++        section.disabled !== '1',
+     )
+     .map((section) => {
+       if (section.connection_type === 'proxy') {
+diff --git a/fe-app-podkop/src/podkop/types.ts b/fe-app-podkop/src/podkop/types.ts
+index 383e6e7..3353acd 100644
+--- a/fe-app-podkop/src/podkop/types.ts
++++ b/fe-app-podkop/src/podkop/types.ts
+@@ -143,6 +143,7 @@ export namespace Podkop {
+   export type ConfigSection = ConfigBaseSection & {
+     '.name': string;
+     '.type': 'settings' | 'section';
++    disabled?: string;
+     yacd_secret_key?: string;
+   };
+ 
+diff --git a/luci-app-podkop/htdocs/luci-static/resources/view/podkop/main.js b/luci-app-podkop/htdocs/luci-static/resources/view/podkop/main.js
+index 9cf5533..5e23fb2 100644
+--- a/luci-app-podkop/htdocs/luci-static/resources/view/podkop/main.js
++++ b/luci-app-podkop/htdocs/luci-static/resources/view/podkop/main.js
+@@ -760,7 +760,7 @@ async function getDashboardSections() {
+     })
+   );
+   const data = configSections.filter(
+-    (section) => section.connection_type !== "block" && section.connection_type !== "exclusion" && section[".type"] !== "settings"
++    (section) => section.connection_type !== "block" && section.connection_type !== "exclusion" && section[".type"] !== "settings" && section.disabled !== "1"
+   ).map((section) => {
+     if (section.connection_type === "proxy") {
+       if (section.proxy_config_type === "url") {
+diff --git a/luci-app-podkop/htdocs/luci-static/resources/view/podkop/section.js b/luci-app-podkop/htdocs/luci-static/resources/view/podkop/section.js
+index 1f5fbce..994bbcd 100644
+--- a/luci-app-podkop/htdocs/luci-static/resources/view/podkop/section.js
++++ b/luci-app-podkop/htdocs/luci-static/resources/view/podkop/section.js
+@@ -17,6 +17,17 @@ function createSectionContent(section, singBoxFeatures = []) {
+   o.value("block", "Block");
+   o.value("exclusion", "Exclusion");
+ 
++  o = section.option(
++    form.Flag,
++    "disabled",
++    _("Disable section"),
++    _(
++      "The section is ignored completely (routing, lists, mixed proxy), but its settings are kept. Clear the checkbox to enable it again",
++    ),
++  );
++  o.default = "0";
++  o.rmempty = false;
++
+   o = section.option(
+     form.ListValue,
+     "proxy_config_type",
+diff --git a/luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js b/luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js
+index 74af0e4..68c0862 100644
+--- a/luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js
++++ b/luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js
+@@ -322,7 +322,7 @@ function createSettingsContent(section) {
+ 
+     for (const secName in sections) {
+       const sec = sections[secName];
+-      if (sec[".type"] === "section" && sec['connection_type'] !== 'block' && sec['connection_type'] !== 'exclusion') {
++      if (sec[".type"] === "section" && sec['connection_type'] !== 'block' && sec['connection_type'] !== 'exclusion' && sec['disabled'] !== '1') {
+         this.keylist.push(secName);
+         this.vallist.push(secName);
+       }
+diff --git a/luci-app-podkop/po/ru/podkop.po b/luci-app-podkop/po/ru/podkop.po
+index b382a59..5508aab 100644
+--- a/luci-app-podkop/po/ru/podkop.po
++++ b/luci-app-podkop/po/ru/podkop.po
+@@ -859,3 +859,9 @@ msgstr "podkop обрабатывает только IPv4: сайты, дост
+ 
+ msgid "No global IPv6 address"
+ msgstr "Глобального адреса IPv6 нет"
++
++msgid "Disable section"
++msgstr "Отключить секцию"
++
++msgid "The section is ignored completely (routing, lists, mixed proxy), but its settings are kept. Clear the checkbox to enable it again"
++msgstr "Секция полностью игнорируется (маршрутизация, списки, mixed-прокси), но её настройки сохраняются. Снимите флажок, чтобы снова включить её"
+diff --git a/luci-app-podkop/po/templates/podkop.pot b/luci-app-podkop/po/templates/podkop.pot
+index a3d4c0d..7690e4c 100644
+--- a/luci-app-podkop/po/templates/podkop.pot
++++ b/luci-app-podkop/po/templates/podkop.pot
+@@ -1188,3 +1188,9 @@ msgstr ""
+ 
+ msgid "No global IPv6 address"
+ msgstr ""
++
++msgid "Disable section"
++msgstr ""
++
++msgid "The section is ignored completely (routing, lists, mixed proxy), but its settings are kept. Clear the checkbox to enable it again"
++msgstr ""
+diff --git a/podkop/files/usr/bin/podkop b/podkop/files/usr/bin/podkop
+index 5e0c845..69bd2c6 100755
+--- a/podkop/files/usr/bin/podkop
++++ b/podkop/files/usr/bin/podkop
+@@ -31,7 +31,7 @@ check_required_file "$PODKOP_LIB/rulesets.sh"
+ . "$PODKOP_LIB/logging.sh"
+ . "$PODKOP_LIB/rulesets.sh"
+ 
+-config_load "$PODKOP_CONFIG"
++config_load "$PODKOP_CONFIG" && drop_disabled_sections
+ 
+ check_requirements() {
+     log "Check Requirements"
+@@ -188,7 +188,7 @@ start() {
+     fi
+ 
+     uci_set "podkop" "settings" "shutdown_correctly" 0
+-    uci commit "podkop" && config_load "$PODKOP_CONFIG"
++    uci commit "podkop" && config_load "$PODKOP_CONFIG" && drop_disabled_sections
+ }
+ 
+ stop() {
+@@ -201,7 +201,7 @@ stop() {
+     stop_main
+ 
+     uci_set "podkop" "settings" "shutdown_correctly" 1
+-    uci commit "podkop" && config_load "$PODKOP_CONFIG"
++    uci commit "podkop" && config_load "$PODKOP_CONFIG" && drop_disabled_sections
+ }
+ 
+ reload() {
+@@ -1288,7 +1288,11 @@ sing_box_additional_inbounds() {
+     if [ "$download_lists_via_proxy" -eq 1 ]; then
+         local download_lists_via_proxy_section section_outbound_tag
+         config_get download_lists_via_proxy_section "settings" "download_lists_via_proxy_section"
+-        section_outbound_tag="$(get_outbound_tag_by_section "$download_lists_via_proxy_section")"
++        section_outbound_tag="$(get_download_detour_tag)"
++        if [ -z "$section_outbound_tag" ]; then
++            log "Section '$download_lists_via_proxy_section' chosen to download lists has no outbound, the lists are downloaded directly" "warn"
++            section_outbound_tag="$SB_DIRECT_OUTBOUND_TAG"
++        fi
+         config=$(
+             sing_box_cf_add_mixed_inbound_and_route_rule \
+                 "$config" \
+@@ -1598,11 +1602,14 @@ get_service_proxy_address() {
+     fi
+ }
+ 
++# Empty (direct) also when the chosen section has no outbound: a disabled
++# section would leave sing-box with a detour to a missing outbound.
+ get_download_detour_tag() {
+     config_get_bool download_lists_via_proxy "settings" "download_lists_via_proxy" 0
+     if [ "$download_lists_via_proxy" -eq 1 ]; then
+         local download_lists_via_proxy_section section_outbound_tag
+         config_get download_lists_via_proxy_section "settings" "download_lists_via_proxy_section"
++        section_has_outbound "$download_lists_via_proxy_section" || return 0
+         section_outbound_tag="$(get_outbound_tag_by_section "$download_lists_via_proxy_section")"
+         echo "$section_outbound_tag"
+     else
+@@ -1610,6 +1617,18 @@ get_download_detour_tag() {
+     fi
+ }
+ 
++# The section is loaded (not disabled) and gets an outbound of its own.
++section_has_outbound() {
++    local connection_type
++
++    case " $CONFIG_SECTIONS " in
++    *" $1 "*) ;;
++    *) return 1 ;;
++    esac
++    config_get connection_type "$1" "connection_type"
++    [ "$connection_type" = "proxy" ] || [ "$connection_type" = "vpn" ]
++}
++
+ _determine_first_outbound_section() {
+     local section="$1"
+ 
+@@ -1629,20 +1648,22 @@ get_first_outbound_section() {
+     echo "$first_section"
+ }
+ 
++# Through config_foreach, not `uci show`: disabled sections are already left
++# out of the loaded config (drop_disabled_sections).
+ get_sections_by_connection_type() {
+-    local connection_type="$1"
++    _wanted_connection_type="$1"
++    config_foreach _print_section_of_connection_type "section"
++}
+ 
+-    uci show podkop | grep "\.connection_type='$connection_type'" | cut -d'.' -f2
++_print_section_of_connection_type() {
++    local connection_type
++    config_get connection_type "$1" "connection_type"
++    [ "$connection_type" = "$_wanted_connection_type" ] && echo "$1"
++    return 0
+ }
+ 
+ section_by_connection_type_exists() {
+-    local connection_type="$1"
+-
+-    if uci show podkop | grep -q "\.connection_type='$connection_type'"; then
+-        return 0
+-    else
+-        return 1
+-    fi
++    [ -n "$(get_sections_by_connection_type "$1")" ]
+ }
+ 
+ section_has_enabled_lists() {
+@@ -2146,7 +2167,7 @@ check_dns_available() {
+     # Check if /etc/config/dhcp has server 127.0.0.42
+     config_load dhcp
+     config_foreach check_dhcp_has_podkop_dns dnsmasq
+-    config_load "$PODKOP_CONFIG"
++    config_load "$PODKOP_CONFIG" && drop_disabled_sections
+ 
+     echo "{\"dns_type\":\"$dns_type\",\"dns_server\":\"$display_dns_server\",\"dns_status\":$dns_status,\"dns_on_router\":$dns_on_router,\"bootstrap_dns_server\":\"$bootstrap_dns_server\",\"bootstrap_dns_status\":$bootstrap_dns_status,\"dhcp_config_status\":$dhcp_config_status}" | jq .
+ }
+diff --git a/podkop/files/usr/lib/helpers.sh b/podkop/files/usr/lib/helpers.sh
+index 685c734..0abf9ee 100644
+--- a/podkop/files/usr/lib/helpers.sh
++++ b/podkop/files/usr/lib/helpers.sh
+@@ -463,3 +463,21 @@ http_date_to_epoch() {
+ 
+     date -u -d "$4-$month_number-$2 $5" +%s 2> /dev/null
+ }
++
++# A section with `option disabled '1'` is left out completely: no outbound,
++# routing, lists, cron job, mixed proxy or dashboard entry, but its settings
++# stay in UCI. Called right after config_load: it removes such sections from
++# the list config_foreach walks, so every per-section loop skips them.
++drop_disabled_sections() {
++    local section type disabled kept=""
++
++    for section in $CONFIG_SECTIONS; do
++        config_get type "$section" TYPE
++        if [ "$type" = "section" ]; then
++            config_get_bool disabled "$section" "disabled" 0
++            [ "$disabled" -eq 1 ] && continue
++        fi
++        kept="$kept $section"
++    done
++    CONFIG_SECTIONS="${kept# }"
++}

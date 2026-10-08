@@ -1,0 +1,820 @@
+From: YBS-PC/oWRT-actions
+Subject: [PATCH] podkop: несколько DNS-серверов — по очереди или все сразу
+ (sing-box 1.14+)
+
+Перенос из netshift (ce7003a). На вкладке DNS: «Несколько DNS-серверов»
+(dns_pool_mode), «Дополнительные DNS-серверы» (list dns_pool_server,
+формат схема://хост[:порт][/путь], схема udp, tcp, dot, doh, doh3, doq,
+есть готовые серверы Google, Cloudflare, Quad9, AdGuard, Яндекс) и
+«Таймаут DNS-сервера» (dns_pool_timeout, по умолчанию 2s).
+- single (по умолчанию и у всех существующих конфигов) — только
+  основной сервер, конфиг sing-box не меняется;
+- fallback — по очереди: основной, затем список; следующий сервер
+  спрашивается, если предыдущий не ответил за таймаут или вернул не
+  NOERROR/NXDOMAIN; последний отвечает тем, что получил;
+- race — всем сразу, побеждает первый ответ NOERROR/NXDOMAIN (SERVFAIL
+  и зависший сервер не мешают).
+Собрано из DNS-правил sing-box 1.14 evaluate/respond(race), правила
+идут последними: FakeIP-домены секций не затрагиваются, домены секций
+«Исключение» по-прежнему резолвит основной сервер, внутренний резолв
+(адреса прокси) — тоже основной.
+
+Отличия от netshift: на sing-box старше 1.14 пул отключается с
+предупреждением (проверка по версии, а не падение конфига); серверы
+doh3/doq пропускаются, если ядро собрано без QUIC (podkop-engine —
+без него, проверяется пробным sing-box check); битая запись, лишняя
+(больше 8 серверов) или неверный таймаут — предупреждение в журнале, а
+не падение podkop. Путь в записях пула маскируется в show_config.
+Проверено: sing-box check на 1.12.22 (пул выключается), 1.14.2 и
+podkop-engine 1.14.2-r11; семантика fallback/race — вживую на 1.14.2 с
+фейковыми DNS. Валидаторы + 53 теста, main.js пересобран, переводы.
+---
+diff --git a/fe-app-podkop/src/constants.ts b/fe-app-podkop/src/constants.ts
+index fb19376..fd2e455 100644
+--- a/fe-app-podkop/src/constants.ts
++++ b/fe-app-podkop/src/constants.ts
+@@ -75,6 +75,29 @@ export const DNS_SERVER_OPTIONS = {
+     'unfiltered.adguard-dns.com (AdGuard Unfiltered)',
+   'family.adguard-dns.com': 'family.adguard-dns.com (AdGuard Family)',
+ };
++// Ready-made additional DNS servers (dns_pool_server), every scheme the pool
++// understands; any other scheme://host[:port][/path] can be typed in as well
++export const DNS_POOL_PRESETS = {
++  'udp://8.8.8.8': 'Google - UDP (8.8.8.8)',
++  'tcp://8.8.8.8': 'Google - TCP (8.8.8.8)',
++  'dot://dns.google': 'Google - DoT (dns.google)',
++  'doh://dns.google/dns-query': 'Google - DoH (dns.google)',
++  'doh3://dns.google/dns-query': 'Google - DoH3 (dns.google)',
++  'udp://1.1.1.1': 'Cloudflare - UDP (1.1.1.1)',
++  'dot://one.one.one.one': 'Cloudflare - DoT (one.one.one.one)',
++  'doh://cloudflare-dns.com/dns-query': 'Cloudflare - DoH (cloudflare-dns.com)',
++  'doh3://cloudflare-dns.com/dns-query':
++    'Cloudflare - DoH3 (cloudflare-dns.com)',
++  'udp://9.9.9.9': 'Quad9 - UDP (9.9.9.9)',
++  'dot://dns.quad9.net': 'Quad9 - DoT (dns.quad9.net)',
++  'doh://dns.quad9.net/dns-query': 'Quad9 - DoH (dns.quad9.net)',
++  'dot://dns.adguard-dns.com': 'AdGuard - DoT (dns.adguard-dns.com)',
++  'doh://dns.adguard-dns.com/dns-query': 'AdGuard - DoH (dns.adguard-dns.com)',
++  'doq://dns.adguard-dns.com': 'AdGuard - DoQ (dns.adguard-dns.com)',
++  'udp://77.88.8.8': 'Yandex - UDP (77.88.8.8)',
++  'doh://common.dns.yandex.net/dns-query':
++    'Yandex - DoH (common.dns.yandex.net)',
++};
+ export const URLTEST_DOWNLOAD_URL_OPTIONS = {
+   'https://speed.cloudflare.com/__down?bytes=65536':
+     'https://speed.cloudflare.com/__down?bytes=65536 (Cloudflare)',
+diff --git a/fe-app-podkop/src/validators/index.ts b/fe-app-podkop/src/validators/index.ts
+index 9bdad27..3184677 100644
+--- a/fe-app-podkop/src/validators/index.ts
++++ b/fe-app-podkop/src/validators/index.ts
+@@ -11,3 +11,4 @@ export * from './validateOutboundJson';
+ export * from './validateTrojanUrl';
+ export * from './validateProxyUrl';
+ export * from './validateSocksUrl';
++export * from './validateDnsPool';
+diff --git a/fe-app-podkop/src/validators/tests/validateDnsPool.test.js b/fe-app-podkop/src/validators/tests/validateDnsPool.test.js
+new file mode 100644
+index 0000000..a9c6878
+--- /dev/null
++++ b/fe-app-podkop/src/validators/tests/validateDnsPool.test.js
+@@ -0,0 +1,71 @@
++import { describe, expect, it } from 'vitest';
++import {
++  validateDnsPoolServer,
++  validateDnsPoolTimeout,
++} from '../validateDnsPool.js';
++import { DNS_POOL_PRESETS } from '../../constants';
++
++const validServers = [
++  'udp://8.8.8.8',
++  'udp://8.8.8.8:5353',
++  'tcp://1.1.1.1',
++  'dot://dns.quad9.net',
++  'dot://dns.quad9.net:853',
++  'doh://dns.google/dns-query',
++  'doh://Dns.Google/dns-query',
++  'doh://1.1.1.1:443/dns-query',
++  'doh3://cloudflare-dns.com/dns-query',
++  'doq://dns.adguard-dns.com',
++];
++
++const invalidServers = [
++  '',
++  '8.8.8.8',
++  'dns.google',
++  'smtp://8.8.8.8',
++  'DOH://dns.google/dns-query',
++  'udp://8.8.8.8/path',
++  'dot://dns.quad9.net/dns-query',
++  'udp://8.8.8.8:0',
++  'udp://8.8.8.8:65536',
++  'udp://',
++  'udp://8.8.8.8 ',
++  'doh://dns google/dns-query',
++  'udp://-bad-.com',
++];
++
++describe('validateDnsPoolServer', () => {
++  it.each(validServers)('accepts %s', (value) => {
++    expect(validateDnsPoolServer(value).valid).toBe(true);
++  });
++
++  it.each(invalidServers)('rejects "%s"', (value) => {
++    expect(validateDnsPoolServer(value).valid).toBe(false);
++  });
++
++  it.each(Object.keys(DNS_POOL_PRESETS))('accepts the preset %s', (value) => {
++    expect(validateDnsPoolServer(value).valid).toBe(true);
++  });
++
++  it('has a preset for every scheme', () => {
++    const schemes = new Set(
++      Object.keys(DNS_POOL_PRESETS).map((value) => value.split('://')[0]),
++    );
++    expect([...schemes].sort()).toEqual(
++      ['doh', 'doh3', 'doq', 'dot', 'tcp', 'udp'].sort(),
++    );
++  });
++});
++
++describe('validateDnsPoolTimeout', () => {
++  it.each(['500ms', '2s', '10s', '1500ms'])('accepts %s', (value) => {
++    expect(validateDnsPoolTimeout(value).valid).toBe(true);
++  });
++
++  it.each(['', '0s', '2', 's', '1.5s', '2m', ' 2s', '-1s'])(
++    'rejects "%s"',
++    (value) => {
++      expect(validateDnsPoolTimeout(value).valid).toBe(false);
++    },
++  );
++});
+diff --git a/fe-app-podkop/src/validators/validateDnsPool.ts b/fe-app-podkop/src/validators/validateDnsPool.ts
+new file mode 100644
+index 0000000..60d05bc
+--- /dev/null
++++ b/fe-app-podkop/src/validators/validateDnsPool.ts
+@@ -0,0 +1,56 @@
++import { validateDNS } from './validateDns';
++import { ValidationResult } from './types';
++
++const DNS_POOL_SCHEMES = ['udp', 'tcp', 'dot', 'doh', 'doh3', 'doq'];
++const DNS_POOL_PATH_SCHEMES = ['doh', 'doh3'];
++
++// One of the additional DNS servers: scheme://host[:port][/path]
++export function validateDnsPoolServer(value: string): ValidationResult {
++  const separator = value.indexOf('://');
++
++  if (separator < 0 || /\s/.test(value)) {
++    return {
++      valid: false,
++      message: _(
++        'Use scheme://host[:port][/path], where scheme is udp, tcp, dot, doh, doh3 or doq. Example: doh://dns.google/dns-query',
++      ),
++    };
++  }
++
++  const scheme = value.slice(0, separator);
++  const rest = value.slice(separator + 3);
++
++  if (!DNS_POOL_SCHEMES.includes(scheme)) {
++    return {
++      valid: false,
++      message: _('Unknown DNS scheme. Use udp, tcp, dot, doh, doh3 or doq'),
++    };
++  }
++
++  if (!DNS_POOL_PATH_SCHEMES.includes(scheme) && rest.includes('/')) {
++    return {
++      valid: false,
++      message: _('A path is only allowed for doh and doh3'),
++    };
++  }
++
++  const port = rest.match(/:(\d+)(?=\/|$)/)?.[1];
++
++  if (port !== undefined && (Number(port) < 1 || Number(port) > 65535)) {
++    return { valid: false, message: _('Port must be between 1 and 65535') };
++  }
++
++  return validateDNS(rest.toLowerCase());
++}
++
++// How long one DNS server of the pool may take: 500ms, 2s
++export function validateDnsPoolTimeout(value: string): ValidationResult {
++  if (/^[1-9][0-9]*(ms|s)$/.test(value)) {
++    return { valid: true, message: _('Valid') };
++  }
++
++  return {
++    valid: false,
++    message: _('Invalid timeout. Examples: 500ms, 2s'),
++  };
++}
+diff --git a/luci-app-podkop/htdocs/luci-static/resources/view/podkop/main.js b/luci-app-podkop/htdocs/luci-static/resources/view/podkop/main.js
+index 0f2438b..9bc3ba6 100644
+--- a/luci-app-podkop/htdocs/luci-static/resources/view/podkop/main.js
++++ b/luci-app-podkop/htdocs/luci-static/resources/view/podkop/main.js
+@@ -603,6 +603,49 @@ function validateProxyUrl(url) {
+   };
+ }
+ 
++// src/validators/validateDnsPool.ts
++var DNS_POOL_SCHEMES = ["udp", "tcp", "dot", "doh", "doh3", "doq"];
++var DNS_POOL_PATH_SCHEMES = ["doh", "doh3"];
++function validateDnsPoolServer(value) {
++  const separator = value.indexOf("://");
++  if (separator < 0 || /\s/.test(value)) {
++    return {
++      valid: false,
++      message: _(
++        "Use scheme://host[:port][/path], where scheme is udp, tcp, dot, doh, doh3 or doq. Example: doh://dns.google/dns-query"
++      )
++    };
++  }
++  const scheme = value.slice(0, separator);
++  const rest = value.slice(separator + 3);
++  if (!DNS_POOL_SCHEMES.includes(scheme)) {
++    return {
++      valid: false,
++      message: _("Unknown DNS scheme. Use udp, tcp, dot, doh, doh3 or doq")
++    };
++  }
++  if (!DNS_POOL_PATH_SCHEMES.includes(scheme) && rest.includes("/")) {
++    return {
++      valid: false,
++      message: _("A path is only allowed for doh and doh3")
++    };
++  }
++  const port = rest.match(/:(\d+)(?=\/|$)/)?.[1];
++  if (port !== void 0 && (Number(port) < 1 || Number(port) > 65535)) {
++    return { valid: false, message: _("Port must be between 1 and 65535") };
++  }
++  return validateDNS(rest.toLowerCase());
++}
++function validateDnsPoolTimeout(value) {
++  if (/^[1-9][0-9]*(ms|s)$/.test(value)) {
++    return { valid: true, message: _("Valid") };
++  }
++  return {
++    valid: false,
++    message: _("Invalid timeout. Examples: 500ms, 2s")
++  };
++}
++
+ // src/helpers/parseValueList.ts
+ function parseValueList(value) {
+   return value.split(/\n/).map((line) => line.split("//")[0]).join(" ").split(/[,\s]+/).map((s) => s.trim()).filter(Boolean);
+@@ -995,6 +1038,25 @@ var DNS_SERVER_OPTIONS = {
+   "unfiltered.adguard-dns.com": "unfiltered.adguard-dns.com (AdGuard Unfiltered)",
+   "family.adguard-dns.com": "family.adguard-dns.com (AdGuard Family)"
+ };
++var DNS_POOL_PRESETS = {
++  "udp://8.8.8.8": "Google - UDP (8.8.8.8)",
++  "tcp://8.8.8.8": "Google - TCP (8.8.8.8)",
++  "dot://dns.google": "Google - DoT (dns.google)",
++  "doh://dns.google/dns-query": "Google - DoH (dns.google)",
++  "doh3://dns.google/dns-query": "Google - DoH3 (dns.google)",
++  "udp://1.1.1.1": "Cloudflare - UDP (1.1.1.1)",
++  "dot://one.one.one.one": "Cloudflare - DoT (one.one.one.one)",
++  "doh://cloudflare-dns.com/dns-query": "Cloudflare - DoH (cloudflare-dns.com)",
++  "doh3://cloudflare-dns.com/dns-query": "Cloudflare - DoH3 (cloudflare-dns.com)",
++  "udp://9.9.9.9": "Quad9 - UDP (9.9.9.9)",
++  "dot://dns.quad9.net": "Quad9 - DoT (dns.quad9.net)",
++  "doh://dns.quad9.net/dns-query": "Quad9 - DoH (dns.quad9.net)",
++  "dot://dns.adguard-dns.com": "AdGuard - DoT (dns.adguard-dns.com)",
++  "doh://dns.adguard-dns.com/dns-query": "AdGuard - DoH (dns.adguard-dns.com)",
++  "doq://dns.adguard-dns.com": "AdGuard - DoQ (dns.adguard-dns.com)",
++  "udp://77.88.8.8": "Yandex - UDP (77.88.8.8)",
++  "doh://common.dns.yandex.net/dns-query": "Yandex - DoH (common.dns.yandex.net)"
++};
+ var URLTEST_DOWNLOAD_URL_OPTIONS = {
+   "https://speed.cloudflare.com/__down?bytes=65536": "https://speed.cloudflare.com/__down?bytes=65536 (Cloudflare)",
+   "https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js": "https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js (Google)",
+@@ -5072,6 +5134,7 @@ return baseclass.extend({
+   CustomPodkopMethods,
+   DIAGNOSTICS_INITIAL_DELAY,
+   DIAGNOSTICS_UPDATE_INTERVAL,
++  DNS_POOL_PRESETS,
+   DNS_SERVER_OPTIONS,
+   DOMAIN_LIST_OPTIONS,
+   DashboardTab,
+@@ -5112,6 +5175,8 @@ return baseclass.extend({
+   store,
+   svgEl,
+   validateDNS,
++  validateDnsPoolServer,
++  validateDnsPoolTimeout,
+   validateDomain,
+   validateIPV4,
+   validateOutboundJson,
+diff --git a/luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js b/luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js
+index 68c0862..0f7decd 100644
+--- a/luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js
++++ b/luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js
+@@ -62,6 +62,68 @@ function createSettingsContent(section) {
+     return validation.message;
+   };
+ 
++  o = section.option(
++    form.ListValue,
++    "dns_pool_mode",
++    _("Several DNS servers"),
++    _(
++      "How additional DNS servers are used together with the main one. Needs sing-box 1.14 or newer, on an older one only the main server is used. Domains of exclusion sections are resolved by the main server only",
++    ),
++  );
++  o.value("single", _("Main server only"));
++  o.value("fallback", _("In turn: the next server if the previous one fails"));
++  o.value("race", _("All at once: the first answer wins"));
++  o.default = "single";
++  o.rmempty = false;
++
++  o = section.option(
++    form.DynamicList,
++    "dns_pool_server",
++    _("Additional DNS servers"),
++    _(
++      "Pick one or enter scheme://host[:port][/path], where scheme is udp, tcp, dot, doh, doh3 or doq. In turn: in this order after the main server. doh3 and doq need sing-box built with QUIC (podkop-engine is not)",
++    ),
++  );
++  Object.entries(main.DNS_POOL_PRESETS).forEach(([key, label]) => {
++    o.value(key, label);
++  });
++  o.depends("dns_pool_mode", "fallback");
++  o.depends("dns_pool_mode", "race");
++  o.validate = function (section_id, value) {
++    if (!value) {
++      return true;
++    }
++
++    const validation = main.validateDnsPoolServer(value);
++
++    if (validation.valid) {
++      return true;
++    }
++
++    return validation.message;
++  };
++
++  o = section.option(
++    form.Value,
++    "dns_pool_timeout",
++    _("DNS server timeout"),
++    _(
++      "How long one DNS server may take before the next one is asked (in turn) or its answer is not waited for (all at once). Examples: 500ms, 2s",
++    ),
++  );
++  o.depends("dns_pool_mode", "fallback");
++  o.depends("dns_pool_mode", "race");
++  o.default = "2s";
++  o.validate = function (section_id, value) {
++    const validation = main.validateDnsPoolTimeout(value);
++
++    if (validation.valid) {
++      return true;
++    }
++
++    return validation.message;
++  };
++
+   o = section.option(
+     form.Value,
+     "dns_rewrite_ttl",
+diff --git a/luci-app-podkop/po/ru/podkop.po b/luci-app-podkop/po/ru/podkop.po
+index 5508aab..e662ce5 100644
+--- a/luci-app-podkop/po/ru/podkop.po
++++ b/luci-app-podkop/po/ru/podkop.po
+@@ -865,3 +865,45 @@ msgstr "Отключить секцию"
+ 
+ msgid "The section is ignored completely (routing, lists, mixed proxy), but its settings are kept. Clear the checkbox to enable it again"
+ msgstr "Секция полностью игнорируется (маршрутизация, списки, mixed-прокси), но её настройки сохраняются. Снимите флажок, чтобы снова включить её"
++
++msgid "Several DNS servers"
++msgstr "Несколько DNS-серверов"
++
++msgid "How additional DNS servers are used together with the main one. Needs sing-box 1.14 or newer, on an older one only the main server is used. Domains of exclusion sections are resolved by the main server only"
++msgstr "Как дополнительные DNS-серверы используются вместе с основным. Нужен sing-box 1.14 или новее, на более старом работает только основной сервер. Домены секций «Исключение» резолвит только основной сервер"
++
++msgid "Main server only"
++msgstr "Только основной сервер"
++
++msgid "In turn: the next server if the previous one fails"
++msgstr "По очереди: следующий сервер, если предыдущий не ответил"
++
++msgid "All at once: the first answer wins"
++msgstr "Все сразу: побеждает первый ответ"
++
++msgid "Additional DNS servers"
++msgstr "Дополнительные DNS-серверы"
++
++msgid "Pick one or enter scheme://host[:port][/path], where scheme is udp, tcp, dot, doh, doh3 or doq. In turn: in this order after the main server. doh3 and doq need sing-box built with QUIC (podkop-engine is not)"
++msgstr "Выберите из списка или введите схема://хост[:порт][/путь], схема — udp, tcp, dot, doh, doh3 или doq. В режиме «По очереди» серверы опрашиваются в этом порядке после основного. Для doh3 и doq нужен sing-box с поддержкой QUIC (podkop-engine собран без неё)"
++
++msgid "DNS server timeout"
++msgstr "Таймаут DNS-сервера"
++
++msgid "How long one DNS server may take before the next one is asked (in turn) or its answer is not waited for (all at once). Examples: 500ms, 2s"
++msgstr "Сколько ждать ответа одного сервера: потом спрашивается следующий (по очереди) или его ответ больше не ждут (все сразу). Примеры: 500ms, 2s"
++
++msgid "Use scheme://host[:port][/path], where scheme is udp, tcp, dot, doh, doh3 or doq. Example: doh://dns.google/dns-query"
++msgstr "Формат: схема://хост[:порт][/путь], схема — udp, tcp, dot, doh, doh3 или doq. Пример: doh://dns.google/dns-query"
++
++msgid "Unknown DNS scheme. Use udp, tcp, dot, doh, doh3 or doq"
++msgstr "Неизвестная схема DNS. Допустимы udp, tcp, dot, doh, doh3 или doq"
++
++msgid "A path is only allowed for doh and doh3"
++msgstr "Путь допустим только для doh и doh3"
++
++msgid "Port must be between 1 and 65535"
++msgstr "Порт должен быть от 1 до 65535"
++
++msgid "Invalid timeout. Examples: 500ms, 2s"
++msgstr "Неверный таймаут. Примеры: 500ms, 2s"
+diff --git a/luci-app-podkop/po/templates/podkop.pot b/luci-app-podkop/po/templates/podkop.pot
+index 7690e4c..bc19099 100644
+--- a/luci-app-podkop/po/templates/podkop.pot
++++ b/luci-app-podkop/po/templates/podkop.pot
+@@ -1194,3 +1194,45 @@ msgstr ""
+ 
+ msgid "The section is ignored completely (routing, lists, mixed proxy), but its settings are kept. Clear the checkbox to enable it again"
+ msgstr ""
++
++msgid "Several DNS servers"
++msgstr ""
++
++msgid "How additional DNS servers are used together with the main one. Needs sing-box 1.14 or newer, on an older one only the main server is used. Domains of exclusion sections are resolved by the main server only"
++msgstr ""
++
++msgid "Main server only"
++msgstr ""
++
++msgid "In turn: the next server if the previous one fails"
++msgstr ""
++
++msgid "All at once: the first answer wins"
++msgstr ""
++
++msgid "Additional DNS servers"
++msgstr ""
++
++msgid "Pick one or enter scheme://host[:port][/path], where scheme is udp, tcp, dot, doh, doh3 or doq. In turn: in this order after the main server. doh3 and doq need sing-box built with QUIC (podkop-engine is not)"
++msgstr ""
++
++msgid "DNS server timeout"
++msgstr ""
++
++msgid "How long one DNS server may take before the next one is asked (in turn) or its answer is not waited for (all at once). Examples: 500ms, 2s"
++msgstr ""
++
++msgid "Use scheme://host[:port][/path], where scheme is udp, tcp, dot, doh, doh3 or doq. Example: doh://dns.google/dns-query"
++msgstr ""
++
++msgid "Unknown DNS scheme. Use udp, tcp, dot, doh, doh3 or doq"
++msgstr ""
++
++msgid "A path is only allowed for doh and doh3"
++msgstr ""
++
++msgid "Port must be between 1 and 65535"
++msgstr ""
++
++msgid "Invalid timeout. Examples: 500ms, 2s"
++msgstr ""
+diff --git a/podkop/files/usr/bin/podkop b/podkop/files/usr/bin/podkop
+index a5a358c..d54bd3b 100755
+--- a/podkop/files/usr/bin/podkop
++++ b/podkop/files/usr/bin/podkop
+@@ -908,6 +908,146 @@ sing_box_configure_dns() {
+     config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_FAKEIP_DNS_RULE_TAG" "query_type" '["A","AAAA"]')
+     service_domains=$(comma_string_to_json_array "$FAKEIP_TEST_DOMAIN,$CHECK_PROXY_IP_DOMAIN")
+     config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_FAKEIP_DNS_RULE_TAG" "domain" "$service_domains")
++
++    # last: the pool answers the queries no rule above took
++    sing_box_configure_dns_pool
++}
++
++# Extra DNS servers next to the main one (list dns_pool_server
++# 'scheme://host[:port][/path]', scheme udp, tcp, dot, doh, doh3 or doq), used as
++# dns_pool_mode says:
++#   single   (default) the main server only, as before;
++#   fallback in order, the main server first: the next one is asked when the
++#            previous one fails, times out or answers other than NOERROR/NXDOMAIN;
++#   race     all of them at once, the first NOERROR/NXDOMAIN answer wins.
++# Domains of FakeIP and exclusion sections are not affected. Built from the
++# evaluate/respond DNS rules of sing-box 1.14.
++sing_box_configure_dns_pool() {
++    local mode version timeout last_tag index tag rcode
++
++    config_get mode "settings" "dns_pool_mode" "single"
++    case "$mode" in
++    fallback | race) ;;
++    *) return 0 ;;
++    esac
++
++    version="$(sing-box version 2> /dev/null | head -n 1 | awk '{print $3}')"
++    if ! is_min_package_version "${version%%-*}" "$SB_DNS_POOL_REQUIRED_VERSION"; then
++        log "Several DNS servers need sing-box $SB_DNS_POOL_REQUIRED_VERSION or newer (installed: $version), only the main DNS server is used" "warn"
++        return 0
++    fi
++
++    _dns_pool_tags="$SB_DNS_SERVER_TAG"
++    _dns_pool_count=1
++    config_list_foreach "settings" "dns_pool_server" _add_dns_pool_server
++    if [ "$_dns_pool_count" -eq 1 ]; then
++        log "No usable additional DNS server is set, only the main DNS server is used" "warn"
++        return 0
++    fi
++
++    config_get timeout "settings" "dns_pool_timeout" "$DNS_POOL_TIMEOUT_DEFAULT"
++    if ! echo "$timeout" | grep -qE '^[1-9][0-9]*(ms|s)$'; then
++        log "Invalid DNS server timeout '$timeout', $DNS_POOL_TIMEOUT_DEFAULT is used" "warn"
++        timeout="$DNS_POOL_TIMEOUT_DEFAULT"
++    fi
++    log "DNS servers: $_dns_pool_count, mode $mode, $timeout per query"
++
++    last_tag="${_dns_pool_tags##* }"
++    index=0
++    for tag in $_dns_pool_tags; do
++        index=$((index + 1))
++        [ "$mode" = "fallback" ] && [ "$tag" = "$last_tag" ] && break
++        config=$(sing_box_cm_add_dns_evaluate_rule "$config" "$tag" "$SB_DNS_POOL_RESPONSE_PREFIX$index" "$timeout")
++        [ "$mode" = "fallback" ] || continue
++        for rcode in NOERROR NXDOMAIN; do
++            config=$(sing_box_cm_add_dns_respond_rule "$config" "$SB_DNS_POOL_RESPONSE_PREFIX$index" "$rcode")
++        done
++    done
++
++    if [ "$mode" = "fallback" ]; then
++        # the last server answers whatever is left, errors included
++        config=$(sing_box_cm_set_dns_final "$config" "$last_tag")
++        return 0
++    fi
++    for rcode in NOERROR NXDOMAIN; do
++        index=0
++        for tag in $_dns_pool_tags; do
++            index=$((index + 1))
++            config=$(sing_box_cm_add_dns_respond_rule "$config" "$SB_DNS_POOL_RESPONSE_PREFIX$index" "$rcode" true)
++        done
++    done
++}
++
++# config_list_foreach callback: adds one dns_pool_server, skipping a broken one
++_add_dns_pool_server() {
++    local entry="$1"
++    local type server authority resolver tag
++
++    type="${entry%%://*}"
++    server="${entry#*://}"
++    authority="${server%%/*}"
++    server="$(echo "$authority" | tr 'A-Z' 'a-z')${server#"$authority"}"
++    if ! dns_pool_entry_is_valid "$type://$server"; then
++        log "DNS server '$entry' is skipped: expected scheme://host[:port][/path], the scheme is udp, tcp, dot, doh, doh3 or doq" "warn"
++        return 0
++    fi
++    if [ "$_dns_pool_count" -ge "$DNS_POOL_MAX_SERVERS" ]; then
++        log "DNS server '$entry' is skipped: at most $DNS_POOL_MAX_SERVERS DNS servers are used" "warn"
++        return 0
++    fi
++    if ! sing_box_supports_dns_type "$type"; then
++        log "DNS server '$entry' is skipped: the installed sing-box is built without $type" "warn"
++        return 0
++    fi
++
++    _dns_pool_count=$((_dns_pool_count + 1))
++    tag="$SB_DNS_SERVER_TAG-$_dns_pool_count"
++    resolver="$SB_BOOTSTRAP_SERVER_TAG"
++    is_ipv4 "$(url_get_host "$server")" && resolver=""
++    config=$(sing_box_cf_add_dns_server "$config" "$type" "$tag" "$server" "$resolver")
++    _dns_pool_tags="$_dns_pool_tags $tag"
++}
++
++# doh3 and doq need sing-box built with QUIC: podkop-engine is not, for one
++sing_box_supports_dns_type() {
++    local type file
++
++    case "$1" in
++    doh3) type="h3" ;;
++    doq) type="quic" ;;
++    *) return 0 ;;
++    esac
++    file="$(mktemp)"
++    echo "{\"dns\":{\"servers\":[{\"type\":\"$type\",\"tag\":\"t\",\"server\":\"127.0.0.1\"}]}}" > "$file"
++    sing-box check -c "$file" > /dev/null 2>&1
++    set -- $?
++    rm -f "$file"
++    return "$1"
++}
++
++# scheme://host[:port][/path], a path only for doh and doh3
++dns_pool_entry_is_valid() {
++    local scheme="${1%%://*}"
++    local server="${1#*://}"
++    local host port
++
++    [ "$server" != "$1" ] || return 1
++    case "$scheme:$server" in
++    *[[:space:]]*) return 1 ;;
++    doh:* | doh3:*) ;;
++    udp:*/* | tcp:*/* | dot:*/* | doq:*/*) return 1 ;;
++    udp:* | tcp:* | dot:* | doq:*) ;;
++    *) return 1 ;;
++    esac
++
++    host="$(url_get_host "$server")"
++    port="$(url_get_port "$server")"
++    is_ipv4 "$host" || is_domain "$host" || return 1
++    case "$port" in
++    "") ;;
++    *[!0-9]*) return 1 ;;
++    *) [ "$port" -ge 1 ] && [ "$port" -le 65535 ] ;;
++    esac
+ }
+ 
+ sing_box_configure_route() {
+@@ -2049,6 +2189,7 @@ show_config() {
+         -e 's/\(list urltest_fallback_links\).*/\1 '\''MASKED'\''/g' \
+         -e 's/\(list selector_proxy_links\).*/\1 '\''MASKED'\''/g' \
+         -e "s@\\(option dns_server '[^/]*\\)/[^']*'@\\1/MASKED'@g" \
++        -e "s@\\(list dns_pool_server '[^/]*//[^/]*\\)/[^']*'@\\1/MASKED'@g" \
+         -e "s@\\(option domain_resolver_dns_server '[^/]*\\)/[^']*'@\\1/MASKED'@g" \
+         -e 's/\(option yacd_secret_key\).*/\1 '\''MASKED'\''/g' \
+         "$PODKOP_CONFIG" > "$tmp_config"
+diff --git a/podkop/files/usr/lib/constants.sh b/podkop/files/usr/lib/constants.sh
+index cbf7219..2fac093 100644
+--- a/podkop/files/usr/lib/constants.sh
++++ b/podkop/files/usr/lib/constants.sh
+@@ -30,6 +30,12 @@ SB_DNS_SERVER_TAG="dns-server"
+ SB_FAKEIP_DNS_SERVER_TAG="fakeip-server"
+ SB_FAKEIP_INET4_RANGE="198.18.0.0/15"
+ SB_BOOTSTRAP_SERVER_TAG="bootstrap-dns-server"
++# DNS pool: the extra servers are "dns-server-<n>" (n >= 2), their evaluated
++# answers "dns-pool-response-<n>". The evaluate/respond DNS rules came in 1.14.0.
++SB_DNS_POOL_RESPONSE_PREFIX="dns-pool-response-"
++SB_DNS_POOL_REQUIRED_VERSION="1.14.0"
++DNS_POOL_TIMEOUT_DEFAULT="2s"
++DNS_POOL_MAX_SERVERS=8
+ SB_FAKEIP_DNS_RULE_TAG="fakeip-dns-rule-tag"
+ SB_INVERT_FAKEIP_DNS_RULE_TAG="invert-fakeip-dns-rule-tag"
+ # Inbounds
+diff --git a/podkop/files/usr/lib/sing_box_config_facade.sh b/podkop/files/usr/lib/sing_box_config_facade.sh
+index 5d7205f..9daf103 100644
+--- a/podkop/files/usr/lib/sing_box_config_facade.sh
++++ b/podkop/files/usr/lib/sing_box_config_facade.sh
+@@ -39,6 +39,21 @@ sing_box_cf_add_dns_server() {
+         config=$(sing_box_cm_add_https_dns_server "$config" "$tag" "$server_address" "$server_port" "$path" "$headers" \
+             "$domain_resolver" "$detour")
+         ;;
++    tcp)
++        [ -z "$server_port" ] && server_port=53
++        config=$(sing_box_cm_add_other_dns_server "$config" "tcp" "$tag" "$server_address" "$server_port" "" \
++            "$domain_resolver" "$detour")
++        ;;
++    doh3)
++        [ -z "$server_port" ] && server_port=443
++        config=$(sing_box_cm_add_other_dns_server "$config" "h3" "$tag" "$server_address" "$server_port" \
++            "$(url_get_path "$server")" "$domain_resolver" "$detour")
++        ;;
++    doq)
++        [ -z "$server_port" ] && server_port=853
++        config=$(sing_box_cm_add_other_dns_server "$config" "quic" "$tag" "$server_address" "$server_port" "" \
++            "$domain_resolver" "$detour")
++        ;;
+     *)
+         log "Unsupported DNS server type: $type. Aborted." "fatal"
+         exit 1
+diff --git a/podkop/files/usr/lib/sing_box_config_manager.sh b/podkop/files/usr/lib/sing_box_config_manager.sh
+index 4e26c93..e862dd5 100644
+--- a/podkop/files/usr/lib/sing_box_config_manager.sh
++++ b/podkop/files/usr/lib/sing_box_config_manager.sh
+@@ -207,6 +207,130 @@ sing_box_cm_add_https_dns_server() {
+ 		)]'
+ }
+ 
++#######################################
++# Add a TCP, HTTP/3 or QUIC DNS server to the DNS section of a sing-box JSON
++# configuration (the types without a function of their own above).
++# Arguments:
++#   config: string (JSON), sing-box configuration to modify
++#   type: string, sing-box DNS server type: tcp, h3 or quic
++#   tag: string, identifier for the DNS server
++#   server_address: string, IP address or hostname of the DNS server
++#   server_port: string or integer, port of the DNS server
++#   path: string, URL path (h3 only, optional)
++#   domain_resolver: string, domain resolver to use for resolving domain names (optional)
++#   detour: string, tag of the upstream outbound (optional)
++# Outputs:
++#   Writes updated JSON configuration to stdout
++# Example:
++#   CONFIG=$(sing_box_cm_add_other_dns_server "$CONFIG" "quic" "doq-server" "dns.adguard-dns.com" 853)
++#######################################
++sing_box_cm_add_other_dns_server() {
++    local config="$1"
++    local type="$2"
++    local tag="$3"
++    local server_address="$4"
++    local server_port="$5"
++    local path="$6"
++    local domain_resolver="$7"
++    local detour="$8"
++
++    echo "$config" | jq \
++        --arg type "$type" \
++        --arg tag "$tag" \
++        --arg server_address "$server_address" \
++        --arg server_port "$server_port" \
++        --arg path "$path" \
++        --arg domain_resolver "$domain_resolver" \
++        --arg detour "$detour" \
++        '.dns.servers += [(
++            {
++                type: $type,
++                tag: $tag,
++                server: $server_address,
++                server_port: ($server_port | tonumber)
++            }
++            + (if $type == "h3" and $path != "" then { path: $path } else {} end)
++            + (if $detour != "" then { detour: $detour } else {} end)
++            + (if $domain_resolver != "" then { domain_resolver: $domain_resolver } else {} end)
++        )]'
++}
++
++#######################################
++# Add an "evaluate" DNS rule: ask a server and keep its answer under a tag for
++# the rules below, without ending the rule walk. sing-box 1.14.0 or newer.
++# Arguments:
++#   config: string (JSON), sing-box configuration to modify
++#   server: string, tag of the DNS server to ask
++#   response_tag: string, tag the answer is kept under
++#   timeout: string, how long to wait for the answer (e.g. "2s")
++# Outputs:
++#   Writes updated JSON configuration to stdout
++#######################################
++sing_box_cm_add_dns_evaluate_rule() {
++    local config="$1"
++    local server="$2"
++    local response_tag="$3"
++    local timeout="$4"
++
++    echo "$config" | jq \
++        --arg server "$server" \
++        --arg response_tag "$response_tag" \
++        --arg timeout "$timeout" \
++        '.dns.rules += [{
++            action: "evaluate",
++            server: $server,
++            tag: $response_tag,
++            timeout: $timeout
++        }]'
++}
++
++#######################################
++# Add a "respond" DNS rule: return the answer kept under a tag if it has the
++# given rcode. sing-box 1.14.0 or newer.
++# Arguments:
++#   config: string (JSON), sing-box configuration to modify
++#   response_tag: string, tag of the evaluated answer
++#   rcode: string, response code to match (NOERROR, NXDOMAIN ...)
++#   race: string, "true": the first race rule to match wins while the other
++#         queries are still running (optional)
++# Outputs:
++#   Writes updated JSON configuration to stdout
++#######################################
++sing_box_cm_add_dns_respond_rule() {
++    local config="$1"
++    local response_tag="$2"
++    local rcode="$3"
++    local race="${4:-false}"
++
++    echo "$config" | jq \
++        --arg response_tag "$response_tag" \
++        --arg rcode "$rcode" \
++        --arg race "$race" \
++        '.dns.rules += [(
++            {
++                match_response: $response_tag,
++                response_rcode: $rcode,
++                action: "respond"
++            }
++            + (if $race == "true" then { race: true } else {} end)
++        )]'
++}
++
++#######################################
++# Set the DNS server that answers the queries no DNS rule answered.
++# Arguments:
++#   config: string (JSON), sing-box configuration to modify
++#   final: string, tag of the DNS server
++# Outputs:
++#   Writes updated JSON configuration to stdout
++#######################################
++sing_box_cm_set_dns_final() {
++    local config="$1"
++    local final="$2"
++
++    echo "$config" | jq --arg final "$final" '.dns.final = $final'
++}
++
+ #######################################
+ # Add a FakeIP DNS server to the DNS section of a sing-box JSON configuration.
+ # Arguments:

@@ -1,0 +1,117 @@
+From: YBS-PC/oWRT-actions
+Subject: [PATCH] podkop: исключённые устройства мимо sing-box
+ (bypass_excluded_ips)
+
+По мотивам netshift (23153b4, часть про устройства). Раньше устройство
+из «Исключённых IP» (routing_excluded_ips) всё равно заходило в
+sing-box: его пакеты к подсетям списков маркировались, шли в tproxy и
+только там уходили напрямую — лишняя нагрузка на процессор (телевизор,
+приставка, торрент-качалка).
+
+Новый флаг в настройках «Исключённые IP мимо sing-box»
+(settings.bypass_excluded_ips, по умолчанию выключен — у существующих
+конфигов правила nft не меняются): для каждого исключённого IP в
+начале цепочки mangle (сразу после ct status dnat return) ставится
+return, и его трафик к подсетям списков уходит напрямую, минуя
+sing-box. Кроме адресов FakeIP: их понимает только sing-box (там
+устройство и так отправляется напрямую правилом исключения), без него
+такой пакет ушёл бы в WAN и пропал. Если флаг включён, а исключённых IP
+нет, в журнале предупреждение.
+
+Проверено в netns с настоящими правилами podkop (create_nft_rules) и
+прозрачным приёмником на месте sing-box: исключённое устройство к
+адресу из списка — напрямую, к FakeIP — через sing-box, обычное
+устройство — как раньше.
+---
+diff --git a/luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js b/luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js
+index 0f7decd..5d5f3fe 100644
+--- a/luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js
++++ b/luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js
+@@ -502,6 +502,17 @@ function createSettingsContent(section) {
+ 
+     return validation.message;
+   };
++
++  o = section.option(
++    form.Flag,
++    "bypass_excluded_ips",
++    _("Excluded IPs bypass sing-box"),
++    _(
++      "Traffic of the IPs above does not enter sing-box at all and goes out directly, which saves CPU (a TV, a game console). Only their connections to the domains of the lists (FakeIP) still pass through sing-box, which sends them out directly as well",
++    ),
++  );
++  o.default = "0";
++  o.rmempty = false;
+ }
+ 
+ const EntryPoint = {
+diff --git a/luci-app-podkop/po/ru/podkop.po b/luci-app-podkop/po/ru/podkop.po
+index e662ce5..f1faf78 100644
+--- a/luci-app-podkop/po/ru/podkop.po
++++ b/luci-app-podkop/po/ru/podkop.po
+@@ -907,3 +907,9 @@ msgstr "Порт должен быть от 1 до 65535"
+ 
+ msgid "Invalid timeout. Examples: 500ms, 2s"
+ msgstr "Неверный таймаут. Примеры: 500ms, 2s"
++
++msgid "Excluded IPs bypass sing-box"
++msgstr "Исключённые IP мимо sing-box"
++
++msgid "Traffic of the IPs above does not enter sing-box at all and goes out directly, which saves CPU (a TV, a game console). Only their connections to the domains of the lists (FakeIP) still pass through sing-box, which sends them out directly as well"
++msgstr "Трафик этих устройств вообще не заходит в sing-box и сразу уходит напрямую, что экономит процессор (телевизор, приставка). Через sing-box (и тоже напрямую) идут только их соединения с доменами из списков (FakeIP)"
+diff --git a/luci-app-podkop/po/templates/podkop.pot b/luci-app-podkop/po/templates/podkop.pot
+index bc19099..f72dae3 100644
+--- a/luci-app-podkop/po/templates/podkop.pot
++++ b/luci-app-podkop/po/templates/podkop.pot
+@@ -1236,3 +1236,9 @@ msgstr ""
+ 
+ msgid "Invalid timeout. Examples: 500ms, 2s"
+ msgstr ""
++
++msgid "Excluded IPs bypass sing-box"
++msgstr ""
++
++msgid "Traffic of the IPs above does not enter sing-box at all and goes out directly, which saves CPU (a TV, a game console). Only their connections to the domains of the lists (FakeIP) still pass through sing-box, which sends them out directly as well"
++msgstr ""
+diff --git a/podkop/files/usr/bin/podkop b/podkop/files/usr/bin/podkop
+index d54bd3b..5a95b10 100755
+--- a/podkop/files/usr/bin/podkop
++++ b/podkop/files/usr/bin/podkop
+@@ -316,6 +316,7 @@ create_nft_rules() {
+     nft add chain inet "$NFT_TABLE_NAME" proxy '{ type filter hook prerouting priority -100; policy accept; }'
+ 
+     nft add rule inet "$NFT_TABLE_NAME" mangle ct status dnat return
++    nft_bypass_excluded_ips
+     nft add rule inet "$NFT_TABLE_NAME" mangle iifname "@$NFT_INTERFACE_SET_NAME" ip daddr "@$NFT_COMMON_SET_NAME" meta l4proto tcp meta mark set "$NFT_FAKEIP_MARK" counter
+     nft add rule inet "$NFT_TABLE_NAME" mangle iifname "@$NFT_INTERFACE_SET_NAME" ip daddr "@$NFT_COMMON_SET_NAME" meta l4proto udp meta mark set "$NFT_FAKEIP_MARK" counter
+     nft add rule inet "$NFT_TABLE_NAME" mangle iifname "@$NFT_INTERFACE_SET_NAME" ip daddr "$SB_FAKEIP_INET4_RANGE" meta l4proto tcp meta mark set "$NFT_FAKEIP_MARK" counter
+@@ -1954,6 +1955,29 @@ nft_list_all_traffic_from_ip() {
+     fi
+ }
+ 
++# settings.bypass_excluded_ips: the devices of routing_excluded_ips do not enter
++# sing-box at all (their traffic to the subnets of the lists used to go through
++# it only to leave directly). Except for FakeIP addresses: they mean something
++# to sing-box only, and the exclusion route rule sends that traffic out directly.
++nft_bypass_excluded_ips() {
++    local bypass excluded_ips
++
++    config_get_bool bypass "settings" "bypass_excluded_ips" 0
++    [ "$bypass" -eq 1 ] || return 0
++    config_get excluded_ips "settings" "routing_excluded_ips"
++    if [ -z "$excluded_ips" ]; then
++        log "Excluded IPs bypass sing-box, but no IP is excluded from routing" "warn"
++        return 0
++    fi
++    config_list_foreach "settings" "routing_excluded_ips" _nft_bypass_excluded_ip
++}
++
++_nft_bypass_excluded_ip() {
++    nft add rule inet "$NFT_TABLE_NAME" mangle iifname "@$NFT_INTERFACE_SET_NAME" ip saddr "$1" \
++        ip daddr "$SB_FAKEIP_INET4_RANGE" meta l4proto '{ tcp, udp }' meta mark set "$NFT_FAKEIP_MARK" counter
++    nft add rule inet "$NFT_TABLE_NAME" mangle iifname "@$NFT_INTERFACE_SET_NAME" ip saddr "$1" counter return
++}
++
+ # "nft insert" puts the fully routed IP rules above "ct status dnat return",
+ # so replies of port-forwarded (DNAT) connections got the proxy mark and port
+ # forwarding broke. Keep the DNAT exemption the first rule of the chain.

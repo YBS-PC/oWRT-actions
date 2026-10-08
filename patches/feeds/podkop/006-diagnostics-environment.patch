@@ -1,0 +1,742 @@
+From: YBS-PC/oWRT-actions
+Subject: [PATCH] podkop: проверка «Окружение» в диагностике (Flow Offloading,
+ часы, IPv6)
+
+По мотивам netshift (7528c82). Команда podkop check_environment и блок
+«Окружение» в диагностике показывают то, что молча ломает перенаправление:
+- включённый Flow Offloading (программный, аппаратный или уже созданная
+  flowtable): установленные соединения обходят хуки netfilter с метками
+  podkop;
+- часы роутера: дата раньше 2025 года — ошибка, расхождение больше
+  5 минут с заголовком Date ответа www.cloudflare.com — предупреждение
+  (TLS и Reality чувствительны ко времени);
+- глобальный адрес IPv6 у роутера: podkop обрабатывает только IPv4, сайты,
+  доступные по IPv6, идут мимо туннеля.
+Настройки не меняются; единственное обращение к сети — один HEAD-запрос
+(без интернета расхождение не определяется). Старый бэкенд без команды
+не даёт ошибку: блок помечается «Недоступно».
+---
+diff --git a/fe-app-podkop/src/podkop/methods/shell/index.ts b/fe-app-podkop/src/podkop/methods/shell/index.ts
+index e69232a..9267bc1 100644
+--- a/fe-app-podkop/src/podkop/methods/shell/index.ts
++++ b/fe-app-podkop/src/podkop/methods/shell/index.ts
+@@ -10,6 +10,10 @@ export const PodkopShellMethods = {
+     callBaseMethod<Podkop.FakeIPCheckResult>(
+       Podkop.AvailableMethods.CHECK_FAKEIP,
+     ),
++  checkEnvironment: async () =>
++    callBaseMethod<Podkop.EnvironmentCheckResult>(
++      Podkop.AvailableMethods.CHECK_ENVIRONMENT,
++    ),
+   checkNftRules: async () =>
+     callBaseMethod<Podkop.NftRulesCheckResult>(
+       Podkop.AvailableMethods.CHECK_NFT_RULES,
+diff --git a/fe-app-podkop/src/podkop/tabs/diagnostic/checks/contstants.ts b/fe-app-podkop/src/podkop/tabs/diagnostic/checks/contstants.ts
+index 2911d89..d5bf5c7 100644
+--- a/fe-app-podkop/src/podkop/tabs/diagnostic/checks/contstants.ts
++++ b/fe-app-podkop/src/podkop/tabs/diagnostic/checks/contstants.ts
+@@ -6,6 +6,7 @@ export enum DIAGNOSTICS_CHECKS {
+   NFT = 'NFT',
+   FAKEIP = 'FAKEIP',
+   OUTBOUNDS = 'OUTBOUNDS',
++  ENVIRONMENT = 'ENVIRONMENT',
+ }
+ 
+ export const DIAGNOSTICS_CHECKS_MAP: Record<
+@@ -37,4 +38,9 @@ export const DIAGNOSTICS_CHECKS_MAP: Record<
+     title: getCheckTitle('FakeIP'),
+     code: DIAGNOSTICS_CHECKS.FAKEIP,
+   },
++  [DIAGNOSTICS_CHECKS.ENVIRONMENT]: {
++    order: 6,
++    title: getCheckTitle('Environment'),
++    code: DIAGNOSTICS_CHECKS.ENVIRONMENT,
++  },
+ };
+diff --git a/fe-app-podkop/src/podkop/tabs/diagnostic/checks/runEnvironmentCheck.ts b/fe-app-podkop/src/podkop/tabs/diagnostic/checks/runEnvironmentCheck.ts
+new file mode 100644
+index 0000000..55f304b
+--- /dev/null
++++ b/fe-app-podkop/src/podkop/tabs/diagnostic/checks/runEnvironmentCheck.ts
+@@ -0,0 +1,55 @@
++import { DIAGNOSTICS_CHECKS_MAP } from './contstants';
++import { PodkopShellMethods } from '../../../methods';
++import { updateCheckStore } from './updateCheckStore';
++import { getEnvironmentItems } from '../helpers/getEnvironmentItems';
++
++export async function runEnvironmentCheck() {
++  const { order, title, code } = DIAGNOSTICS_CHECKS_MAP.ENVIRONMENT;
++
++  updateCheckStore({
++    order,
++    code,
++    title,
++    description: _('Checking, please wait'),
++    state: 'loading',
++    items: [],
++  });
++
++  const response = await PodkopShellMethods.checkEnvironment();
++
++  // An older backend has no such command: the hints are optional, so this is
++  // not an error of the router.
++  if (
++    !response.success ||
++    typeof response.data !== 'object' ||
++    response.data === null
++  ) {
++    updateCheckStore({
++      order,
++      code,
++      title,
++      description: _('Not available'),
++      state: 'skipped',
++      items: [],
++    });
++
++    return;
++  }
++
++  const items = getEnvironmentItems(response.data);
++  const hasError = items.some((item) => item.state === 'error');
++  const hasWarning = items.some((item) => item.state === 'warning');
++
++  updateCheckStore({
++    order,
++    code,
++    title,
++    description: hasError
++      ? _('Checks failed')
++      : hasWarning
++        ? _('Issues detected')
++        : _('Checks passed'),
++    state: hasError ? 'error' : hasWarning ? 'warning' : 'success',
++    items,
++  });
++}
+diff --git a/fe-app-podkop/src/podkop/tabs/diagnostic/diagnostic.store.ts b/fe-app-podkop/src/podkop/tabs/diagnostic/diagnostic.store.ts
+index c6ea562..fc771f4 100644
+--- a/fe-app-podkop/src/podkop/tabs/diagnostic/diagnostic.store.ts
++++ b/fe-app-podkop/src/podkop/tabs/diagnostic/diagnostic.store.ts
+@@ -88,6 +88,14 @@ export const initialDiagnosticStore: Pick<
+       items: [],
+       state: 'skipped',
+     },
++    {
++      code: DIAGNOSTICS_CHECKS.ENVIRONMENT,
++      title: DIAGNOSTICS_CHECKS_MAP.ENVIRONMENT.title,
++      order: DIAGNOSTICS_CHECKS_MAP.ENVIRONMENT.order,
++      description: _('Not running'),
++      items: [],
++      state: 'skipped',
++    },
+   ],
+ };
+ 
+@@ -136,5 +144,13 @@ export const loadingDiagnosticsChecksStore: Pick<
+       items: [],
+       state: 'skipped',
+     },
++    {
++      code: DIAGNOSTICS_CHECKS.ENVIRONMENT,
++      title: DIAGNOSTICS_CHECKS_MAP.ENVIRONMENT.title,
++      order: DIAGNOSTICS_CHECKS_MAP.ENVIRONMENT.order,
++      description: _('Pending'),
++      items: [],
++      state: 'skipped',
++    },
+   ],
+ };
+diff --git a/fe-app-podkop/src/podkop/tabs/diagnostic/helpers/getEnvironmentItems.ts b/fe-app-podkop/src/podkop/tabs/diagnostic/helpers/getEnvironmentItems.ts
+new file mode 100644
+index 0000000..d37b46f
+--- /dev/null
++++ b/fe-app-podkop/src/podkop/tabs/diagnostic/helpers/getEnvironmentItems.ts
+@@ -0,0 +1,71 @@
++import { IDiagnosticsChecksItem } from '../../../services';
++import { Podkop } from '../../../types';
++
++// The clock may differ from the server's by this much before it is reported:
++// TLS tolerates some skew, a few minutes are normal on routers without RTC.
++export const CLOCK_SKEW_WARNING_SECONDS = 300;
++
++// Turns the backend facts into the rows of the Environment check.
++export function getEnvironmentItems(
++  data: Podkop.EnvironmentCheckResult,
++): IDiagnosticsChecksItem[] {
++  const items: IDiagnosticsChecksItem[] = [];
++  const flow = data.flow_offloading;
++
++  if (flow.hardware || flow.software || flow.active) {
++    items.push({
++      state: 'warning',
++      key: _('Flow offloading is enabled'),
++      value: _(
++        'Established connections can skip the marks podkop sets: turn it off in Network - Firewall',
++      ),
++    });
++  } else {
++    items.push({
++      state: 'success',
++      key: _('Flow offloading is off'),
++      value: '',
++    });
++  }
++
++  if (!data.clock.plausible) {
++    items.push({
++      state: 'error',
++      key: _('The router clock is not set'),
++      value: _('TLS and Reality fail with a wrong time: check NTP'),
++    });
++  } else if (
++    data.clock.skew_seconds !== null &&
++    Math.abs(data.clock.skew_seconds) > CLOCK_SKEW_WARNING_SECONDS
++  ) {
++    items.push({
++      state: 'warning',
++      key: _('The router clock is off'),
++      value: `${Math.round(data.clock.skew_seconds / 60)} ${_('min')}`,
++    });
++  } else {
++    items.push({
++      state: 'success',
++      key: _('The router clock is right'),
++      value: '',
++    });
++  }
++
++  if (data.ipv6.router_has_global) {
++    items.push({
++      state: 'warning',
++      key: _('The router has a global IPv6 address'),
++      value: _(
++        'podkop handles IPv4 only: sites reached over IPv6 go around the tunnel',
++      ),
++    });
++  } else {
++    items.push({
++      state: 'success',
++      key: _('No global IPv6 address'),
++      value: '',
++    });
++  }
++
++  return items;
++}
+diff --git a/fe-app-podkop/src/podkop/tabs/diagnostic/initController.ts b/fe-app-podkop/src/podkop/tabs/diagnostic/initController.ts
+index 7ef08cd..c0c6dfa 100644
+--- a/fe-app-podkop/src/podkop/tabs/diagnostic/initController.ts
++++ b/fe-app-podkop/src/podkop/tabs/diagnostic/initController.ts
+@@ -3,6 +3,7 @@ import { runDnsCheck } from './checks/runDnsCheck';
+ import { runSingBoxCheck } from './checks/runSingBoxCheck';
+ import { runNftCheck } from './checks/runNftCheck';
+ import { runFakeIPCheck } from './checks/runFakeIPCheck';
++import { runEnvironmentCheck } from './checks/runEnvironmentCheck';
+ import { loadingDiagnosticsChecksStore } from './diagnostic.store';
+ import { logger, store, StoreType } from '../../services';
+ import {
+@@ -481,6 +482,8 @@ async function runChecks() {
+     await runSectionsCheck();
+ 
+     await runFakeIPCheck();
++
++    await runEnvironmentCheck();
+   } catch (e) {
+     logger.error('[DIAGNOSTIC]', 'runChecks - e', e);
+   } finally {
+diff --git a/fe-app-podkop/src/podkop/tabs/diagnostic/tests/getEnvironmentItems.test.ts b/fe-app-podkop/src/podkop/tabs/diagnostic/tests/getEnvironmentItems.test.ts
+new file mode 100644
+index 0000000..783bb34
+--- /dev/null
++++ b/fe-app-podkop/src/podkop/tabs/diagnostic/tests/getEnvironmentItems.test.ts
+@@ -0,0 +1,57 @@
++import { describe, expect, it } from 'vitest';
++import { getEnvironmentItems } from '../helpers/getEnvironmentItems';
++import type { Podkop } from '../../../types';
++
++const clean: Podkop.EnvironmentCheckResult = {
++  flow_offloading: { software: false, hardware: false, active: false },
++  clock: {
++    plausible: true,
++    skew_seconds: 2,
++    ntp_enabled: true,
++    timezone: 'UTC',
++  },
++  ipv6: { router_has_global: false },
++};
++
++const states = (data: Podkop.EnvironmentCheckResult) =>
++  getEnvironmentItems(data).map((item) => item.state);
++
++describe('getEnvironmentItems', () => {
++  it('is all green on a clean router', () => {
++    expect(states(clean)).toEqual(['success', 'success', 'success']);
++  });
++
++  it('warns about any kind of flow offloading', () => {
++    for (const flow of [
++      { software: true, hardware: false, active: false },
++      { software: false, hardware: true, active: false },
++      { software: false, hardware: false, active: true },
++    ]) {
++      expect(states({ ...clean, flow_offloading: flow })[0]).toBe('warning');
++    }
++  });
++
++  it('fails on an impossible clock and warns on a skewed one', () => {
++    expect(
++      states({ ...clean, clock: { ...clean.clock, plausible: false } })[1],
++    ).toBe('error');
++    expect(
++      states({ ...clean, clock: { ...clean.clock, skew_seconds: 301 } })[1],
++    ).toBe('warning');
++    expect(
++      states({ ...clean, clock: { ...clean.clock, skew_seconds: -900 } })[1],
++    ).toBe('warning');
++    expect(
++      states({ ...clean, clock: { ...clean.clock, skew_seconds: 300 } })[1],
++    ).toBe('success');
++    expect(
++      states({ ...clean, clock: { ...clean.clock, skew_seconds: null } })[1],
++    ).toBe('success');
++  });
++
++  it('warns about a global IPv6 address', () => {
++    expect(states({ ...clean, ipv6: { router_has_global: true } })[2]).toBe(
++      'warning',
++    );
++  });
++});
+diff --git a/fe-app-podkop/src/podkop/types.ts b/fe-app-podkop/src/podkop/types.ts
+index f41f8be..383e6e7 100644
+--- a/fe-app-podkop/src/podkop/types.ts
++++ b/fe-app-podkop/src/podkop/types.ts
+@@ -51,6 +51,7 @@ export namespace Podkop {
+   export enum AvailableMethods {
+     CHECK_DNS_AVAILABLE = 'check_dns_available',
+     CHECK_FAKEIP = 'check_fakeip',
++    CHECK_ENVIRONMENT = 'check_environment',
+     CHECK_NFT_RULES = 'check_nft_rules',
+     GET_STATUS = 'get_status',
+     CHECK_SING_BOX = 'check_sing_box',
+@@ -194,6 +195,17 @@ export namespace Podkop {
+     IP: string;
+   }
+ 
++  export interface EnvironmentCheckResult {
++    flow_offloading: { software: boolean; hardware: boolean; active: boolean };
++    clock: {
++      plausible: boolean;
++      skew_seconds: number | null;
++      ntp_enabled: boolean;
++      timezone: string;
++    };
++    ipv6: { router_has_global: boolean };
++  }
++
+   export interface GetStatus {
+     enabled: number;
+     status: string;
+diff --git a/luci-app-podkop/htdocs/luci-static/resources/view/podkop/main.js b/luci-app-podkop/htdocs/luci-static/resources/view/podkop/main.js
+index 018ad6f..9cf5533 100644
+--- a/luci-app-podkop/htdocs/luci-static/resources/view/podkop/main.js
++++ b/luci-app-podkop/htdocs/luci-static/resources/view/podkop/main.js
+@@ -646,6 +646,7 @@ var Podkop;
+   ((AvailableMethods2) => {
+     AvailableMethods2["CHECK_DNS_AVAILABLE"] = "check_dns_available";
+     AvailableMethods2["CHECK_FAKEIP"] = "check_fakeip";
++    AvailableMethods2["CHECK_ENVIRONMENT"] = "check_environment";
+     AvailableMethods2["CHECK_NFT_RULES"] = "check_nft_rules";
+     AvailableMethods2["GET_STATUS"] = "get_status";
+     AvailableMethods2["CHECK_SING_BOX"] = "check_sing_box";
+@@ -679,6 +680,9 @@ var PodkopShellMethods = {
+   checkFakeIP: async () => callBaseMethod(
+     Podkop.AvailableMethods.CHECK_FAKEIP
+   ),
++  checkEnvironment: async () => callBaseMethod(
++    Podkop.AvailableMethods.CHECK_ENVIRONMENT
++  ),
+   checkNftRules: async () => callBaseMethod(
+     Podkop.AvailableMethods.CHECK_NFT_RULES
+   ),
+@@ -1194,6 +1198,11 @@ var DIAGNOSTICS_CHECKS_MAP = {
+     order: 5,
+     title: getCheckTitle("FakeIP"),
+     code: "FAKEIP" /* FAKEIP */
++  },
++  ["ENVIRONMENT" /* ENVIRONMENT */]: {
++    order: 6,
++    title: getCheckTitle("Environment"),
++    code: "ENVIRONMENT" /* ENVIRONMENT */
+   }
+ };
+ 
+@@ -1275,6 +1284,14 @@ var initialDiagnosticStore = {
+       description: _("Not running"),
+       items: [],
+       state: "skipped"
++    },
++    {
++      code: "ENVIRONMENT" /* ENVIRONMENT */,
++      title: DIAGNOSTICS_CHECKS_MAP.ENVIRONMENT.title,
++      order: DIAGNOSTICS_CHECKS_MAP.ENVIRONMENT.order,
++      description: _("Not running"),
++      items: [],
++      state: "skipped"
+     }
+   ]
+ };
+@@ -1319,6 +1336,14 @@ var loadingDiagnosticsChecksStore = {
+       description: _("Pending"),
+       items: [],
+       state: "skipped"
++    },
++    {
++      code: "ENVIRONMENT" /* ENVIRONMENT */,
++      title: DIAGNOSTICS_CHECKS_MAP.ENVIRONMENT.title,
++      order: DIAGNOSTICS_CHECKS_MAP.ENVIRONMENT.order,
++      description: _("Pending"),
++      items: [],
++      state: "skipped"
+     }
+   ]
+ };
+@@ -2858,6 +2883,99 @@ async function runFakeIPCheck() {
+   });
+ }
+ 
++// src/podkop/tabs/diagnostic/helpers/getEnvironmentItems.ts
++var CLOCK_SKEW_WARNING_SECONDS = 300;
++function getEnvironmentItems(data) {
++  const items = [];
++  const flow = data.flow_offloading;
++  if (flow.hardware || flow.software || flow.active) {
++    items.push({
++      state: "warning",
++      key: _("Flow offloading is enabled"),
++      value: _(
++        "Established connections can skip the marks podkop sets: turn it off in Network - Firewall"
++      )
++    });
++  } else {
++    items.push({
++      state: "success",
++      key: _("Flow offloading is off"),
++      value: ""
++    });
++  }
++  if (!data.clock.plausible) {
++    items.push({
++      state: "error",
++      key: _("The router clock is not set"),
++      value: _("TLS and Reality fail with a wrong time: check NTP")
++    });
++  } else if (data.clock.skew_seconds !== null && Math.abs(data.clock.skew_seconds) > CLOCK_SKEW_WARNING_SECONDS) {
++    items.push({
++      state: "warning",
++      key: _("The router clock is off"),
++      value: `${Math.round(data.clock.skew_seconds / 60)} ${_("min")}`
++    });
++  } else {
++    items.push({
++      state: "success",
++      key: _("The router clock is right"),
++      value: ""
++    });
++  }
++  if (data.ipv6.router_has_global) {
++    items.push({
++      state: "warning",
++      key: _("The router has a global IPv6 address"),
++      value: _(
++        "podkop handles IPv4 only: sites reached over IPv6 go around the tunnel"
++      )
++    });
++  } else {
++    items.push({
++      state: "success",
++      key: _("No global IPv6 address"),
++      value: ""
++    });
++  }
++  return items;
++}
++
++// src/podkop/tabs/diagnostic/checks/runEnvironmentCheck.ts
++async function runEnvironmentCheck() {
++  const { order, title, code } = DIAGNOSTICS_CHECKS_MAP.ENVIRONMENT;
++  updateCheckStore({
++    order,
++    code,
++    title,
++    description: _("Checking, please wait"),
++    state: "loading",
++    items: []
++  });
++  const response = await PodkopShellMethods.checkEnvironment();
++  if (!response.success || typeof response.data !== "object" || response.data === null) {
++    updateCheckStore({
++      order,
++      code,
++      title,
++      description: _("Not available"),
++      state: "skipped",
++      items: []
++    });
++    return;
++  }
++  const items = getEnvironmentItems(response.data);
++  const hasError = items.some((item) => item.state === "error");
++  const hasWarning = items.some((item) => item.state === "warning");
++  updateCheckStore({
++    order,
++    code,
++    title,
++    description: hasError ? _("Checks failed") : hasWarning ? _("Issues detected") : _("Checks passed"),
++    state: hasError ? "error" : hasWarning ? "warning" : "success",
++    items
++  });
++}
++
+ // src/partials/button/styles.ts
+ var styles2 = `
+ .pdk-partial-button {
+@@ -4428,6 +4546,7 @@ async function runChecks() {
+     await runNftCheck();
+     await runSectionsCheck();
+     await runFakeIPCheck();
++    await runEnvironmentCheck();
+   } catch (e) {
+     logger.error("[DIAGNOSTIC]", "runChecks - e", e);
+   } finally {
+diff --git a/luci-app-podkop/po/ru/podkop.po b/luci-app-podkop/po/ru/podkop.po
+index 0e271bb..b382a59 100644
+--- a/luci-app-podkop/po/ru/podkop.po
++++ b/luci-app-podkop/po/ru/podkop.po
+@@ -823,3 +823,39 @@ msgstr "Торренты мимо прокси"
+ 
+ msgid "BitTorrent traffic recognized by sing-box goes directly, bypassing the proxy. Useful with Fully Routed IPs: many providers ban subscriptions for torrents"
+ msgstr "Распознанный sing-box трафик BitTorrent идёт напрямую, минуя прокси. Полезно вместе с Fully Routed IPs: многие провайдеры VPN блокируют подписку за торренты"
++
++msgid "Not available"
++msgstr "Недоступно"
++
++msgid "min"
++msgstr "мин"
++
++msgid "Flow offloading is enabled"
++msgstr "Включён Flow Offloading"
++
++msgid "Established connections can skip the marks podkop sets: turn it off in Network - Firewall"
++msgstr "Установленные соединения могут обходить метки podkop: выключите его в «Сеть → Межсетевой экран»"
++
++msgid "Flow offloading is off"
++msgstr "Flow Offloading выключен"
++
++msgid "The router clock is not set"
++msgstr "Часы роутера не установлены"
++
++msgid "TLS and Reality fail with a wrong time: check NTP"
++msgstr "С неверным временем TLS и Reality не работают: проверьте NTP"
++
++msgid "The router clock is off"
++msgstr "Часы роутера расходятся с точным временем"
++
++msgid "The router clock is right"
++msgstr "Часы роутера идут верно"
++
++msgid "The router has a global IPv6 address"
++msgstr "У роутера есть глобальный адрес IPv6"
++
++msgid "podkop handles IPv4 only: sites reached over IPv6 go around the tunnel"
++msgstr "podkop обрабатывает только IPv4: сайты, доступные по IPv6, идут мимо туннеля"
++
++msgid "No global IPv6 address"
++msgstr "Глобального адреса IPv6 нет"
+diff --git a/luci-app-podkop/po/templates/podkop.pot b/luci-app-podkop/po/templates/podkop.pot
+index 141c47c..a3d4c0d 100644
+--- a/luci-app-podkop/po/templates/podkop.pot
++++ b/luci-app-podkop/po/templates/podkop.pot
+@@ -1152,3 +1152,39 @@ msgstr ""
+ 
+ msgid "BitTorrent traffic recognized by sing-box goes directly, bypassing the proxy. Useful with Fully Routed IPs: many providers ban subscriptions for torrents"
+ msgstr ""
++
++msgid "Not available"
++msgstr ""
++
++msgid "min"
++msgstr ""
++
++msgid "Flow offloading is enabled"
++msgstr ""
++
++msgid "Established connections can skip the marks podkop sets: turn it off in Network - Firewall"
++msgstr ""
++
++msgid "Flow offloading is off"
++msgstr ""
++
++msgid "The router clock is not set"
++msgstr ""
++
++msgid "TLS and Reality fail with a wrong time: check NTP"
++msgstr ""
++
++msgid "The router clock is off"
++msgstr ""
++
++msgid "The router clock is right"
++msgstr ""
++
++msgid "The router has a global IPv6 address"
++msgstr ""
++
++msgid "podkop handles IPv4 only: sites reached over IPv6 go around the tunnel"
++msgstr ""
++
++msgid "No global IPv6 address"
++msgstr ""
+diff --git a/podkop/files/usr/bin/podkop b/podkop/files/usr/bin/podkop
+index ceb612c..5e0c845 100755
+--- a/podkop/files/usr/bin/podkop
++++ b/podkop/files/usr/bin/podkop
+@@ -2316,6 +2316,60 @@ check_fakeip() {
+     curl -m 3 -s "https://$FAKEIP_TEST_DOMAIN/check" | jq .
+ }
+ 
++#######################################
++# Facts about the router that silently break the redirect: flow offloading
++# (established flows skip the netfilter hooks that carry podkop marks), a clock
++# far from the real time (TLS and Reality fail), a global IPv6 address (podkop
++# handles IPv4 only, IPv6 connections go around the tunnel).
++# Outputs a JSON object. The only network access is one HEAD request, to compare
++# the clock; without internet the skew is null.
++#######################################
++check_environment() {
++    local flow_software flow_hardware flow_active now plausible remote_date remote_epoch skew
++    local zone ntp_enabled ipv6_global
++
++    flow_software="$(uci -q get firewall.@defaults[0].flow_offloading)"
++    flow_hardware="$(uci -q get firewall.@defaults[0].flow_offloading_hw)"
++    flow_active=0
++    nft list flowtables 2> /dev/null | grep -q 'flowtable' && flow_active=1
++
++    now="$(date +%s)"
++    plausible=1
++    [ "$now" -ge "$ENVIRONMENT_MIN_PLAUSIBLE_EPOCH" ] || plausible=0
++    skew=""
++    remote_date="$(curl -sI -m 5 "$ENVIRONMENT_CLOCK_PROBE_URL" 2> /dev/null |
++        sed -n 's/^[Dd]ate:[[:space:]]*//p' | tr -d '\r' | sed -n '1p')"
++    if [ -n "$remote_date" ]; then
++        remote_epoch="$(http_date_to_epoch "$remote_date")"
++        [ -n "$remote_epoch" ] && skew=$((remote_epoch - now))
++    fi
++    zone="$(uci -q get system.@system[0].zonename)"
++    [ -n "$zone" ] || zone="$(uci -q get system.@system[0].timezone)"
++    ntp_enabled="$(uci -q get system.ntp.enabled)"
++    [ "$ntp_enabled" = "0" ] || ntp_enabled=1
++
++    ipv6_global=0
++    if ip -6 addr show scope global 2> /dev/null | grep 'inet6' | grep -vqE 'inet6 f[cd]'; then
++        ipv6_global=1
++    fi
++
++    jq -n \
++        --argjson flow_software "$([ "$flow_software" = "1" ] && echo true || echo false)" \
++        --argjson flow_hardware "$([ "$flow_hardware" = "1" ] && echo true || echo false)" \
++        --argjson flow_active "$([ "$flow_active" -eq 1 ] && echo true || echo false)" \
++        --argjson plausible "$([ "$plausible" -eq 1 ] && echo true || echo false)" \
++        --arg skew "$skew" \
++        --arg zone "$zone" \
++        --argjson ntp "$([ "$ntp_enabled" = "1" ] && echo true || echo false)" \
++        --argjson ipv6_global "$([ "$ipv6_global" -eq 1 ] && echo true || echo false)" \
++        '{
++            flow_offloading: {software: $flow_software, hardware: $flow_hardware, active: $flow_active},
++            clock: {plausible: $plausible, skew_seconds: (if $skew == "" then null else ($skew | tonumber) end),
++                    ntp_enabled: $ntp, timezone: $zone},
++            ipv6: {router_has_global: $ipv6_global}
++        }'
++}
++
+ #######################################
+ # Clash API interface for managing proxies and groups
+ # Arguments:
+@@ -2784,6 +2838,7 @@ Available commands:
+     check_logs              Show podkop logs from system journal
+     check_sing_box_logs     Show sing-box logs
+     check_fakeip            Test FakeIP on router
++    check_environment       Flow offloading, clock and IPv6 facts that affect the redirect
+     clash_api               Clash API interface for managing proxies and groups
+     show_config             Display current podkop configuration
+     show_version            Show podkop version
+@@ -2877,6 +2932,9 @@ check_sing_box_logs)
+ check_fakeip)
+     check_fakeip
+     ;;
++check_environment)
++    check_environment
++    ;;
+ clash_api)
+     clash_api "$2" "$3" "$4"
+     ;;
+diff --git a/podkop/files/usr/lib/constants.sh b/podkop/files/usr/lib/constants.sh
+index 8c0cd9d..cbf7219 100644
+--- a/podkop/files/usr/lib/constants.sh
++++ b/podkop/files/usr/lib/constants.sh
+@@ -64,4 +64,9 @@ SUBNETS_HETZNER="${GITHUB_RAW_URL}/Subnets/IPv4/hetzner.lst"
+ SUBNETS_OVH="${GITHUB_RAW_URL}/Subnets/IPv4/ovh.lst"
+ SUBNETS_DIGITALOCEAN="${GITHUB_RAW_URL}/Subnets/IPv4/digitalocean.lst"
+ SUBNETS_CLOUDFRONT="${GITHUB_RAW_URL}/Subnets/IPv4/cloudfront.lst"
+-COMMUNITY_SERVICES="russia_inside russia_outside ukraine_inside geoblock block porn news anime youtube hdrezka tiktok google_ai google_play hodca discord meta twitter cloudflare cloudfront digitalocean hetzner ovh telegram roblox"
+\ No newline at end of file
++COMMUNITY_SERVICES="russia_inside russia_outside ukraine_inside geoblock block porn news anime youtube hdrezka tiktok google_ai google_play hodca discord meta twitter cloudflare cloudfront digitalocean hetzner ovh telegram roblox"
++# Environment hints (check_environment): a clock earlier than this (2025-01-01) is
++# certainly not the real time, and the Date header of this URL is compared with
++# the router clock.
++ENVIRONMENT_MIN_PLAUSIBLE_EPOCH=1735689600
++ENVIRONMENT_CLOCK_PROBE_URL="https://www.cloudflare.com/"
+diff --git a/podkop/files/usr/lib/helpers.sh b/podkop/files/usr/lib/helpers.sh
+index 1d31f04..685c734 100644
+--- a/podkop/files/usr/lib/helpers.sh
++++ b/podkop/files/usr/lib/helpers.sh
+@@ -430,4 +430,36 @@ parse_domain_or_subnet_file_to_comma_string() {
+     done < "$filepath"
+ 
+     echo "$result"
+-}
+\ No newline at end of file
++}
++# Converts an HTTP Date header value ("Sun, 04 Oct 2026 09:13:05 GMT") to epoch
++# seconds; prints nothing when it cannot be parsed. busybox date does not read
++# this format, so the fields are rearranged for `date -u -d`.
++http_date_to_epoch() {
++    local month_number
++
++    # shellcheck disable=SC2046
++    set -- $(printf '%s' "$1" | tr -d ',')
++    [ "$#" -ge 5 ] || return 1
++
++    case "$3" in
++    Jan) month_number=01 ;;
++    Feb) month_number=02 ;;
++    Mar) month_number=03 ;;
++    Apr) month_number=04 ;;
++    May) month_number=05 ;;
++    Jun) month_number=06 ;;
++    Jul) month_number=07 ;;
++    Aug) month_number=08 ;;
++    Sep) month_number=09 ;;
++    Oct) month_number=10 ;;
++    Nov) month_number=11 ;;
++    Dec) month_number=12 ;;
++    *) return 1 ;;
++    esac
++
++    case "$4$2" in
++    *[!0-9]*) return 1 ;;
++    esac
++
++    date -u -d "$4-$month_number-$2 $5" +%s 2> /dev/null
++}
