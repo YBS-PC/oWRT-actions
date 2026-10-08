@@ -19,9 +19,8 @@ Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
  netshift/files/usr/bin/netshift | 35 ++++++++++++++++++++++++++++-----
  1 file changed, 30 insertions(+), 5 deletions(-)
-
 diff --git a/netshift/files/usr/bin/netshift b/netshift/files/usr/bin/netshift
-index 4ddb768..801cb7a 100755
+index 20f9ded..2e776da 100755
 --- a/netshift/files/usr/bin/netshift
 +++ b/netshift/files/usr/bin/netshift
 @@ -4401,6 +4401,10 @@ sing_box_configure_dns() {
@@ -101,6 +100,3 @@ index 4ddb768..801cb7a 100755
              bootstrap_dns_status=1
          fi
      fi
--- 
-2.43.0
-
