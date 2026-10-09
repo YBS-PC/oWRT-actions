@@ -168,9 +168,10 @@ env:
   # ByeDPI в секциях). Отдельный вариант trafira, свой конфиг
   # /etc/config/trafira. Патчи patches/feeds/trafira (001 — без него
   # установка sing-box со страницы «Компоненты» падает; 002 — правило fw4
-  # для TPROXY в образе прошивки; 003 — Exclude BitTorrent; 004 — пароли с
-  # %40/%23/+ в ручных ссылках; 005 — битая ссылка блокирует только свою
-  # секцию; 006 — блок «Окружение» в диагностике). Версия пакета —
+  # для TPROXY в образе прошивки; 004 — пароли с %40/%23/+ в ручных
+  # ссылках; 005 — битая ссылка блокирует только свою секцию; 006 — блок
+  # «Окружение» в диагностике; Exclude BitTorrent автор внёс сам, наш 003
+  # удалён). Версия пакета —
   # из тегов этого репозитория (TRAFIRA_VERSION).
   TRAFIRA_FEED: "trafira https://github.com/petrouspetr-pixel/trafira.git;main"
 
@@ -383,7 +384,7 @@ jobs:
           # гостевые зоны с input=REJECT режут проксируемый трафик (патч 002).
           echo "$json" | jq -r '.include[] | select(.variant == "trafira" and .patches == false) | .target' |
           while read -r t; do
-            echo "::warning title=${t}: trafira без патчей::Без патчей patches/feeds/trafira установка и обновление sing-box из LuCI trafira падают с ошибкой ucode (001), в прошивке нет правила fw4 для TPROXY — зоны с input=REJECT (гостевые) режут проксируемый трафик (002), нет настройки Exclude BitTorrent (003), ссылка с %40/%23 в пароле trojan или одна битая ссылка не дают trafira запуститься (004, 005). Включите apply_patches."
+            echo "::warning title=${t}: trafira без патчей::Без патчей patches/feeds/trafira установка и обновление sing-box из LuCI trafira падают с ошибкой ucode (001), в прошивке нет правила fw4 для TPROXY — зоны с input=REJECT (гостевые) режут проксируемый трафик (002), ссылка с %40/%23 в пароле trojan или одна битая ссылка не дают trafira запуститься (004, 005). Включите apply_patches."
           done
 
           # netshift без патчей: ссылки socks5 с ':' в логине/пароле дают
