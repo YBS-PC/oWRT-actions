@@ -25,7 +25,7 @@ outbound с XHTTP и т. п.) по-прежнему останавливают �
 без патча — сторожевой таймер установщика в контейнере).
 ---
 diff --git a/tests/manual_hysteria2_ports.sh b/tests/manual_hysteria2_ports.sh
-index 98a0609..1aac090 100644
+index 98a06099..1aac090a 100644
 --- a/tests/manual_hysteria2_ports.sh
 +++ b/tests/manual_hysteria2_ports.sh
 @@ -38,12 +38,22 @@ for (const name of ['range','authority','single']) {
@@ -55,7 +55,7 @@ index 98a0609..1aac090 100644
  done
  printf 'Manual Hysteria2 port hopping checks passed\n'
 diff --git a/tests/sing_box_runtime.sh b/tests/sing_box_runtime.sh
-index 89c3ba7..f6cc418 100644
+index 89c3ba7a..f6cc4184 100644
 --- a/tests/sing_box_runtime.sh
 +++ b/tests/sing_box_runtime.sh
 @@ -1078,12 +1078,18 @@ generate_config "$WORK_DIR/server-inbound-fixture.json" "$WORK_DIR/server.json"
@@ -119,7 +119,7 @@ index 89c3ba7..f6cc418 100644
    grep -Fq "uses XHTTP transport, but sing-box-extended is not installed" "$WORK_DIR/$fixture-stable.stderr" ||
      fail "explicit $fixture XHTTP failure should explain the extended requirement"
 diff --git a/trafira/files/usr/lib/singbox/generator.uc b/trafira/files/usr/lib/singbox/generator.uc
-index 3c6edbd..54583fa 100644
+index 6a69a95a..085119b6 100644
 --- a/trafira/files/usr/lib/singbox/generator.uc
 +++ b/trafira/files/usr/lib/singbox/generator.uc
 @@ -26,6 +26,9 @@ let runtime_supports_xhttp = true;
@@ -141,7 +141,7 @@ index 3c6edbd..54583fa 100644
      warn(reason, "\n");
      exit(2);
  }
-@@ -1848,8 +1853,8 @@ function apply_link_transport(outbound, query) {
+@@ -1663,8 +1668,8 @@ function apply_link_transport(outbound, query) {
          optional_query_string(result, "host", as_string(query.host || "") != "" ? query.host : query.sni);
      }
      else {
@@ -152,7 +152,7 @@ index 3c6edbd..54583fa 100644
      }
  
      outbound.transport = result;
-@@ -2148,11 +2153,25 @@ function add_manual_proxy_link(config, state, section_name, manual_index, link,
+@@ -1963,11 +1968,25 @@ function add_manual_proxy_link(config, state, section_name, manual_index, link,
          tag_name = unique_tag(tag_name, taken);
      taken[tag_name] = true;
  
@@ -180,7 +180,7 @@ index 3c6edbd..54583fa 100644
      push(config.outbounds, outbound);
      push(selector_tags, tag_name);
      push(urltest_candidate_tags, tag_name);
-@@ -2351,8 +2370,9 @@ function add_connections_outbound(config, section, taken) {
+@@ -2166,8 +2185,9 @@ function add_connections_outbound(config, section, taken) {
      add_connection_interfaces(config, state, section, taken, selector_tags, urltest_candidate_tags);
      add_connection_json_outbounds(config, state, section, taken, selector_tags, urltest_candidate_tags);
  
@@ -191,7 +191,7 @@ index 3c6edbd..54583fa 100644
  
      if (section_needs_country_is(section)) {
          let previous_state = read_json_file(runtime_subscription.section_cache_path(section_name));
-@@ -3116,6 +3136,35 @@ function unsupported_matcher_key(section) {
+@@ -2932,6 +2952,35 @@ function unsupported_matcher_key(section) {
      return "";
  }
  
@@ -227,7 +227,7 @@ index 3c6edbd..54583fa 100644
  function add_outbound_for_section(config, section, taken, sections) {
      let action = option(section, "action", "");
      let section_name = section[".name"];
-@@ -3126,7 +3175,7 @@ function add_outbound_for_section(config, section, taken, sections) {
+@@ -2942,7 +2991,7 @@ function add_outbound_for_section(config, section, taken, sections) {
          runtime_generate_unsupported("section has unsupported matcher " + unsupported_matcher);
  
      if (connections.is_connections_action(action))
@@ -237,7 +237,7 @@ index 3c6edbd..54583fa 100644
          add_zapret_outbound(config, section, sections);
      else if (action == "zapret2")
 diff --git a/trafira/files/usr/lib/subscription/parser.uc b/trafira/files/usr/lib/subscription/parser.uc
-index 9251a0d..f061637 100644
+index 9251a0d6..f0616370 100644
 --- a/trafira/files/usr/lib/subscription/parser.uc
 +++ b/trafira/files/usr/lib/subscription/parser.uc
 @@ -699,7 +699,9 @@ function add_transport(url) {
