@@ -1632,6 +1632,39 @@ jobs:
         echo "Applied Hash    : $LATEST_HASH"
         echo "=========================================="
     
+    - name: Download sources
+      run: |
+        cd openwrt
+        # Исходники качаются отдельно и с повторами: при сбое зеркала
+        # sources.cdn.openwrt.org OpenWrt собирает архив из git сам, а такой
+        # архив (*.tar.zst) часто не совпадает по хешу — так падала сборка на
+        # luarocks (его тянет luaposix для internet-detector). Хуже того,
+        # scripts/download.pl при неверном хеше уже скачанного файла
+        # завершается раньше, чем удаляет его, и зеркала больше не пробует.
+        # Поэтому после неудачной попытки такие файлы удаляются из dl/ и
+        # загрузка повторяется.
+        for try in 1 2 3; do
+            echo ">>> make download, попытка $try"
+            if make -k download -j8 > download.log 2>&1; then
+                echo ">>> Исходники скачаны."
+                exit 0
+            fi
+            make -k download -j1 V=s >> download.log 2>&1 || true
+            bad=$(sed -n -e 's/.*Hash of the local file \([^ ]*\) does not match.*/\1/p' \
+                -e 's/.*Hash mismatch for file \([^:]*\):.*/\1/p' download.log | sort -u)
+            for f in $bad; do
+                echo ">>> Неверный хеш: $f — удаляю из dl/"
+                rm -f "dl/$f"
+            done
+            # недокачанные файлы нулевой длины
+            find dl -maxdepth 1 -type f -size 0 -print -delete
+            [ "$try" -lt 3 ] && sleep 60
+        done
+        echo "::error title=Не скачаны исходники::$(grep -o 'ERROR: [^ ]* failed to download' download.log | sort -u | tr '\n' ' ')"
+        tail -n 60 download.log
+        mkdir -p bin && cp download.log bin/download_failure.log
+        exit 1
+
     - name: Compile
       run: |
         cd openwrt
