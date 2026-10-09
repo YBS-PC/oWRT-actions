@@ -30,14 +30,11 @@ reality_mlkem).
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
- .../files/usr/lib/sing_box_config_facade.sh   | 30 +++++++++++++++----
- .../files/usr/lib/sing_box_config_manager.sh  |  6 ++--
- 2 files changed, 28 insertions(+), 8 deletions(-)
 diff --git a/netshift/files/usr/lib/sing_box_config_facade.sh b/netshift/files/usr/lib/sing_box_config_facade.sh
-index f76b67f..63e11d7 100644
+index 998bc79..046166e 100644
 --- a/netshift/files/usr/lib/sing_box_config_facade.sh
 +++ b/netshift/files/usr/lib/sing_box_config_facade.sh
-@@ -114,10 +114,14 @@ sing_box_cf_add_proxy_outbound() {
+@@ -116,10 +116,14 @@ sing_box_cf_add_proxy_outbound() {
          port="$url_port"
          version="${scheme#socks}"
          if [ "$scheme" = "socks5" ]; then
@@ -55,7 +52,7 @@ index f76b67f..63e11d7 100644
              fi
          fi
          config="$(sing_box_cm_add_socks_outbound \
-@@ -405,7 +409,7 @@ _add_outbound_security() {
+@@ -407,7 +411,7 @@ _add_outbound_security() {
                  "$reality_mlkem"
          )
          ;;
@@ -64,7 +61,7 @@ index f76b67f..63e11d7 100644
      *)
          log "Unknown security '$security' detected." "error"
          ;;
-@@ -471,6 +475,17 @@ _add_outbound_transport() {
+@@ -473,6 +477,17 @@ _add_outbound_transport() {
              sing_box_cm_set_httpupgrade_transport_for_outbound "$config" "$outbound_tag" "$httpupgrade_path" "$httpupgrade_host"
          )
          ;;
@@ -82,7 +79,7 @@ index f76b67f..63e11d7 100644
      xhttp | splithttp)
          # `splithttp` is the pre-rename name of the `xhttp` transport (sing-box
          # renamed it). Accept it as an alias and normalize to xhttp downstream:
-@@ -778,7 +793,10 @@ sing_box_cf_prepare_subscription_batch() {
+@@ -809,7 +824,10 @@ sing_box_cf_prepare_subscription_batch() {
            ] as $kept
          # Assign unique tags using a deterministic dedup pass. $state.used is a
          # set (object) of tags already taken, seeded with the existing config tags.
@@ -94,7 +91,7 @@ index f76b67f..63e11d7 100644
              {used: ($existing | map({(.): true}) | add // {}), out: []};
              . as $state
              | $kept[$i] as $entry
-@@ -820,7 +838,7 @@ sing_box_cf_prepare_subscription_batch() {
+@@ -851,7 +869,7 @@ sing_box_cf_prepare_subscription_batch() {
                        else . end
                  )
                }]
@@ -104,10 +101,10 @@ index f76b67f..63e11d7 100644
              outbounds: [$resolved.out[].outbound],
              tags: [$resolved.out[].tag],
 diff --git a/netshift/files/usr/lib/sing_box_config_manager.sh b/netshift/files/usr/lib/sing_box_config_manager.sh
-index 2afac3a..357b981 100644
+index eaa6159..f43fdad 100644
 --- a/netshift/files/usr/lib/sing_box_config_manager.sh
 +++ b/netshift/files/usr/lib/sing_box_config_manager.sh
-@@ -1291,12 +1291,14 @@ sing_box_cm_set_tls_for_outbound() {
+@@ -1296,12 +1296,14 @@ sing_box_cm_set_tls_for_outbound() {
                              }
                          } else {} end)
                          + (if $reality_public_key != "" then {
