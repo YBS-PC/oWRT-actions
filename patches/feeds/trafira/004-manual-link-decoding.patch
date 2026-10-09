@@ -21,7 +21,7 @@ Subject: [PATCH] trafira: ручные ссылки — каждая часть 
 ---
 diff --git a/tests/manual_link_decoding.sh b/tests/manual_link_decoding.sh
 new file mode 100755
-index 00000000..9f7fcd3e
+index 0000000..9f7fcd3
 --- /dev/null
 +++ b/tests/manual_link_decoding.sh
 @@ -0,0 +1,79 @@
@@ -105,7 +105,7 @@ index 00000000..9f7fcd3e
 +
 +printf 'manual_link_decoding: ok\n'
 diff --git a/trafira/files/usr/lib/core/url.uc b/trafira/files/usr/lib/core/url.uc
-index c8330029..becd529b 100644
+index c833002..becd529 100644
 --- a/trafira/files/usr/lib/core/url.uc
 +++ b/trafira/files/usr/lib/core/url.uc
 @@ -27,13 +27,13 @@ function hex_digit_value(value) {
@@ -174,10 +174,10 @@ index c8330029..becd529b 100644
      query_params
  };
 diff --git a/trafira/files/usr/lib/singbox/generator.uc b/trafira/files/usr/lib/singbox/generator.uc
-index f719c449..6a69a95a 100644
+index c914272..0201b85 100644
 --- a/trafira/files/usr/lib/singbox/generator.uc
 +++ b/trafira/files/usr/lib/singbox/generator.uc
-@@ -49,6 +49,8 @@ let url_strip_fragment_value = runtime_url.strip_fragment;
+@@ -50,6 +50,8 @@ let url_strip_fragment_value = runtime_url.strip_fragment;
  let url_host = runtime_url.host;
  let url_port = runtime_url.port;
  let url_userinfo = runtime_url.userinfo;
@@ -186,7 +186,7 @@ index f719c449..6a69a95a 100644
  let url_path = runtime_url.path;
  let url_query_params = runtime_url.query_params;
  
-@@ -1683,19 +1685,19 @@ function manual_socks_outbound(link, tag_name) {
+@@ -1684,19 +1686,19 @@ function manual_socks_outbound(link, tag_name) {
          version: scheme == "socks4" || scheme == "socks4a" ? "4" : "5"
      };
      if (scheme == "socks5") {
@@ -210,7 +210,7 @@ index f719c449..6a69a95a 100644
      let body = substr(raw, 5);
      let question = index(body, "?");
      let query_string = "";
-@@ -1712,7 +1714,7 @@ function manual_shadowsocks_outbound(link, tag_name) {
+@@ -1713,7 +1715,7 @@ function manual_shadowsocks_outbound(link, tag_name) {
          hostport = substr(body, at + 1);
      }
      else {
@@ -219,7 +219,7 @@ index f719c449..6a69a95a 100644
          if (decoded == null)
              runtime_generate_unsupported("manual Shadowsocks proxy link is invalid");
          at = rindex(decoded, "@");
-@@ -1722,7 +1724,7 @@ function manual_shadowsocks_outbound(link, tag_name) {
+@@ -1723,7 +1725,7 @@ function manual_shadowsocks_outbound(link, tag_name) {
          hostport = substr(decoded, at + 1);
      }
  
@@ -228,7 +228,7 @@ index f719c449..6a69a95a 100644
      if (!shadowsocks_userinfo_valid(userinfo)) {
          let decoded = base64_decode_value(userinfo);
          if (decoded == null)
-@@ -1937,7 +1939,10 @@ function manual_link_outbound(link, tag_name) {
+@@ -1938,7 +1940,10 @@ function manual_link_outbound(link, tag_name) {
      if (scheme == "vmess")
          return manual_vmess_outbound(link, tag_name);
  
@@ -241,7 +241,7 @@ index f719c449..6a69a95a 100644
      if (scheme == "socks4" || scheme == "socks4a" || scheme == "socks5")
          return manual_socks_outbound(link, tag_name);
 diff --git a/trafira/files/usr/lib/subscription/parser.uc b/trafira/files/usr/lib/subscription/parser.uc
-index bd1c1720..9251a0d6 100644
+index bd1c172..9251a0d 100644
 --- a/trafira/files/usr/lib/subscription/parser.uc
 +++ b/trafira/files/usr/lib/subscription/parser.uc
 @@ -408,6 +408,16 @@ function urldecode(value) {
