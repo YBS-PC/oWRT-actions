@@ -18,9 +18,6 @@ could not catch this.
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
- trafira/files/usr/lib/components/action.uc | 52 +++++++++++-----------
- 1 file changed, 26 insertions(+), 26 deletions(-)
-
 diff --git a/trafira/files/usr/lib/components/action.uc b/trafira/files/usr/lib/components/action.uc
 index 07c20ebc..8cba90b6 100644
 --- a/trafira/files/usr/lib/components/action.uc
@@ -98,6 +95,3 @@ index 07c20ebc..8cba90b6 100644
  function sing_box_runtime_success(mode, args) {
      let command_args = [ LIB_DIR + "/singbox/runtime.uc", mode ];
      for (let arg in (type(args) == "array" ? args : []))
--- 
-2.43.0
-
