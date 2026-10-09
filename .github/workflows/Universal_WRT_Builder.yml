@@ -915,6 +915,7 @@ jobs:
 
     - name: Init Env
       env: { DEBIAN_FRONTEND: noninteractive }
+      timeout-minutes: 50
       run: |
         # Список зависимостей берём из своего репозитория, а не с чужого
         # raw.githubusercontent: внешний файл могут переименовать или удалить.
@@ -933,11 +934,27 @@ jobs:
         echo ">>> Раннер: ${{ inputs.runner_os }}"
         echo ">>> Файл зависимостей: $(basename "$DEPENDS_FILE") ($(wc -l < "$DEPENDS_FILE") пакетов)"
 
-        # Обновляем базу пакетов
-        sudo -E apt-get -qq update
-
-        # Устанавливаем зависимости
-        sudo -E apt-get -qq install $(tr '\n' ' ' < "$DEPENDS_FILE")
+        # apt без таймаутов может часами ждать медленное зеркало Ubuntu (так
+        # шаг однажды шёл 2 часа, а при повторе — 2,5 минуты). Поэтому:
+        # таймауты и повторы скачивания, ограничение на попытку 15 минут и
+        # до трёх попыток; триггер man-db (пересборка индекса man на каждый
+        # пакет) отключён — для сборки он не нужен.
+        echo 'man-db man-db/auto-update boolean false' | sudo debconf-set-selections
+        sudo rm -f /var/lib/man-db/auto-update
+        APT_OPTS="-o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o DPkg::Lock::Timeout=120"
+        PKGS=$(tr '\n' ' ' < "$DEPENDS_FILE")
+        for try in 1 2 3; do
+            if sudo -E timeout 15m apt-get -qq $APT_OPTS update &&
+               sudo -E timeout 15m apt-get -qq $APT_OPTS install $PKGS; then
+                break
+            fi
+            if [ "$try" -eq 3 ]; then
+                echo "::error::apt-get не справился за 3 попытки"
+                exit 1
+            fi
+            echo "::warning::apt-get: попытка $try не удалась, повтор через 30 с"
+            sleep 30
+        done
         
         # Настройка времени и рабочей директории
         sudo timedatectl set-timezone "$TZ"
