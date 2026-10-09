@@ -283,7 +283,7 @@ drift, и сборка остановится (или они будут проп
 (vitest 354/354, eslint, prettier), `main.js` совпадает со сборкой tsup,
 функции бэкенда в busybox ash (в том числе ссылки xhttp с podkop-engine и
 без него), генерация полного конфига с реальным `functions.sh` OpenWrt и
-`sing-box check` на 1.12.22, 1.13.21, 1.14.2, 1.14.3 и podkop-engine 1.14.2-r11
+`sing-box check` на 1.12.22, 1.13.21, 1.14.2, 1.14.3 и podkop-engine 1.14.2-r11 и r13 (обычный и -full)
 (выключенные и битые секции, пул DNS, все опции сразу), режимы
 fallback/race — вживую на 1.14.2 с фейковыми DNS-серверами, порядок правил
 nft и обход sing-box для исключённых устройств — в network namespace.
