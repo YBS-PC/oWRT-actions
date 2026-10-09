@@ -1,0 +1,953 @@
+From: YBS-PC/oWRT-actions
+Subject: [PATCH] trafira: блок «Окружение» в диагностике (Flow Offloading, часы,
+ IPv6)
+
+Перенос podkop 006 (netshift 7528c82) под trafira. Команда
+`trafira check_environment` (diagnostics/runtime.uc check-environment) и
+блок «Окружение» на вкладке «Диагностика» показывают то, что молча
+ломает перенаправление, хотя trafira здесь ни при чём:
+- включённый Flow Offloading (программный, аппаратный или уже созданная
+  flowtable): установленные соединения обходят метки trafira;
+- часы роутера: дата раньше 2025 года — ошибка, расхождение больше
+  5 минут с заголовком Date ответа www.cloudflare.com — предупреждение
+  (TLS и Reality чувствительны ко времени);
+- IPv6: trafira перехватывает IPv6, если он включён на роутере;
+  предупреждение — только если есть глобальный адрес IPv6, а IPv6 в ядре
+  выключен и трафик идёт мимо туннеля.
+Настройки не меняются, единственное обращение к сети — один HEAD-запрос.
+Старый бэкенд без команды — блок «Недоступно», а не ошибка.
+Тесты: tests/check_environment.sh (подставные nft/curl/ip/sysctl и UCI),
+vitest getEnvironmentItems (531 тест фронтенда проходит), main.js
+пересобран (yarn build), переводы ru.
+---
+diff --git a/fe-app-trafira/locales/trafira.pot b/fe-app-trafira/locales/trafira.pot
+index 9da02a2..5e0b273 100644
+--- a/fe-app-trafira/locales/trafira.pot
++++ b/fe-app-trafira/locales/trafira.pot
+@@ -3577,3 +3577,59 @@ msgstr ""
+ #: src/trafira/tabs/diagnostic/checks/runZapret2Check.ts:107
+ msgid "Zapret2 sing-box outbound is not configured"
+ msgstr ""
++
++#: src/trafira/tabs/diagnostic/checks/contstants.ts:67
++msgid "Environment"
++msgstr ""
++
++#: src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts:20
++msgid "Established connections can skip the marks trafira sets: turn it off in Network - Firewall"
++msgstr ""
++
++#: src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts:18
++msgid "Flow offloading is enabled"
++msgstr ""
++
++#: src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts:26
++msgid "Flow offloading is off"
++msgstr ""
++
++#: src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts:59
++msgid "IPv6 is disabled on the router, so trafira cannot intercept it: sites reached over IPv6 go around the tunnel"
++msgstr ""
++
++#: src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts:65
++msgid "IPv6 is routed by trafira as well"
++msgstr ""
++
++#: src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts:71
++msgid "No global IPv6 address"
++msgstr ""
++
++#: src/trafira/tabs/diagnostic/checks/runEnvironmentCheck.ts:31
++msgid "Not available"
++msgstr ""
++
++#: src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts:34
++msgid "The router clock is not set"
++msgstr ""
++
++#: src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts:43
++msgid "The router clock is off"
++msgstr ""
++
++#: src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts:49
++msgid "The router clock is right"
++msgstr ""
++
++#: src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts:57
++msgid "The router has a global IPv6 address"
++msgstr ""
++
++#: src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts:35
++msgid "TLS and Reality fail with a wrong time: check NTP"
++msgstr ""
++
++#: src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts:44
++msgid "min"
++msgstr ""
+diff --git a/fe-app-trafira/locales/trafira.ru.po b/fe-app-trafira/locales/trafira.ru.po
+index 2dddd20..b36e341 100644
+--- a/fe-app-trafira/locales/trafira.ru.po
++++ b/fe-app-trafira/locales/trafira.ru.po
+@@ -2488,3 +2488,45 @@ msgstr "sing-box outbound для Zapret2 настроен"
+ 
+ msgid "Zapret2 sing-box outbound is not configured"
+ msgstr "sing-box outbound для Zapret2 не настроен"
++
++msgid "Environment"
++msgstr "Окружение"
++
++msgid "Established connections can skip the marks trafira sets: turn it off in Network - Firewall"
++msgstr "Установленные соединения могут обходить метки trafira: выключите его в Сеть → Межсетевой экран"
++
++msgid "Flow offloading is enabled"
++msgstr "Включён Flow Offloading (ускорение потоков)"
++
++msgid "Flow offloading is off"
++msgstr "Flow Offloading выключен"
++
++msgid "IPv6 is disabled on the router, so trafira cannot intercept it: sites reached over IPv6 go around the tunnel"
++msgstr "IPv6 на роутере выключен, и trafira не может его перехватить: сайты, открытые по IPv6, идут мимо туннеля"
++
++msgid "IPv6 is routed by trafira as well"
++msgstr "IPv6 тоже маршрутизирует trafira"
++
++msgid "No global IPv6 address"
++msgstr "Глобального адреса IPv6 нет"
++
++msgid "Not available"
++msgstr "Недоступно"
++
++msgid "The router clock is not set"
++msgstr "Часы роутера не установлены"
++
++msgid "The router clock is off"
++msgstr "Часы роутера сбиты"
++
++msgid "The router clock is right"
++msgstr "Часы роутера идут верно"
++
++msgid "The router has a global IPv6 address"
++msgstr "У роутера есть глобальный адрес IPv6"
++
++msgid "TLS and Reality fail with a wrong time: check NTP"
++msgstr "С неверным временем TLS и Reality не подключаются: проверьте NTP"
++
++msgid "min"
++msgstr "мин"
+diff --git a/fe-app-trafira/src/trafira/methods/shell/index.ts b/fe-app-trafira/src/trafira/methods/shell/index.ts
+index 76efa9d..1a279f5 100644
+--- a/fe-app-trafira/src/trafira/methods/shell/index.ts
++++ b/fe-app-trafira/src/trafira/methods/shell/index.ts
+@@ -213,6 +213,10 @@ export const TrafiraShellMethods = {
+     callBaseMethod<Trafira.FakeIPCheckResult>(
+       Trafira.AvailableMethods.CHECK_FAKEIP,
+     ),
++  checkEnvironment: async () =>
++    callBaseMethod<Trafira.EnvironmentCheckResult>(
++      Trafira.AvailableMethods.CHECK_ENVIRONMENT,
++    ),
+   checkNftRules: async () =>
+     callBaseMethod<Trafira.NftRulesCheckResult>(
+       Trafira.AvailableMethods.CHECK_NFT_RULES,
+diff --git a/fe-app-trafira/src/trafira/tabs/diagnostic/checks/contstants.ts b/fe-app-trafira/src/trafira/tabs/diagnostic/checks/contstants.ts
+index 7c1ba83..015545a 100644
+--- a/fe-app-trafira/src/trafira/tabs/diagnostic/checks/contstants.ts
++++ b/fe-app-trafira/src/trafira/tabs/diagnostic/checks/contstants.ts
+@@ -10,6 +10,7 @@ export enum DIAGNOSTICS_CHECKS {
+   FAKEIP = 'FAKEIP',
+   OUTBOUNDS = 'OUTBOUNDS',
+   INBOUNDS = 'INBOUNDS',
++  ENVIRONMENT = 'ENVIRONMENT',
+ }
+ 
+ export const DIAGNOSTICS_CHECKS_MAP: Record<
+@@ -61,4 +62,9 @@ export const DIAGNOSTICS_CHECKS_MAP: Record<
+     title: getCheckTitle('Inbounds'),
+     code: DIAGNOSTICS_CHECKS.INBOUNDS,
+   },
++  [DIAGNOSTICS_CHECKS.ENVIRONMENT]: {
++    order: 10,
++    title: getCheckTitle(_('Environment')),
++    code: DIAGNOSTICS_CHECKS.ENVIRONMENT,
++  },
+ };
+diff --git a/fe-app-trafira/src/trafira/tabs/diagnostic/checks/runEnvironmentCheck.ts b/fe-app-trafira/src/trafira/tabs/diagnostic/checks/runEnvironmentCheck.ts
+new file mode 100644
+index 0000000..f636ae6
+--- /dev/null
++++ b/fe-app-trafira/src/trafira/tabs/diagnostic/checks/runEnvironmentCheck.ts
+@@ -0,0 +1,55 @@
++import { DIAGNOSTICS_CHECKS_MAP } from './contstants';
++import { TrafiraShellMethods } from '../../../methods';
++import { updateCheckStore } from './updateCheckStore';
++import { getEnvironmentItems } from '../helpers/getEnvironmentItems';
++
++export async function runEnvironmentCheck() {
++  const { order, title, code } = DIAGNOSTICS_CHECKS_MAP.ENVIRONMENT;
++
++  updateCheckStore({
++    order,
++    code,
++    title,
++    description: _('Checking, please wait'),
++    state: 'loading',
++    items: [],
++  });
++
++  const response = await TrafiraShellMethods.checkEnvironment();
++
++  // An older backend has no such command: the hints are optional, so this is
++  // not an error of the router.
++  if (
++    !response.success ||
++    typeof response.data !== 'object' ||
++    response.data === null
++  ) {
++    updateCheckStore({
++      order,
++      code,
++      title,
++      description: _('Not available'),
++      state: 'skipped',
++      items: [],
++    });
++
++    return;
++  }
++
++  const items = getEnvironmentItems(response.data);
++  const hasError = items.some((item) => item.state === 'error');
++  const hasWarning = items.some((item) => item.state === 'warning');
++
++  updateCheckStore({
++    order,
++    code,
++    title,
++    description: hasError
++      ? _('Checks failed')
++      : hasWarning
++        ? _('Issues detected')
++        : _('Checks passed'),
++    state: hasError ? 'error' : hasWarning ? 'warning' : 'success',
++    items,
++  });
++}
+diff --git a/fe-app-trafira/src/trafira/tabs/diagnostic/diagnostic.store.ts b/fe-app-trafira/src/trafira/tabs/diagnostic/diagnostic.store.ts
+index 0552b42..1912e77 100644
+--- a/fe-app-trafira/src/trafira/tabs/diagnostic/diagnostic.store.ts
++++ b/fe-app-trafira/src/trafira/tabs/diagnostic/diagnostic.store.ts
+@@ -51,7 +51,11 @@ export function getDiagnosticsChecks(
+     checks.push(DIAGNOSTICS_CHECKS.BYEDPI);
+   }
+ 
+-  checks.push(DIAGNOSTICS_CHECKS.OUTBOUNDS, DIAGNOSTICS_CHECKS.FAKEIP);
++  checks.push(
++    DIAGNOSTICS_CHECKS.OUTBOUNDS,
++    DIAGNOSTICS_CHECKS.FAKEIP,
++    DIAGNOSTICS_CHECKS.ENVIRONMENT,
++  );
+ 
+   return checks.map((code) => createDiagnosticCheck(code, description));
+ }
+diff --git a/fe-app-trafira/src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts b/fe-app-trafira/src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts
+new file mode 100644
+index 0000000..7cbbb92
+--- /dev/null
++++ b/fe-app-trafira/src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts
+@@ -0,0 +1,77 @@
++import type { IDiagnosticsChecksItem } from '../../../services';
++import { Trafira } from '../../../types';
++
++// The clock may differ from the server's by this much before it is reported:
++// TLS tolerates some skew, a few minutes are normal on routers without RTC.
++export const CLOCK_SKEW_WARNING_SECONDS = 300;
++
++// Turns the backend facts into the rows of the Environment check.
++export function getEnvironmentItems(
++  data: Trafira.EnvironmentCheckResult,
++): IDiagnosticsChecksItem[] {
++  const items: IDiagnosticsChecksItem[] = [];
++  const flow = data.flow_offloading;
++
++  if (flow.hardware || flow.software || flow.active) {
++    items.push({
++      state: 'warning',
++      key: _('Flow offloading is enabled'),
++      value: _(
++        'Established connections can skip the marks trafira sets: turn it off in Network - Firewall',
++      ),
++    });
++  } else {
++    items.push({
++      state: 'success',
++      key: _('Flow offloading is off'),
++      value: '',
++    });
++  }
++
++  if (!data.clock.plausible) {
++    items.push({
++      state: 'error',
++      key: _('The router clock is not set'),
++      value: _('TLS and Reality fail with a wrong time: check NTP'),
++    });
++  } else if (
++    data.clock.skew_seconds !== null &&
++    Math.abs(data.clock.skew_seconds) > CLOCK_SKEW_WARNING_SECONDS
++  ) {
++    items.push({
++      state: 'warning',
++      key: _('The router clock is off'),
++      value: `${Math.round(data.clock.skew_seconds / 60)} ${_('min')}`,
++    });
++  } else {
++    items.push({
++      state: 'success',
++      key: _('The router clock is right'),
++      value: '',
++    });
++  }
++
++  if (data.ipv6.router_has_global && !data.ipv6.trafira_handles) {
++    items.push({
++      state: 'warning',
++      key: _('The router has a global IPv6 address'),
++      value: _(
++        'IPv6 is disabled on the router, so trafira cannot intercept it: sites reached over IPv6 go around the tunnel',
++      ),
++    });
++  } else if (data.ipv6.router_has_global) {
++    items.push({
++      state: 'success',
++      key: _('IPv6 is routed by trafira as well'),
++      value: '',
++    });
++  } else {
++    items.push({
++      state: 'success',
++      key: _('No global IPv6 address'),
++      value: '',
++    });
++  }
++
++  return items;
++}
+diff --git a/fe-app-trafira/src/trafira/tabs/diagnostic/initController.ts b/fe-app-trafira/src/trafira/tabs/diagnostic/initController.ts
+index af4c3b7..b54221a 100644
+--- a/fe-app-trafira/src/trafira/tabs/diagnostic/initController.ts
++++ b/fe-app-trafira/src/trafira/tabs/diagnostic/initController.ts
+@@ -4,6 +4,7 @@ import { runSingBoxCheck } from './checks/runSingBoxCheck';
+ import { runInboundsCheck } from './checks/runInboundsCheck';
+ import { runNftCheck } from './checks/runNftCheck';
+ import { runFakeIPCheck } from './checks/runFakeIPCheck';
++import { runEnvironmentCheck } from './checks/runEnvironmentCheck';
+ import { runZapretCheck } from './checks/runZapretCheck';
+ import { runZapret2Check } from './checks/runZapret2Check';
+ import { runByedpiCheck } from './checks/runByedpiCheck';
+@@ -1049,6 +1050,7 @@ function getDiagnosticRunners(
+       : []),
+     { code: DIAGNOSTICS_CHECKS.OUTBOUNDS, run: runSectionsCheck },
+     { code: DIAGNOSTICS_CHECKS.FAKEIP, run: runFakeIPCheck },
++    { code: DIAGNOSTICS_CHECKS.ENVIRONMENT, run: runEnvironmentCheck },
+   ];
+ }
+ 
+diff --git a/fe-app-trafira/src/trafira/tabs/diagnostic/tests/diagnosticStoreZapret2.test.ts b/fe-app-trafira/src/trafira/tabs/diagnostic/tests/diagnosticStoreZapret2.test.ts
+index 6b80a6b..839602c 100644
+--- a/fe-app-trafira/src/trafira/tabs/diagnostic/tests/diagnosticStoreZapret2.test.ts
++++ b/fe-app-trafira/src/trafira/tabs/diagnostic/tests/diagnosticStoreZapret2.test.ts
+@@ -20,6 +20,7 @@ describe('diagnostic store provider checks', () => {
+       DIAGNOSTICS_CHECKS.BYEDPI,
+       DIAGNOSTICS_CHECKS.OUTBOUNDS,
+       DIAGNOSTICS_CHECKS.FAKEIP,
++      DIAGNOSTICS_CHECKS.ENVIRONMENT,
+     ]);
+   });
+ 
+diff --git a/fe-app-trafira/src/trafira/tabs/diagnostic/tests/getEnvironmentItems.test.ts b/fe-app-trafira/src/trafira/tabs/diagnostic/tests/getEnvironmentItems.test.ts
+new file mode 100644
+index 0000000..da14627
+--- /dev/null
++++ b/fe-app-trafira/src/trafira/tabs/diagnostic/tests/getEnvironmentItems.test.ts
+@@ -0,0 +1,81 @@
++import { describe, expect, it } from 'vitest';
++import {
++  CLOCK_SKEW_WARNING_SECONDS,
++  getEnvironmentItems,
++} from '../helpers/getEnvironmentItems';
++import { Trafira } from '../../../types';
++
++function facts(
++  overrides: Partial<Trafira.EnvironmentCheckResult> = {},
++): Trafira.EnvironmentCheckResult {
++  return {
++    flow_offloading: { software: false, hardware: false, active: false },
++    clock: {
++      plausible: true,
++      skew_seconds: 0,
++      ntp_enabled: true,
++      timezone: 'Europe/Moscow',
++    },
++    ipv6: { router_has_global: false, trafira_handles: true },
++    ...overrides,
++  };
++}
++
++describe('getEnvironmentItems', () => {
++  it('reports a clean router as all success', () => {
++    const items = getEnvironmentItems(facts());
++    expect(items).toHaveLength(3);
++    expect(items.every((item) => item.state === 'success')).toBe(true);
++  });
++
++  it.each([
++    [{ software: true, hardware: false, active: false }],
++    [{ software: false, hardware: true, active: false }],
++    [{ software: false, hardware: false, active: true }],
++  ])('warns about flow offloading %j', (flow) => {
++    const items = getEnvironmentItems(facts({ flow_offloading: flow }));
++    expect(items[0].state).toBe('warning');
++  });
++
++  it('fails on a clock that was never set', () => {
++    const items = getEnvironmentItems(
++      facts({
++        clock: {
++          plausible: false,
++          skew_seconds: null,
++          ntp_enabled: true,
++          timezone: '',
++        },
++      }),
++    );
++    expect(items[1].state).toBe('error');
++  });
++
++  it('warns about a clock skew above the limit only', () => {
++    const clock = (skew: number | null) =>
++      getEnvironmentItems(
++        facts({
++          clock: {
++            plausible: true,
++            skew_seconds: skew,
++            ntp_enabled: true,
++            timezone: '',
++          },
++        }),
++      )[1].state;
++    expect(clock(CLOCK_SKEW_WARNING_SECONDS)).toBe('success');
++    expect(clock(CLOCK_SKEW_WARNING_SECONDS + 1)).toBe('warning');
++    expect(clock(-CLOCK_SKEW_WARNING_SECONDS - 1)).toBe('warning');
++    expect(clock(null)).toBe('success');
++  });
++
++  it('warns about global IPv6 only when trafira cannot intercept it', () => {
++    const ipv6 = (router_has_global: boolean, trafira_handles: boolean) =>
++      getEnvironmentItems(
++        facts({ ipv6: { router_has_global, trafira_handles } }),
++      )[2].state;
++    expect(ipv6(true, false)).toBe('warning');
++    expect(ipv6(true, true)).toBe('success');
++    expect(ipv6(false, false)).toBe('success');
++  });
++});
+diff --git a/fe-app-trafira/src/trafira/types.ts b/fe-app-trafira/src/trafira/types.ts
+index fe02c22..b166eb7 100644
+--- a/fe-app-trafira/src/trafira/types.ts
++++ b/fe-app-trafira/src/trafira/types.ts
+@@ -40,6 +40,7 @@ export namespace Trafira {
+   // check_logs              Show trafira logs from system journal
+   // check_sing_box_logs     Show sing-box logs
+   // check_fakeip            Test sing-box FakeIP DNS
++  // check_environment       Check flow offloading, the clock and IPv6
+   // clash_api               Clash API interface for managing proxies and groups
+   // show_config             Display current trafira configuration
+   // show_version            Show trafira version
+@@ -54,6 +55,7 @@ export namespace Trafira {
+   export enum AvailableMethods {
+     CHECK_DNS_AVAILABLE = 'check_dns_available',
+     CHECK_FAKEIP = 'check_fakeip',
++    CHECK_ENVIRONMENT = 'check_environment',
+     CHECK_NFT_RULES = 'check_nft_rules',
+     CHECK_ZAPRET_RUNTIME = 'check_zapret_runtime',
+     CHECK_ZAPRET2_RUNTIME = 'check_zapret2_runtime',
+@@ -457,6 +459,17 @@ export namespace Trafira {
+     IP: string;
+   }
+ 
++  export interface EnvironmentCheckResult {
++    flow_offloading: { software: boolean; hardware: boolean; active: boolean };
++    clock: {
++      plausible: boolean;
++      skew_seconds: number | null;
++      ntp_enabled: boolean;
++      timezone: string;
++    };
++    ipv6: { router_has_global: boolean; trafira_handles: boolean };
++  }
++
+   export interface GetStatus {
+     running: number;
+     enabled: number;
+diff --git a/luci-app-trafira/htdocs/luci-static/resources/view/trafira/main.js b/luci-app-trafira/htdocs/luci-static/resources/view/trafira/main.js
+index 4032cf6..a57835b 100644
+--- a/luci-app-trafira/htdocs/luci-static/resources/view/trafira/main.js
++++ b/luci-app-trafira/htdocs/luci-static/resources/view/trafira/main.js
+@@ -2697,6 +2697,7 @@ var Trafira;
+   ((AvailableMethods2) => {
+     AvailableMethods2["CHECK_DNS_AVAILABLE"] = "check_dns_available";
+     AvailableMethods2["CHECK_FAKEIP"] = "check_fakeip";
++    AvailableMethods2["CHECK_ENVIRONMENT"] = "check_environment";
+     AvailableMethods2["CHECK_NFT_RULES"] = "check_nft_rules";
+     AvailableMethods2["CHECK_ZAPRET_RUNTIME"] = "check_zapret_runtime";
+     AvailableMethods2["CHECK_ZAPRET2_RUNTIME"] = "check_zapret2_runtime";
+@@ -2909,6 +2910,9 @@ var TrafiraShellMethods = {
+   checkFakeIP: async () => callBaseMethod(
+     Trafira.AvailableMethods.CHECK_FAKEIP
+   ),
++  checkEnvironment: async () => callBaseMethod(
++    Trafira.AvailableMethods.CHECK_ENVIRONMENT
++  ),
+   checkNftRules: async () => callBaseMethod(
+     Trafira.AvailableMethods.CHECK_NFT_RULES
+   ),
+@@ -4469,6 +4473,7 @@ var DIAGNOSTICS_CHECKS = /* @__PURE__ */ ((DIAGNOSTICS_CHECKS2) => {
+   DIAGNOSTICS_CHECKS2["FAKEIP"] = "FAKEIP";
+   DIAGNOSTICS_CHECKS2["OUTBOUNDS"] = "OUTBOUNDS";
+   DIAGNOSTICS_CHECKS2["INBOUNDS"] = "INBOUNDS";
++  DIAGNOSTICS_CHECKS2["ENVIRONMENT"] = "ENVIRONMENT";
+   return DIAGNOSTICS_CHECKS2;
+ })(DIAGNOSTICS_CHECKS || {});
+ var DIAGNOSTICS_CHECKS_MAP = {
+@@ -4516,6 +4521,11 @@ var DIAGNOSTICS_CHECKS_MAP = {
+     order: 3,
+     title: getCheckTitle("Inbounds"),
+     code: "INBOUNDS" /* INBOUNDS */
++  },
++  ["ENVIRONMENT" /* ENVIRONMENT */]: {
++    order: 10,
++    title: getCheckTitle(_("Environment")),
++    code: "ENVIRONMENT" /* ENVIRONMENT */
+   }
+ };
+ 
+@@ -4546,7 +4556,11 @@ function getDiagnosticsChecks(description, options = {}) {
+   if (options.includeByedpi) {
+     checks.push("BYEDPI" /* BYEDPI */);
+   }
+-  checks.push("OUTBOUNDS" /* OUTBOUNDS */, "FAKEIP" /* FAKEIP */);
++  checks.push(
++    "OUTBOUNDS" /* OUTBOUNDS */,
++    "FAKEIP" /* FAKEIP */,
++    "ENVIRONMENT" /* ENVIRONMENT */
++  );
+   return checks.map((code) => createDiagnosticCheck(code, description));
+ }
+ function getLoadingDiagnosticsChecks(options = {}) {
+@@ -8600,6 +8614,105 @@ async function runFakeIPCheck() {
+   });
+ }
+ 
++// src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts
++var CLOCK_SKEW_WARNING_SECONDS = 300;
++function getEnvironmentItems(data) {
++  const items = [];
++  const flow = data.flow_offloading;
++  if (flow.hardware || flow.software || flow.active) {
++    items.push({
++      state: "warning",
++      key: _("Flow offloading is enabled"),
++      value: _(
++        "Established connections can skip the marks trafira sets: turn it off in Network - Firewall"
++      )
++    });
++  } else {
++    items.push({
++      state: "success",
++      key: _("Flow offloading is off"),
++      value: ""
++    });
++  }
++  if (!data.clock.plausible) {
++    items.push({
++      state: "error",
++      key: _("The router clock is not set"),
++      value: _("TLS and Reality fail with a wrong time: check NTP")
++    });
++  } else if (data.clock.skew_seconds !== null && Math.abs(data.clock.skew_seconds) > CLOCK_SKEW_WARNING_SECONDS) {
++    items.push({
++      state: "warning",
++      key: _("The router clock is off"),
++      value: `${Math.round(data.clock.skew_seconds / 60)} ${_("min")}`
++    });
++  } else {
++    items.push({
++      state: "success",
++      key: _("The router clock is right"),
++      value: ""
++    });
++  }
++  if (data.ipv6.router_has_global && !data.ipv6.trafira_handles) {
++    items.push({
++      state: "warning",
++      key: _("The router has a global IPv6 address"),
++      value: _(
++        "IPv6 is disabled on the router, so trafira cannot intercept it: sites reached over IPv6 go around the tunnel"
++      )
++    });
++  } else if (data.ipv6.router_has_global) {
++    items.push({
++      state: "success",
++      key: _("IPv6 is routed by trafira as well"),
++      value: ""
++    });
++  } else {
++    items.push({
++      state: "success",
++      key: _("No global IPv6 address"),
++      value: ""
++    });
++  }
++  return items;
++}
++
++// src/trafira/tabs/diagnostic/checks/runEnvironmentCheck.ts
++async function runEnvironmentCheck() {
++  const { order, title, code } = DIAGNOSTICS_CHECKS_MAP.ENVIRONMENT;
++  updateCheckStore({
++    order,
++    code,
++    title,
++    description: _("Checking, please wait"),
++    state: "loading",
++    items: []
++  });
++  const response = await TrafiraShellMethods.checkEnvironment();
++  if (!response.success || typeof response.data !== "object" || response.data === null) {
++    updateCheckStore({
++      order,
++      code,
++      title,
++      description: _("Not available"),
++      state: "skipped",
++      items: []
++    });
++    return;
++  }
++  const items = getEnvironmentItems(response.data);
++  const hasError = items.some((item) => item.state === "error");
++  const hasWarning = items.some((item) => item.state === "warning");
++  updateCheckStore({
++    order,
++    code,
++    title,
++    description: hasError ? _("Checks failed") : hasWarning ? _("Issues detected") : _("Checks passed"),
++    state: hasError ? "error" : hasWarning ? "warning" : "success",
++    items
++  });
++}
++
+ // src/trafira/tabs/diagnostic/checks/getCheckItemsMeta.ts
+ function getCheckItemsMeta(items) {
+   if (items.some((item) => item.state === "error")) {
+@@ -10947,7 +11060,8 @@ function getDiagnosticRunners(providerOptions) {
+     ...providerOptions.includeZapret2 ? [{ code: "ZAPRET2" /* ZAPRET2 */, run: runZapret2Check }] : [],
+     ...providerOptions.includeByedpi ? [{ code: "BYEDPI" /* BYEDPI */, run: runByedpiCheck }] : [],
+     { code: "OUTBOUNDS" /* OUTBOUNDS */, run: runSectionsCheck },
+-    { code: "FAKEIP" /* FAKEIP */, run: runFakeIPCheck }
++    { code: "FAKEIP" /* FAKEIP */, run: runFakeIPCheck },
++    { code: "ENVIRONMENT" /* ENVIRONMENT */, run: runEnvironmentCheck }
+   ];
+ }
+ async function runChecks({ resume } = {}) {
+diff --git a/luci-app-trafira/po/ru/trafira.po b/luci-app-trafira/po/ru/trafira.po
+index 2dddd20..b36e341 100644
+--- a/luci-app-trafira/po/ru/trafira.po
++++ b/luci-app-trafira/po/ru/trafira.po
+@@ -2488,3 +2488,45 @@ msgstr "sing-box outbound для Zapret2 настроен"
+ 
+ msgid "Zapret2 sing-box outbound is not configured"
+ msgstr "sing-box outbound для Zapret2 не настроен"
++
++msgid "Environment"
++msgstr "Окружение"
++
++msgid "Established connections can skip the marks trafira sets: turn it off in Network - Firewall"
++msgstr "Установленные соединения могут обходить метки trafira: выключите его в Сеть → Межсетевой экран"
++
++msgid "Flow offloading is enabled"
++msgstr "Включён Flow Offloading (ускорение потоков)"
++
++msgid "Flow offloading is off"
++msgstr "Flow Offloading выключен"
++
++msgid "IPv6 is disabled on the router, so trafira cannot intercept it: sites reached over IPv6 go around the tunnel"
++msgstr "IPv6 на роутере выключен, и trafira не может его перехватить: сайты, открытые по IPv6, идут мимо туннеля"
++
++msgid "IPv6 is routed by trafira as well"
++msgstr "IPv6 тоже маршрутизирует trafira"
++
++msgid "No global IPv6 address"
++msgstr "Глобального адреса IPv6 нет"
++
++msgid "Not available"
++msgstr "Недоступно"
++
++msgid "The router clock is not set"
++msgstr "Часы роутера не установлены"
++
++msgid "The router clock is off"
++msgstr "Часы роутера сбиты"
++
++msgid "The router clock is right"
++msgstr "Часы роутера идут верно"
++
++msgid "The router has a global IPv6 address"
++msgstr "У роутера есть глобальный адрес IPv6"
++
++msgid "TLS and Reality fail with a wrong time: check NTP"
++msgstr "С неверным временем TLS и Reality не подключаются: проверьте NTP"
++
++msgid "min"
++msgstr "мин"
+diff --git a/luci-app-trafira/po/templates/trafira.pot b/luci-app-trafira/po/templates/trafira.pot
+index 9da02a2..5e0b273 100644
+--- a/luci-app-trafira/po/templates/trafira.pot
++++ b/luci-app-trafira/po/templates/trafira.pot
+@@ -3577,3 +3577,59 @@ msgstr ""
+ #: src/trafira/tabs/diagnostic/checks/runZapret2Check.ts:107
+ msgid "Zapret2 sing-box outbound is not configured"
+ msgstr ""
++
++#: src/trafira/tabs/diagnostic/checks/contstants.ts:67
++msgid "Environment"
++msgstr ""
++
++#: src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts:20
++msgid "Established connections can skip the marks trafira sets: turn it off in Network - Firewall"
++msgstr ""
++
++#: src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts:18
++msgid "Flow offloading is enabled"
++msgstr ""
++
++#: src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts:26
++msgid "Flow offloading is off"
++msgstr ""
++
++#: src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts:59
++msgid "IPv6 is disabled on the router, so trafira cannot intercept it: sites reached over IPv6 go around the tunnel"
++msgstr ""
++
++#: src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts:65
++msgid "IPv6 is routed by trafira as well"
++msgstr ""
++
++#: src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts:71
++msgid "No global IPv6 address"
++msgstr ""
++
++#: src/trafira/tabs/diagnostic/checks/runEnvironmentCheck.ts:31
++msgid "Not available"
++msgstr ""
++
++#: src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts:34
++msgid "The router clock is not set"
++msgstr ""
++
++#: src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts:43
++msgid "The router clock is off"
++msgstr ""
++
++#: src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts:49
++msgid "The router clock is right"
++msgstr ""
++
++#: src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts:57
++msgid "The router has a global IPv6 address"
++msgstr ""
++
++#: src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts:35
++msgid "TLS and Reality fail with a wrong time: check NTP"
++msgstr ""
++
++#: src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts:44
++msgid "min"
++msgstr ""
+diff --git a/tests/check_environment.sh b/tests/check_environment.sh
+new file mode 100755
+index 0000000..68ab770
+--- /dev/null
++++ b/tests/check_environment.sh
+@@ -0,0 +1,68 @@
++#!/usr/bin/env bash
++set -eo pipefail
++
++ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
++TRAFIRA_LIB="$ROOT_DIR/trafira/files/usr/lib"
++WORK_DIR="$(mktemp -d)"
++
++cleanup() {
++  rm -rf "$WORK_DIR"
++}
++trap cleanup EXIT
++
++fail() {
++  printf 'FAIL: %s\n' "$1" >&2
++  exit 1
++}
++
++# Stubs for the commands the Environment check reads.
++mkdir -p "$WORK_DIR/bin"
++cat >"$WORK_DIR/bin/nft" <<'SH'
++#!/bin/sh
++[ -n "$FT" ] && echo "table inet fw4 { flowtable ft { hook ingress priority filter; } }"
++exit 0
++SH
++cat >"$WORK_DIR/bin/curl" <<'SH'
++#!/bin/sh
++[ -n "$NONET" ] && exit 6
++printf 'HTTP/2 200\r\ndate: %s\r\n' "$(date -u -d "@$(( $(date +%s) - ${SKEW:-0} ))" '+%a, %d %b %Y %H:%M:%S GMT')"
++SH
++cat >"$WORK_DIR/bin/ip" <<'SH'
++#!/bin/sh
++[ -n "$V6" ] && echo "    inet6 $V6/64 scope global dynamic"
++exit 0
++SH
++cat >"$WORK_DIR/bin/sysctl" <<'SH'
++#!/bin/sh
++echo "${V6OFF:-0}"
++SH
++chmod +x "$WORK_DIR"/bin/*
++
++check() {
++  printf '%s\n' "$1" >"$WORK_DIR/uci.state"
++  shift
++  env PATH="$WORK_DIR/bin:$PATH" TRAFIRA_UCI_STATE_FILE="$WORK_DIR/uci.state" "$@" \
++    ucode -L "$TRAFIRA_LIB" "$TRAFIRA_LIB/diagnostics/runtime.uc" check-environment
++}
++
++expect() {
++  local json="$1" filter="$2" what="$3"
++  printf '%s' "$json" | jq -e "$filter" >/dev/null || fail "$what: $json"
++}
++
++out="$(check 'system.@system[0].zonename=Europe/Moscow')"
++expect "$out" '.flow_offloading == {software: false, hardware: false, active: false}' "clean: flow offloading"
++expect "$out" '.clock.plausible and (.clock.skew_seconds | fabs) < 5 and .clock.ntp_enabled' "clean: clock"
++expect "$out" '.clock.timezone == "Europe/Moscow"' "clean: timezone"
++expect "$out" '.ipv6 == {router_has_global: false, trafira_handles: true}' "clean: ipv6"
++
++out="$(check "$(printf 'firewall.@defaults[0].flow_offloading=1\nfirewall.@defaults[0].flow_offloading_hw=1')" FT=1 SKEW=600 V6=2001:db8::1)"
++expect "$out" '.flow_offloading == {software: true, hardware: true, active: true}' "offloading"
++expect "$out" '.clock.skew_seconds >= 595 and .clock.skew_seconds <= 605' "clock skew"
++expect "$out" '.ipv6.router_has_global and .ipv6.trafira_handles' "global ipv6 handled"
++
++out="$(check 'system.ntp.enabled=0' NONET=1 V6=fd00::1 V6OFF=1)"
++expect "$out" '.clock.skew_seconds == null and (.clock.ntp_enabled | not)' "no network"
++expect "$out" '(.ipv6.router_has_global | not) and (.ipv6.trafira_handles | not)' "ULA is not global"
++
++printf 'check_environment: ok\n'
+diff --git a/trafira/files/usr/bin/trafira b/trafira/files/usr/bin/trafira
+index 060e6fb..5ee973a 100755
+--- a/trafira/files/usr/bin/trafira
++++ b/trafira/files/usr/bin/trafira
+@@ -80,6 +80,7 @@ function show_help() {
+     print("    check_logs              Show Trafira logs from system journal\n");
+     print("    check_sing_box_logs     Show sing-box logs\n");
+     print("    check_fakeip            Test sing-box FakeIP DNS\n");
++    print("    check_environment       Check flow offloading, the clock and IPv6\n");
+     print("    check_zapret_runtime    Check external zapret provider state\n");
+     print("    check_zapret2_runtime   Check external zapret2 provider state\n");
+     print("    check_byedpi_runtime    Check external ByeDPI provider state\n");
+@@ -155,6 +156,7 @@ function command_spec(command) {
+         check_logs: [ "diagnostics/runtime.uc", "check-logs", 0 ],
+         check_sing_box_logs: [ "diagnostics/runtime.uc", "check-sing-box-logs", 0 ],
+         check_fakeip: [ "diagnostics/runtime.uc", "check-fakeip", 0 ],
++        check_environment: [ "diagnostics/runtime.uc", "check-environment", 0 ],
+         check_zapret_runtime: [ "diagnostics/runtime.uc", "check-zapret-runtime", 0 ],
+         check_zapret2_runtime: [ "diagnostics/runtime.uc", "check-zapret2-runtime", 0 ],
+         check_byedpi_runtime: [ "diagnostics/runtime.uc", "check-byedpi-runtime", 0 ],
+diff --git a/trafira/files/usr/lib/diagnostics/runtime.uc b/trafira/files/usr/lib/diagnostics/runtime.uc
+index 696f74f..906e7cc 100644
+--- a/trafira/files/usr/lib/diagnostics/runtime.uc
++++ b/trafira/files/usr/lib/diagnostics/runtime.uc
+@@ -8,6 +8,9 @@ let runtime_dns = require("singbox.dns");
+ let netstat = require("core.netstat");
+ 
+ const CONFIG_NAME = getenv("TRAFIRA_CONFIG_NAME") || constants.TRAFIRA_CONFIG_NAME || "trafira";
++// 2025-01-01: an earlier date means the clock was never set
++const ENVIRONMENT_MIN_PLAUSIBLE_EPOCH = 1735689600;
++const ENVIRONMENT_CLOCK_PROBE_URL = "https://www.cloudflare.com/";
+ const LIB_DIR = getenv("TRAFIRA_LIB") || "/usr/lib/trafira";
+ const TRAFIRA_VERSION = getenv("TRAFIRA_VERSION") || constants.TRAFIRA_VERSION || "";
+ const TRAFIRA_CONFIG = getenv("TRAFIRA_CONFIG") || constants.TRAFIRA_CONFIG || "/etc/config/" + CONFIG_NAME;
+@@ -1318,6 +1321,59 @@ function dns_check_timeout_seconds(value) {
+     return milliseconds > 0 ? int((milliseconds + 999) / 1000) : 2;
+ }
+ 
++// "Date: Thu, 08 Oct 2026 19:22:55 GMT" -> seconds since the epoch, or null
++function http_date_epoch(value) {
++    let months = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
++    let m = match(as_string(value), /([0-9]{1,2}) ([A-Za-z]{3}) ([0-9]{4}) ([0-9]{2}):([0-9]{2}):([0-9]{2})/);
++    if (m == null || months[lc(m[2])] == null)
++        return null;
++    return timegm({
++        sec: int(m[6], 10), min: int(m[5], 10), hour: int(m[4], 10),
++        mday: int(m[1], 10), mon: months[lc(m[2])], year: int(m[3], 10)
++    });
++}
++
++// The "Environment" check: what silently breaks the redirection without being
++// a fault of trafira itself. Only reads; the one network access is a HEAD
++// request for the clock (no internet - no skew, which is not an error).
++//   flow offloading - established connections skip the marks trafira sets;
++//   the clock       - TLS and Reality fail with a wrong date;
++//   IPv6            - with IPv6 off in the kernel trafira cannot intercept it,
++//                     while a global address still lets clients use it.
++function check_environment() {
++    let software = uci_get("firewall.@defaults[0].flow_offloading") == "1";
++    let hardware = uci_get("firewall.@defaults[0].flow_offloading_hw") == "1";
++    let active = match(command_output_from_args([ "nft", "list", "flowtables" ]), /flowtable /) != null;
++
++    let now = time();
++    let date_line = "";
++    for (let line in split(command_output_from_args([ "curl", "-sI", "-m", "5", ENVIRONMENT_CLOCK_PROBE_URL ]), "\n"))
++        if (match(lc(line), /^date:/))
++            date_line = line;
++    let server_time = http_date_epoch(date_line);
++
++    let global_ipv6 = false;
++    for (let line in split(command_output_from_args([ "ip", "-6", "addr", "show", "scope", "global" ]), "\n")) {
++        let addr = match(line, /inet6 ([0-9a-fA-F:]+)\//);
++        if (addr && !match(lc(addr[1]), /^f[cd]/))
++            global_ipv6 = true;
++    }
++    let ipv6_off = trim(command_output_from_args([ "sysctl", "-n", "net.ipv6.conf.all.disable_ipv6" ])) == "1" ||
++        trim(command_output_from_args([ "sysctl", "-n", "net.ipv6.conf.lo.disable_ipv6" ])) == "1";
++
++    write_json({
++        flow_offloading: { software, hardware, active },
++        clock: {
++            plausible: now >= ENVIRONMENT_MIN_PLAUSIBLE_EPOCH,
++            skew_seconds: server_time == null ? null : now - server_time,
++            ntp_enabled: uci_get("system.ntp.enabled") != "0",
++            timezone: uci_get("system.@system[0].zonename")
++        },
++        ipv6: { router_has_global: global_ipv6, trafira_handles: !ipv6_off }
++    });
++    return 0;
++}
++
+ function check_dns_available() {
+     let cfg = settings();
+     let dns_type = option(cfg, "dns_type", "");
+@@ -1964,6 +2020,8 @@ else if (mode == "get-server-capabilities")
+     exit(get_server_capabilities());
+ else if (mode == "check-dns-available")
+     exit(check_dns_available());
++else if (mode == "check-environment")
++    exit(check_environment());
+ else if (mode == "global-check")
+     exit(global_check(ARGV[1] || "", ARGV[2] || ""));
+ else if (mode == "validate-nfqws-strategy-json")

@@ -1,0 +1,318 @@
+From: YBS-PC/oWRT-actions
+Subject: [PATCH] trafira: ручные ссылки — каждая часть декодируется один раз, '+'
+ не пробел
+
+Генератор сначала раскодировал всю ссылку, а потом ещё раз её части:
+- trojan:// с %40 или %23 в пароле превращался в ссылку с лишним '@'
+  или '#', генератор завершался «manual Trojan proxy link is invalid», и
+  trafira не запускался целиком (LuCI такую ссылку принимает);
+- '+' и %2B в паролях ss:// и hysteria2:// становились пробелом — узел
+  с неверным паролем;
+- socks5 с %3A в логине делился по двоеточию уже после раскодирования:
+  логин «us», пароль «er:pa:ss» вместо «us:er» / «pa:ss». Та же ошибка
+  была в разборе подписок (subscription/parser.uc), где userinfo к тому же
+  раскодировался дважды (%2541 → «A»).
+Теперь ссылка не раскодируется целиком: userinfo — один раз и без замены
+'+' (core/url.uc: decode_component, userinfo_raw), socks5 делится до
+раскодирования, base64 shadowsocks с %3D в конце раскодируется перед
+декодированием base64. Параметры запроса — как раньше ('+' там пробел).
+Тест tests/manual_link_decoding.sh; тесты trafira, касающиеся генератора,
+парсера и URL (36), проходят до и после.
+---
+diff --git a/tests/manual_link_decoding.sh b/tests/manual_link_decoding.sh
+new file mode 100755
+index 0000000..9f7fcd3
+--- /dev/null
++++ b/tests/manual_link_decoding.sh
+@@ -0,0 +1,79 @@
++#!/usr/bin/env bash
++set -eo pipefail
++
++ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
++TRAFIRA_LIB="$ROOT_DIR/trafira/files/usr/lib"
++WORK_DIR="$(mktemp -d)"
++
++cleanup() {
++  rm -rf "$WORK_DIR"
++}
++trap cleanup EXIT
++
++fail() {
++  printf 'FAIL: %s\n' "$1" >&2
++  exit 1
++}
++
++# Every part of a link is percent-decoded once, where it is taken out, and '+'
++# outside the query is a plain '+': an escaped '@', '#' or ':' in a password
++# must not become a separator, and a '+' must not become a space.
++manual_outbound() {
++  local link="$1"
++  jq -n --arg link "$link" '{
++    settings: { ".name": "settings", ".type": "settings", log_level: "warn" },
++    section: [ { ".name": "proxy", ".type": "section", enabled: "1", action: "proxy",
++                 selector_proxy_links: [ $link ] } ]
++  }' >"$WORK_DIR/fixture.json"
++  rm -rf "$WORK_DIR/out.json" "$WORK_DIR/out.json.section-cache"
++  mkdir -p "$WORK_DIR/out.json.section-cache"
++  ucode -L "$TRAFIRA_LIB" "$TRAFIRA_LIB/singbox/generator.uc" generate-config-fixture \
++    "$WORK_DIR/fixture.json" "$WORK_DIR/out.json" "127.0.0.1" >"$WORK_DIR/gen.log" 2>&1 ||
++    fail "generator rejected $link: $(cat "$WORK_DIR/gen.log")"
++  jq -c '.outbounds[] | select(.tag | test("^proxy-1")) | del(.tag)' "$WORK_DIR/out.json"
++}
++
++subscription_outbound() {
++  ucode -L "$TRAFIRA_LIB" "$TRAFIRA_LIB/subscription/parser.uc" share-link-outbound "$1" x | jq -c 'del(.tag)'
++}
++
++expect_field() {
++  local json="$1" field="$2" want="$3" what="$4"
++  local got
++  got="$(printf '%s' "$json" | jq -r "$field")"
++  [ "$got" = "$want" ] || fail "$what: $field is '$got', want '$want'"
++}
++
++out="$(manual_outbound 'trojan://p%40ss%23w@h.example:443?security=tls&sni=h.example#n')"
++expect_field "$out" .password 'p@ss#w' "manual trojan %40/%23"
++
++out="$(manual_outbound 'ss://aes-128-gcm:p%2Bs@192.0.2.1:8388#enc')"
++expect_field "$out" .password 'p+s' "manual ss %2B"
++
++out="$(manual_outbound 'ss://aes-128-gcm:p+s@192.0.2.1:8388#raw')"
++expect_field "$out" .password 'p+s' "manual ss raw +"
++
++out="$(manual_outbound 'ss://YWVzLTEyOC1nY206cGFzcw%3D%3D@192.0.2.1:8388#pad')"
++expect_field "$out" .password 'pass' "manual ss base64 with %3D padding"
++
++out="$(manual_outbound 'hysteria2://p%2Bq%40@h.example:443?sni=h.example#hy')"
++expect_field "$out" .password 'p+q@' "manual hysteria2"
++
++out="$(manual_outbound 'socks5://us%3Aer:pa%3Ass@192.0.2.1:1080#socks')"
++expect_field "$out" .username 'us:er' "manual socks5 username"
++expect_field "$out" .password 'pa:ss' "manual socks5 password"
++
++out="$(manual_outbound 'vless://00000000-0000-4000-8000-000000000001@h.example:443?type=ws&path=%2Fws%3Fed%3D2048&security=tls&sni=h.example#ws')"
++expect_field "$out" .transport.path '/ws?ed=2048' "manual vless ws path"
++
++out="$(subscription_outbound 'socks5://us%3Aer:pa%3Ass@192.0.2.1:1080#socks')"
++expect_field "$out" .username 'us:er' "subscription socks5 username"
++expect_field "$out" .password 'pa:ss' "subscription socks5 password"
++
++out="$(subscription_outbound 'ss://aes-128-gcm:p+s@192.0.2.1:8388#raw')"
++expect_field "$out" .password 'p+s' "subscription ss raw +"
++
++out="$(subscription_outbound 'trojan://p%2541@h.example:443?security=tls#once')"
++expect_field "$out" .password 'p%41' "subscription decodes once"
++
++printf 'manual_link_decoding: ok\n'
+diff --git a/trafira/files/usr/lib/core/url.uc b/trafira/files/usr/lib/core/url.uc
+index c833002..becd529 100644
+--- a/trafira/files/usr/lib/core/url.uc
++++ b/trafira/files/usr/lib/core/url.uc
+@@ -27,13 +27,13 @@ function hex_digit_value(value) {
+     return -1;
+ }
+ 
+-function decode(value) {
++function decode(value, keep_plus) {
+     value = as_string(value);
+     let result = "";
+ 
+     for (let i = 0; i < length(value); i++) {
+         let c = substr(value, i, 1);
+-        if (c == "+") {
++        if (c == "+" && !keep_plus) {
+             result += " ";
+             continue;
+         }
+@@ -52,6 +52,12 @@ function decode(value) {
+     return result;
+ }
+ 
++// Percent-decoding of a URL part outside the query: '+' stays '+'. Only
++// form-encoded query values use '+' for a space; in a password it is a '+'.
++function decode_component(value) {
++    return decode(value, true);
++}
++
+ function scheme(value) {
+     value = as_string(value);
+     let marker = index(value, "://");
+@@ -129,12 +135,18 @@ function port(value) {
+     return substr(value_authority, colon + 1);
+ }
+ 
+-function userinfo(value) {
++// The userinfo still percent-encoded: split it on ':' first, then decode the
++// parts, or an escaped ':' (%3A) inside a username moves the split.
++function userinfo_raw(value) {
+     let value_authority = strip_first_scheme_marker(strip_fragment(value));
+     let end = first_index_any(value_authority, ["/", "?", "#"], 0);
+     value_authority = end >= 0 ? substr(value_authority, 0, end) : value_authority;
+     let at = rindex(value_authority, "@");
+-    return at >= 0 ? decode(substr(value_authority, 0, at)) : "";
++    return at >= 0 ? substr(value_authority, 0, at) : "";
++}
++
++function userinfo(value) {
++    return decode_component(userinfo_raw(value));
+ }
+ 
+ function path(value) {
+@@ -175,12 +187,14 @@ function query_params(value) {
+ 
+ return {
+     decode,
++    decode_component,
+     scheme,
+     fragment,
+     strip_fragment,
+     host,
+     port,
+     userinfo,
++    userinfo_raw,
+     path,
+     query_params
+ };
+diff --git a/trafira/files/usr/lib/singbox/generator.uc b/trafira/files/usr/lib/singbox/generator.uc
+index ed60704..3c6edbd 100644
+--- a/trafira/files/usr/lib/singbox/generator.uc
++++ b/trafira/files/usr/lib/singbox/generator.uc
+@@ -49,6 +49,8 @@ let url_strip_fragment_value = runtime_url.strip_fragment;
+ let url_host = runtime_url.host;
+ let url_port = runtime_url.port;
+ let url_userinfo = runtime_url.userinfo;
++let url_userinfo_raw = runtime_url.userinfo_raw;
++let url_decode_component = runtime_url.decode_component;
+ let url_path = runtime_url.path;
+ let url_query_params = runtime_url.query_params;
+ 
+@@ -1868,19 +1870,19 @@ function manual_socks_outbound(link, tag_name) {
+         version: scheme == "socks4" || scheme == "socks4a" ? "4" : "5"
+     };
+     if (scheme == "socks5") {
+-        let userinfo = url_userinfo(link);
++        let userinfo = url_userinfo_raw(link);
+         if (userinfo != "") {
+             let colon = index(userinfo, ":");
+-            outbound.username = colon >= 0 ? substr(userinfo, 0, colon) : userinfo;
++            outbound.username = url_decode_component(colon >= 0 ? substr(userinfo, 0, colon) : userinfo);
+             if (colon >= 0)
+-                outbound.password = substr(userinfo, colon + 1);
++                outbound.password = url_decode_component(substr(userinfo, colon + 1));
+         }
+     }
+     return outbound;
+ }
+ 
+ function manual_shadowsocks_outbound(link, tag_name) {
+-    let raw = url_strip_fragment_value(url_decode(link));
++    let raw = url_strip_fragment_value(link);
+     let body = substr(raw, 5);
+     let question = index(body, "?");
+     let query_string = "";
+@@ -1897,7 +1899,7 @@ function manual_shadowsocks_outbound(link, tag_name) {
+         hostport = substr(body, at + 1);
+     }
+     else {
+-        let decoded = base64_decode_value(body);
++        let decoded = base64_decode_value(url_decode_component(body));
+         if (decoded == null)
+             runtime_generate_unsupported("manual Shadowsocks proxy link is invalid");
+         at = rindex(decoded, "@");
+@@ -1907,7 +1909,7 @@ function manual_shadowsocks_outbound(link, tag_name) {
+         hostport = substr(decoded, at + 1);
+     }
+ 
+-    userinfo = url_decode(userinfo);
++    userinfo = url_decode_component(userinfo);
+     if (!shadowsocks_userinfo_valid(userinfo)) {
+         let decoded = base64_decode_value(userinfo);
+         if (decoded == null)
+@@ -2122,7 +2124,10 @@ function manual_link_outbound(link, tag_name) {
+     if (scheme == "vmess")
+         return manual_vmess_outbound(link, tag_name);
+ 
+-    link = url_strip_fragment_value(url_decode(link));
++    // No decoding of the whole link: every part is decoded once where it is
++    // taken out, or an escaped '@', '#', '?' or ':' in a password would turn
++    // into a separator ('%40' broke a Trojan link completely).
++    link = url_strip_fragment_value(link);
+     scheme = url_scheme(link);
+     if (scheme == "socks4" || scheme == "socks4a" || scheme == "socks5")
+         return manual_socks_outbound(link, tag_name);
+diff --git a/trafira/files/usr/lib/subscription/parser.uc b/trafira/files/usr/lib/subscription/parser.uc
+index bd1c172..9251a0d 100644
+--- a/trafira/files/usr/lib/subscription/parser.uc
++++ b/trafira/files/usr/lib/subscription/parser.uc
+@@ -408,6 +408,16 @@ function urldecode(value) {
+     });
+ }
+ 
++// Percent-decoding outside the query: '+' stays '+' (a password may hold it).
++function urldecode_component(value) {
++    value = as_string(value);
++    if (index(value, "%") < 0)
++        return value;
++    return replace(value, /%([0-9A-Fa-f][0-9A-Fa-f])/g, function(all, hex_value) {
++        return chr(hex(hex_value));
++    });
++}
++
+ let fragment_prefix_decode_cache = {};
+ let fragment_decode_cache = {};
+ let query_parse_cache = {};
+@@ -523,10 +533,12 @@ function parse_url(url) {
+     let slash_pos = index(rest, "/");
+     let authority = slash_pos >= 0 ? substr(rest, 0, slash_pos) : rest;
+     let userinfo = "";
++    let userinfo_raw = "";
+     let hostport = authority;
+     let at_pos = rindex(authority, "@");
+     if (at_pos >= 0) {
+-        userinfo = urldecode(substr(authority, 0, at_pos));
++        userinfo_raw = substr(authority, 0, at_pos);
++        userinfo = urldecode_component(userinfo_raw);
+         hostport = substr(authority, at_pos + 1);
+     }
+ 
+@@ -534,6 +546,7 @@ function parse_url(url) {
+     return {
+         scheme: scheme,
+         userinfo: userinfo,
++        userinfo_raw: userinfo_raw,
+         host: host_port[0] || "",
+         port: host_port[1],
+         query: parse_query(query),
+@@ -820,16 +833,18 @@ function process_socks(raw, url) {
+         return null;
+ 
+     let username = "", password = "";
+-    if (url.userinfo != "") {
+-        let colon = index(url.userinfo, ":");
++    // Split the still encoded userinfo: an escaped ':' (%3A) belongs to the
++    // username or password. Decoding it twice also turned '%2541' into 'A'.
++    if (url.userinfo_raw != "") {
++        let colon = index(url.userinfo_raw, ":");
+         if (colon >= 0) {
+-            username = urldecode(substr(url.userinfo, 0, colon));
+-            password = urldecode(substr(url.userinfo, colon + 1));
++            username = urldecode_component(substr(url.userinfo_raw, 0, colon));
++            password = urldecode_component(substr(url.userinfo_raw, colon + 1));
+             if (username == password)
+                 password = "";
+         }
+         else {
+-            username = urldecode(url.userinfo);
++            username = urldecode_component(url.userinfo_raw);
+         }
+     }
+ 
+@@ -897,7 +912,7 @@ function process_shadowsocks(raw) {
+         hostport = substr(decoded, at_pos + 1);
+     }
+ 
+-    userinfo = urldecode(userinfo);
++    userinfo = urldecode_component(userinfo);
+     if (!is_shadowsocks_userinfo_format(userinfo)) {
+         let decoded = base64_decode(userinfo);
+         if (!decoded)
