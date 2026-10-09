@@ -19,10 +19,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
 diff --git a/trafira/files/usr/lib/components/action.uc b/trafira/files/usr/lib/components/action.uc
-index 07c20ebc..8cba90b6 100644
+index 8107786..c6ce6ef 100644
 --- a/trafira/files/usr/lib/components/action.uc
 +++ b/trafira/files/usr/lib/components/action.uc
-@@ -162,25 +162,6 @@ function install_storage_error(path, available, required) {
+@@ -167,25 +167,6 @@ function install_storage_error(path, available, required) {
          " MiB required as a safety minimum. Free disk space and retry; installation stopped before proceeding";
  }
  
@@ -48,7 +48,7 @@ index 07c20ebc..8cba90b6 100644
  function staged_install_bytes(binary, library) {
      let binary_stat = fs.stat(binary);
      let library_stat = library != "" ? fs.stat(library) : null;
-@@ -465,6 +446,32 @@ function action_fail(component, action, message, current_version, latest_version
+@@ -510,6 +491,32 @@ function action_fail(component, action, message, current_version, latest_version
      exit(1);
  }
  
@@ -81,7 +81,7 @@ index 07c20ebc..8cba90b6 100644
  function run_logged(description, command, capture_install_error) {
      init_tmp_dir();
      let output_file = make_tmp_file("command");
-@@ -1665,13 +1672,6 @@ function pkg_install_rollback_files(files) {
+@@ -1723,13 +1730,6 @@ function pkg_install_rollback_files(files) {
      return true;
  }
  
