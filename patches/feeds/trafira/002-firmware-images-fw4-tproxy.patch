@@ -21,16 +21,6 @@ input=REJECT (guest networks) kept dropping TPROXY traffic.
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
- .github/workflows/shellcheck.yml                   | 1 +
- build.sh                                           | 4 +++-
- tests/shell_inventory.sh                           | 8 ++++++++
- trafira/Makefile                                   | 3 +++
- trafira/files/etc/uci-defaults/60_trafira-firewall | 6 ++++++
- trafira/files/usr/bin/trafira                      | 1 +
- trafira/files/usr/lib/service/package.uc           | 4 +++-
- 7 files changed, 25 insertions(+), 2 deletions(-)
- create mode 100644 trafira/files/etc/uci-defaults/60_trafira-firewall
-
 diff --git a/.github/workflows/shellcheck.yml b/.github/workflows/shellcheck.yml
 index fbbb8cd9..9666e471 100644
 --- a/.github/workflows/shellcheck.yml
@@ -116,10 +106,10 @@ index 00000000..598d242d
 +/usr/bin/trafira package_firewall >/dev/null 2>&1 || true
 +exit 0
 diff --git a/trafira/files/usr/bin/trafira b/trafira/files/usr/bin/trafira
-index 94c9db53..060e6fb9 100755
+index cf9e3825..00ecc0bb 100755
 --- a/trafira/files/usr/bin/trafira
 +++ b/trafira/files/usr/bin/trafira
-@@ -195,6 +195,7 @@ function command_spec(command) {
+@@ -201,6 +201,7 @@ function command_spec(command) {
          validate_byedpi_strategy_json: [ "providers/byedpi/validator.uc", "validate-json", 1 ],
          package_prerm: [ "service/package.uc", "prerm", 1 ],
          package_postinst: [ "service/package.uc", "postinst", 0 ],
@@ -143,6 +133,3 @@ index 104b50f7..4b153a26 100644
  
      if (!path_exists(PACKAGE_UPGRADE_STATE))
          return true;
--- 
-2.43.0
-
