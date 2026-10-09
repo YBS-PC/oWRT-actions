@@ -17,13 +17,11 @@ Subject: [PATCH 2/2] netshift: DNS - SRV/PTR/TXT past FakeIP, diagnostics for
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
- netshift/files/usr/bin/netshift | 35 ++++++++++++++++++++++++++++-----
- 1 file changed, 30 insertions(+), 5 deletions(-)
 diff --git a/netshift/files/usr/bin/netshift b/netshift/files/usr/bin/netshift
-index 20f9ded..2e776da 100755
+index 19ca497..971a930 100755
 --- a/netshift/files/usr/bin/netshift
 +++ b/netshift/files/usr/bin/netshift
-@@ -4401,6 +4401,10 @@ sing_box_configure_dns() {
+@@ -4869,6 +4869,10 @@ sing_box_configure_dns() {
      config=$(sing_box_cm_add_dns_reject_rule "$config" "domain_suffix" '"use-application-dns.net"')
      config=$(sing_box_cm_add_dns_route_rule "$config" "$SB_FAKEIP_DNS_SERVER_TAG" "$SB_FAKEIP_DNS_RULE_TAG")
      config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_FAKEIP_DNS_RULE_TAG" "rewrite_ttl" "$rewrite_ttl")
@@ -34,7 +32,7 @@ index 20f9ded..2e776da 100755
      service_domains=$(comma_string_to_json_array "$FAKEIP_TEST_DOMAIN,$CHECK_PROXY_IP_DOMAIN")
      config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_FAKEIP_DNS_RULE_TAG" "domain" "$service_domains")
  
-@@ -6855,6 +6859,20 @@ get_status() {
+@@ -7456,6 +7460,20 @@ get_status() {
      echo "{\"enabled\":$enabled,\"status\":\"$status\"}"
  }
  
@@ -55,7 +53,7 @@ index 20f9ded..2e776da 100755
  check_dns_available() {
      local dns_type dns_server bootstrap_dns_server
      config_get dns_type "settings" "dns_type"
-@@ -6879,24 +6897,29 @@ check_dns_available() {
+@@ -7480,28 +7498,33 @@ check_dns_available() {
          display_dns_server="dns.nextdns.io/$masked_path"
      fi
  
@@ -88,8 +86,13 @@ index 20f9ded..2e776da 100755
 +        if dig @"$dns_host" -p "${dns_port:-53}" "$domain" +timeout=2 +tries=1 > /dev/null 2>&1; then
              dns_status=1
          fi
-     fi
-@@ -6908,7 +6931,9 @@ check_dns_available() {
+     elif [ "$dns_type" = "tcp" ]; then
+-        if dig @"$dns_server" "$domain" +tcp +timeout=2 +tries=1 > /dev/null 2>&1; then
++        if dig @"$dns_host" -p "${dns_port:-53}" "$domain" +tcp +timeout=2 +tries=1 > /dev/null 2>&1; then
+             dns_status=1
+         fi
+     else
+@@ -7520,7 +7543,9 @@ check_dns_available() {
  
      # Check bootstrap DNS server
      if [ -n "$bootstrap_dns_server" ]; then
