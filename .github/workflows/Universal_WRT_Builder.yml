@@ -918,7 +918,7 @@ jobs:
 
     - name: Init Env
       env: { DEBIAN_FRONTEND: noninteractive }
-      timeout-minutes: 50
+      timeout-minutes: 80
       run: |
         # Список зависимостей берём из своего репозитория, а не с чужого
         # raw.githubusercontent: внешний файл могут переименовать или удалить.
@@ -938,27 +938,72 @@ jobs:
         echo ">>> Файл зависимостей: $(basename "$DEPENDS_FILE") ($(wc -l < "$DEPENDS_FILE") пакетов)"
 
         # apt без таймаутов может часами ждать медленное зеркало Ubuntu (так
-        # шаг однажды шёл 2 часа, а при повторе — 2,5 минуты). Поэтому:
-        # таймауты и повторы скачивания, ограничение на попытку 15 минут и
-        # до трёх попыток; триггер man-db (пересборка индекса man на каждый
-        # пакет) отключён — для сборки он не нужен.
+        # шаг однажды шёл 2 часа, а при повторе — 2,5 минуты; 09.10.2026 все
+        # три попытки по 15 минут висели молча). Поэтому:
+        # - сторонние репозитории раннера (PPA Launchpad, Microsoft,
+        #   PostgreSQL…) на время установки отключены: все пакеты сборки —
+        #   из архива Ubuntu, а медленный PPA держал «apt-get update»;
+        # - таймауты и повторы скачивания, без конвейерных запросов
+        #   (Pipeline-Depth=0: на части зеркал из-за них соединение зависает);
+        # - отдельные ограничения: update — 5 минут, install — 20 минут;
+        # - вывод apt виден в логе (-q без -qq): видно, на чём он стоит;
+        # - каждая следующая попытка идёт через другое зеркало Ubuntu;
+        # - триггер man-db (индекс man на каждый пакет) отключён.
         echo 'man-db man-db/auto-update boolean false' | sudo debconf-set-selections
         sudo rm -f /var/lib/man-db/auto-update
-        APT_OPTS="-o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o DPkg::Lock::Timeout=120"
+
+        APT_DISABLED=/etc/apt/sources.list.d.disabled
+        sudo mkdir -p "$APT_DISABLED"
+        for f in /etc/apt/sources.list.d/*; do
+            [ -e "$f" ] || continue
+            case "$(basename "$f")" in
+                ubuntu.sources) ;;
+                *) sudo mv "$f" "$APT_DISABLED/" && echo ">>> apt: отключён сторонний источник $(basename "$f")" ;;
+            esac
+        done
+
+        # Где лежат адреса архива Ubuntu: 24.04 — ubuntu.sources (deb822),
+        # 22.04 — sources.list. Зеркало раннера (azure.archive.ubuntu.com)
+        # меняется на запасные только при неудачной попытке.
+        APT_SRC=""
+        for f in /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list; do
+            [ -f "$f" ] && grep -q '^[^#]*https\?://[^ ]*/ubuntu' "$f" && APT_SRC="$APT_SRC $f"
+        done
+        CUR_MIRROR=$(grep -ho 'https\?://[^ ]*/ubuntu/\?' $APT_SRC 2>/dev/null | grep -v security | head -n1 | sed 's|/$||')
+        echo ">>> apt: зеркало Ubuntu — ${CUR_MIRROR:-не найдено}"
+        set_mirror() {
+            [ -n "$CUR_MIRROR" ] && [ -n "$APT_SRC" ] || return 0
+            sudo sed -i "s|$CUR_MIRROR|$1|g" $APT_SRC
+            echo ">>> apt: зеркало $CUR_MIRROR -> $1"
+            CUR_MIRROR="$1"
+        }
+
+        APT_OPTS="-o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::http::Pipeline-Depth=0 -o DPkg::Lock::Timeout=120 -o Dpkg::Use-Pty=0"
         PKGS=$(tr '\n' ' ' < "$DEPENDS_FILE")
         for try in 1 2 3; do
-            if sudo -E timeout 15m apt-get -qq $APT_OPTS update &&
-               sudo -E timeout 15m apt-get -qq $APT_OPTS install $PKGS; then
+            case "$try" in
+                2) set_mirror "http://archive.ubuntu.com/ubuntu" ;;
+                3) set_mirror "https://mirrors.edge.kernel.org/ubuntu" ;;
+            esac
+            if ! sudo -E timeout 5m apt-get -q $APT_OPTS update; then
+                STAGE="update"
+            elif ! sudo -E timeout 20m apt-get -q -y $APT_OPTS install $PKGS; then
+                STAGE="install"
+            else
+                STAGE=""
                 break
             fi
             if [ "$try" -eq 3 ]; then
-                echo "::error::apt-get не справился за 3 попытки"
+                echo "::error::apt-get не справился за 3 попытки (последней сорвалась стадия $STAGE). Зеркала Ubuntu или сеть раннера недоступны — перезапустите сборку позже."
                 exit 1
             fi
-            echo "::warning::apt-get: попытка $try не удалась, повтор через 30 с"
+            echo "::warning::apt-get: попытка $try сорвалась на стадии $STAGE, повтор через 30 с через другое зеркало"
             sleep 30
         done
-        
+        # Сторонние источники — обратно: шаги ниже apt не используют, но
+        # раннер остаётся в исходном виде.
+        sudo sh -c "mv '$APT_DISABLED'/* /etc/apt/sources.list.d/ 2>/dev/null; rmdir '$APT_DISABLED'" || true
+
         # Настройка времени и рабочей директории
         sudo timedatectl set-timezone "$TZ"
         sudo mkdir -p /workdir && sudo chown $USER:$GROUPS /workdir
