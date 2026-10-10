@@ -1,0 +1,44 @@
+name: Cleanup
+
+# Удаляет завершённые запуски всех workflow старше суток вместе с их
+# логами и артефактами. Нужен, когда новых сборок нет: шаг «Delete workflow
+# runs» в Universal_WRT_Builder.yml срабатывает только в конце сборки.
+# Артефакты сборки и сами истекают через сутки (retention-days: 1).
+on:
+  schedule:
+    # Каждые 6 часов: запуск живёт не дольше ~30 ч. Время — UTC.
+    - cron: '23 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+concurrency:
+  group: cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+    - name: Delete runs older than 1 day
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GH_REPO: ${{ github.repository }}
+      run: |
+        # createdAt у GitHub всегда в UTC с 'Z', jq сравнивает строки —
+        # поэтому и границу берём в UTC с 'Z'.
+        CUTOFF=$(date -u -d "1 day ago" +"%Y-%m-%dT%H:%M:%SZ")
+        echo ">>> Удаляются завершённые запуски, созданные до $CUTOFF (UTC)"
+        IDS=$(gh run list --limit 500 --json databaseId,createdAt,status \
+          --jq ".[] | select(.status == \"completed\" and .createdAt < \"$CUTOFF\") | .databaseId")
+        if [ -z "$IDS" ]; then
+          echo ">>> Старых запусков нет."
+          exit 0
+        fi
+        n=0
+        for ID in $IDS; do
+          if gh run delete "$ID" >/dev/null; then n=$((n + 1)); else echo "::warning::Не удалось удалить запуск $ID"; fi
+        done
+        echo ">>> Удалено запусков: $n"
