@@ -34,7 +34,7 @@ index fbbb8cd..9666e47 100644
                -print0
            )
 diff --git a/build.sh b/build.sh
-index 865c8b4..780e8cf 100755
+index 45b9d70..6ed2861 100755
 --- a/build.sh
 +++ b/build.sh
 @@ -172,6 +172,8 @@ build_backend_root() {
@@ -46,12 +46,12 @@ index 865c8b4..780e8cf 100755
    install -m 0644 "$ROOT_DIR/trafira/files/etc/config/trafira" "$output_root/etc/config/trafira"
    install -m 0755 "$ROOT_DIR/trafira/files/usr/bin/trafira" "$output_root/usr/bin/trafira"
    install -m 0755 "$ROOT_DIR/trafira/files/usr/bin/trafira-config" "$output_root/usr/bin/trafira-config"
-@@ -184,7 +186,8 @@ build_backend_root() {
+@@ -185,7 +187,8 @@ build_backend_root() {
  
    normalize_package_root_modes "$output_root"
    chmod 0755 "$output_root/etc/init.d/trafira" "$output_root/usr/bin/trafira" \
--    "$output_root/usr/bin/trafira-config"
-+    "$output_root/usr/bin/trafira-config" \
+-    "$output_root/usr/bin/trafira-config" "$output_root/usr/bin/trafira-read"
++    "$output_root/usr/bin/trafira-config" "$output_root/usr/bin/trafira-read" \
 +    "$output_root/etc/uci-defaults/60_trafira-firewall"
  }
  
@@ -81,7 +81,7 @@ index c5cd46b..63be4f0 100644
 +
  printf 'shell inventory checks passed\n'
 diff --git a/trafira/Makefile b/trafira/Makefile
-index 5033c7f..3f62557 100644
+index 999fa8a..bb48cf9 100644
 --- a/trafira/Makefile
 +++ b/trafira/Makefile
 @@ -64,6 +64,9 @@ define Package/trafira/install
