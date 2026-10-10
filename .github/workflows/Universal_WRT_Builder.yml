@@ -1813,7 +1813,8 @@ jobs:
         path: openwrt/bin
         # На ранней ошибке (до создания bin/) не валим джоб красным "no files".
         if-no-files-found: warn
-        retention-days: 10
+        # Артефакт живёт сутки; старые запуски убирает и Cleanup.yml по расписанию.
+        retention-days: 1
 
   notify:
     # Одно уведомление в Telegram после ВСЕЙ матрицы — со статусом каждой
@@ -1926,13 +1927,13 @@ jobs:
         # checkout в этой джобе нет — репозиторий для gh задаём явно
         GH_REPO: ${{ github.repository }}
       run: |
-        echo ">>> Deleting workflow runs older than 10 days..."
+        echo ">>> Deleting workflow runs older than 1 day..."
         
-        # 1. Вычисляем дату "10 дней назад" в UTC с суффиксом Z.
+        # 1. Вычисляем дату "сутки назад" в UTC с суффиксом Z.
         # ВАЖНО: GitHub createdAt всегда в UTC ('...Z'), а jq ниже сравнивает СТРОКИ.
         # При TZ=Europe/Moscow обычный 'date -Iseconds' даёт '+03:00' -> строковое
         # сравнение с 'Z'-датами врёт в окне ±3ч вокруг границы. Поэтому форсим UTC+Z.
-        CUTOFF_DATE=$(date -u -d "10 days ago" +"%Y-%m-%dT%H:%M:%SZ")
+        CUTOFF_DATE=$(date -u -d "1 day ago" +"%Y-%m-%dT%H:%M:%SZ")
         echo ">>> Cutoff date (UTC): $CUTOFF_DATE"
         
         # 2. Получаем список запусков и фильтруем через jq те, что старше CUTOFF_DATE
