@@ -21,10 +21,10 @@ vitest getEnvironmentItems (531 тест фронтенда проходит), m
 пересобран (yarn build), переводы ru.
 ---
 diff --git a/fe-app-trafira/locales/trafira.pot b/fe-app-trafira/locales/trafira.pot
-index 8ff06abd..8797703b 100644
+index 65c2610a..203e7b10 100644
 --- a/fe-app-trafira/locales/trafira.pot
 +++ b/fe-app-trafira/locales/trafira.pot
-@@ -4682,3 +4682,58 @@ msgstr ""
+@@ -4777,3 +4777,58 @@ msgstr ""
  #: src/trafira/tabs/diagnostic/checks/runZapret2Check.ts:107
  msgid "Zapret2 sing-box outbound is not configured"
  msgstr ""
@@ -84,10 +84,10 @@ index 8ff06abd..8797703b 100644
 +#: src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts:44
 +msgid "min"
 diff --git a/fe-app-trafira/locales/trafira.ru.po b/fe-app-trafira/locales/trafira.ru.po
-index 2c89305c..856bbd24 100644
+index afa6e083..90e17ee2 100644
 --- a/fe-app-trafira/locales/trafira.ru.po
 +++ b/fe-app-trafira/locales/trafira.ru.po
-@@ -3286,3 +3286,45 @@ msgstr "sing-box outbound для Zapret2 настроен"
+@@ -3352,3 +3352,45 @@ msgstr "sing-box outbound для Zapret2 настроен"
  
  msgid "Zapret2 sing-box outbound is not configured"
  msgstr "sing-box outbound для Zapret2 не настроен"
@@ -489,7 +489,7 @@ index fe02c226..b166eb74 100644
      running: number;
      enabled: number;
 diff --git a/luci-app-trafira/htdocs/luci-static/resources/view/trafira/main.js b/luci-app-trafira/htdocs/luci-static/resources/view/trafira/main.js
-index f58e83ad..d0963739 100644
+index b3b595bb..ad172a9c 100644
 --- a/luci-app-trafira/htdocs/luci-static/resources/view/trafira/main.js
 +++ b/luci-app-trafira/htdocs/luci-static/resources/view/trafira/main.js
 @@ -2770,6 +2770,7 @@ var Trafira;
@@ -543,7 +543,7 @@ index f58e83ad..d0963739 100644
    return checks.map((code) => createDiagnosticCheck(code, description));
  }
  function getLoadingDiagnosticsChecks(options = {}) {
-@@ -9306,6 +9320,105 @@ async function runFakeIPCheck() {
+@@ -9349,6 +9363,105 @@ async function runFakeIPCheck() {
    });
  }
  
@@ -649,7 +649,7 @@ index f58e83ad..d0963739 100644
  // src/trafira/tabs/diagnostic/checks/getCheckItemsMeta.ts
  function getCheckItemsMeta(items) {
    if (items.some((item) => item.state === "error")) {
-@@ -11653,7 +11766,8 @@ function getDiagnosticRunners(providerOptions) {
+@@ -11696,7 +11809,8 @@ function getDiagnosticRunners(providerOptions) {
      ...providerOptions.includeZapret2 ? [{ code: "ZAPRET2" /* ZAPRET2 */, run: runZapret2Check }] : [],
      ...providerOptions.includeByedpi ? [{ code: "BYEDPI" /* BYEDPI */, run: runByedpiCheck }] : [],
      { code: "OUTBOUNDS" /* OUTBOUNDS */, run: runSectionsCheck },
@@ -660,10 +660,10 @@ index f58e83ad..d0963739 100644
  }
  async function runChecks({ resume } = {}) {
 diff --git a/luci-app-trafira/po/ru/trafira.po b/luci-app-trafira/po/ru/trafira.po
-index 2c89305c..856bbd24 100644
+index afa6e083..90e17ee2 100644
 --- a/luci-app-trafira/po/ru/trafira.po
 +++ b/luci-app-trafira/po/ru/trafira.po
-@@ -3286,3 +3286,45 @@ msgstr "sing-box outbound для Zapret2 настроен"
+@@ -3352,3 +3352,45 @@ msgstr "sing-box outbound для Zapret2 настроен"
  
  msgid "Zapret2 sing-box outbound is not configured"
  msgstr "sing-box outbound для Zapret2 не настроен"
@@ -710,10 +710,10 @@ index 2c89305c..856bbd24 100644
 +msgid "min"
 +msgstr "мин"
 diff --git a/luci-app-trafira/po/templates/trafira.pot b/luci-app-trafira/po/templates/trafira.pot
-index 8ff06abd..8797703b 100644
+index 65c2610a..203e7b10 100644
 --- a/luci-app-trafira/po/templates/trafira.pot
 +++ b/luci-app-trafira/po/templates/trafira.pot
-@@ -4682,3 +4682,58 @@ msgstr ""
+@@ -4777,3 +4777,58 @@ msgstr ""
  #: src/trafira/tabs/diagnostic/checks/runZapret2Check.ts:107
  msgid "Zapret2 sing-box outbound is not configured"
  msgstr ""
