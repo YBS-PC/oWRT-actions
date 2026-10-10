@@ -21,7 +21,7 @@ Subject: [PATCH] trafira: ручные ссылки — каждая часть 
 ---
 diff --git a/tests/manual_link_decoding.sh b/tests/manual_link_decoding.sh
 new file mode 100755
-index 0000000..9f7fcd3
+index 00000000..9f7fcd3e
 --- /dev/null
 +++ b/tests/manual_link_decoding.sh
 @@ -0,0 +1,79 @@
@@ -105,7 +105,7 @@ index 0000000..9f7fcd3
 +
 +printf 'manual_link_decoding: ok\n'
 diff --git a/trafira/files/usr/lib/core/url.uc b/trafira/files/usr/lib/core/url.uc
-index c833002..becd529 100644
+index c8330029..becd529b 100644
 --- a/trafira/files/usr/lib/core/url.uc
 +++ b/trafira/files/usr/lib/core/url.uc
 @@ -27,13 +27,13 @@ function hex_digit_value(value) {
@@ -174,7 +174,7 @@ index c833002..becd529 100644
      query_params
  };
 diff --git a/trafira/files/usr/lib/singbox/generator.uc b/trafira/files/usr/lib/singbox/generator.uc
-index c914272..0201b85 100644
+index 94e752b3..53cbad3e 100644
 --- a/trafira/files/usr/lib/singbox/generator.uc
 +++ b/trafira/files/usr/lib/singbox/generator.uc
 @@ -50,6 +50,8 @@ let url_strip_fragment_value = runtime_url.strip_fragment;
@@ -241,7 +241,7 @@ index c914272..0201b85 100644
      if (scheme == "socks4" || scheme == "socks4a" || scheme == "socks5")
          return manual_socks_outbound(link, tag_name);
 diff --git a/trafira/files/usr/lib/subscription/parser.uc b/trafira/files/usr/lib/subscription/parser.uc
-index bd1c172..9251a0d 100644
+index bd1c1720..9251a0d6 100644
 --- a/trafira/files/usr/lib/subscription/parser.uc
 +++ b/trafira/files/usr/lib/subscription/parser.uc
 @@ -408,6 +408,16 @@ function urldecode(value) {
