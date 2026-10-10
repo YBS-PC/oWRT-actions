@@ -667,7 +667,7 @@
           <tr>
             <th class="key" scope="row">Target Device <small>target</small></th>
             <td data-l="Значения"><div class="opts"><span class="opt def">combo</span><span class="opt">rb5009</span><span class="opt">nanopi-r6s</span><span class="opt">nanopi-r5s</span><span class="opt">slateax</span><span class="opt">ax59u</span><span class="opt">brume2</span><span class="opt">all</span></div></td>
-            <td data-l="Что делает"><p>Какое устройство (или набор) собирать. <code>combo</code> — три фиксированные сборки сразу, у каждой свои настройки (таблица ниже); <code>all</code> — все шесть устройств с выбранным вариантом; одиночное значение — одно устройство. Из него же берётся архитектура пакетов.</p></td>
+            <td data-l="Что делает"><p>Какое устройство (или набор) собирать. <code>combo</code> — пять фиксированных сборок сразу, у каждой свои настройки (таблица ниже); <code>all</code> — все шесть устройств с выбранным вариантом; одиночное значение — одно устройство. Из него же берётся архитектура пакетов.</p></td>
           </tr>
           <tr>
             <th class="key" scope="row">Source Code <small>source</small></th>
@@ -753,7 +753,7 @@
 
     <div class="note warn">
       <span class="ic">!</span>
-      <div><p><b>combo и all — особый случай.</b> Режим <code>combo</code> игнорирует поля Build Variant, AdGuard Home, sing-box, youtubeUnblock, Скрипт zz1, Применять патчи и Фиды из репозитория пакетов: три сборки и их настройки жёстко зашиты в job <code>setup</code> (таблица ниже). Режим <code>all</code> собирает все шесть устройств с выбранным вариантом. На slateax и ax59u в вариантах homeproxy, rehomeproxy, podkop, netshift, forkop и trafira всегда ставится <code>sing-box-tiny</code> из фида (выбор версии к ним не применяется, в матрице <code>sb=tiny</code>). С патчами homeproxy (004, 006) генератор сам подстраивается под версию из фида (1.13+). Без патчей (<code>apply_patches</code> = нет) сборка homeproxy с sing-box новее 1.12 остановится на проверке совместимости до компиляции — остальные при этом продолжатся; job <code>setup</code> предупреждает об этом заранее. Выбор, который вариант или устройство не допускают, <code>setup</code> приводит в соответствие и пишет об этом в лог (notice «Выбор скорректирован»).</p></div>
+      <div><p><b>combo и all — особый случай.</b> Режим <code>combo</code> игнорирует поля Build Variant, AdGuard Home, sing-box, youtubeUnblock, Скрипт zz1, Применять патчи и Фиды из репозитория пакетов: пять сборок и их настройки жёстко зашиты в job <code>setup</code> (таблица ниже). Режим <code>all</code> собирает все шесть устройств с выбранным вариантом. На slateax и ax59u в вариантах homeproxy, rehomeproxy, podkop, netshift, forkop и trafira всегда ставится <code>sing-box-tiny</code> из фида (выбор версии к ним не применяется, в матрице <code>sb=tiny</code>). С патчами homeproxy (004, 006) генератор сам подстраивается под версию из фида (1.13+). Без патчей (<code>apply_patches</code> = нет) сборка homeproxy с sing-box новее 1.12 остановится на проверке совместимости до компиляции — остальные при этом продолжатся; job <code>setup</code> предупреждает об этом заранее. Выбор, который вариант или устройство не допускают, <code>setup</code> приводит в соответствие и пишет об этом в лог (notice «Выбор скорректирован»).</p></div>
     </div>
 
     <h3>Сборки combo</h3>
@@ -762,6 +762,8 @@
         <thead><tr><th>Устройство</th><th>Вариант</th><th>AGH</th><th>sing-box</th><th>youtubeUnblock</th><th>zz1</th><th>Патчи</th><th>Фиды</th></tr></thead>
         <tbody>
           <tr><th class="key" scope="row">nanopi-r6s</th><td data-l="Вариант"><code>homeproxy</code></td><td data-l="AGH"><code>latest</code></td><td data-l="sing-box"><code>latest</code> (нужны патчи HomeProxy 004/006)</td><td data-l="youtubeUnblock">да</td><td data-l="zz1">да</td><td data-l="Патчи">да</td><td data-l="Фиды">репозиторий</td></tr>
+          <tr><th class="key" scope="row">nanopi-r6s</th><td data-l="Вариант"><code>trafira</code></td><td data-l="AGH"><code>latest</code></td><td data-l="sing-box"><code>extended</code></td><td data-l="youtubeUnblock">нет</td><td data-l="zz1">да</td><td data-l="Патчи">да</td><td data-l="Фиды">репозиторий</td></tr>
+          <tr><th class="key" scope="row">nanopi-r6s</th><td data-l="Вариант"><code>podkop</code></td><td data-l="AGH"><code>latest</code></td><td data-l="sing-box"><code>podkop-engine-full</code></td><td data-l="youtubeUnblock">да</td><td data-l="zz1">да</td><td data-l="Патчи">да</td><td data-l="Фиды">репозиторий</td></tr>
           <tr><th class="key" scope="row">rb5009</th><td data-l="Вариант"><code>clear</code></td><td data-l="AGH"><code>no</code></td><td data-l="sing-box"><code>no</code></td><td data-l="youtubeUnblock">нет</td><td data-l="zz1">да</td><td data-l="Патчи">нет</td><td data-l="Фиды">репозиторий</td></tr>
           <tr><th class="key" scope="row">rb5009</th><td data-l="Вариант"><code>switch</code></td><td data-l="AGH"><code>no</code></td><td data-l="sing-box"><code>no</code></td><td data-l="youtubeUnblock">нет</td><td data-l="zz1">да</td><td data-l="Патчи">нет</td><td data-l="Фиды">репозиторий</td></tr>
         </tbody>
@@ -789,7 +791,7 @@
     <div class="sec-head"><span class="sec-num">06</span><h2>Конвейер сборки</h2></div>
     <p class="sec-sub">Что делает <code>Universal_WRT_Builder.yml</code> по шагам. Job <code>setup</code> строит матрицу из выбранного target и variant, job <code>build</code> на раннере из поля <code>runner_os</code> прогоняет сборку для каждой пары «устройство × вариант», а job <code>notify</code> подводит итог.</p>
     <ol class="steps">
-      <li><b>Матрица сборки.</b> Из target и variant формируется список пар: <code>combo</code> → три фиксированные сборки со своими настройками, <code>all</code> → все шесть устройств, одиночный выбор → одна пара.</li>
+      <li><b>Матрица сборки.</b> Из target и variant формируется список пар: <code>combo</code> → пять фиксированных сборок со своими настройками, <code>all</code> → все шесть устройств, одиночный выбор → одна пара.</li>
       <li><b>Подготовка раннера.</b> Освобождение места на диске, checkout репозитория со скриптами.</li>
       <li><b>Права на <code>files/</code>.</b> Делаются исполняемыми скрипты в <code>files/etc/uci-defaults</code> и <code>files/usr/bin</code> (попадут в образ).</li>
       <li><b>Скачивание AdGuard Home</b> — только при <code>agh = latest</code>. Последний стабильный тег ищется через <code>git ls-remote</code>, архив сверяется по SHA-256 (<code>sh/verify-sha256.sh</code>: digest ассета из GitHub API, иначе <code>checksums.txt</code> релиза). При несовпадении бинарь не кладётся и используется пакет из фида.</li>
