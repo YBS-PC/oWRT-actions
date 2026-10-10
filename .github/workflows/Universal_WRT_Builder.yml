@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: 'Target Device (combo: R6S-homeproxy + RB5009-clear + RB5009-switch; AGH/sing-box/ytb/zz1 задаёт сам)'
+        description: 'Target Device (combo: R6S homeproxy, trafira, podkop + RB5009 clear, switch; AGH/sing-box/ytb/zz1 задаёт сам)'
         required: true
         default: 'combo'
         type: choice
@@ -299,13 +299,16 @@ jobs:
             # прошивки почти нет); поставьте false для сборки на коммитах тега.
             #   R6S homeproxy: AGH latest, sing-box latest, ytb, zz1, патчи
             #     (с sing-box 1.13+ homeproxy работает только с патчами 004/006)
+            #   R6S trafira: AGH latest, sing-box-extended, без ytb (у trafira
+            #     его нет), zz1, патчи
+            #   R6S podkop: AGH latest, podkop-engine-full, ytb, zz1, патчи
             #   RB5009 clear и RB5009 switch: без AGH/sing-box/ytb, zz1, без патчей
             # $(entry ...) — подстановка: в ней NOTES не сохраняется, для
             # combo это и не нужно (значения ниже уже согласованы с вариантами).
             # Запасные сборки (дописать в include через запятую):
             #   $(entry nanopi-r6s homeproxy latest 1.12.x true true false true)
             #   $(entry nanopi-r6s forkop latest extended false true true true)
-            json="{\"include\":[$(entry nanopi-r6s homeproxy latest latest true true true true),$(entry rb5009 clear no no false true false true),$(entry rb5009 switch no no false true false true)]}"
+            json="{\"include\":[$(entry nanopi-r6s homeproxy latest latest true true true true),$(entry nanopi-r6s trafira latest extended false true true true),$(entry nanopi-r6s podkop latest podkop-engine-full true true true true),$(entry rb5009 clear no no false true false true),$(entry rb5009 switch no no false true false true)]}"
           else
             # Все устройства из config/conf/ — при добавлении нового дописать сюда.
             targets="nanopi-r6s nanopi-r5s rb5009 slateax ax59u brume2"
