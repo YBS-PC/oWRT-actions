@@ -817,12 +817,12 @@
       <li><b>Загрузка исходников.</b> <code>make -k download</code> отдельным шагом, до трёх попыток с паузой: после неудачи файлы с неверным хешем удаляются из <code>dl/</code> (сам <code>download.pl</code> их не удаляет и зеркала не пробует). Защищает от сбоев зеркала <code>sources.cdn.openwrt.org</code>: без него OpenWrt собирает архив из git, и хеш часто не совпадает (так падала сборка на <code>luarocks</code>, который нужен <code>luaposix</code> для internet-detector). Если не помогло — ошибка с именами пакетов и <code>bin/download_failure.log</code> в артефакте.</li>
       <li><b>Компиляция.</b> Многопоточная; при сбое — повтор в один поток с сохранением <code>build.log</code>.</li>
       <li><b>Bootloader-файлы.</b> Глубокий поиск и сохранение <code>idbloader.img</code>/<code>u-boot.itb</code>/<code>.fip</code> для прошивки загрузчика.</li>
-      <li><b>Артефакт.</b> Содержимое <code>bin/</code> загружается (<code>upload-artifact@v7</code>, хранение 10 дней) под именем вида <code>nanopi-r6s_openwrt_openwrt-25.12_homeproxy_patches_agh-latest_sb-latest_ytb_zz_feeds-tag_2026.09.28-1200</code>.
+      <li><b>Артефакт.</b> Содержимое <code>bin/</code> загружается (<code>upload-artifact@v7</code>, хранение 1 день) под именем вида <code>nanopi-r6s_openwrt_openwrt-25.12_homeproxy_patches_agh-latest_sb-latest_ytb_zz_feeds-tag_2026.09.28-1200</code>.
         <details class="more"><summary>Схема имени</summary><div>
           <p><code>&lt;устройство&gt;_&lt;source&gt;_&lt;branch&gt;_&lt;вариант&gt;_&lt;patches|nopatches&gt;_agh-&lt;agh&gt;_sb-&lt;sb&gt;_&lt;ytb|noytb&gt;_&lt;zz|nozz&gt;_&lt;feeds-tag|feeds-repo&gt;_&lt;дата&gt;</code>. Все параметры в имени различают сборки одного устройства и варианта; при падении компиляции туда же попадает <code>build_failure.log</code>.</p>
         </div></details>
       </li>
-      <li><b>Уведомление (job <code>notify</code>).</b> После всей матрицы в Telegram уходит одно сообщение со статусом и длительностью каждой сборки (если заданы секреты <code>TELEGRAM_BOT_TOKEN</code>/<code>TELEGRAM_CHAT_ID</code>); затем удаляются прогоны workflow старше 10 дней.</li>
+      <li><b>Уведомление (job <code>notify</code>).</b> После всей матрицы в Telegram уходит одно сообщение со статусом и длительностью каждой сборки (если заданы секреты <code>TELEGRAM_BOT_TOKEN</code>/<code>TELEGRAM_CHAT_ID</code>); затем удаляются завершённые прогоны workflow старше суток. Отдельный workflow <code>Cleanup.yml</code> делает то же по расписанию каждые 6 часов, чтобы прогоны и их артефакты не задерживались, когда новых сборок нет.</li>
     </ol>
   </section>
 
