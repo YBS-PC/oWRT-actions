@@ -21,10 +21,10 @@ vitest getEnvironmentItems (531 тест фронтенда проходит), m
 пересобран (yarn build), переводы ru.
 ---
 diff --git a/fe-app-trafira/locales/trafira.pot b/fe-app-trafira/locales/trafira.pot
-index 5155334..4fb355b 100644
+index a722ee3..f07fbdd 100644
 --- a/fe-app-trafira/locales/trafira.pot
 +++ b/fe-app-trafira/locales/trafira.pot
-@@ -4239,3 +4239,58 @@ msgstr ""
+@@ -4243,3 +4243,58 @@ msgstr ""
  #: src/trafira/tabs/diagnostic/checks/runZapret2Check.ts:107
  msgid "Zapret2 sing-box outbound is not configured"
  msgstr ""
@@ -84,10 +84,10 @@ index 5155334..4fb355b 100644
 +#: src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts:44
 +msgid "min"
 diff --git a/fe-app-trafira/locales/trafira.ru.po b/fe-app-trafira/locales/trafira.ru.po
-index cbdc857..b5edec1 100644
+index cffccb6..b2573a7 100644
 --- a/fe-app-trafira/locales/trafira.ru.po
 +++ b/fe-app-trafira/locales/trafira.ru.po
-@@ -2968,3 +2968,45 @@ msgstr "sing-box outbound для Zapret2 настроен"
+@@ -2962,3 +2962,45 @@ msgstr "sing-box outbound для Zapret2 настроен"
  
  msgid "Zapret2 sing-box outbound is not configured"
  msgstr "sing-box outbound для Zapret2 не настроен"
@@ -232,7 +232,7 @@ index 0000000..f636ae6
 +  });
 +}
 diff --git a/fe-app-trafira/src/trafira/tabs/diagnostic/diagnostic.store.ts b/fe-app-trafira/src/trafira/tabs/diagnostic/diagnostic.store.ts
-index c9d279e..1d8cc9e 100644
+index 0552b42..1912e77 100644
 --- a/fe-app-trafira/src/trafira/tabs/diagnostic/diagnostic.store.ts
 +++ b/fe-app-trafira/src/trafira/tabs/diagnostic/diagnostic.store.ts
 @@ -51,7 +51,11 @@ export function getDiagnosticsChecks(
@@ -451,7 +451,7 @@ index 0000000..da14627
 +  });
 +});
 diff --git a/fe-app-trafira/src/trafira/types.ts b/fe-app-trafira/src/trafira/types.ts
-index 451669f..0138ba3 100644
+index fe02c22..b166eb7 100644
 --- a/fe-app-trafira/src/trafira/types.ts
 +++ b/fe-app-trafira/src/trafira/types.ts
 @@ -40,6 +40,7 @@ export namespace Trafira {
@@ -470,7 +470,7 @@ index 451669f..0138ba3 100644
      CHECK_NFT_RULES = 'check_nft_rules',
      CHECK_ZAPRET_RUNTIME = 'check_zapret_runtime',
      CHECK_ZAPRET2_RUNTIME = 'check_zapret2_runtime',
-@@ -458,6 +460,17 @@ export namespace Trafira {
+@@ -457,6 +459,17 @@ export namespace Trafira {
      IP: string;
    }
  
@@ -489,7 +489,7 @@ index 451669f..0138ba3 100644
      running: number;
      enabled: number;
 diff --git a/luci-app-trafira/htdocs/luci-static/resources/view/trafira/main.js b/luci-app-trafira/htdocs/luci-static/resources/view/trafira/main.js
-index dce1960..e7c0bf9 100644
+index a458cfa..2dfdbfa 100644
 --- a/luci-app-trafira/htdocs/luci-static/resources/view/trafira/main.js
 +++ b/luci-app-trafira/htdocs/luci-static/resources/view/trafira/main.js
 @@ -2698,6 +2698,7 @@ var Trafira;
@@ -543,7 +543,7 @@ index dce1960..e7c0bf9 100644
    return checks.map((code) => createDiagnosticCheck(code, description));
  }
  function getLoadingDiagnosticsChecks(options = {}) {
-@@ -9920,6 +9934,105 @@ async function runFakeIPCheck() {
+@@ -9986,6 +10000,105 @@ async function runFakeIPCheck() {
    });
  }
  
@@ -649,7 +649,7 @@ index dce1960..e7c0bf9 100644
  // src/trafira/tabs/diagnostic/checks/getCheckItemsMeta.ts
  function getCheckItemsMeta(items) {
    if (items.some((item) => item.state === "error")) {
-@@ -12267,7 +12380,8 @@ function getDiagnosticRunners(providerOptions) {
+@@ -12333,7 +12446,8 @@ function getDiagnosticRunners(providerOptions) {
      ...providerOptions.includeZapret2 ? [{ code: "ZAPRET2" /* ZAPRET2 */, run: runZapret2Check }] : [],
      ...providerOptions.includeByedpi ? [{ code: "BYEDPI" /* BYEDPI */, run: runByedpiCheck }] : [],
      { code: "OUTBOUNDS" /* OUTBOUNDS */, run: runSectionsCheck },
@@ -660,10 +660,10 @@ index dce1960..e7c0bf9 100644
  }
  async function runChecks({ resume } = {}) {
 diff --git a/luci-app-trafira/po/ru/trafira.po b/luci-app-trafira/po/ru/trafira.po
-index cbdc857..b5edec1 100644
+index cffccb6..b2573a7 100644
 --- a/luci-app-trafira/po/ru/trafira.po
 +++ b/luci-app-trafira/po/ru/trafira.po
-@@ -2968,3 +2968,45 @@ msgstr "sing-box outbound для Zapret2 настроен"
+@@ -2962,3 +2962,45 @@ msgstr "sing-box outbound для Zapret2 настроен"
  
  msgid "Zapret2 sing-box outbound is not configured"
  msgstr "sing-box outbound для Zapret2 не настроен"
@@ -710,10 +710,10 @@ index cbdc857..b5edec1 100644
 +msgid "min"
 +msgstr "мин"
 diff --git a/luci-app-trafira/po/templates/trafira.pot b/luci-app-trafira/po/templates/trafira.pot
-index 5155334..4fb355b 100644
+index a722ee3..f07fbdd 100644
 --- a/luci-app-trafira/po/templates/trafira.pot
 +++ b/luci-app-trafira/po/templates/trafira.pot
-@@ -4239,3 +4239,58 @@ msgstr ""
+@@ -4243,3 +4243,58 @@ msgstr ""
  #: src/trafira/tabs/diagnostic/checks/runZapret2Check.ts:107
  msgid "Zapret2 sing-box outbound is not configured"
  msgstr ""
@@ -847,7 +847,7 @@ index 0000000..68ab770
 +
 +printf 'check_environment: ok\n'
 diff --git a/trafira/files/usr/bin/trafira b/trafira/files/usr/bin/trafira
-index de223de..3cbd16e 100755
+index 51e90ca..571689e 100755
 --- a/trafira/files/usr/bin/trafira
 +++ b/trafira/files/usr/bin/trafira
 @@ -84,6 +84,7 @@ function show_help() {
@@ -867,7 +867,7 @@ index de223de..3cbd16e 100755
          check_zapret2_runtime: [ "diagnostics/runtime.uc", "check-zapret2-runtime", 0 ],
          check_byedpi_runtime: [ "diagnostics/runtime.uc", "check-byedpi-runtime", 0 ],
 diff --git a/trafira/files/usr/lib/diagnostics/runtime.uc b/trafira/files/usr/lib/diagnostics/runtime.uc
-index 3db569a..66bc4f1 100644
+index 696f74f..906e7cc 100644
 --- a/trafira/files/usr/lib/diagnostics/runtime.uc
 +++ b/trafira/files/usr/lib/diagnostics/runtime.uc
 @@ -8,6 +8,9 @@ let runtime_dns = require("singbox.dns");
@@ -880,7 +880,7 @@ index 3db569a..66bc4f1 100644
  const LIB_DIR = getenv("TRAFIRA_LIB") || "/usr/lib/trafira";
  const TRAFIRA_VERSION = getenv("TRAFIRA_VERSION") || constants.TRAFIRA_VERSION || "";
  const TRAFIRA_CONFIG = getenv("TRAFIRA_CONFIG") || constants.TRAFIRA_CONFIG || "/etc/config/" + CONFIG_NAME;
-@@ -1322,6 +1325,59 @@ function dns_check_timeout_seconds(value) {
+@@ -1318,6 +1321,59 @@ function dns_check_timeout_seconds(value) {
      return milliseconds > 0 ? int((milliseconds + 999) / 1000) : 2;
  }
  
@@ -940,7 +940,7 @@ index 3db569a..66bc4f1 100644
  function check_dns_available() {
      let cfg = settings();
      let dns_type = option(cfg, "dns_type", "");
-@@ -1968,6 +2024,8 @@ else if (mode == "get-server-capabilities")
+@@ -1964,6 +2020,8 @@ else if (mode == "get-server-capabilities")
      exit(get_server_capabilities());
  else if (mode == "check-dns-available")
      exit(check_dns_available());
