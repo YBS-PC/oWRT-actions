@@ -21,10 +21,10 @@ vitest getEnvironmentItems (531 тест фронтенда проходит), m
 пересобран (yarn build), переводы ru.
 ---
 diff --git a/fe-app-trafira/locales/trafira.pot b/fe-app-trafira/locales/trafira.pot
-index fbac9d5..59dc3ae 100644
+index 8ff06abd..8797703b 100644
 --- a/fe-app-trafira/locales/trafira.pot
 +++ b/fe-app-trafira/locales/trafira.pot
-@@ -4578,3 +4578,58 @@ msgstr ""
+@@ -4682,3 +4682,58 @@ msgstr ""
  #: src/trafira/tabs/diagnostic/checks/runZapret2Check.ts:107
  msgid "Zapret2 sing-box outbound is not configured"
  msgstr ""
@@ -84,10 +84,10 @@ index fbac9d5..59dc3ae 100644
 +#: src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts:44
 +msgid "min"
 diff --git a/fe-app-trafira/locales/trafira.ru.po b/fe-app-trafira/locales/trafira.ru.po
-index 48457fa..632b267 100644
+index 2c89305c..856bbd24 100644
 --- a/fe-app-trafira/locales/trafira.ru.po
 +++ b/fe-app-trafira/locales/trafira.ru.po
-@@ -3208,3 +3208,45 @@ msgstr "sing-box outbound для Zapret2 настроен"
+@@ -3286,3 +3286,45 @@ msgstr "sing-box outbound для Zapret2 настроен"
  
  msgid "Zapret2 sing-box outbound is not configured"
  msgstr "sing-box outbound для Zapret2 не настроен"
@@ -134,7 +134,7 @@ index 48457fa..632b267 100644
 +msgid "min"
 +msgstr "мин"
 diff --git a/fe-app-trafira/src/trafira/methods/shell/index.ts b/fe-app-trafira/src/trafira/methods/shell/index.ts
-index 76efa9d..1a279f5 100644
+index 76efa9d2..1a279f56 100644
 --- a/fe-app-trafira/src/trafira/methods/shell/index.ts
 +++ b/fe-app-trafira/src/trafira/methods/shell/index.ts
 @@ -213,6 +213,10 @@ export const TrafiraShellMethods = {
@@ -149,7 +149,7 @@ index 76efa9d..1a279f5 100644
      callBaseMethod<Trafira.NftRulesCheckResult>(
        Trafira.AvailableMethods.CHECK_NFT_RULES,
 diff --git a/fe-app-trafira/src/trafira/tabs/diagnostic/checks/contstants.ts b/fe-app-trafira/src/trafira/tabs/diagnostic/checks/contstants.ts
-index 7c1ba83..015545a 100644
+index 7c1ba832..015545aa 100644
 --- a/fe-app-trafira/src/trafira/tabs/diagnostic/checks/contstants.ts
 +++ b/fe-app-trafira/src/trafira/tabs/diagnostic/checks/contstants.ts
 @@ -10,6 +10,7 @@ export enum DIAGNOSTICS_CHECKS {
@@ -172,7 +172,7 @@ index 7c1ba83..015545a 100644
  };
 diff --git a/fe-app-trafira/src/trafira/tabs/diagnostic/checks/runEnvironmentCheck.ts b/fe-app-trafira/src/trafira/tabs/diagnostic/checks/runEnvironmentCheck.ts
 new file mode 100644
-index 0000000..f636ae6
+index 00000000..f636ae63
 --- /dev/null
 +++ b/fe-app-trafira/src/trafira/tabs/diagnostic/checks/runEnvironmentCheck.ts
 @@ -0,0 +1,55 @@
@@ -232,7 +232,7 @@ index 0000000..f636ae6
 +  });
 +}
 diff --git a/fe-app-trafira/src/trafira/tabs/diagnostic/diagnostic.store.ts b/fe-app-trafira/src/trafira/tabs/diagnostic/diagnostic.store.ts
-index 0552b42..1912e77 100644
+index 0552b425..1912e775 100644
 --- a/fe-app-trafira/src/trafira/tabs/diagnostic/diagnostic.store.ts
 +++ b/fe-app-trafira/src/trafira/tabs/diagnostic/diagnostic.store.ts
 @@ -51,7 +51,11 @@ export function getDiagnosticsChecks(
@@ -250,7 +250,7 @@ index 0552b42..1912e77 100644
  }
 diff --git a/fe-app-trafira/src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts b/fe-app-trafira/src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts
 new file mode 100644
-index 0000000..7cbbb92
+index 00000000..7cbbb928
 --- /dev/null
 +++ b/fe-app-trafira/src/trafira/tabs/diagnostic/helpers/getEnvironmentItems.ts
 @@ -0,0 +1,77 @@
@@ -332,7 +332,7 @@ index 0000000..7cbbb92
 +  return items;
 +}
 diff --git a/fe-app-trafira/src/trafira/tabs/diagnostic/initController.ts b/fe-app-trafira/src/trafira/tabs/diagnostic/initController.ts
-index 099bd72..7309e49 100644
+index 099bd725..7309e49a 100644
 --- a/fe-app-trafira/src/trafira/tabs/diagnostic/initController.ts
 +++ b/fe-app-trafira/src/trafira/tabs/diagnostic/initController.ts
 @@ -5,6 +5,7 @@ import { runSingBoxCheck } from './checks/runSingBoxCheck';
@@ -352,7 +352,7 @@ index 099bd72..7309e49 100644
  }
  
 diff --git a/fe-app-trafira/src/trafira/tabs/diagnostic/tests/diagnosticStoreZapret2.test.ts b/fe-app-trafira/src/trafira/tabs/diagnostic/tests/diagnosticStoreZapret2.test.ts
-index 6b80a6b..839602c 100644
+index 6b80a6b4..839602c3 100644
 --- a/fe-app-trafira/src/trafira/tabs/diagnostic/tests/diagnosticStoreZapret2.test.ts
 +++ b/fe-app-trafira/src/trafira/tabs/diagnostic/tests/diagnosticStoreZapret2.test.ts
 @@ -20,6 +20,7 @@ describe('diagnostic store provider checks', () => {
@@ -365,7 +365,7 @@ index 6b80a6b..839602c 100644
  
 diff --git a/fe-app-trafira/src/trafira/tabs/diagnostic/tests/getEnvironmentItems.test.ts b/fe-app-trafira/src/trafira/tabs/diagnostic/tests/getEnvironmentItems.test.ts
 new file mode 100644
-index 0000000..da14627
+index 00000000..da146275
 --- /dev/null
 +++ b/fe-app-trafira/src/trafira/tabs/diagnostic/tests/getEnvironmentItems.test.ts
 @@ -0,0 +1,81 @@
@@ -451,7 +451,7 @@ index 0000000..da14627
 +  });
 +});
 diff --git a/fe-app-trafira/src/trafira/types.ts b/fe-app-trafira/src/trafira/types.ts
-index fe02c22..b166eb7 100644
+index fe02c226..b166eb74 100644
 --- a/fe-app-trafira/src/trafira/types.ts
 +++ b/fe-app-trafira/src/trafira/types.ts
 @@ -40,6 +40,7 @@ export namespace Trafira {
@@ -489,10 +489,10 @@ index fe02c22..b166eb7 100644
      running: number;
      enabled: number;
 diff --git a/luci-app-trafira/htdocs/luci-static/resources/view/trafira/main.js b/luci-app-trafira/htdocs/luci-static/resources/view/trafira/main.js
-index ec8a6be..7c4b6ed 100644
+index f58e83ad..d0963739 100644
 --- a/luci-app-trafira/htdocs/luci-static/resources/view/trafira/main.js
 +++ b/luci-app-trafira/htdocs/luci-static/resources/view/trafira/main.js
-@@ -2768,6 +2768,7 @@ var Trafira;
+@@ -2770,6 +2770,7 @@ var Trafira;
    ((AvailableMethods2) => {
      AvailableMethods2["CHECK_DNS_AVAILABLE"] = "check_dns_available";
      AvailableMethods2["CHECK_FAKEIP"] = "check_fakeip";
@@ -500,7 +500,7 @@ index ec8a6be..7c4b6ed 100644
      AvailableMethods2["CHECK_NFT_RULES"] = "check_nft_rules";
      AvailableMethods2["CHECK_ZAPRET_RUNTIME"] = "check_zapret_runtime";
      AvailableMethods2["CHECK_ZAPRET2_RUNTIME"] = "check_zapret2_runtime";
-@@ -2980,6 +2981,9 @@ var TrafiraShellMethods = {
+@@ -2982,6 +2983,9 @@ var TrafiraShellMethods = {
    checkFakeIP: async () => callBaseMethod(
      Trafira.AvailableMethods.CHECK_FAKEIP
    ),
@@ -510,7 +510,7 @@ index ec8a6be..7c4b6ed 100644
    checkNftRules: async () => callBaseMethod(
      Trafira.AvailableMethods.CHECK_NFT_RULES
    ),
-@@ -4540,6 +4544,7 @@ var DIAGNOSTICS_CHECKS = /* @__PURE__ */ ((DIAGNOSTICS_CHECKS2) => {
+@@ -4542,6 +4546,7 @@ var DIAGNOSTICS_CHECKS = /* @__PURE__ */ ((DIAGNOSTICS_CHECKS2) => {
    DIAGNOSTICS_CHECKS2["FAKEIP"] = "FAKEIP";
    DIAGNOSTICS_CHECKS2["OUTBOUNDS"] = "OUTBOUNDS";
    DIAGNOSTICS_CHECKS2["INBOUNDS"] = "INBOUNDS";
@@ -518,7 +518,7 @@ index ec8a6be..7c4b6ed 100644
    return DIAGNOSTICS_CHECKS2;
  })(DIAGNOSTICS_CHECKS || {});
  var DIAGNOSTICS_CHECKS_MAP = {
-@@ -4587,6 +4592,11 @@ var DIAGNOSTICS_CHECKS_MAP = {
+@@ -4589,6 +4594,11 @@ var DIAGNOSTICS_CHECKS_MAP = {
      order: 3,
      title: getCheckTitle("Inbounds"),
      code: "INBOUNDS" /* INBOUNDS */
@@ -530,7 +530,7 @@ index ec8a6be..7c4b6ed 100644
    }
  };
  
-@@ -4617,7 +4627,11 @@ function getDiagnosticsChecks(description, options = {}) {
+@@ -4619,7 +4629,11 @@ function getDiagnosticsChecks(description, options = {}) {
    if (options.includeByedpi) {
      checks.push("BYEDPI" /* BYEDPI */);
    }
@@ -543,7 +543,7 @@ index ec8a6be..7c4b6ed 100644
    return checks.map((code) => createDiagnosticCheck(code, description));
  }
  function getLoadingDiagnosticsChecks(options = {}) {
-@@ -9216,6 +9230,105 @@ async function runFakeIPCheck() {
+@@ -9306,6 +9320,105 @@ async function runFakeIPCheck() {
    });
  }
  
@@ -649,7 +649,7 @@ index ec8a6be..7c4b6ed 100644
  // src/trafira/tabs/diagnostic/checks/getCheckItemsMeta.ts
  function getCheckItemsMeta(items) {
    if (items.some((item) => item.state === "error")) {
-@@ -11563,7 +11676,8 @@ function getDiagnosticRunners(providerOptions) {
+@@ -11653,7 +11766,8 @@ function getDiagnosticRunners(providerOptions) {
      ...providerOptions.includeZapret2 ? [{ code: "ZAPRET2" /* ZAPRET2 */, run: runZapret2Check }] : [],
      ...providerOptions.includeByedpi ? [{ code: "BYEDPI" /* BYEDPI */, run: runByedpiCheck }] : [],
      { code: "OUTBOUNDS" /* OUTBOUNDS */, run: runSectionsCheck },
@@ -660,10 +660,10 @@ index ec8a6be..7c4b6ed 100644
  }
  async function runChecks({ resume } = {}) {
 diff --git a/luci-app-trafira/po/ru/trafira.po b/luci-app-trafira/po/ru/trafira.po
-index 48457fa..632b267 100644
+index 2c89305c..856bbd24 100644
 --- a/luci-app-trafira/po/ru/trafira.po
 +++ b/luci-app-trafira/po/ru/trafira.po
-@@ -3208,3 +3208,45 @@ msgstr "sing-box outbound для Zapret2 настроен"
+@@ -3286,3 +3286,45 @@ msgstr "sing-box outbound для Zapret2 настроен"
  
  msgid "Zapret2 sing-box outbound is not configured"
  msgstr "sing-box outbound для Zapret2 не настроен"
@@ -710,10 +710,10 @@ index 48457fa..632b267 100644
 +msgid "min"
 +msgstr "мин"
 diff --git a/luci-app-trafira/po/templates/trafira.pot b/luci-app-trafira/po/templates/trafira.pot
-index fbac9d5..59dc3ae 100644
+index 8ff06abd..8797703b 100644
 --- a/luci-app-trafira/po/templates/trafira.pot
 +++ b/luci-app-trafira/po/templates/trafira.pot
-@@ -4578,3 +4578,58 @@ msgstr ""
+@@ -4682,3 +4682,58 @@ msgstr ""
  #: src/trafira/tabs/diagnostic/checks/runZapret2Check.ts:107
  msgid "Zapret2 sing-box outbound is not configured"
  msgstr ""
@@ -774,7 +774,7 @@ index fbac9d5..59dc3ae 100644
 +msgid "min"
 diff --git a/tests/check_environment.sh b/tests/check_environment.sh
 new file mode 100755
-index 0000000..68ab770
+index 00000000..68ab770f
 --- /dev/null
 +++ b/tests/check_environment.sh
 @@ -0,0 +1,68 @@
@@ -847,7 +847,7 @@ index 0000000..68ab770
 +
 +printf 'check_environment: ok\n'
 diff --git a/trafira/files/usr/bin/trafira b/trafira/files/usr/bin/trafira
-index 51e90ca..571689e 100755
+index 51e90ca3..571689ea 100755
 --- a/trafira/files/usr/bin/trafira
 +++ b/trafira/files/usr/bin/trafira
 @@ -84,6 +84,7 @@ function show_help() {
@@ -867,7 +867,7 @@ index 51e90ca..571689e 100755
          check_zapret2_runtime: [ "diagnostics/runtime.uc", "check-zapret2-runtime", 0 ],
          check_byedpi_runtime: [ "diagnostics/runtime.uc", "check-byedpi-runtime", 0 ],
 diff --git a/trafira/files/usr/lib/diagnostics/runtime.uc b/trafira/files/usr/lib/diagnostics/runtime.uc
-index 696f74f..906e7cc 100644
+index 696f74f5..906e7cc5 100644
 --- a/trafira/files/usr/lib/diagnostics/runtime.uc
 +++ b/trafira/files/usr/lib/diagnostics/runtime.uc
 @@ -8,6 +8,9 @@ let runtime_dns = require("singbox.dns");
