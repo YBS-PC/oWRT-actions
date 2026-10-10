@@ -19,7 +19,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
 diff --git a/trafira/files/usr/lib/components/action.uc b/trafira/files/usr/lib/components/action.uc
-index 8107786..c6ce6ef 100644
+index 2ed5cd4..96c56f3 100644
 --- a/trafira/files/usr/lib/components/action.uc
 +++ b/trafira/files/usr/lib/components/action.uc
 @@ -167,25 +167,6 @@ function install_storage_error(path, available, required) {
