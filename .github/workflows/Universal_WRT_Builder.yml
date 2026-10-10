@@ -308,7 +308,7 @@ jobs:
             # Запасные сборки (дописать в include через запятую):
             #   $(entry nanopi-r6s homeproxy latest 1.12.x true true false true)
             #   $(entry nanopi-r6s forkop latest extended false true true true)
-            json="{\"include\":[$(entry nanopi-r6s homeproxy latest latest true true true true),$(entry nanopi-r6s trafira latest extended false true true true),$(entry nanopi-r6s podkop latest podkop-engine-full true true true true),$(entry rb5009 clear no no false true false true),$(entry rb5009 switch no no false true false true)]}"
+            json="{\"include\":[$(entry nanopi-r6s homeproxy latest latest true true true true),$(entry nanopi-r6s trafira latest extended false true true true),$(entry nanopi-r6s podkop latest podkop-engine-full true true true true),$(entry nanopi-r6s homeproxy latest latest true true false true),$(entry rb5009 clear no no false true false true),$(entry rb5009 switch no no false true false true)]}"
           else
             # Все устройства из config/conf/ — при добавлении нового дописать сюда.
             targets="nanopi-r6s nanopi-r5s rb5009 slateax ax59u brume2"
