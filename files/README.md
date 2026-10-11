@@ -127,24 +127,38 @@ rm /usr/lib/lua/luci/controller/adguardhome_net.lua
 - `/etc/homeproxy/scripts/firewall_post.ut`: строка
   `const dns_hijacked = uci.get('dhcp', '@dnsmasq[0]', 'dns_redirect') || '0'`
   заменяется на `const dns_hijacked = '1'` — homeproxy не трогает правила dnsmasq
-- `/etc/homeproxy/scripts/generate_client.uc`: в `config.experimental` добавляется
-  `clash_api: { external_controller: '0.0.0.0:9090', external_ui: '/opt/yacd' }`
-  (Re:HomeProxy, вариант `rehomeproxy`: блок `clash_api` у него уже есть с
-  `127.0.0.1:9090` — там адрес меняется на `0.0.0.0:9090` и добавляется
-  `external_ui: '/opt/yacd'`, остальное как у homeproxy)
-- `/etc/homeproxy/scripts/update_firewall_rules.sh` создаётся целиком: в режиме TUN или при включённом Server добавляет в firewall include `fw4_forward.nft` / `fw4_input.nft`, иначе удаляет их
-- `/etc/init.d/homeproxy`: в `start_service()` и `stop_service()` добавляется строка
-```sh
-. /etc/homeproxy/scripts/update_firewall_rules.sh
-```
+- Доработки патчей 010 и 011 проверяются по меткам в файлах: если пакет
+  собран без патчей или обновлён из фида (zz1 запускают и после
+  `apk upgrade`), в файлы вписывается тот же код, что и в патчах; если
+  доработка уже есть, файл не трогается. Повторный запуск ничего не меняет.
+- Clash API (панель YACD на `:9090`):
+  - luci-app-homeproxy: в `/etc/homeproxy/scripts/generate_client.uc` нет
+    `clash_api_controller` → вписывается код патча 010 (чтение опций
+    `clash_api_controller` / `clash_api_ui` / `clash_api_secret` и блок
+    `config.experimental.clash_api`); строка `clash_api: {...}` прежних
+    версий zz1 удаляется. В `/etc/init.d/homeproxy` нет `clash_api_ui` →
+    после первой строки `procd_add_jail_mount "/etc/TZ"` (клиент)
+    вписывается подключение каталога панели в ujail;
+  - затем задаются опции `homeproxy.infra.clash_api_controller='0.0.0.0:9090'`
+    и `homeproxy.infra.clash_api_ui='/opt/yacd'`, если адрес ещё не задан
+    (свой адрес или `clash_api_secret` не перезаписываются);
+  - Re:HomeProxy (вариант `rehomeproxy`): блок `clash_api` у него уже есть с
+    `127.0.0.1:9090` — адрес меняется на `0.0.0.0:9090` и добавляется
+    `external_ui: '/opt/yacd'`.
+- Include-секции fw4 `homeproxy_forward` / `homeproxy_input` (в том числе
+  Re:HomeProxy): в `/etc/init.d/homeproxy` нет `: > "$RUN_DIR/fw4_forward.nft"`
+  → перед `ucode "$HP_DIR/scripts/firewall_pre.uc"` вписывается код патча 011
+  (пустые `fw4_forward.nft`, `fw4_input.nft`, `fw4_post.nft`). Вызовы
+  `update_firewall_rules.sh` прежних версий zz1 убираются из init, сам
+  скрипт удаляется; секции добавляются, если их удалил этот скрипт.
 - `/etc/nftables.d/bypass_homeproxy_ips.nft` (если нет): цепочка ставит метку `0x64` пакетам к адресам из `@bypass_ips`
 
 **Если НЕ установлен:** файл `/etc/nftables.d/bypass_homeproxy_ips.nft` удаляется.
 
-**Чтобы проверить / откатить init:**
+**Чтобы проверить, что доработки на месте:**
 ```sh
-grep -n 'update_firewall_rules' /etc/init.d/homeproxy
-sed -i '/update_firewall_rules/d' /etc/init.d/homeproxy
+grep -c 'clash_api_controller' /etc/homeproxy/scripts/generate_client.uc
+grep -n 'clash_api_ui\|fw4_forward.nft' /etc/init.d/homeproxy
 ```
 
 ## 8. Панель YACD (вместе с homeproxy)
