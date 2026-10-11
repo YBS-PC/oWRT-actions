@@ -44,6 +44,21 @@ patch_check() {   # <файл> <строка-после-правки> <опис�
     fi
 }
 
+hp_insert() {   # <файл> <якорь-подстрока> <before|after> <файл-вставки>
+    # Вставляет файл-вставку перед/после первой строки с якорем. Права и
+    # владельца файла сохраняет (пишет поверх через cat, а не mv).
+    grep -qF -- "$2" "$1" 2>/dev/null || return 1
+    awk -v a="$2" -v w="$3" -v s="$4" '
+        !done && index($0, a) {
+            if (w == "after") print
+            while ((getline l < s) > 0) print l
+            close(s); done = 1
+            if (w == "after") next
+        }
+        { print }' "$1" > "$1.zz1" && cat "$1.zz1" > "$1"
+    _rc=$?; rm -f "$1.zz1"; return $_rc
+}
+
 # ========== НАЧАЛО СКРИПТА ==========
 
 # Не включаем set -x, чтобы не дублировать структурированный лог
@@ -111,7 +126,6 @@ esac)
 log_ok "ROUTER_MODEL_NAME=$ROUTER_MODEL_NAME"
 
 HOSTNAME_PATTERN="${ROUTER_MODEL_NAME}-${ROUTER_NAME}"
-TAB_CHAR=$(printf '\t')
 CURRENT_VARIANT=$(cat /etc/build_variant 2>/dev/null | head -n 1)
 log_ok "Build Variant: ${CURRENT_VARIANT:-unknown}"
 
@@ -274,8 +288,8 @@ if [ -f "/etc/init.d/homeproxy" ]; then
     fi
 
     # --- Clash API + панель YACD -----------------------------------------
-    # В luci-app-homeproxy опции нет: генератор пишет в experimental только
-    # cache_file, дописываем clash_api сами.
+    # Clash API включается опциями UCI (патч 010, без него zz1 вписывает
+    # тот же код в генератор сам — см. ниже).
     # Каталог /opt/yacd НИКОГДА не должен быть пустым: при пустом каталоге
     # sing-box на каждом старте лезет качать панель с GitHub через дефолтный
     # outbound. Поэтому кладём заглушку сразу, а настоящую панель догружает
@@ -353,22 +367,79 @@ Y_INST_EOF
     grep -q '^/opt/yacd$' /etc/sysupgrade.conf 2>/dev/null || echo '/opt/yacd' >> /etc/sysupgrade.conf
 
     GEN_UC="/etc/homeproxy/scripts/generate_client.uc"
-    if [ -f "$GEN_UC" ] && grep -q "external_controller: '127.0.0.1:9090'" "$GEN_UC"; then
-        # Re:HomeProxy (вариант rehomeproxy): у него свой многострочный блок
-        # clash_api с 127.0.0.1:9090, им пользуются его страницы LuCI.
-        # Строки clash_api не удаляем (это сломало бы синтаксис файла), а
-        # открываем тот же контроллер в LAN и подключаем панель YACD.
-        run_cmd "Clash API в generate_client.uc (Re:HomeProxy)" \
-            sed -i "s|external_controller: '127.0.0.1:9090'|external_controller: '0.0.0.0:9090', external_ui: '/opt/yacd'|" "$GEN_UC"
+    HOMEPROXY_INIT="/etc/init.d/homeproxy"
+    if [ -f "$GEN_UC" ] && grep -q 'hiddify' "$GEN_UC"; then
+        # Re:HomeProxy (вариант rehomeproxy, генератор знает hiddify-core):
+        # у него свой многострочный блок clash_api с 127.0.0.1:9090, им
+        # пользуются его страницы LuCI. Строки clash_api не удаляем (это
+        # сломало бы синтаксис файла), а открываем тот же контроллер в LAN и
+        # подключаем панель YACD. При повторном запуске адрес уже заменён.
+        if grep -q "external_controller: '127.0.0.1:9090'" "$GEN_UC"; then
+            run_cmd "Clash API в generate_client.uc (Re:HomeProxy)" \
+                sed -i "s|external_controller: '127.0.0.1:9090'|external_controller: '0.0.0.0:9090', external_ui: '/opt/yacd'|" "$GEN_UC"
+        fi
         patch_check "$GEN_UC" "external_ui: '/opt/yacd'" "generate_client.uc (Clash API)"
     elif [ -f "$GEN_UC" ]; then
-        CLASH_API="clash_api: { external_controller: '0.0.0.0:9090', external_ui: '/opt/yacd' },"
-        if ! grep -qF "$CLASH_API" "$GEN_UC"; then
-            sed -i '/clash_api:/d' "$GEN_UC"
-            sed -i "s|^\tconfig.experimental = {|\tconfig.experimental = {\n\t\t${CLASH_API}|" "$GEN_UC"
-            log_ok "Clash API добавлен в generate_client.uc"
+        # luci-app-homeproxy: Clash API включается опциями UCI (патч 010).
+        # zz1 запускают и после обновления пакетов: если пакет собран без
+        # патчей или обновлён из фида, вписываем тот же код, что и патч 010;
+        # если доработка уже есть, файлы не трогаем.
+        if grep -q 'clash_api_controller' "$GEN_UC"; then
+            log_info "generate_client.uc: опция Clash API уже есть"
+        else
+            # Строка clash_api, которую вписывали прежние версии zz1
+            sed -i "/clash_api: { external_controller: '0.0.0.0:9090', external_ui: '\/opt\/yacd' },/d" "$GEN_UC"
+            if grep -qF '/* UCI config end */' "$GEN_UC" && grep -qF '/* Experimental end */' "$GEN_UC"; then
+                cat << 'HP_EOF' > /tmp/zz1-hp.snip
+
+/* Clash API, off unless a controller address is set */
+const clash_api_controller = uci.get(uciconfig, uciinfra, 'clash_api_controller'),
+      clash_api_ui = uci.get(uciconfig, uciinfra, 'clash_api_ui'),
+      clash_api_secret = uci.get(uciconfig, uciinfra, 'clash_api_secret');
+HP_EOF
+                hp_insert "$GEN_UC" '/* UCI config end */' before /tmp/zz1-hp.snip
+                cat << 'HP_EOF' > /tmp/zz1-hp.snip
+
+/* The Clash API serves YACD-like panels and the connection list; it does
+ * not depend on the routing mode. */
+if (clash_api_controller) {
+	config.experimental ||= {};
+	config.experimental.clash_api = {
+		external_controller: clash_api_controller,
+		external_ui: clash_api_ui,
+		secret: clash_api_secret
+	};
+}
+HP_EOF
+                hp_insert "$GEN_UC" '/* Experimental end */' before /tmp/zz1-hp.snip &&
+                    log_ok "Опция Clash API добавлена в generate_client.uc (как патч 010)"
+                rm -f /tmp/zz1-hp.snip
+            fi
+            patch_check "$GEN_UC" "config.experimental.clash_api = {" "generate_client.uc (Clash API)"
         fi
-        patch_check "$GEN_UC" 'clash_api' "generate_client.uc (Clash API)"
+        # Каталог панели должен быть виден sing-box внутри ujail
+        if [ -f "$HOMEPROXY_INIT" ] && ! grep -q 'clash_api_ui' "$HOMEPROXY_INIT"; then
+            cat << 'HP_EOF' > /tmp/zz1-hp.snip
+			# The panel files of the Clash API (external_ui) must be seen in the jail.
+			local clash_api_ui
+			config_get clash_api_ui "infra" "clash_api_ui"
+			[ -z "$clash_api_ui" ] || procd_add_jail_mount "$clash_api_ui"
+HP_EOF
+            hp_insert "$HOMEPROXY_INIT" 'procd_add_jail_mount "/etc/TZ"' after /tmp/zz1-hp.snip &&
+                log_ok "Каталог панели Clash API добавлен в jail init homeproxy (как патч 010)"
+            rm -f /tmp/zz1-hp.snip
+            patch_check "$HOMEPROXY_INIT" 'procd_add_jail_mount "$clash_api_ui"' "homeproxy init (Clash API в jail)"
+        fi
+        # Свой адрес или секрет, заданные вручную, не трогаем.
+        if ! grep -q 'clash_api_controller' "$GEN_UC"; then
+            :   # генератор не удалось доработать, ошибка уже в логе
+        elif [ -z "$(uci -q get homeproxy.infra.clash_api_controller)" ]; then
+            uci -q set homeproxy.infra.clash_api_controller='0.0.0.0:9090'
+            uci -q set homeproxy.infra.clash_api_ui='/opt/yacd'
+            run_cmd "Clash API homeproxy (опции UCI)" uci commit homeproxy
+        else
+            log_info "Clash API homeproxy уже задан: $(uci -q get homeproxy.infra.clash_api_controller)"
+        fi
     fi
 
     # Пункт меню LuCI -> YACD. Адрес берётся из SERVER_ADDR, то есть из того,
@@ -399,46 +470,56 @@ EOF
 
     run_cmd "Отключение homeproxy" /etc/init.d/homeproxy disable
 
-    HELPER_SCRIPT_PATH="/etc/homeproxy/scripts/update_firewall_rules.sh"
-    cat << 'EOF' > "$HELPER_SCRIPT_PATH"
-#!/bin/sh
-PROXY_MODE=$(uci -q get homeproxy.config.proxy_mode || echo "redirect_tproxy")
-SERVER_ENABLED=$(uci -q get homeproxy.server.enabled || echo "0")
-if (echo "$PROXY_MODE" | grep -q "tun") || [ "$SERVER_ENABLED" = "1" ]; then
-	uci -q batch <<-E_O_F
-	set firewall.homeproxy_forward=include
-	set firewall.homeproxy_forward.type=nftables
-	set firewall.homeproxy_forward.path="/var/run/homeproxy/fw4_forward.nft"
-	set firewall.homeproxy_forward.position="chain-pre"
-	set firewall.homeproxy_forward.chain="forward"
-
-	set firewall.homeproxy_input=include
-	set firewall.homeproxy_input.type=nftables
-	set firewall.homeproxy_input.path="/var/run/homeproxy/fw4_input.nft"
-	set firewall.homeproxy_input.position="chain-pre"
-	set firewall.homeproxy_input.chain="input"
-E_O_F
-else
-	uci -q batch <<-E_O_F
-	delete firewall.homeproxy_forward
-	delete firewall.homeproxy_input
-E_O_F
-fi
-uci -q commit firewall
-EOF
-    _RC=$?; [ $_RC -eq 0 ] && log_ok "Скрипт-помощник homeproxy создан" || log_err "Ошибка создания $HELPER_SCRIPT_PATH (exit: $_RC)"
-    chmod +x "$HELPER_SCRIPT_PATH"
-
     HOMEPROXY_INIT="/etc/init.d/homeproxy"
-    HELPER_CALL="${TAB_CHAR}. ${HELPER_SCRIPT_PATH}"
-    if [ -f "$HOMEPROXY_INIT" ] && ! grep -q "$HELPER_SCRIPT_PATH" "$HOMEPROXY_INIT"; then
-        sed -i "/start_service() {/a \\$HELPER_CALL" "$HOMEPROXY_INIT"
-        sed -i "/stop_service() {/a \\$HELPER_CALL" "$HOMEPROXY_INIT"
-        log_ok "Init homeproxy пропатчен"
-    fi
-    patch_check "$HOMEPROXY_INIT" "$HELPER_SCRIPT_PATH" "homeproxy init"
+    if [ -f "$HOMEPROXY_INIT" ]; then
+        # Скрипт-помощник update_firewall_rules.sh прежних версий zz1 больше
+        # не нужен: его заменяет правка init ниже (как патч 011).
+        if grep -q 'update_firewall_rules' "$HOMEPROXY_INIT"; then
+            sed -i '/update_firewall_rules\.sh/d' "$HOMEPROXY_INIT"
+            log_ok "Вызовы старого скрипта-помощника убраны из init homeproxy"
+        fi
+        rm -f /etc/homeproxy/scripts/update_firewall_rules.sh
 
-    . "$HELPER_SCRIPT_PATH"
+        # uci-defaults пакета всегда добавляет include-секции fw4, а файлы
+        # для них init создаёт, только когда есть правила (TUN, сервер).
+        # Без файлов fw4 на каждом reload пишет «unreachable path». Патч 011
+        # создаёт их пустыми перед генераторами; без патча (сборка без патчей,
+        # обновление из фида, Re:HomeProxy) вписываем те же строки сами.
+        if grep -qF ': > "$RUN_DIR/fw4_forward.nft"' "$HOMEPROXY_INIT"; then
+            log_info "Init homeproxy: пустые файлы include fw4 уже создаются"
+        else
+            cat << 'HP_EOF' > /tmp/zz1-hp.snip
+	# The uci-defaults of the package always add the fw4 includes
+	# homeproxy_forward, homeproxy_input and homeproxy_post. For a file that
+	# does not exist fw4 prints "specifies unreachable path ..., ignoring
+	# section" on every reload, and firewall_pre.uc writes its files only
+	# when there are rules (TUN, server). Start from empty files, the
+	# generators below fill them.
+	: > "$RUN_DIR/fw4_forward.nft"
+	: > "$RUN_DIR/fw4_input.nft"
+	: > "$RUN_DIR/fw4_post.nft"
+HP_EOF
+            hp_insert "$HOMEPROXY_INIT" 'ucode "$HP_DIR/scripts/firewall_pre.uc"' before /tmp/zz1-hp.snip &&
+                log_ok "Init homeproxy: пустые файлы include fw4 (как патч 011)"
+            rm -f /tmp/zz1-hp.snip
+            patch_check "$HOMEPROXY_INIT" ': > "$RUN_DIR/fw4_forward.nft"' "homeproxy init (include fw4)"
+        fi
+
+        # Секции возвращаем, если их удалял помощник прежних прошивок
+        # (как их создаёт uci-defaults пакета).
+        for _inc in forward input; do
+            if [ -z "$(uci -q get firewall.homeproxy_${_inc})" ]; then
+                uci -q batch <<-E_O_F
+					set firewall.homeproxy_${_inc}=include
+					set firewall.homeproxy_${_inc}.type=nftables
+					set firewall.homeproxy_${_inc}.path="/var/run/homeproxy/fw4_${_inc}.nft"
+					set firewall.homeproxy_${_inc}.position="chain-pre"
+					set firewall.homeproxy_${_inc}.chain="${_inc}"
+				E_O_F
+                run_cmd "Include-секция firewall.homeproxy_${_inc}" uci commit firewall
+            fi
+        done
+    fi
     run_cmd "Включение homeproxy" /etc/init.d/homeproxy enable
 
     NFT_RULE_FILE="/etc/nftables.d/bypass_homeproxy_ips.nft"
