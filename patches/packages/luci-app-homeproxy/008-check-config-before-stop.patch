@@ -1,0 +1,163 @@
+From 84099e4643d754ffefc6b634a0be38b9c89985e7 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 11 Oct 2026 13:35:08 +0000
+Subject: [PATCH] fix(init): check a new configuration before stopping the
+ service
+
+A reload (any save in LuCI, a WAN reconnect) and a restart first stop
+the service: the firewall rules are taken down and the configuration
+files are deleted. The new configuration was generated and checked only
+in start_service. If "sing-box check" failed there - a typo in a rule,
+a broken node from a subscription, a rule set the core does not accept -
+start_service returned and the router was left without the proxy and
+without the redirect rules until someone noticed.
+
+Now reload_service and restart generate and check the client and the
+server configuration first, while the running instance keeps working.
+On an error nothing is stopped, the files of the running instance are
+put back (procd respawns sing-box from them) and the log says the
+running service is kept. When the check passes, start_service does not
+run "sing-box check" again for the very same file, so the time without
+the redirect rules no longer includes the check.
+
+Checked with the real rc.common of OpenWrt and stubs for procd,
+sing-box, the generators, fw4 and dnsmasq: a bad client or server
+configuration on reload and on restart left the service running with
+the old files; a good one was checked once and started; a plain start
+and a start after stop still ran the check.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
+---
+ root/etc/init.d/homeproxy | 89 ++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 87 insertions(+), 2 deletions(-)
+
+diff --git a/root/etc/init.d/homeproxy b/root/etc/init.d/homeproxy
+index a89a49f..30c1352 100755
+--- a/root/etc/init.d/homeproxy
++++ b/root/etc/init.d/homeproxy
+@@ -27,6 +27,7 @@ log() {
+ 	echo -e "$(date "+%Y-%m-%d %H:%M:%S") [DAEMON] $*" >> "$LOG_PATH"
+ }
+ 
++
+ start_service() {
+ 	config_load "$CONF"
+ 
+@@ -57,7 +58,7 @@ start_service() {
+ 		if [ ! -e "$RUN_DIR/sing-box-c.json" ]; then
+ 			log "Error: failed to generate client configuration."
+ 			return 1
+-		elif ! "$PROG" check --config "$RUN_DIR/sing-box-c.json" 2>>"$LOG_PATH"; then
++		elif ! config_was_checked "c" && ! "$PROG" check --config "$RUN_DIR/sing-box-c.json" 2>>"$LOG_PATH"; then
+ 			log "Error: wrong client configuration detected."
+ 			return 1
+ 		fi
+@@ -182,7 +183,7 @@ start_service() {
+ 		if [ ! -e "$RUN_DIR/sing-box-s.json" ]; then
+ 			log "Error: failed to generate server configuration."
+ 			return 1
+-		elif ! "$PROG" check --config "$RUN_DIR/sing-box-s.json" 2>>"$LOG_PATH"; then
++		elif ! config_was_checked "s" && ! "$PROG" check --config "$RUN_DIR/sing-box-s.json" 2>>"$LOG_PATH"; then
+ 			log "Error: wrong server configuration detected."
+ 			return 1
+ 		fi
+@@ -338,11 +339,95 @@ service_stopped() {
+ 	ip tuntap del mode tun name "$tun_name" 2>"/dev/null"
+ }
+ 
++# A reload or restart first stops the service: the firewall rules go and the
++# configuration files are deleted. If the new configuration then fails
++# "sing-box check", start_service returns and the router is left without the
++# proxy until someone notices. So the configuration is generated and checked
++# here, while the running instance keeps working, and on an error nothing is
++# stopped. The generators write to the paths procd runs sing-box from, so the
++# files of the running instance are saved first and put back on an error: a
++# respawn must find the old, working configuration.
++config_was_checked() {
++	local checked="$RUN_DIR/sing-box-$1.json.checked"
++
++	# start_service skips "sing-box check" for the file checked just before.
++	[ -e "$checked" ] || return 1
++	cmp -s "$RUN_DIR/sing-box-$1.json" "$checked"
++	local ret="$?"
++	rm -f "$checked"
++	return "$ret"
++}
++
++check_new_config() {
++	local routing_mode outbound_node server_enabled name gen generated="" ret=0
++
++	config_load "$CONF"
++	config_get routing_mode "config" "routing_mode" "bypass_mainland_china"
++	if [ "$routing_mode" != "custom" ]; then
++		config_get outbound_node "config" "main_node" "nil"
++	else
++		config_get outbound_node "routing" "default_outbound" "nil"
++	fi
++	config_get_bool server_enabled "server" "enabled" "0"
++
++	mkdir -p "$RUN_DIR"
++	rm -f "$RUN_DIR/sing-box-c.json.checked" "$RUN_DIR/sing-box-s.json.checked"
++	for name in c s; do
++		if [ "$name" = "c" ]; then
++			[ "$outbound_node" != "nil" ] || continue
++			gen="generate_client.uc"
++		else
++			[ "$server_enabled" = "1" ] || continue
++			gen="generate_server.uc"
++		fi
++
++		rm -f "$RUN_DIR/sing-box-$name.json.bak"
++		[ ! -e "$RUN_DIR/sing-box-$name.json" ] || \
++			cp -p "$RUN_DIR/sing-box-$name.json" "$RUN_DIR/sing-box-$name.json.bak"
++		generated="$generated $name"
++		ucode -S "$HP_DIR/scripts/$gen" 2>>"$LOG_PATH"
++		if [ -e "$RUN_DIR/sing-box-$name.json" ] && \
++		   "$PROG" check --config "$RUN_DIR/sing-box-$name.json" 2>>"$LOG_PATH"; then
++			cp -p "$RUN_DIR/sing-box-$name.json" "$RUN_DIR/sing-box-$name.json.checked"
++		else
++			ret=1
++			break
++		fi
++	done
++
++	for name in $generated; do
++		if [ "$ret" = "0" ]; then
++			rm -f "$RUN_DIR/sing-box-$name.json.bak"
++		elif [ -e "$RUN_DIR/sing-box-$name.json.bak" ]; then
++			mv -f "$RUN_DIR/sing-box-$name.json.bak" "$RUN_DIR/sing-box-$name.json"
++		else
++			rm -f "$RUN_DIR/sing-box-$name.json"
++		fi
++	done
++	if [ "$ret" != "0" ]; then
++		rm -f "$RUN_DIR/sing-box-c.json.checked" "$RUN_DIR/sing-box-s.json.checked"
++		log "Error: the new configuration failed the check, the running service is kept."
++	fi
++
++	return "$ret"
++}
++
+ reload_service() {
+ 	log "Reloading service..."
+ 
++	check_new_config || return 1
+ 	stop
+ 	start
++	rm -f "$RUN_DIR/sing-box-c.json.checked" "$RUN_DIR/sing-box-s.json.checked"
++}
++
++restart() {
++	check_new_config || return 1
++	trap '' TERM
++	stop "$@"
++	trap - TERM
++	start "$@"
++	rm -f "$RUN_DIR/sing-box-c.json.checked" "$RUN_DIR/sing-box-s.json.checked"
+ }
+ 
+ service_triggers() {
+-- 
+2.43.0
+

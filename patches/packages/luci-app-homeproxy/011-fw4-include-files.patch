@@ -1,0 +1,49 @@
+From 3f0b191291ebb917211e03daf798daefae2e76e9 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 11 Oct 2026 14:00:52 +0000
+Subject: [PATCH] fix(init): keep the fw4 include files of homeproxy in place
+
+The uci-defaults of the package always add three fw4 includes:
+homeproxy_forward, homeproxy_input and homeproxy_post. firewall_pre.uc
+writes fw4_forward.nft and fw4_input.nft only when there are rules (the
+TUN mode, an enabled server), and fw4_post.nft is not written without a
+client node. For a file that does not exist fw4 prints "specifies
+unreachable path ..., ignoring section" on every reload.
+
+start_service now creates the three files empty before the generators
+fill them, so the includes always point to a file and an empty one
+changes nothing. This also drops stale rules of a previous mode.
+
+Checked with the real rc.common of OpenWrt and stubs: after start in the
+redirect mode the three files exist and are empty, in the TUN mode the
+forward and input files get their rules, and stop leaves them empty.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
+---
+ root/etc/init.d/homeproxy | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/root/etc/init.d/homeproxy b/root/etc/init.d/homeproxy
+index b683af0..34c5a4a 100755
+--- a/root/etc/init.d/homeproxy
++++ b/root/etc/init.d/homeproxy
+@@ -273,6 +273,15 @@ start_service() {
+ 	chown -R sing-box:sing-box "$RUN_DIR"
+ 
+ 	# Setup firewall
++	# The uci-defaults of the package always add the fw4 includes
++	# homeproxy_forward, homeproxy_input and homeproxy_post. For a file that
++	# does not exist fw4 prints "specifies unreachable path ..., ignoring
++	# section" on every reload, and firewall_pre.uc writes its files only
++	# when there are rules (TUN, server). Start from empty files, the
++	# generators below fill them.
++	: > "$RUN_DIR/fw4_forward.nft"
++	: > "$RUN_DIR/fw4_input.nft"
++	: > "$RUN_DIR/fw4_post.nft"
+ 	ucode "$HP_DIR/scripts/firewall_pre.uc"
+ 	[ "$outbound_node" = "nil" ] || utpl -S "$HP_DIR/scripts/firewall_post.ut" > "$RUN_DIR/fw4_post.nft"
+ 	fw4 reload >"/dev/null" 2>&1
+-- 
+2.43.0
+

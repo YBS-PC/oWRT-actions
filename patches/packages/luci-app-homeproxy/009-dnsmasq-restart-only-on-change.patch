@@ -1,0 +1,107 @@
+From 336180675e58c01481b3fe5762cdc52c9eaca322 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 11 Oct 2026 13:35:08 +0000
+Subject: [PATCH] fix(init): restart dnsmasq once, and only if its files
+ changed
+
+A reload or restart runs stop_service and start_service, and each of
+them restarted dnsmasq, although the files homeproxy writes for dnsmasq
+are usually the same before and after (in the custom routing mode they
+only point dnsmasq to the sing-box DNS port). Each restart drops DHCP
+and local DNS for a moment and empties the dnsmasq cache.
+
+Within a reload or restart the two restarts are now skipped, and
+dnsmasq is restarted once at the end if its homeproxy files changed or
+if they hold "nftset=" lines: the gfwlist and proxy list sets are
+created anew on start and dnsmasq fills them only from fresh answers.
+A plain start or stop restarts dnsmasq as before.
+
+Checked with the real rc.common of OpenWrt and stubs: a reload without
+changes did not restart dnsmasq, a changed DNS port restarted it once,
+the gfwlist mode restarted it on every reload, and stop and start kept
+their restart.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
+---
+ root/etc/init.d/homeproxy | 32 ++++++++++++++++++++++++++++++--
+ 1 file changed, 30 insertions(+), 2 deletions(-)
+
+diff --git a/root/etc/init.d/homeproxy b/root/etc/init.d/homeproxy
+index 30c1352..3349086 100755
+--- a/root/etc/init.d/homeproxy
++++ b/root/etc/init.d/homeproxy
+@@ -27,6 +27,28 @@ log() {
+ 	echo -e "$(date "+%Y-%m-%d %H:%M:%S") [DAEMON] $*" >> "$LOG_PATH"
+ }
+ 
++# A reload or restart runs stop_service and start_service, and each of them
++# restarted dnsmasq, although the dnsmasq files homeproxy writes are usually
++# the same before and after. Each restart drops the DHCP and DNS service for a
++# moment and empties the dnsmasq cache. Within a reload or restart the two
++# restarts are skipped, and dnsmasq is restarted once at the end if the files
++# changed. Lists with "nftset=" (gfwlist, proxy list) always get a restart:
++# their sets are created anew and dnsmasq fills them only from fresh answers.
++dnsmasq_files_digest() {
++	cat "$DNSMASQ_DIR/../dnsmasq-homeproxy.conf" "$DNSMASQ_DIR"/* 2>"/dev/null" | md5sum
++}
++
++restart_dnsmasq() {
++	[ -n "$HP_DNSMASQ_DEFER" ] || /etc/init.d/dnsmasq restart >"/dev/null" 2>&1
++}
++
++restart_dnsmasq_if_changed() {
++	HP_DNSMASQ_DEFER=""
++	if [ "$(dnsmasq_files_digest)" != "$1" ] || \
++	   grep -qs "^nftset=" "$DNSMASQ_DIR"/*; then
++		/etc/init.d/dnsmasq restart >"/dev/null" 2>&1
++	fi
++}
+ 
+ start_service() {
+ 	config_load "$CONF"
+@@ -105,7 +127,7 @@ start_service() {
+ 			sed -r -e '/^\s*$/d' -e "s/(.*)/server=\/\1\/127.0.0.1#$dns_port\nnftset=\/\1\\/4#inet#fw4#homeproxy_wan_proxy_addr_v4$wan_nftset_v6/g" \
+ 				"$HP_DIR/resources/proxy_list.txt" > "$DNSMASQ_DIR/proxy_list.conf"
+ 		fi
+-		/etc/init.d/dnsmasq restart >"/dev/null" 2>&1
++		restart_dnsmasq
+ 
+ 		# Setup routing table
+ 		local table_mark
+@@ -320,7 +342,7 @@ stop_service() {
+ 
+ 	# Remove DNS hijack
+ 	rm -rf "$DNSMASQ_DIR/../dnsmasq-homeproxy.conf" "$DNSMASQ_DIR"
+-	/etc/init.d/dnsmasq restart >"/dev/null" 2>&1
++	restart_dnsmasq
+ 
+ 	rm -f "$RUN_DIR/sing-box-c.json" "$RUN_DIR/sing-box-c.log" \
+ 		"$RUN_DIR/sing-box-s.json" "$RUN_DIR/sing-box-s.log"
+@@ -416,17 +438,23 @@ reload_service() {
+ 	log "Reloading service..."
+ 
+ 	check_new_config || return 1
++	local dnsmasq_digest="$(dnsmasq_files_digest)"
++	HP_DNSMASQ_DEFER=1
+ 	stop
+ 	start
++	restart_dnsmasq_if_changed "$dnsmasq_digest"
+ 	rm -f "$RUN_DIR/sing-box-c.json.checked" "$RUN_DIR/sing-box-s.json.checked"
+ }
+ 
+ restart() {
+ 	check_new_config || return 1
++	local dnsmasq_digest="$(dnsmasq_files_digest)"
++	HP_DNSMASQ_DEFER=1
+ 	trap '' TERM
+ 	stop "$@"
+ 	trap - TERM
+ 	start "$@"
++	restart_dnsmasq_if_changed "$dnsmasq_digest"
+ 	rm -f "$RUN_DIR/sing-box-c.json.checked" "$RUN_DIR/sing-box-s.json.checked"
+ }
+ 
+-- 
+2.43.0
+

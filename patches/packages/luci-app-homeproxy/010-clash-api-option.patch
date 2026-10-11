@@ -1,0 +1,83 @@
+From 910d1a07a4fab86ff0221978fc59fdf7973a39e0 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 11 Oct 2026 14:00:38 +0000
+Subject: [PATCH] feat(client): optional Clash API from UCI
+
+There was no way to turn on the Clash API (the controller that YACD-like
+panels and connection lists use) other than editing generate_client.uc,
+and the experimental section exists only in the bypass_mainland_china
+and custom routing modes.
+
+Read three optional options of the infra section:
+  clash_api_controller  address to listen on, e.g. 0.0.0.0:9090
+  clash_api_ui          directory of the panel files (external_ui)
+  clash_api_secret      secret of the controller
+When clash_api_controller is set, experimental.clash_api is written in
+every routing mode; without it the configuration is the same as before.
+In the modes where sing-box runs in ujail the panel directory is mounted
+into the jail.
+
+Checked with the generator run by ucode in a sandbox and "sing-box
+check" 1.14.2: without the options the output is unchanged; with them
+clash_api appears in the custom mode next to cache_file and in the
+global mode, where there was no experimental section.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
+---
+ root/etc/homeproxy/scripts/generate_client.uc | 16 ++++++++++++++++
+ root/etc/init.d/homeproxy                     |  4 ++++
+ 2 files changed, 20 insertions(+)
+
+diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
+index ba09f38..c2b1621 100755
+--- a/root/etc/homeproxy/scripts/generate_client.uc
++++ b/root/etc/homeproxy/scripts/generate_client.uc
+@@ -137,6 +137,11 @@ if (match(proxy_mode, /tun/)) {
+ }
+ 
+ const log_level = uci.get(uciconfig, ucimain, 'log_level') || 'warn';
++
++/* Clash API, off unless a controller address is set */
++const clash_api_controller = uci.get(uciconfig, uciinfra, 'clash_api_controller'),
++      clash_api_ui = uci.get(uciconfig, uciinfra, 'clash_api_ui'),
++      clash_api_secret = uci.get(uciconfig, uciinfra, 'clash_api_secret');
+ /* UCI config end */
+ 
+ /*
+@@ -993,6 +998,17 @@ if (routing_mode in ['bypass_mainland_china', 'custom']) {
+ 		}
+ 	};
+ }
++
++/* The Clash API serves YACD-like panels and the connection list; it does
++ * not depend on the routing mode. */
++if (clash_api_controller) {
++	config.experimental ||= {};
++	config.experimental.clash_api = {
++		external_controller: clash_api_controller,
++		external_ui: clash_api_ui,
++		secret: clash_api_secret
++	};
++}
+ /* Experimental end */
+ 
+ system('mkdir -p ' + RUN_DIR);
+diff --git a/root/etc/init.d/homeproxy b/root/etc/init.d/homeproxy
+index 3349086..b683af0 100755
+--- a/root/etc/init.d/homeproxy
++++ b/root/etc/init.d/homeproxy
+@@ -184,6 +184,10 @@ start_service() {
+ 			procd_add_jail_mount "/etc/ssl/"
+ 			procd_add_jail_mount "/etc/localtime"
+ 			procd_add_jail_mount "/etc/TZ"
++			# The panel files of the Clash API (external_ui) must be seen in the jail.
++			local clash_api_ui
++			config_get clash_api_ui "infra" "clash_api_ui"
++			[ -z "$clash_api_ui" ] || procd_add_jail_mount "$clash_api_ui"
+ 			procd_set_param capabilities "/etc/capabilities/homeproxy.json"
+ 			procd_set_param no_new_privs 1
+ 			procd_set_param user sing-box
+-- 
+2.43.0
+
