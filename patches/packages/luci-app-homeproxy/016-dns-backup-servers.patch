@@ -1,0 +1,403 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 12 Oct 2026 18:35:58 +0000
+Subject: [PATCH] feat: backup DNS servers, one after another or all at once
+
+When the DNS server does not answer, sing-box answers nothing (AdGuard Home
+then waits for its timeout and asks its fallback servers), and an error
+answer (SERVFAIL, REFUSED) goes to the client as it is. homeproxy had no
+second DNS server for that.
+
+New settings, all off by default (the configuration is then as before):
+
+- routing modes global, gfwlist and proxy_mainland_china (Client
+  Settings, under the DNS server): "Backup DNS servers" (none, one after
+  another, all at once), "Backup DNS server" (a list in the format of the
+  DNS server field, wan included), "Backup DNS servers directly" (ask them
+  through direct-out instead of the main node) and "DNS server timeout"
+  (seconds, 2 by default);
+- custom routing (DNS Settings): the same mode and timeout, and the
+  backup servers chosen from the DNS servers (default, system, the
+  enabled ones of the DNS Servers tab), in the order of the list.
+
+They are built from the evaluate and respond DNS rules of sing-box 1.14,
+after all other DNS rules, so only what no rule answers is affected:
+- one after another: the next server is asked when the previous one does
+  not answer in the timeout or answers other than NOERROR or NXDOMAIN; the
+  last one answers whatever it gets;
+- all at once: the first NOERROR or NXDOMAIN answer wins; if none comes,
+  the DNS server answers as before.
+
+With these rules sing-box uses its new DNS rule mode and refuses some
+older rules (a rule with a strategy, as in the bypass mainland China mode,
+where the setting is therefore not offered, or an IP match without
+match_response). So the generator asks "sing-box check": if the
+configuration with the backup servers is refused and the one without them
+is not, they are left out with the reason in the log. On a sing-box older
+than 1.14 they are left out with a log line too. A backup server that is
+not a DNS address or not a known DNS server is left out or replaced with
+default-dns and reported (the guard of patch 015). parse_dnsserver no
+longer stops the generator on an address it cannot parse.
+
+Russian translation of the new strings in po/ru (patch 014).
+
+Checked: without the new settings the configuration is byte-identical to
+before (24 test configurations, also with the xhttp patch on the official
+and the extended core); with them "sing-box check" passes on 1.14.2,
+1.14.3 and 1.14.1-extended-2.7.2, and on 1.12.22 and 1.13.21 the backup
+servers are left out with a log line. Live with sing-box 1.14.2 and fake
+DNS servers (silent, SERVFAIL, REFUSED, NXDOMAIN, a good answer): one
+after another moves on after the timeout or at once on SERVFAIL/REFUSED,
+stops at NXDOMAIN, the last server answers as it is; all at once returns
+the good answer at once even with the first server silent (30 queries in
+a row). LuCI: rendered with luci-base in Chromium with a mocked ubus, no
+errors on any tab of the client page, the fields show only with their
+mode, an invalid address is refused while typing, the saved values are as
+entered, and saving without touching them writes the same as before.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
+---
+ .../resources/view/homeproxy/client.js        |  78 +++++++++++
+ po/ru/homeproxy.po                            |  74 ++++++++++
+ root/etc/homeproxy/scripts/generate_client.uc | 127 +++++++++++++++++-
+ 3 files changed, 278 insertions(+), 1 deletion(-)
+
+diff --git a/htdocs/luci-static/resources/view/homeproxy/client.js b/htdocs/luci-static/resources/view/homeproxy/client.js
+index 0f9d971..4d6119b 100644
+--- a/htdocs/luci-static/resources/view/homeproxy/client.js
++++ b/htdocs/luci-static/resources/view/homeproxy/client.js
+@@ -213,6 +213,46 @@ return view.extend({
+ 
+ 			return true;
+ 		}
++		const dns_server_validate = o.validate;
++
++		o = s.taboption('routing', form.ListValue, 'dns_fallback_mode', _('Backup DNS servers'),
++			_('Ask more DNS servers when the DNS server does not answer in time or answers with an error. Needs sing-box 1.14 or newer.'));
++		o.value('', _('None'));
++		o.value('fallback', _('One after another'));
++		o.value('race', _('All at once, the first answer wins'));
++		o.depends('routing_mode', 'gfwlist');
++		o.depends('routing_mode', 'global');
++		o.depends('routing_mode', 'proxy_mainland_china');
++
++		o = s.taboption('routing', form.DynamicList, 'dns_fallback_server', _('Backup DNS server'),
++			_('Same format as the DNS server. Asked in this order, after the DNS server.'));
++		o.value('wan', _('WAN DNS (read from interface)'));
++		o.value('1.1.1.1', _('CloudFlare Public DNS (1.1.1.1)'));
++		o.value('208.67.222.222', _('Cisco Public DNS (208.67.222.222)'));
++		o.value('8.8.8.8', _('Google Public DNS (8.8.8.8)'));
++		o.validate = function(section_id, value) {
++			for (let v of (Array.isArray(value) ? value : [ value ])) {
++				const res = v ? dns_server_validate.call(this, section_id, v) : true;
++				if (res !== true)
++					return res;
++			}
++
++			return true;
++		}
++		o.depends('dns_fallback_mode', 'fallback');
++		o.depends('dns_fallback_mode', 'race');
++
++		o = s.taboption('routing', form.Flag, 'dns_fallback_direct', _('Backup DNS servers directly'),
++			_('Ask the backup DNS servers directly, not through the main node: they also work when the main node does not, but these queries are not hidden from the provider.'));
++		o.depends('dns_fallback_mode', 'fallback');
++		o.depends('dns_fallback_mode', 'race');
++
++		o = s.taboption('routing', form.Value, 'dns_fallback_timeout', _('DNS server timeout'),
++			_('How long to wait for each DNS server, in seconds.'));
++		o.datatype = 'range(1, 30)';
++		o.placeholder = '2';
++		o.depends('dns_fallback_mode', 'fallback');
++		o.depends('dns_fallback_mode', 'race');
+ 
+ 		o = s.taboption('routing', form.Value, 'china_dns_server', _('China DNS server'),
+ 			_('The dns server for resolving China domains. Support UDP, TCP, DoH, DoQ, DoT.'));
+@@ -896,6 +936,44 @@ return view.extend({
+ 		so.default = 'default-dns';
+ 		so.rmempty = false;
+ 
++		so = ss.option(form.ListValue, 'fallback_mode', _('Backup DNS servers'),
++			_('Ask more DNS servers when the default DNS server does not answer in time or answers with an error. Only for the queries no DNS rule answers. Needs sing-box 1.14 or newer; with DNS rules that set a strategy or match an IP address sing-box does not take them, the log then says so.'));
++		so.value('', _('None'));
++		so.value('fallback', _('One after another'));
++		so.value('race', _('All at once, the first answer wins'));
++
++		so = ss.option(form.DynamicList, 'fallback_server', _('Backup DNS server'),
++			_('Asked in this order, after the default DNS server.'));
++		so.load = function(section_id) {
++			delete this.keylist;
++			delete this.vallist;
++
++			this.value('default-dns', _('Default DNS (issued by WAN)'));
++			this.value('system-dns', _('System DNS'));
++			uci.sections(data[0], 'dns_server', (res) => {
++				if (res.enabled === '1')
++					this.value(res['.name'], res.label);
++			});
++
++			return this.super('load', section_id);
++		}
++		so.validate = function(section_id, value) {
++			for (let v of (Array.isArray(value) ? value : [ value ]))
++				if (section_id && v && !this.keylist.includes(v))
++					return _('Expecting: %s').format(_('a DNS server from the list'));
++
++			return true;
++		}
++		so.depends('fallback_mode', 'fallback');
++		so.depends('fallback_mode', 'race');
++
++		so = ss.option(form.Value, 'fallback_timeout', _('DNS server timeout'),
++			_('How long to wait for each DNS server, in seconds.'));
++		so.datatype = 'range(1, 30)';
++		so.placeholder = '2';
++		so.depends('fallback_mode', 'fallback');
++		so.depends('fallback_mode', 'race');
++
+ 		so = ss.option(form.Flag, 'disable_cache', _('Disable DNS cache'));
+ 
+ 		so = ss.option(form.Flag, 'disable_cache_expire', _('Disable cache expire'));
+diff --git a/po/ru/homeproxy.po b/po/ru/homeproxy.po
+index a64c21e..8225866 100644
+--- a/po/ru/homeproxy.po
++++ b/po/ru/homeproxy.po
+@@ -3276,3 +3276,77 @@ msgstr "корректное значение порта"
+ #: htdocs/luci-static/resources/homeproxy.js:328
+ msgid "valid uuid"
+ msgstr "корректный uuid"
++
++#: htdocs/luci-static/resources/view/homeproxy/client.js
++msgid "Backup DNS servers"
++msgstr "Резервные DNS-серверы"
++
++#: htdocs/luci-static/resources/view/homeproxy/client.js
++msgid ""
++"Ask more DNS servers when the DNS server does not answer in time or answers "
++"with an error. Needs sing-box 1.14 or newer."
++msgstr ""
++"Спрашивать другие DNS-серверы, если DNS-сервер не ответил вовремя или "
++"ответил ошибкой. Нужен sing-box 1.14 или новее."
++
++#: htdocs/luci-static/resources/view/homeproxy/client.js
++msgid "One after another"
++msgstr "По очереди"
++
++#: htdocs/luci-static/resources/view/homeproxy/client.js
++msgid "All at once, the first answer wins"
++msgstr "Все сразу, побеждает первый ответ"
++
++#: htdocs/luci-static/resources/view/homeproxy/client.js
++msgid "Backup DNS server"
++msgstr "Резервный DNS-сервер"
++
++#: htdocs/luci-static/resources/view/homeproxy/client.js
++msgid ""
++"Same format as the DNS server. Asked in this order, after the DNS server."
++msgstr ""
++"В том же формате, что и DNS-сервер. Спрашиваются в этом порядке, после DNS-"
++"сервера."
++
++#: htdocs/luci-static/resources/view/homeproxy/client.js
++msgid "Backup DNS servers directly"
++msgstr "Резервные DNS-серверы напрямую"
++
++#: htdocs/luci-static/resources/view/homeproxy/client.js
++msgid ""
++"Ask the backup DNS servers directly, not through the main node: they also "
++"work when the main node does not, but these queries are not hidden from the "
++"provider."
++msgstr ""
++"Спрашивать резервные DNS-серверы напрямую, а не через основной узел: они "
++"работают и тогда, когда основной узел недоступен, но эти запросы видит "
++"провайдер."
++
++#: htdocs/luci-static/resources/view/homeproxy/client.js
++msgid "DNS server timeout"
++msgstr "Таймаут DNS-сервера"
++
++#: htdocs/luci-static/resources/view/homeproxy/client.js
++msgid "How long to wait for each DNS server, in seconds."
++msgstr "Сколько ждать ответа каждого DNS-сервера, в секундах."
++
++#: htdocs/luci-static/resources/view/homeproxy/client.js
++msgid ""
++"Ask more DNS servers when the default DNS server does not answer in time or "
++"answers with an error. Only for the queries no DNS rule answers. Needs sing-"
++"box 1.14 or newer; with DNS rules that set a strategy or match an IP address "
++"sing-box does not take them, the log then says so."
++msgstr ""
++"Спрашивать другие DNS-серверы, если DNS-сервер по умолчанию не ответил "
++"вовремя или ответил ошибкой. Только для запросов, на которые не ответило ни "
++"одно DNS-правило. Нужен sing-box 1.14 или новее; если в DNS-правилах задана "
++"стратегия или проверка IP-адреса, sing-box их не примет, и в журнале будет "
++"запись об этом."
++
++#: htdocs/luci-static/resources/view/homeproxy/client.js
++msgid "Asked in this order, after the default DNS server."
++msgstr "Спрашиваются в этом порядке, после DNS-сервера по умолчанию."
++
++#: htdocs/luci-static/resources/view/homeproxy/client.js
++msgid "a DNS server from the list"
++msgstr "DNS-сервер из списка"
+diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
+index a557a77..c0538b5 100755
+--- a/root/etc/homeproxy/scripts/generate_client.uc
++++ b/root/etc/homeproxy/scripts/generate_client.uc
+@@ -7,7 +7,7 @@
+ 
+ 'use strict';
+ 
+-import { popen, readfile, writefile } from 'fs';
++import { popen, readfile, unlink, writefile } from 'fs';
+ import { isnan } from 'math';
+ import { connect } from 'ubus';
+ import { cursor } from 'uci';
+@@ -207,6 +207,8 @@ function parse_dnsserver(server_addr, default_protocol) {
+ 	if (!match(server_addr, /:\/\//))
+ 		server_addr = (default_protocol || 'udp') + '://' + (validation('ip6addr', server_addr) ? `[${server_addr}]` : server_addr);
+ 	server_addr = parseURL(server_addr);
++	if (!server_addr)
++		return null;
+ 
+ 	return {
+ 		type: server_addr.protocol,
+@@ -650,6 +652,89 @@ if (!isEmpty(main_node)) {
+ 
+ 	config.dns.final = get_resolver(dns_default_server);
+ }
++
++/* Backup DNS servers (sing-box 1.14+, its evaluate and respond DNS rules).
++ * What no DNS rule above answers goes to the DNS server and the backup ones:
++ * - fallback: one after another, the next one is asked when the previous
++ *   one does not answer in time or answers other than NOERROR or NXDOMAIN;
++ *   the last one answers whatever it gets;
++ * - race: all at once, the first NOERROR or NXDOMAIN answer wins; if none
++ *   comes, the DNS server answers as before.
++ * Without it (the default) the configuration is as before. */
++let dns_pool = null;
++if (config.dns.final) {
++	const custom = (routing_mode === 'custom'),
++	      pool_section = custom ? ucidnssetting : ucimain,
++	      pool_prefix = custom ? '' : 'dns_',
++	      pool_mode = uci.get(uciconfig, pool_section, pool_prefix + 'fallback_mode');
++
++	if (!(pool_mode in ['fallback', 'race'])) {
++		/* off */
++	} else if (sing_box_version && legacy_dns_cache) {
++		foreign_warn('Backup DNS servers', 'they need sing-box 1.14 or newer, only the DNS server is used');
++	} else {
++		let tags = [ config.dns.final ], servers = [];
++
++		for (let entry in (uci.get(uciconfig, pool_section, pool_prefix + 'fallback_server') || [])) {
++			let tag;
++			if (custom) {
++				tag = get_resolver(entry);
++			} else {
++				const server = parse_dnsserver((entry === 'wan') ? wan_dns : entry, 'tcp');
++				if (!server?.type || !server?.server) {
++					foreign_warn(`Backup DNS server "${entry}"`, 'not a DNS server address, left out');
++					continue;
++				}
++
++				tag = 'main-dns-' + (length(servers) + 2);
++				push(servers, {
++					tag: tag,
++					domain_resolver: {
++						server: 'default-dns',
++						strategy: (ipv6_support !== '1') ? 'ipv4_only' : null
++					},
++					detour: (uci.get(uciconfig, ucimain, 'dns_fallback_direct') === '1') ?
++						(self_mark ? 'direct-out' : null) : 'main-out',
++					...server
++				});
++			}
++			if (!(tag in tags))
++				push(tags, tag);
++		}
++
++		const timeout = `${strToInt(uci.get(uciconfig, pool_section, pool_prefix + 'fallback_timeout')) || 2}s`;
++
++		if (length(tags) < 2) {
++			foreign_warn('Backup DNS servers', 'none is set, only the DNS server is used');
++		} else {
++			let rules = [];
++			for (let i, tag in tags) {
++				if (pool_mode === 'fallback' && i === length(tags) - 1)
++					break;
++
++				push(rules, { action: 'evaluate', server: tag, tag: `dns-pool-${i + 1}`, timeout: timeout });
++				if (pool_mode === 'fallback')
++					for (let rcode in [ 'NOERROR', 'NXDOMAIN' ])
++						push(rules, { match_response: `dns-pool-${i + 1}`, response_rcode: rcode, action: 'respond' });
++			}
++			if (pool_mode === 'race')
++				for (let rcode in [ 'NOERROR', 'NXDOMAIN' ])
++					for (let i = 0; i < length(tags); i++)
++						push(rules, { match_response: `dns-pool-${i + 1}`, response_rcode: rcode, action: 'respond', race: true });
++
++			dns_pool = {
++				servers: config.dns.servers,
++				rules: config.dns.rules,
++				final: config.dns.final
++			};
++			config.dns.servers = [ ...config.dns.servers, ...servers ];
++			config.dns.rules = [ ...(config.dns.rules || []), ...rules ];
++			if (pool_mode === 'fallback')
++				config.dns.final = tags[length(tags) - 1];
++			dns_pool.message = `${join(', ', tags)}, ${pool_mode}, ${timeout} each`;
++		}
++	}
++}
+ /* DNS end */
+ 
+ /* Inbound start */
+@@ -1131,4 +1216,44 @@ if (length(blocked_tags))
+ 		}
+ 
+ system('mkdir -p ' + RUN_DIR);
++
++/* With the evaluate and respond rules sing-box uses its new DNS rule mode,
++ * which refuses some older DNS rules: one with a strategy (as in the bypass
++ * mainland China mode) or an IP match without match_response. So sing-box
++ * is asked: if it refuses the configuration with the backup DNS servers but
++ * not the one without them, they are left out and the log says why. */
++function sing_box_check() {
++	const bin = '/usr/bin/sing-box', file = RUN_DIR + '/sing-box-c.check.json';
++	writefile(file, sprintf('%.J\n', removeBlankAttrs(config)));
++	const fd = popen(`${bin} check -c ${file} 2>&1`);
++	const out = fd ? fd.read('all') : '';
++	const code = fd ? fd.close() : 1;
++	unlink(file);
++	if (code === 0)
++		return null;
++
++	const lines = filter(split(replace(out || '', /\x1b\[[0-9;]*m/g, ''), '\n'), (l) => length(trim(l)));
++	return replace(trim(lines[-1] || 'unknown error'), /^FATAL\[[0-9]+\] */, '');
++}
++
++if (dns_pool) {
++	const err = sing_box_check();
++	if (err) {
++		const with_pool = { servers: config.dns.servers, rules: config.dns.rules, final: config.dns.final };
++		config.dns.servers = dns_pool.servers;
++		config.dns.rules = dns_pool.rules;
++		config.dns.final = dns_pool.final;
++		if (sing_box_check() === null) {
++			foreign_warn('Backup DNS servers', `sing-box does not take them with these settings, only the DNS server is used (${err})`);
++			dns_pool = null;
++		} else {
++			config.dns.servers = with_pool.servers;
++			config.dns.rules = with_pool.rules;
++			config.dns.final = with_pool.final;
++		}
++	}
++	if (dns_pool)
++		warn(`${getTime()} [DAEMON] Backup DNS servers: ${dns_pool.message}\n`);
++}
++
+ writefile(RUN_DIR + '/sing-box-c.json', sprintf('%.J\n', removeBlankAttrs(config)));
+-- 
+2.43.0
+
