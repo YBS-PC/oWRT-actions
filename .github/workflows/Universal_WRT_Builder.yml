@@ -310,7 +310,7 @@ jobs:
             #   $(entry nanopi-r6s forkop latest extended false true true true)
             #   $(entry nanopi-r6s homeproxy latest extended true true true true)
             #     (homeproxy с sing-box-extended: только в этой связке
-            #     применяется патч 016 — транспорт XHTTP, Build-If)
+            #     применяется патч 017 — транспорт XHTTP, Build-If)
             json="{\"include\":[$(entry nanopi-r6s homeproxy latest latest true true true true),$(entry nanopi-r6s homeproxy latest extended true true true true),$(entry nanopi-r6s trafira latest extended false true true true),$(entry nanopi-r6s podkop latest podkop-engine-full true true true true),$(entry rb5009 clear no no false true false true),$(entry rb5009 switch no no false true false true)]}"
           else
             # Все устройства из config/conf/ — при добавлении нового дописать сюда.
