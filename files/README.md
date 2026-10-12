@@ -106,7 +106,8 @@ option user 'root'
 option group 'root'
 ```
 - Создаются группа и пользователь `adguardhome` (uid/gid 853), если их нет
-- `/etc/init.d/adguardhome`: `--logfile syslog` → `--logfile /var/AdGuardHome.log`
+- `/etc/init.d/adguardhome`: `--logfile syslog` (или `/var/AdGuardHome.log` прежних версий) → `--logfile /tmp/log/AdGuardHome.log` — журнал в файл, а не в syslog
+- `/etc/config/adguardhome`: `list jail_mount_rw '/tmp/log'` — каталог журнала доступен для записи из песочницы ujail
 - `/etc/adguardhome/adguardhome.yaml` — upstream DNS зависит от варианта:
   - `forkop`, `trafira`, `podkop`, `netshift` → `127.0.0.42:53` (DNS их sing-box), плюс `<вариант>.settings.dont_touch_dhcp='1'` (у forkop ещё `intercept_device_dns='0'`)
   - `xray` → `127.0.0.1:5300` (DNS-вход Xray luci-app-xray)
