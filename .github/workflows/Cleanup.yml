@@ -32,7 +32,7 @@ jobs:
         # поэтому и границу берём в UTC с 'Z'.
         CUTOFF=$(date -u -d "1 day ago" +"%Y-%m-%dT%H:%M:%SZ")
         echo ">>> Удаляются завершённые запуски, созданные до $CUTOFF (UTC)"
-        RUNS=$(gh run list --limit 500 --json databaseId,createdAt,status,event,workflowName)
+        RUNS=$(gh run list --limit 500 --json databaseId,createdAt,status,event,name,workflowName)
         OLD=$(printf '%s' "$RUNS" | jq -r --arg c "$CUTOFF" \
           '.[] | select(.status == "completed" and .createdAt < $c) | .databaseId')
         # «pages build and deployment» GitHub запускает сам (event dynamic)
@@ -40,8 +40,10 @@ jobs:
         # сайт остаётся, — поэтому завершённые удаляются сразу, без суток.
         # Самый новый (список идёт от новых к старым) остаётся: по нему
         # видно, чем закончилась последняя публикация.
+        # У gh name — имя запуска («pages build and deployment»), workflowName —
+        # имя workflow («pages-build-deployment»): проверяются оба.
         PAGES=$(printf '%s' "$RUNS" | jq -r \
-          '[.[] | select(.event == "dynamic" and .workflowName == "pages build and deployment")]
+          '[.[] | select(.event == "dynamic" and (.name == "pages build and deployment" or .workflowName == "pages-build-deployment"))]
            | .[1:][] | select(.status == "completed") | .databaseId')
         echo ">>> pages build and deployment: к удалению $(printf '%s\n' "$PAGES" | grep -c .)"
         IDS=$(printf '%s\n%s\n' "$OLD" "$PAGES" | grep . | sort -u)
