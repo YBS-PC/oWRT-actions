@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: 'Target Device (combo: R6S homeproxy, trafira, podkop + RB5009 clear, switch; AGH/sing-box/ytb/zz1 задаёт сам)'
+        description: 'Target Device (combo: R6S homeproxy ×2 (sb latest и extended), trafira, podkop + RB5009 clear, switch; AGH/sing-box/ytb/zz1 задаёт сам)'
         required: true
         default: 'combo'
         type: choice
