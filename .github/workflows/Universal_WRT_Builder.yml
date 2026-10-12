@@ -1934,7 +1934,7 @@ jobs:
         # checkout в этой джобе нет — репозиторий для gh задаём явно
         GH_REPO: ${{ github.repository }}
       run: |
-        echo ">>> Deleting workflow runs older than 1 day..."
+        echo ">>> Deleting workflow runs older than 1 day and finished pages runs..."
         
         # 1. Вычисляем дату "сутки назад" в UTC с суффиксом Z.
         # ВАЖНО: GitHub createdAt всегда в UTC ('...Z'), а jq ниже сравнивает СТРОКИ.
@@ -1944,8 +1944,16 @@ jobs:
         echo ">>> Cutoff date (UTC): $CUTOFF_DATE"
         
         # 2. Получаем список запусков и фильтруем через jq те, что старше CUTOFF_DATE
-        RUN_IDS=$(gh run list --limit 100 --json databaseId,createdAt --jq ".[] | select(.createdAt < \"$CUTOFF_DATE\") | .databaseId")
-        
+        RUNS=$(gh run list --limit 100 --json databaseId,createdAt,status,event,workflowName)
+        OLD_IDS=$(printf '%s' "$RUNS" | jq -r --arg c "$CUTOFF_DATE" '.[] | select(.createdAt < $c) | .databaseId')
+        # Завершённые «pages build and deployment» (GitHub запускает их сам при
+        # каждом изменении файлов) — сразу, кроме самого нового; как в Cleanup.yml.
+        PAGES_IDS=$(printf '%s' "$RUNS" | jq -r \
+          '[.[] | select(.event == "dynamic" and .workflowName == "pages build and deployment")]
+           | .[1:][] | select(.status == "completed") | .databaseId')
+        echo ">>> pages build and deployment: к удалению $(printf '%s\n' "$PAGES_IDS" | grep -c .)"
+        RUN_IDS=$(printf '%s\n%s\n' "$OLD_IDS" "$PAGES_IDS" | grep . | sort -u)
+
         # 3. Удаляем найденные запуски
         if [ -z "$RUN_IDS" ]; then
           echo ">>> No old runs found to delete."
