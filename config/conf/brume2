@@ -1,4 +1,6 @@
 # GL.iNet Brume 2 (MT2500) Configuration
+# Wi-Fi у Brume 2 нет: прошивки mt7981 и модули mt76 не нужны.
+# eip197-mini-firmware отдельно не указывается: её подтягивает kmod-crypto-hw-safexcel.
 TARGET_NAME="GL.iNet Brume 2 (MT2500)"
 KERNEL_PATH="mediatek/filogic"
 
@@ -7,12 +9,8 @@ echo 'CONFIG_TARGET_mediatek=y' >> ./.config
 echo 'CONFIG_TARGET_mediatek_filogic=y' >> ./.config
 echo 'CONFIG_TARGET_mediatek_filogic_DEVICE_glinet_gl-mt2500=y' >> ./.config
 echo 'CONFIG_TARGET_ARCH_PACKAGES="aarch64_cortex-a53"' >> ./.config
-echo 'CONFIG_PACKAGE_eip197-mini-firmware=y' >> ./.config
 echo 'CONFIG_PACKAGE_fitblk=y' >> ./.config
 echo 'CONFIG_PACKAGE_kmod-crypto-hw-safexcel=y' >> ./.config
-echo 'CONFIG_PACKAGE_kmod-mt7981-firmware=y' >> ./.config
-echo 'CONFIG_PACKAGE_mt7981-wo-firmware=y' >> ./.config
-echo 'CONFIG_PACKAGE_kmod-mt76=m' >> ./.config
 sed -i "/irqbalance/Id" ./.config
 EOF
 )
