@@ -776,8 +776,18 @@ EOF
     run_cmd_ign "Удаление серверов dnsmasq" uci delete dhcp.@dnsmasq[0].server
     run_cmd "Сохранение dhcp" uci commit dhcp
 
-    run_cmd "Настройка лога adguardhome" sed -i 's|--logfile syslog|--logfile /var/AdGuardHome.log|' /etc/init.d/adguardhome
-    patch_check /etc/init.d/adguardhome '--logfile /var/AdGuardHome.log' "adguardhome init"
+    # Журнал AdGuard Home — в файл, а не в syslog (он забивает системный
+    # журнал). Файл лежит в /tmp/log (он же /var/log, создаётся при каждой
+    # загрузке), и этот каталог подключается в песочницу ujail на запись:
+    # прежний /var/AdGuardHome.log из песочницы недоступен. Без ujail
+    # работает так же.
+    run_cmd "Журнал adguardhome → /tmp/log/AdGuardHome.log" \
+        sed -i -e 's|--logfile syslog|--logfile /tmp/log/AdGuardHome.log|' \
+               -e 's|--logfile /var/AdGuardHome.log|--logfile /tmp/log/AdGuardHome.log|' /etc/init.d/adguardhome
+    patch_check /etc/init.d/adguardhome '--logfile /tmp/log/AdGuardHome.log' "adguardhome init (журнал)"
+    uci -q del_list adguardhome.config.jail_mount_rw='/tmp/log'
+    uci -q add_list adguardhome.config.jail_mount_rw='/tmp/log'
+    run_cmd "Каталог журнала в песочнице adguardhome" uci commit adguardhome
     # --- Upstream DNS в AGH yaml ------------------------------------------
     # Зависит от варианта сборки:
     #   forkop, trafira, podkop, netshift → 127.0.0.42:53 (DNS inbound их sing-box)
