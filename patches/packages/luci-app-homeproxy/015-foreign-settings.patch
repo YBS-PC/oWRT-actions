@@ -1,0 +1,246 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 12 Oct 2026 17:44:09 +0000
+Subject: [PATCH] fix: settings of another build do not stop homeproxy
+
+/etc/config/homeproxy outlives the firmware: sysupgrade keeps it, so it
+can come from a build with sing-box-extended (nodes with the xhttp
+transport) or from Re:HomeProxy, which uses the same file with its own
+values. homeproxy then failed in several ways:
+
+- a node type it does not know (amneziawg, mieru, naive) or the xhttp
+  transport went to sing-box as is, and sing-box refused the whole
+  configuration;
+- an outbound name it does not know (main-out, byedpi-out, zapret-out)
+  stopped generate_client.uc with "main-out's node is missing";
+- a DNS server it does not know (russia-dns, region-dns, secure-dns)
+  became a tag that does not exist, and sing-box failed at start with
+  "DNS server not found";
+- a routing mode it does not know (proxy_banned_ru, bypass_cn,
+  bypass_ir, custom_json) proxied everything but left the DNS of the
+  clients out of sing-box, with 223.5.5.5 as the WAN DNS fallback;
+- a server type it does not know (mtproxy) made sing-box refuse the
+  server configuration.
+
+Now nothing of it is removed from the settings (it works again in the
+build it came from), but here:
+
+- an unknown node type or transport becomes a block outbound: its
+  traffic is dropped, never sent direct; a URLTest group leaves it out,
+  and a group with nothing left blocks;
+- an unknown, removed or disabled routing node named as an outbound
+  becomes block-out;
+- an unknown, removed or disabled DNS server becomes default-dns (also
+  the local-dns of old default settings that patch 002 migrates);
+- an unknown routing mode works as global in generate_client.uc, the
+  init script and firewall_post.ut;
+- a server of an unknown type is left out.
+
+Each case is a line in the homeproxy log.
+
+Checked: with known settings the configuration, the server configuration
+and the fw4 rules of every routing mode are byte-identical to before,
+apart from the two intended cases (a missing DNS server, an unknown
+routing mode), checked against the same settings with default-dns and
+global written in. Four configurations with settings of Re:HomeProxy and
+of an extended build that crashed generate_client.uc or failed sing-box
+check before now pass "sing-box check" on 1.12.22, 1.13.21, 1.14.2,
+1.14.3 and 1.14.1-extended-2.7.2; a server configuration with mtproxy and
+socks passes with socks only.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
+---
+ root/etc/homeproxy/scripts/firewall_post.ut   |  5 +-
+ root/etc/homeproxy/scripts/generate_client.uc | 73 ++++++++++++++++++-
+ root/etc/homeproxy/scripts/generate_server.uc | 10 ++-
+ root/etc/init.d/homeproxy                     | 11 +++
+ 4 files changed, 96 insertions(+), 3 deletions(-)
+
+diff --git a/root/etc/homeproxy/scripts/firewall_post.ut b/root/etc/homeproxy/scripts/firewall_post.ut
+index 04a0f6d..9284b3d 100755
+--- a/root/etc/homeproxy/scripts/firewall_post.ut
++++ b/root/etc/homeproxy/scripts/firewall_post.ut
+@@ -56,7 +56,10 @@ const cfgname = 'homeproxy';
+ const uci = cursor();
+ uci.load(cfgname);
+ 
+-const routing_mode = uci.get(cfgname, 'config', 'routing_mode') || 'bypass_mainland_china';
++let routing_mode = uci.get(cfgname, 'config', 'routing_mode') || 'bypass_mainland_china';
++/* A routing mode of another build (Re:HomeProxy) works as global */
++if (!(routing_mode in [ 'bypass_mainland_china', 'custom', 'gfwlist', 'global', 'proxy_mainland_china' ]))
++	routing_mode = 'global';
+ let outbound_node, outbound_udp_node, china_dns_server, bypass_cn_traffic;
+ 
+ if (routing_mode !== 'custom') {
+diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
+index 9058130..a557a77 100755
+--- a/root/etc/homeproxy/scripts/generate_client.uc
++++ b/root/etc/homeproxy/scripts/generate_client.uc
+@@ -42,7 +42,24 @@ const uciroutingsetting = 'routing',
+ const ucinode = 'node';
+ const uciruleset = 'ruleset';
+ 
+-const routing_mode = uci.get(uciconfig, ucimain, 'routing_mode') || 'bypass_mainland_china';
++let routing_mode = uci.get(uciconfig, ucimain, 'routing_mode') || 'bypass_mainland_china';
++
++/* Settings can come from another build: a sysupgrade that keeps them, from
++ * Re:HomeProxy (its routing modes, DNS servers, node types and outbounds) or
++ * from a build with sing-box-extended (the xhttp transport). What this
++ * homeproxy does not know must not make sing-box refuse the whole
++ * configuration. It is not removed from the settings, so it works again in
++ * the build it came from; here it is replaced as below and the log says so. */
++function foreign_warn(what, msg) {
++	warn(`${getTime()} [DAEMON] ${what}: ${msg}\n`);
++}
++
++/* An unknown routing mode works as global, as in the init script and the
++ * firewall rules */
++if (!(routing_mode in [ 'bypass_mainland_china', 'custom', 'gfwlist', 'global', 'proxy_mainland_china' ])) {
++	foreign_warn(`Routing mode "${routing_mode}"`, 'not supported, working as global');
++	routing_mode = 'global';
++}
+ 
+ let wan_dns = ubus.call('network.interface', 'status', {'interface': 'wan'})?.['dns-server']?.[0];
+ if (!wan_dns)
+@@ -392,6 +409,13 @@ function get_outbound(cfg) {
+ 		case 'direct-out':
+ 			return cfg;
+ 		default:
++			/* A routing node that is gone or off, or an outbound of another
++			 * build (main-out of Re:HomeProxy): its traffic is blocked */
++			if (uci.get(uciconfig, cfg) !== uciroutingnode || uci.get(uciconfig, cfg, 'enabled') !== '1') {
++				foreign_warn(`Outbound "${cfg}"`, 'no such enabled routing node, its traffic is blocked');
++				return 'block-out';
++			}
++
+ 			const node = uci.get(uciconfig, cfg, 'node');
+ 			if (isEmpty(node))
+ 				die(sprintf("%s's node is missing, please check your configuration.", cfg));
+@@ -412,6 +436,13 @@ function get_resolver(cfg) {
+ 	case 'system-dns':
+ 		return cfg;
+ 	default:
++		/* A DNS server that is gone or off, or one of another build
++		 * (russia-dns of Re:HomeProxy): the default DNS server is used */
++		if (uci.get(uciconfig, cfg) !== ucidnsserver || uci.get(uciconfig, cfg, 'enabled') !== '1') {
++			foreign_warn(`DNS server "${cfg}"`, 'no such enabled DNS server, default-dns is used');
++			return 'default-dns';
++		}
++
+ 		return 'cfg-' + cfg + '-dns';
+ 	}
+ }
+@@ -1059,5 +1090,45 @@ if (clash_api_controller) {
+ }
+ /* Experimental end */
+ 
++/* A node type or transport this homeproxy does not know (amneziawg, mieru
++ * and naive of Re:HomeProxy, xhttp of a build with sing-box-extended)
++ * becomes a block outbound: its traffic is dropped, never sent direct, and
++ * the other nodes keep working */
++const known_outbounds = [ 'block', 'direct', 'urltest',
++	'anytls', 'http', 'hysteria', 'hysteria2', 'shadowsocks', 'shadowtls',
++	'socks', 'ssh', 'trojan', 'tuic', 'vless', 'vmess' ];
++const known_transports = [ 'grpc', 'http', 'httpupgrade', 'quic', 'ws' ];
++
++let blocked_tags = [];
++for (let i, o in config.outbounds) {
++	if (type(o) !== 'object')
++		continue;
++
++	let what;
++	if (!(o.type in known_outbounds))
++		what = `type ${o.type}`;
++	else if (o.transport?.type && !(o.transport.type in known_transports))
++		what = `transport ${o.transport.type}` + ((o.transport.type === 'xhttp') ? ' (needs sing-box-extended)' : '');
++
++	if (what) {
++		foreign_warn(`Outbound ${o.tag}`, `${what} is not supported here, its traffic is blocked`);
++		config.outbounds[i] = { type: 'block', tag: o.tag };
++		push(blocked_tags, o.tag);
++	}
++}
++
++/* A URLTest group leaves such outbounds out, as removed nodes: before its
++ * first test it could pick one and drop the traffic. With none left the
++ * group itself blocks. */
++if (length(blocked_tags))
++	for (let i, o in config.outbounds)
++		if (o?.type === 'urltest') {
++			o.outbounds = filter(o.outbounds, (t) => !(t in blocked_tags));
++			if (!length(o.outbounds)) {
++				foreign_warn(`Outbound ${o.tag}`, 'no supported nodes left in the group, its traffic is blocked');
++				config.outbounds[i] = { type: 'block', tag: o.tag };
++			}
++		}
++
+ system('mkdir -p ' + RUN_DIR);
+ writefile(RUN_DIR + '/sing-box-c.json', sprintf('%.J\n', removeBlankAttrs(config)));
+diff --git a/root/etc/homeproxy/scripts/generate_server.uc b/root/etc/homeproxy/scripts/generate_server.uc
+index 224d725..e28e276 100755
+--- a/root/etc/homeproxy/scripts/generate_server.uc
++++ b/root/etc/homeproxy/scripts/generate_server.uc
+@@ -11,7 +11,7 @@ import { writefile } from 'fs';
+ import { cursor } from 'uci';
+ 
+ import {
+-	isEmpty, strToBool, strToInt, strToTime,
++	getTime, isEmpty, strToBool, strToInt, strToTime,
+ 	removeBlankAttrs, HP_DIR, RUN_DIR
+ } from 'homeproxy';
+ 
+@@ -42,6 +42,14 @@ uci.foreach(uciconfig, uciserver, (cfg) => {
+ 	if (cfg.enabled !== '1')
+ 		return;
+ 
++	/* A server type of another build (mtproxy of Re:HomeProxy) would make
++	 * sing-box refuse the whole configuration: that server is left out */
++	if (!(cfg.type in [ 'anytls', 'http', 'hysteria', 'hysteria2', 'mixed', 'naive',
++	                    'shadowsocks', 'socks', 'trojan', 'tuic', 'vless', 'vmess' ])) {
++		warn(`${getTime()} [DAEMON] Server "${cfg.label || cfg['.name']}": type ${cfg.type} is not supported here, the server is left out\n`);
++		return;
++	}
++
+ 	push(config.inbounds, {
+ 		type: cfg.type,
+ 		tag: 'cfg-' + cfg['.name'] + '-in',
+diff --git a/root/etc/init.d/homeproxy b/root/etc/init.d/homeproxy
+index 34c5a4a..8f9d773 100755
+--- a/root/etc/init.d/homeproxy
++++ b/root/etc/init.d/homeproxy
+@@ -27,6 +27,15 @@ log() {
+ 	echo -e "$(date "+%Y-%m-%d %H:%M:%S") [DAEMON] $*" >> "$LOG_PATH"
+ }
+ 
++# A routing mode of another build (Re:HomeProxy) works as global, as in
++# generate_client.uc (it says so in the log) and firewall_post.ut.
++known_routing_mode() {
++	case "$1" in
++	bypass_mainland_china|custom|gfwlist|global|proxy_mainland_china) echo "$1" ;;
++	*) echo "global" ;;
++	esac
++}
++
+ # A reload or restart runs stop_service and start_service, and each of them
+ # restarted dnsmasq, although the dnsmasq files homeproxy writes are usually
+ # the same before and after. Each restart drops the DHCP and DNS service for a
+@@ -55,6 +64,7 @@ start_service() {
+ 
+ 	local routing_mode proxy_mode
+ 	config_get routing_mode "config" "routing_mode" "bypass_mainland_china"
++	routing_mode="$(known_routing_mode "$routing_mode")"
+ 	config_get proxy_mode "config" "proxy_mode" "redirect_tproxy"
+ 
+ 	local outbound_node
+@@ -398,6 +408,7 @@ check_new_config() {
+ 
+ 	config_load "$CONF"
+ 	config_get routing_mode "config" "routing_mode" "bypass_mainland_china"
++	routing_mode="$(known_routing_mode "$routing_mode")"
+ 	if [ "$routing_mode" != "custom" ]; then
+ 		config_get outbound_node "config" "main_node" "nil"
+ 	else
+-- 
+2.43.0
+
