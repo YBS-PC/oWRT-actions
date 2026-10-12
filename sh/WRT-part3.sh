@@ -120,9 +120,26 @@ if ! . "$GITHUB_WORKSPACE/sh/patch-drift.sh" 2>/dev/null; then
     PATCH_DRIFT_CHECK=0
 fi
 
+# «Build-If: <ключ>=<значение> ...» в заголовке патча (до первого diff):
+# патч только для сборок, где совпадают все значения. Ключи: variant
+# (VARIANT), sb (SB_MODE). Например, 013 у homeproxy — только
+# «Build-If: variant=homeproxy sb=extended». Печатает невыполненные условия;
+# неизвестный ключ — условие не выполнено (патч не применяется).
+patch_build_if() {
+    local _c _cur
+    for _c in $(sed -n '/^diff --git /q; s/^Build-If:[[:space:]]*//p' "$1"); do
+        case "${_c%%=*}" in
+            variant) _cur="${VARIANT:-}" ;;
+            sb)      _cur="${SB_MODE:-}" ;;
+            *)       _cur="" ;;
+        esac
+        [ "$_cur" = "${_c#*=}" ] || printf '%s ' "$_c"
+    done
+}
+
 apply_package_patches() {
     local _dir _name _pkg _p _pp _patch _applied _present _failed _failed_names _ok
-    local _f _q _tmp _later _still _rev _d _skipf
+    local _f _q _tmp _later _still _rev _d _skipf _cond _other
     local -A _drift
 
     for _dir in "$GITHUB_WORKSPACE"/patches/packages/*/; do
@@ -139,12 +156,19 @@ apply_package_patches() {
             continue
         fi
 
-        _applied=0; _present=0; _failed=0; _failed_names=""; _ok=" "; _drift=(); _skipf=""
+        _applied=0; _present=0; _failed=0; _failed_names=""; _ok=" "; _drift=(); _skipf=""; _other=0
         _pp="/tmp/pkgpatch.$$.patch"
         for _p in "$_dir"*.patch; do
             [ -f "$_p" ] || continue
             _patch=$(basename "$_p" .patch)
             sed 's/\r$//' "$_p" > "$_pp"
+
+            _cond=$(patch_build_if "$_pp")
+            if [ -n "$_cond" ]; then
+                echo "  $_name: $_patch не для этой сборки (нужно: ${_cond% }), пропуск"
+                _other=$((_other + 1))
+                continue
+            fi
 
             _d=""
             if [ "${PATCH_DRIFT_CHECK:-1}" = "1" ] && [ "$_pkg" = "package/$_name" ]; then
@@ -206,7 +230,7 @@ apply_package_patches() {
         done
         _failed_names=" $_still"
 
-        echo ">>> $_name ($_pkg): применено $_applied, уже было $_present, пропущено $_failed"
+        echo ">>> $_name ($_pkg): применено $_applied, уже было $_present, пропущено $_failed$([ "$_other" -gt 0 ] && echo ", не для этой сборки $_other")"
         if [ "$_failed" -gt 0 ]; then
             echo "::warning title=Патчи пакета $_name::Не применены:$_failed_names"
             if [ "${FEED_PATCH_STRICT:-0}" = "1" ]; then
