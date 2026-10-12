@@ -1,0 +1,239 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 12 Oct 2026 13:02:02 +0000
+Subject: [PATCH] fix(subscribe): skip nodes with a transport sing-box cannot
+ load
+
+The transport of a vless, trojan or vmess link was copied as is. A link
+with type=xhttp (or splithttp, or any other transport the generator does
+not know) became a node with that transport, and sing-box rejected the
+whole configuration: "unknown transport type: xhttp" on sing-box,
+"x_padding_bytes cannot be disabled" on sing-box-extended. One such node
+in a subscription stopped homeproxy after the next restart.
+
+Subscriptions and the share link import in LuCI now accept only the
+transports the generator writes (grpc, http/h2, httpupgrade, quic, ws)
+and skip any other one with a log line, as they did for kcp. "raw", the
+newer Xray name of plain TCP, is read as TCP instead of an unknown
+transport. The vmess log line names the protocol instead of "(null)".
+
+Checked with the real parse_uri of update_subscriptions.uc and
+parseShareLink of node.js on vless/trojan/vmess links with tcp, raw,
+ws, grpc, xhttp, splithttp and kcp: before, xhttp and splithttp nodes
+were created and raw became an unknown transport; after, they are
+skipped or read as TCP and the other links give the same nodes.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
+---
+ .../resources/view/homeproxy/node.js          | 33 ++++++++++++----
+ .../homeproxy/scripts/update_subscriptions.uc | 38 +++++++++++++++----
+ 2 files changed, 56 insertions(+), 15 deletions(-)
+
+diff --git a/htdocs/luci-static/resources/view/homeproxy/node.js b/htdocs/luci-static/resources/view/homeproxy/node.js
+index 63e0074..de350bc 100644
+--- a/htdocs/luci-static/resources/view/homeproxy/node.js
++++ b/htdocs/luci-static/resources/view/homeproxy/node.js
+@@ -19,6 +19,20 @@ function allowInsecureConfirm(ev, _section_id, value) {
+ 		ev.target.firstElementChild.checked = null;
+ }
+ 
++/* Transports the generator can write. Any other one (kcp, xhttp, splithttp
++ * ...) would make sing-box reject the whole configuration, so such a link is
++ * not imported. "raw" is the newer Xray name of plain TCP. */
++const supported_transports = ['grpc', 'h2', 'http', 'httpupgrade', 'quic', 'ws'];
++
++function transportType(type) {
++	return (!type || ['tcp', 'raw'].includes(type)) ? null : type;
++}
++
++function unsupportedTransport(type) {
++	type = transportType(type);
++	return !!type && !supported_transports.includes(type);
++}
++
+ function parseShareLink(uri, features) {
+ 	let config, url, params;
+ 
+@@ -203,6 +217,9 @@ function parseShareLink(uri, features) {
+ 			/* Check if password exists */
+ 			if (!url.username)
+ 				return null;
++			/* Unsupported transport */
++			else if (unsupportedTransport(params.get('type')))
++				return null;
+ 
+ 			config = {
+ 				label: url.hash ? decodeURIComponent(url.hash.slice(1)) : null,
+@@ -210,7 +227,7 @@ function parseShareLink(uri, features) {
+ 				address: url.hostname,
+ 				port: url.port || '80',
+ 				password: decodeURIComponent(url.username),
+-				transport: params.get('type') !== 'tcp' ? params.get('type') : null,
++				transport: transportType(params.get('type')),
+ 				tls: '1',
+ 				tls_sni: params.get('sni')
+ 			};
+@@ -259,8 +276,8 @@ function parseShareLink(uri, features) {
+ 			url = new URL('http://' + uri[1]);
+ 			params = url.searchParams;
+ 
+-			/* Unsupported protocol */
+-			if (params.get('type') === 'kcp')
++			/* Unsupported transport */
++			if (unsupportedTransport(params.get('type')))
+ 				return null;
+ 			else if (params.get('type') === 'quic' && ((params.get('quicSecurity') && params.get('quicSecurity') !== 'none') || !features.with_quic))
+ 				return null;
+@@ -274,7 +291,7 @@ function parseShareLink(uri, features) {
+ 				address: url.hostname,
+ 				port: url.port || '80',
+ 				uuid: url.username,
+-				transport: params.get('type') !== 'tcp' ? params.get('type') : null,
++				transport: transportType(params.get('type')),
+ 				tls: ['tls', 'xtls', 'reality'].includes(params.get('security')) ? '1' : '0',
+ 				tls_sni: params.get('sni'),
+ 				tls_alpn: params.get('alpn') ? decodeURIComponent(params.get('alpn')).split(',') : null,
+@@ -290,6 +307,7 @@ function parseShareLink(uri, features) {
+ 				break;
+ 			case 'http':
+ 			case 'tcp':
++			case 'raw':
+ 				if (config.transport === 'http' || params.get('headerType') === 'http') {
+ 					config.http_host = params.get('host') ? decodeURIComponent(params.get('host')).split(',') : null;
+ 					config.http_path = params.get('path') ? decodeURIComponent(params.get('path')) : null;
+@@ -321,8 +339,8 @@ function parseShareLink(uri, features) {
+ 
+ 			if (uri.v != '2')
+ 				return null;
+-			/* Unsupported protocols */
+-			else if (uri.net === 'kcp')
++			/* Unsupported transports */
++			else if (unsupportedTransport(uri.net))
+ 				return null;
+ 			else if (uri.net === 'quic' && ((uri.type && uri.type !== 'none') || !features.with_quic))
+ 				return null;
+@@ -339,7 +357,7 @@ function parseShareLink(uri, features) {
+ 				uuid: uri.id,
+ 				vmess_alterid: uri.aid,
+ 				vmess_encrypt: uri.scy || 'auto',
+-				transport: (uri.net !== 'tcp') ? uri.net : null,
++				transport: transportType(uri.net),
+ 				tls: uri.tls === 'tls' ? '1' : '0',
+ 				tls_sni: uri.sni || uri.host,
+ 				tls_alpn: uri.alpn ? uri.alpn.split(',') : null,
+@@ -351,6 +369,7 @@ function parseShareLink(uri, features) {
+ 				break;
+ 			case 'h2':
+ 			case 'tcp':
++			case 'raw':
+ 				if (uri.net === 'h2' || uri.type === 'http') {
+ 					config.transport = 'http';
+ 					config.http_host = uri.host ? uri.host.split(',') : null;
+diff --git a/root/etc/homeproxy/scripts/update_subscriptions.uc b/root/etc/homeproxy/scripts/update_subscriptions.uc
+index bf7c6cd..d5b1a1e 100755
+--- a/root/etc/homeproxy/scripts/update_subscriptions.uc
++++ b/root/etc/homeproxy/scripts/update_subscriptions.uc
+@@ -69,6 +69,20 @@ const node_cache = {},
+ 
+ const ubus = connect();
+ const sing_features = ubus.call('luci.homeproxy', 'singbox_get_features', {}) || {};
++
++/* Transports the generator can write. Any other one (kcp, xhttp, splithttp
++ * ...) would make sing-box reject the whole configuration, so such a node is
++ * skipped. "raw" is the newer Xray name of plain TCP. */
++const supported_transports = ['grpc', 'h2', 'http', 'httpupgrade', 'quic', 'ws'];
++
++function transport_type(t) {
++	return (!t || t in ['tcp', 'raw']) ? null : t;
++}
++
++function unsupported_transport(t) {
++	t = transport_type(t);
++	return (t && !(t in supported_transports));
++}
+ /* Common var end */
+ 
+ /* Log */
+@@ -265,13 +279,19 @@ function parse_uri(uri) {
+ 			url = parseURL('http://' + uri[1]) || {};
+ 			params = url.searchParams || {};
+ 
++			/* Unsupported transport */
++			if (unsupported_transport(params.type)) {
++				log(sprintf('Skipping unsupported %s node: %s.', uri[0], urldecode(url.hash) || url.hostname));
++				return null;
++			}
++
+ 			config = {
+ 				label: url.hash ? urldecode(url.hash) : null,
+ 				type: 'trojan',
+ 				address: url.hostname,
+ 				port: url.port,
+ 				password: urldecode(url.username),
+-				transport: (params.type !== 'tcp') ? params.type : null,
++				transport: transport_type(params.type),
+ 				tls: '1',
+ 				tls_sni: params.sni
+ 			};
+@@ -323,8 +343,8 @@ function parse_uri(uri) {
+ 			url = parseURL('http://' + uri[1]) || {};
+ 			params = url.searchParams || {};
+ 
+-			/* Unsupported protocol */
+-			if (params.type === 'kcp') {
++			/* Unsupported transport */
++			if (unsupported_transport(params.type)) {
+ 				log(sprintf('Skipping sunsupported %s node: %s.', uri[0], urldecode(url.hash) || url.hostname));
+ 				return null;
+ 			} else if (params.type === 'quic' && ((params.quicSecurity && params.quicSecurity !== 'none') || !sing_features.with_quic)) {
+@@ -341,7 +361,7 @@ function parse_uri(uri) {
+ 				address: url.hostname,
+ 				port: url.port,
+ 				uuid: url.username,
+-				transport: (params.type !== 'tcp') ? params.type : null,
++				transport: transport_type(params.type),
+ 				tls: (params.security in ['tls', 'xtls', 'reality']) ? '1' : '0',
+ 				tls_sni: params.sni,
+ 				tls_alpn: params.alpn ? split(urldecode(params.alpn), ',') : null,
+@@ -357,6 +377,7 @@ function parse_uri(uri) {
+ 				break;
+ 			case 'http':
+ 			case 'tcp':
++			case 'raw':
+ 				if (params.type === 'http' || params.headerType === 'http') {
+ 					config.http_host = params.host ? split(urldecode(params.host), ',') : null;
+ 					config.http_path = params.path ? urldecode(params.path) : null;
+@@ -396,9 +417,9 @@ function parse_uri(uri) {
+ 			if (uri.v != '2') {
+ 				log(sprintf('Skipping unsupported %s format.', uri[0]));
+ 				return null;
+-			/* Unsupported protocol */
+-			} else if (uri.net === 'kcp') {
+-				log(sprintf('Skipping unsupported %s node: %s.', uri[0], uri.ps || uri.add));
++			/* Unsupported transport */
++			} else if (unsupported_transport(uri.net)) {
++				log(sprintf('Skipping unsupported %s node: %s.', 'vmess', uri.ps || uri.add));
+ 				return null;
+ 			} else if (uri.net === 'quic' && ((uri.type && uri.type !== 'none') || uri.path || !sing_features.with_quic)) {
+ 				log(sprintf('Skipping unsupported %s node: %s.', uri[0], uri.ps || uri.add));
+@@ -424,7 +445,7 @@ function parse_uri(uri) {
+ 				vmess_alterid: uri.aid,
+ 				vmess_encrypt: uri.scy || 'auto',
+ 				vmess_global_padding: '1',
+-				transport: (uri.net !== 'tcp') ? uri.net : null,
++				transport: transport_type(uri.net),
+ 				tls: (uri.tls === 'tls') ? '1' : '0',
+ 				tls_sni: uri.sni || uri.host,
+ 				tls_alpn: uri.alpn ? split(uri.alpn, ',') : null,
+@@ -436,6 +457,7 @@ function parse_uri(uri) {
+ 				break;
+ 			case 'h2':
+ 			case 'tcp':
++			case 'raw':
+ 				if (uri.net === 'h2' || uri.type === 'http') {
+ 					config.transport = 'http';
+ 					config.http_host = uri.host ? split(uri.host, ',') : null;
+-- 
+2.43.0
+
