@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: 'Target Device (combo: R6S homeproxy ×2 (sb latest и extended), trafira, podkop + RB5009 clear, switch; AGH/sing-box/ytb/zz1 задаёт сам)'
+        description: 'Target Device (combo: R6S homeproxy sb-extended, RB5009 clear, RB5009 switch; agh/sb/ytb/zz/patches/feeds задаёт сам)'
         required: true
         default: 'combo'
         type: choice
@@ -158,30 +158,21 @@ env:
   # подпапки с его патчами: patches/feeds/<имя>/ (WRT-part2.sh применяет
   # подпапку того фида, который реально загружен, остальные пропускает).
   # Версия пакета берётся из тегов этого же репозитория.
-  #   патчи patches/feeds/forkop (25 шт., включая всё рабочее из форка)
+  #   патчи patches/feeds/forkop (включая всё рабочее из форка)
   FORKOP_FEED_ORIG: "forkop https://github.com/ushan0v/forkop.git;main"
-  #   патч  patches/feeds/forkopmod (001, для 1.0.10: без него исключённые
-  #   устройства не получают правил «напрямую», «apk del forkop» падает)
+
   FORKOP_FEED_MOD: "forkopmod https://github.com/Gavr1024/forkop-mod.git;main"
 
   # Фид trafira (продолжение forkop: Alice Mode, DoH mTLS, Zapret/Zapret2/
   # ByeDPI в секциях). Отдельный вариант trafira, свой конфиг
-  # /etc/config/trafira. Патчи patches/feeds/trafira (001 — без него
-  # установка sing-box со страницы «Компоненты» падает; 002 — правило fw4
-  # для TPROXY в образе прошивки; 004 — пароли с %40/%23/+ в ручных
-  # ссылках; 005 — битая ссылка блокирует только свою секцию; 006 — блок
-  # «Окружение» в диагностике; Exclude BitTorrent автор внёс сам, наш 003
-  # удалён). Версия пакета —
+  # /etc/config/trafira. Версия пакета —
   # из тегов этого репозитория (TRAFIRA_VERSION).
   TRAFIRA_FEED: "trafira https://github.com/petrouspetr-pixel/trafira.git;main"
 
   # Фид netshift (форк podkop от yandexru45: подписки с группами и
   # автовыбором, переключение sing-box ↔ sing-box-extended (xhttp) из LuCI,
   # IPv6, блокировка DoH). Как podkop: shell + jq, конфиг /etc/config/netshift,
-  # DNS 127.0.0.42:53, youtubeUnblock совместим. Патчи patches/feeds/netshift
-  # (001 — разбор ссылок: socks5, транспорт http, синтаксис jq 1.7 для 24.10;
-  # 002 — SRV/PTR мимо FakeIP,
-  # диагностика DNS с портом). Версия — из тегов (NETSHIFT_VERSION).
+  # DNS 127.0.0.42:53, youtubeUnblock совместим. Версия — из тегов (NETSHIFT_VERSION).
   NETSHIFT_FEED: "netshift https://github.com/yandexru45/netshift.git;main"
 
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -306,13 +297,15 @@ jobs:
             # $(entry ...) — подстановка: в ней NOTES не сохраняется, для
             # combo это и не нужно (значения ниже уже согласованы с вариантами).
             # Запасные сборки (дописать в include через запятую):
-            #   $(entry nanopi-r6s homeproxy latest 1.12.x true true false true)
-            #   $(entry nanopi-r6s forkop latest extended false true true true)
-            #   $(entry nanopi-r6s homeproxy latest extended true true true true)
+            #   $(entry nanopi-r6s homeproxy latest 1.12.x true true false true),
+            #   $(entry nanopi-r6s forkop latest extended false true true true),
+            #   $(entry nanopi-r6s homeproxy latest latest true true true true),
+            #   $(entry nanopi-r6s trafira latest extended false true true true),
+            #   $(entry nanopi-r6s podkop latest podkop-engine-full true true true true),
+            #   $(entry nanopi-r6s homeproxy latest extended true true true true),
             #     (homeproxy с sing-box-extended: только в этой связке
-            #     применяются патчи 017–018 — XHTTP и ключ X25519MLKEM768
-            #     для REALITY, Build-If)
-            json="{\"include\":[$(entry nanopi-r6s homeproxy latest latest true true true true),$(entry nanopi-r6s homeproxy latest extended true true true true),$(entry nanopi-r6s trafira latest extended false true true true),$(entry nanopi-r6s podkop latest podkop-engine-full true true true true),$(entry rb5009 clear no no false true false true),$(entry rb5009 switch no no false true false true)]}"
+            #     применяются патчи XHTTP и ключ X25519MLKEM768 для REALITY, Build-If)
+            json="{\"include\":[$(entry nanopi-r6s homeproxy latest extended true true true true),$(entry rb5009 clear no no false true false true),$(entry rb5009 switch no no false true false true)]}"
           else
             # Все устройства из config/conf/ — при добавлении нового дописать сюда.
             targets="nanopi-r6s nanopi-r5s rb5009 slateax ax59u brume2"
@@ -473,7 +466,7 @@ jobs:
         AGH_REPO="AdguardTeam/AdGuardHome"
         AGH_ASSET="AdGuardHome_linux_arm64.tar.gz"
         # Последний стабильный тег — через git ls-remote, как у sing-box: без
-        # лимитов API, сортировка по версии, бета-теги (v0.108.0-b.N) отсекаются.
+        # лимитов API, сортировка по версии, бета-теги отсекаются.
         # Архив и файл сумм качаем по этому тегу: две ссылки на «latest» могли
         # бы попасть в разные релизы, если новый выйдет между запросами.
         AGH_TAG=$(git ls-remote --tags --refs "https://github.com/${AGH_REPO}.git" 2>/dev/null \
