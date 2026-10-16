@@ -223,10 +223,9 @@ jobs:
           # ВНИМАНИЕ: slateax и ax59u — «тонкие» устройства: part3 ставит им
           # пакет sing-box-tiny из фида и удаляет скачанный бинарник, поэтому
           # выбор версии sing-box на них не влияет (в матрице sb=tiny). С
-          # патчами homeproxy (patches/packages/luci-app-homeproxy/004, 006)
-          # генератор сам подстраивается под версию из фида (1.13+). Без патчей
-          # генератор несовместим с sing-box 1.13+, и в варианте homeproxy эти
-          # сборки честно упадут на «Check sing-box compatibility» (до
+          # патчем homeproxy 006 (patches/packages/luci-app-homeproxy) генератор
+          # сам подстраивается под версию из фида; если ядро что-то не примет,
+          # сборка честно упадёт на «Check sing-box compatibility» (до
           # компиляции, остальные продолжатся: fail-fast: false).
           TINY_TARGETS="slateax ax59u"
           NOTES=""
@@ -289,7 +288,7 @@ jobs:
             # feeds=true — фиды из репозитория пакетов (обновлений после
             # прошивки почти нет); поставьте false для сборки на коммитах тега.
             #   R6S homeproxy: AGH latest, sing-box latest, ytb, zz1, патчи
-            #     (с sing-box 1.13+ homeproxy работает только с патчами 004/006)
+            #     (с sing-box 1.14 опции DNS — патч 006)
             #   R6S trafira: AGH latest, sing-box-extended, без ytb (у trafira
             #     его нет), zz1, патчи
             #   R6S podkop: AGH latest, podkop-engine-full, ytb, zz1, патчи
@@ -346,14 +345,15 @@ jobs:
             done
           fi
 
-          # Заранее предупреждаем о сборках homeproxy без патчей, которые
-          # остановятся на проверке совместимости: без патча 004 генератор
-          # homeproxy принимает только sing-box 1.12. В фиде 25.12: в теге
-          # 25.12.5 — 1.12.x, в репозитории пакетов (feeds_latest) — 1.13.x;
-          # на slateax/ax59u — sing-box-tiny из фида (sb=tiny).
+          # Заранее предупреждаем о сборках homeproxy без патчей: генератор
+          # immortalwrt/homeproxy принимает sing-box 1.13+, но на 1.14+ пишет
+          # устаревший store_rdrc, а в режиме bypass_mainland_china со списком
+          # прокси-доменов sing-box 1.14 не запускается (патч 006). В фиде
+          # 25.12: в теге 25.12.5 — 1.12.x, в репозитории пакетов
+          # (feeds_latest) — 1.14.x; на slateax/ax59u — sing-box-tiny (sb=tiny).
           echo "$json" | jq -r '.include[] | select(.variant == "homeproxy" and .patches == false and (.sb != "1.12.x")) | "\(.target) \(.sb)"' |
           while read -r t sbv; do
-            echo "::warning title=${t}: homeproxy без патчей (sb=${sbv})::Без патча 004 homeproxy несовместим с sing-box 1.13+, и сборка ${t} остановится на проверке совместимости до компиляции (если в фиде 1.13+). Включите apply_patches или выберите sb=1.12.x."
+            echo "::warning title=${t}: homeproxy без патчей (sb=${sbv})::Без патча 006 на sing-box 1.14+ homeproxy пишет устаревший store_rdrc, а в режиме bypass_mainland_china со списком прокси-доменов не запускается. Включите apply_patches или выберите sb=1.12.x."
           done
 
           # Re:HomeProxy без патчей: генератор форка пишет DNS-серверам detour
@@ -1526,34 +1526,17 @@ jobs:
         M_RDRC=$(has 'store_rdrc')                                     # cache_file.store_rdrc (устарел в 1.14)
         M_INDEP=$(has 'independent_cache')                             # dns.independent_cache (устарел в 1.14)
 
-        # Генератор, который сам выбирает форму sniff по версии ядра
-        # (patches/packages/luci-app-homeproxy/004-*): legacy-поля пишутся
-        # только для sing-box < 1.13, иначе — правило action 'sniff'.
-        # Признаки проверяются все сразу: поля входящих подключений зависят от
-        # legacy_inbound_sniff, правило sniff есть, версия читается из ядра.
-        # Тогда для 1.13+ legacy-поля в пробу не попадают. Если патч не
-        # применился или его формат другой — остаётся строгая проверка выше.
-        SNIFF_MODE="статически"
-        if [ "$M_SNIFF" = "1" ] &&
-           grep -q 'sniff: legacy_inbound_sniff' "$GEN" &&
-           grep -q "action: 'sniff'" "$GEN" &&
-           grep -q "sing-box version" "$GEN"; then
-            case "$SB_VER" in
-                0.*|1.[0-9]|1.[0-9].*|1.1[0-2]|1.1[0-2].*) SNIFF_MODE="по версии: legacy-поля (sing-box < 1.13)" ;;
-                *) M_SNIFF=0; SNIFF_MODE="по версии: правило sniff (sing-box ≥ 1.13)" ;;
-            esac
-        fi
-
-        # То же для опций кэша DNS (patches/packages/luci-app-homeproxy/006-*):
-        # store_rdrc и independent_cache пишутся только для sing-box < 1.14,
-        # с 1.14 — store_dns. Тогда для 1.14+ их нет и в пробе.
+        # Генератор с патчем 006 (patches/packages/luci-app-homeproxy/006-*)
+        # сам выбирает опции кэша DNS по версии ядра: store_rdrc — только для
+        # sing-box < 1.14, с 1.14 — store_dns. Тогда для 1.14+ store_rdrc нет и
+        # в пробе. independent_cache и legacy-поля sniff в immortalwrt/homeproxy
+        # убрал сам автор; если генератор их пишет, остаётся строгая проверка.
         CACHE_MODE="статически"
-        if grep -q 'independent_cache: legacy_dns_cache' "$GEN" &&
-           grep -q 'store_rdrc: legacy_dns_cache' "$GEN" &&
+        if grep -q 'store_rdrc: legacy_dns_cache' "$GEN" &&
            grep -q 'store_dns: modern_dns_cache' "$GEN"; then
             case "$SB_VER" in
-                0.*|1.[0-9]|1.[0-9].*|1.1[0-3]|1.1[0-3].*) CACHE_MODE="по версии: store_rdrc/independent_cache (sing-box < 1.14)" ;;
-                *) M_RDRC=0; M_INDEP=0; CACHE_MODE="по версии: store_dns (sing-box ≥ 1.14)" ;;
+                0.*|1.[0-9]|1.[0-9].*|1.1[0-3]|1.1[0-3].*) CACHE_MODE="по версии: store_rdrc (sing-box < 1.14)" ;;
+                *) M_RDRC=0; CACHE_MODE="по версии: store_dns (sing-box ≥ 1.14)" ;;
             esac
         fi
 
@@ -1582,7 +1565,6 @@ jobs:
         echo "Генератор      : $GEN"
         echo "sing-box       : $SB_VER ($SB_SRC)"
         echo "Маркеры        : sniff=$M_SNIFF block=$M_BLOCK store_rdrc=$M_RDRC independent_cache=$M_INDEP"
-        echo "sniff в генер. : $SNIFF_MODE"
         echo "Кэш DNS в ген. : $CACHE_MODE"
         echo "------------------------------------------"
         echo "${OUT:-(замечаний нет)}"
@@ -1612,8 +1594,8 @@ jobs:
                 echo ">>> либо дождись обновления homeproxy в immortalwrt."
             fi
             if [ "${{ matrix.patches }}" != "true" ]; then
-                echo ">>> Патчи для этой сборки отключены (patches=false). Поддержку"
-                echo ">>> sing-box 1.13+ даёт patches/packages/luci-app-homeproxy/004-*:"
+                echo ">>> Патчи для этой сборки отключены (patches=false). Опции DNS"
+                echo ">>> sing-box 1.14 даёт patches/packages/luci-app-homeproxy/006-*:"
                 echo ">>> включи патчи (apply_patches / поле patches в combo) или выбери 1.12.x."
             fi
             exit 1
