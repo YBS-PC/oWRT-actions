@@ -57,6 +57,20 @@ else
     echo ">>> [Zapret] Пакет 'zapret' не выбран в конфиге (или закомментирован). Скачивание пропущено."
 fi
 
+# checkout_variant_commit <каталог клона> <имя для лога>
+# Поле формы variant_commit (VARIANT_COMMIT, только hex — проверено в
+# workflow): клон переключается на этот коммит. Нет такого коммита — сборка
+# останавливается: молча собрать последний код вместо заказанного нельзя.
+checkout_variant_commit() {
+    [ -n "$VARIANT_COMMIT" ] || return 0
+    if git -C "$1" checkout -q "$VARIANT_COMMIT" 2>/dev/null; then
+        echo ">>> [$2] Коммит $(git -C "$1" rev-parse --short HEAD) из поля variant_commit ($(git -C "$1" log -1 --format=%cd --date=short))"
+    else
+        echo "::error title=$2::Коммит $VARIANT_COMMIT (поле variant_commit) не найден в репозитории"
+        exit 1
+    fi
+}
+
 # =========================================================
 # УСЛОВНЫЙ БЛОК: HomeProxy из immortalwrt/homeproxy (master)
 # На OpenWrt его нет в фидах. В ImmortalWrt LuCI он есть, но в ветках
@@ -72,15 +86,21 @@ if [[ "$VARIANT" != "clear" && "$VARIANT" != "crystal_clear" && "$VARIANT" != "s
         echo ">>> [HomeProxy] Добавляем HomeProxy вручную..."
         mkdir -p ./package/luci-app-homeproxy
         git clone -b master https://github.com/immortalwrt/homeproxy.git ./package/luci-app-homeproxy/
+        checkout_variant_commit ./package/luci-app-homeproxy HomeProxy
     else
         echo ">>> [HomeProxy] Обнаружен фид ImmortalWrt LuCI: его копия заменяется на immortalwrt/homeproxy (master), как на OpenWrt."
         mkdir -p ./package/luci-app-homeproxy
         if git clone -b master https://github.com/immortalwrt/homeproxy.git ./package/luci-app-homeproxy/; then
+            checkout_variant_commit ./package/luci-app-homeproxy HomeProxy
             # feeds install уже сделал ссылку package/feeds/luci/luci-app-homeproxy:
             # без её удаления пакет был бы в дереве дважды.
             rm -rf ./feeds/luci/applications/luci-app-homeproxy ./package/feeds/luci/luci-app-homeproxy
         else
             rm -rf ./package/luci-app-homeproxy
+            if [ -n "$VARIANT_COMMIT" ]; then
+                echo "::error title=HomeProxy::Клон immortalwrt/homeproxy не получен, а задан коммит $VARIANT_COMMIT (поле variant_commit)"
+                exit 1
+            fi
             echo "::warning title=HomeProxy::Клон immortalwrt/homeproxy не получен, остаётся копия из фида ImmortalWrt LuCI: патчи patches/packages/luci-app-homeproxy на неё могут не лечь"
         fi
     fi
@@ -98,6 +118,7 @@ if [ "$VARIANT" == "rehomeproxy" ]; then
     REHP_DIR="./package/luci-app-re-homeproxy"
     echo ">>> [Re:HomeProxy] Клонируем 1andrevich/homeproxy-hiddify..."
     git clone -b master https://github.com/1andrevich/homeproxy-hiddify.git "$REHP_DIR/"
+    [ -d "$REHP_DIR/.git" ] && checkout_variant_commit "$REHP_DIR" Re:HomeProxy
     # В Makefile форка PKG_VERSION:=1; его собственные сборки получают версию
     # <дата коммита>-r<число коммитов>. Делаем так же, чтобы версия пакета
     # в прошивке показывала, из какого состояния репозитория он собран.
