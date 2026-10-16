@@ -68,7 +68,7 @@ index 04a0f6d..9284b3d 100755
  
  if (routing_mode !== 'custom') {
 diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
-index 6febd89..b306af1 100755
+index 7ecd502..ab8c6ec 100755
 --- a/root/etc/homeproxy/scripts/generate_client.uc
 +++ b/root/etc/homeproxy/scripts/generate_client.uc
 @@ -42,7 +42,24 @@ const uciroutingsetting = 'routing',
@@ -97,7 +97,7 @@ index 6febd89..b306af1 100755
  
  let wan_dns = ubus.call('network.interface', 'status', {'interface': 'wan'})?.['dns-server']?.[0];
  if (!wan_dns)
-@@ -376,6 +393,13 @@ function get_outbound(cfg) {
+@@ -382,6 +399,13 @@ function get_outbound(cfg) {
  		case 'direct-out':
  			return cfg;
  		default:
@@ -111,7 +111,7 @@ index 6febd89..b306af1 100755
  			const node = uci.get(uciconfig, cfg, 'node');
  			if (isEmpty(node))
  				die(sprintf("%s's node is missing, please check your configuration.", cfg));
-@@ -396,6 +420,13 @@ function get_resolver(cfg) {
+@@ -402,6 +426,13 @@ function get_resolver(cfg) {
  	case 'system-dns':
  		return cfg;
  	default:
@@ -125,7 +125,7 @@ index 6febd89..b306af1 100755
  		return 'cfg-' + cfg + '-dns';
  	}
  }
-@@ -1034,5 +1065,45 @@ if (clash_api_controller) {
+@@ -1055,5 +1086,45 @@ if (clash_api_controller) {
  }
  /* Experimental end */
  
