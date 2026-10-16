@@ -49,6 +49,26 @@ resolve_latest_tag() {
     [ -n "$_ver" ] && printf '%s\n' "$_ver"
 }
 
+# variant_version <имя фида> <git-url> -> x.y.z для пакета варианта.
+# С коммитом из поля variant_commit (VARIANT_COMMIT) — последний тег x.y.z,
+# который входит в этот коммит: scripts/feeds клонирует такой фид целиком,
+# теги в клоне есть. Без коммита (или если в истории тегов нет) — последний
+# тег репозитория, как раньше.
+variant_version() {
+    local _name="$1" _repo="$2" _ver=""
+    if [ -n "$VARIANT_COMMIT" ] && [ -e "feeds/$_name/.git" ]; then
+        _ver=$(git -C "feeds/$_name" tag --merged HEAD 2>/dev/null | sed 's|^v||' \
+            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
+        if [ -n "$_ver" ]; then
+            echo "  (тег $_ver входит в коммит $VARIANT_COMMIT)" >&2
+        else
+            echo "  (в истории коммита $VARIANT_COMMIT нет тегов x.y.z, беру последний тег репозитория)" >&2
+        fi
+    fi
+    [ -n "$_ver" ] || _ver=$(resolve_latest_tag "$_repo")
+    [ -n "$_ver" ] && printf '%s\n' "$_ver"
+}
+
 # export_build_var <ИМЯ> <значение> — в текущий процесс и в шаги workflow
 export_build_var() {
     export "$1=$2"
@@ -63,9 +83,10 @@ if [[ "$VARIANT" == "forkop" ]]; then
     # Версию берём из репозитория того фида forkop, который реально подключён
     # в feeds.conf (вариант forkop / forkop-mod в форме): forkop (ushan0v) или forkopmod
     # (Gavr1024) — подходит любое имя фида, начинающееся с «forkop».
-    FORKOP_REPO=$(awk '$1 == "src-git" && $2 ~ /^forkop/ { print $3; exit }' feeds.conf.default 2>/dev/null | sed 's/[;^].*//')
+    FORKOP_REPO=$(awk '$1 ~ /^src-git/ && $2 ~ /^forkop/ { print $3; exit }' feeds.conf.default 2>/dev/null | sed 's/[;^].*//')
+    FORKOP_FEED_NAME=$(awk '$1 ~ /^src-git/ && $2 ~ /^forkop/ { print $2; exit }' feeds.conf.default 2>/dev/null)
     [ -n "$FORKOP_REPO" ] || FORKOP_REPO="https://github.com/ushan0v/forkop.git"
-    FORKOP_VER=$(resolve_latest_tag "$FORKOP_REPO")
+    FORKOP_VER=$(variant_version "${FORKOP_FEED_NAME:-forkop}" "$FORKOP_REPO")
     if [ -n "$FORKOP_VER" ]; then
         export_build_var FORKOP_VERSION "$FORKOP_VER"
         echo "✓ forkop: $FORKOP_VER ($FORKOP_REPO)"
@@ -82,9 +103,9 @@ if [[ "$VARIANT" == "trafira" ]]; then
     # trafira/Makefile и luci-app-trafira/Makefile: TRAFIRA_VERSION x.y.z
     # (dev -> PKG_VERSION=0.0.0, иное -> $(error)). Версия видна в LuCI
     # trafira и в его проверке обновлений.
-    TRAFIRA_REPO=$(awk '$1 == "src-git" && $2 == "trafira" { print $3; exit }' feeds.conf.default 2>/dev/null | sed 's/[;^].*//')
+    TRAFIRA_REPO=$(awk '$1 ~ /^src-git/ && $2 == "trafira" { print $3; exit }' feeds.conf.default 2>/dev/null | sed 's/[;^].*//')
     [ -n "$TRAFIRA_REPO" ] || TRAFIRA_REPO="https://github.com/petrouspetr-pixel/trafira.git"
-    TRAFIRA_VER=$(resolve_latest_tag "$TRAFIRA_REPO")
+    TRAFIRA_VER=$(variant_version trafira "$TRAFIRA_REPO")
     if [ -n "$TRAFIRA_VER" ]; then
         export_build_var TRAFIRA_VERSION "$TRAFIRA_VER"
         echo "✓ trafira: $TRAFIRA_VER ($TRAFIRA_REPO)"
@@ -99,9 +120,9 @@ if [[ "$VARIANT" == "podkop" ]]; then
     # пакета 0.<дата сборки>, и проверка обновлений в LuCI podkop всегда
     # видит «новую версию». Берём последний тег (форма 0.7.22) того репо,
     # что подключён в feeds.conf.
-    PODKOP_REPO=$(awk '$1 == "src-git" && $2 == "podkop" { print $3; exit }' feeds.conf.default 2>/dev/null | sed 's/[;^].*//')
+    PODKOP_REPO=$(awk '$1 ~ /^src-git/ && $2 == "podkop" { print $3; exit }' feeds.conf.default 2>/dev/null | sed 's/[;^].*//')
     [ -n "$PODKOP_REPO" ] || PODKOP_REPO="https://github.com/itdoginfo/podkop.git"
-    PODKOP_VER=$(resolve_latest_tag "$PODKOP_REPO")
+    PODKOP_VER=$(variant_version podkop "$PODKOP_REPO")
     if [ -n "$PODKOP_VER" ]; then
         export_build_var PODKOP_VERSION "$PODKOP_VER"
         echo "✓ podkop: $PODKOP_VER ($PODKOP_REPO)"
@@ -114,9 +135,9 @@ if [[ "$VARIANT" == "netshift" ]]; then
     # netshift/Makefile: без NETSHIFT_VERSION — зашитая версия, которая
     # отстаёт от тегов; luci-app-netshift — 0.<дата сборки>, и проверка
     # обновлений в LuCI всегда видела бы «новую версию».
-    NETSHIFT_REPO=$(awk '$1 == "src-git" && $2 == "netshift" { print $3; exit }' feeds.conf.default 2>/dev/null | sed 's/[;^].*//')
+    NETSHIFT_REPO=$(awk '$1 ~ /^src-git/ && $2 == "netshift" { print $3; exit }' feeds.conf.default 2>/dev/null | sed 's/[;^].*//')
     [ -n "$NETSHIFT_REPO" ] || NETSHIFT_REPO="https://github.com/yandexru45/netshift.git"
-    NETSHIFT_VER=$(resolve_latest_tag "$NETSHIFT_REPO")
+    NETSHIFT_VER=$(variant_version netshift "$NETSHIFT_REPO")
     if [ -n "$NETSHIFT_VER" ]; then
         export_build_var NETSHIFT_VERSION "$NETSHIFT_VER"
         echo "✓ netshift: $NETSHIFT_VER ($NETSHIFT_REPO)"
