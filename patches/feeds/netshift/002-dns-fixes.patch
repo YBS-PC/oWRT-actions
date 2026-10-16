@@ -18,11 +18,11 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
 diff --git a/netshift/files/usr/bin/netshift b/netshift/files/usr/bin/netshift
-index 8a0d96e..090c78a 100755
+index 4141ff7..d9093ed 100755
 --- a/netshift/files/usr/bin/netshift
 +++ b/netshift/files/usr/bin/netshift
-@@ -5002,6 +5002,10 @@ sing_box_configure_dns() {
-     config=$(sing_box_cm_add_dns_reject_rule "$config" "domain_suffix" '"use-application-dns.net"')
+@@ -5043,6 +5043,10 @@ sing_box_configure_dns() {
+     config_foreach configure_ipv6_real_dns_rule "section"
      config=$(sing_box_cm_add_dns_route_rule "$config" "$SB_FAKEIP_DNS_SERVER_TAG" "$SB_FAKEIP_DNS_RULE_TAG")
      config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_FAKEIP_DNS_RULE_TAG" "rewrite_ttl" "$rewrite_ttl")
 +    # FakeIP can only answer A/AAAA. Other query types for the same domains
@@ -32,7 +32,7 @@ index 8a0d96e..090c78a 100755
      service_domains=$(comma_string_to_json_array "$FAKEIP_TEST_DOMAIN,$CHECK_PROXY_IP_DOMAIN")
      config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_FAKEIP_DNS_RULE_TAG" "domain" "$service_domains")
  
-@@ -7595,6 +7599,20 @@ get_status() {
+@@ -7707,6 +7711,20 @@ get_status() {
      echo "{\"enabled\":$enabled,\"status\":\"$status\"}"
  }
  
@@ -53,7 +53,7 @@ index 8a0d96e..090c78a 100755
  check_dns_available() {
      local dns_type dns_server bootstrap_dns_server
      config_get dns_type "settings" "dns_type"
-@@ -7619,28 +7637,33 @@ check_dns_available() {
+@@ -7731,28 +7749,33 @@ check_dns_available() {
          display_dns_server="dns.nextdns.io/$masked_path"
      fi
  
@@ -92,7 +92,7 @@ index 8a0d96e..090c78a 100755
              dns_status=1
          fi
      else
-@@ -7659,7 +7682,9 @@ check_dns_available() {
+@@ -7771,7 +7794,9 @@ check_dns_available() {
  
      # Check bootstrap DNS server
      if [ -n "$bootstrap_dns_server" ]; then
