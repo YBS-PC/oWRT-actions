@@ -116,6 +116,12 @@ on:
         type: boolean
         default: true
 
+      use_base_commit:
+        description: 'Приложение варианта — с коммита автора из BASE его патчей (на нём патчи ложатся точно; действует при включённых патчах, и в combo). Снять — последний коммит'
+        required: true
+        type: boolean
+        default: true
+
       feeds_latest:
         description: 'Фиды packages/luci/routing/telephony/video — коммиты репозитория пакетов (как после apk upgrade), а не тега релиза (в combo задаётся матрицей)'
         required: true
@@ -132,12 +138,6 @@ on:
         description: 'Target Commit Hash (Optional)'
         required: false
         default: ''
-
-      variant_commit:
-        description: 'Коммит репозитория приложения варианта (homeproxy, rehomeproxy, podkop, netshift, forkop, forkop-mod, trafira, passwall, xray), 7–40 hex. Пусто — последний. В combo игнорируется'
-        required: false
-        default: ''
-        type: string
 
 env:
   CONFIG_FILE: ./config/WRT.config
@@ -190,9 +190,6 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
       - id: set-matrix
-        env:
-          # Строка формы — через env, а не подстановкой в текст скрипта.
-          INPUT_VCOMMIT: ${{ inputs.variant_commit }}
         run: |
           INPUT_TARGET="${{ inputs.target }}"
           INPUT_VARIANT="${{ inputs.variant }}"
@@ -203,15 +200,9 @@ jobs:
           INPUT_PATCHES="${{ inputs.apply_patches }}"
           INPUT_FEEDS="${{ inputs.feeds_latest }}"
 
-          # Коммит репозитория приложения варианта (поле variant_commit):
-          # только hex, иначе в feeds.conf и git checkout попала бы
-          # произвольная строка. Пусто — последний коммит, как раньше.
-          VCOMMIT="${INPUT_VCOMMIT//[[:space:]]/}"
-          VCOMMIT="${VCOMMIT,,}"
-          if [ -n "$VCOMMIT" ] && ! [[ "$VCOMMIT" =~ ^[0-9a-f]{7,40}$ ]]; then
-            echo "::error::Некорректный variant_commit: '$INPUT_VCOMMIT' (нужно 7–40 hex-символов)"
-            exit 1
-          fi
+          # Галочка use_base_commit: приложение варианта — с коммита автора из
+          # patches/<feeds|packages>/<имя>/BASE (коммит читает job build).
+          INPUT_BASE="${{ inputs.use_base_commit }}"
 
           # Каждая сборка матрицы несёт СВОИ настройки:
           #   agh     — "no" (убрать из прошивки), "feed" (пакет из фида),
@@ -249,8 +240,8 @@ jobs:
           TINY_TARGETS="slateax ax59u"
           NOTES=""
 
-          # entry <target> <variant> <agh> <sb> <ytb> <zz> <patches> <feeds> [vc]
-          # vc — коммит репозитория приложения варианта (пусто — последний).
+          # entry <target> <variant> <agh> <sb> <ytb> <zz> <patches> <feeds>
+          # Поле base матрицы — галочка use_base_commit формы (и в combo).
           # Приводит выбор к тому, что вариант реально допускает, чтобы имя
           # артефакта не врало: clear/crystal_clear/switch вырезают AGH,
           # sing-box и youtubeUnblock; passwall/v2raya/xray — sing-box;
@@ -260,7 +251,7 @@ jobs:
           # и тянут его зависимостью); rehomeproxy (Re:HomeProxy) умеет и hiddify-core,
           # но его приложение ставит само уже на роутере.
           entry() {
-            local t="$1" v="$2" agh="$3" sb="$4" ytb="$5" zz="$6" pt="$7" fd="$8" vc="${9:-}" orig
+            local t="$1" v="$2" agh="$3" sb="$4" ytb="$5" zz="$6" pt="$7" fd="$8" orig
             # vname — имя варианта для людей (имя job и артефакта); fk — фид
             # forkop. forkop-mod внутри сборки — тот же вариант forkop, только
             # с фидом форка: part2/part3/zz1 различать их не нужно.
@@ -298,20 +289,18 @@ jobs:
             if [ "$orig" != "agh=$agh sb=$sb ytb=$ytb zz=$zz" ]; then
               NOTES="${NOTES}${t}/${vname}: ${orig} -> agh=$agh sb=$sb ytb=$ytb zz=$zz\n"
             fi
-            # У clear/crystal_clear/switch нет приложения, v2rayA берётся из
-            # фида packages: закреплять нечего.
-            case "$v" in
-              clear|crystal_clear|switch|v2raya)
-                [ -n "$vc" ] && NOTES="${NOTES}${t}/${vname}: variant_commit=${vc} -> пусто (у варианта нет своего репозитория)\n"
-                vc="" ;;
-            esac
-            printf '{"target":"%s","variant":"%s","vname":"%s","fk":"%s","agh":"%s","sb":"%s","ytb":%s,"zz":%s,"patches":%s,"feeds":%s,"vc":"%s"}' \
-              "$t" "$v" "$vname" "$fk" "$agh" "$sb" "$ytb" "$zz" "$pt" "$fd" "$vc"
+            # Коммит из BASE — только вместе с патчами: он описывает, на какой
+            # код сняты патчи. У clear/crystal_clear/switch нет приложения,
+            # v2rayA берётся из фида packages: закреплять нечего.
+            local base=false
+            [ "$INPUT_BASE" = "true" ] && [ "$pt" = "true" ] && base=true
+            case "$v" in clear|crystal_clear|switch|v2raya) base=false ;; esac
+            printf '{"target":"%s","variant":"%s","vname":"%s","fk":"%s","agh":"%s","sb":"%s","ytb":%s,"zz":%s,"patches":%s,"feeds":%s,"base":%s}' \
+              "$t" "$v" "$vname" "$fk" "$agh" "$sb" "$ytb" "$zz" "$pt" "$fd" "$base"
           }
 
           if [ "$INPUT_TARGET" == "combo" ]; then
             echo ">>> Generating COMBO matrix..."
-            [ -n "$VCOMMIT" ] && echo "::notice title=variant_commit::В combo поле игнорируется: каждая сборка берёт последний коммит своего приложения."
             # Поля: устройство вариант agh sb ytb zz patches feeds.
             # feeds=true — фиды из репозитория пакетов (обновлений после
             # прошивки почти нет); поставьте false для сборки на коммитах тега.
@@ -347,7 +336,7 @@ jobs:
               [ -n "$json_parts" ] && json_parts="$json_parts,"
               # Без подстановки $(...): entry дописывает NOTES, а подоболочка
               # эти изменения потеряла бы.
-              entry "$t" "$INPUT_VARIANT" "$INPUT_AGH" "$INPUT_SB" "$INPUT_YTB" "$INPUT_ZZ" "$INPUT_PATCHES" "$INPUT_FEEDS" "$VCOMMIT" > /tmp/entry.json
+              entry "$t" "$INPUT_VARIANT" "$INPUT_AGH" "$INPUT_SB" "$INPUT_YTB" "$INPUT_ZZ" "$INPUT_PATCHES" "$INPUT_FEEDS" > /tmp/entry.json
               json_parts="$json_parts$(cat /tmp/entry.json)"
             done
             json="{\"include\":[$json_parts]}"
@@ -440,7 +429,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
     
-    name: ${{ inputs.source }} ${{ inputs.branch }} [${{ matrix.vname }}] - ${{ matrix.target }} (agh:${{ matrix.agh }}, sb:${{ matrix.sb }}, ytb:${{ matrix.ytb }}, zz:${{ matrix.zz }}, patches:${{ matrix.patches }}, feeds:${{ matrix.feeds && 'repo' || 'tag' }}${{ matrix.vc && format(', app:{0}', matrix.vc) || '' }})
+    name: ${{ inputs.source }} ${{ inputs.branch }} [${{ matrix.vname }}] - ${{ matrix.target }} (agh:${{ matrix.agh }}, sb:${{ matrix.sb }}, ytb:${{ matrix.ytb }}, zz:${{ matrix.zz }}, patches:${{ matrix.patches }}, feeds:${{ matrix.feeds && 'repo' || 'tag' }}${{ matrix.base && ', app:base' || '' }})
 
     steps:
     - name: Free up disk space
@@ -941,7 +930,7 @@ jobs:
         else
             echo "Фиды           : как в теге релиза"
         fi
-        echo "Приложение     : ${{ matrix.vc && format('коммит {0} (поле variant_commit)', matrix.vc) || 'последний коммит репозитория' }}"
+        echo "Приложение     : ${{ matrix.base && 'коммит из BASE патчей (use_base_commit)' || 'последний коммит репозитория' }}"
         echo "Exclude        : ${SUM_EXCLUDE:-(нет)}"
         echo "Device config  : ./config/conf/${{ matrix.target }}"
         echo "Kernel path    : $KERNEL_PATH"
@@ -1141,10 +1130,27 @@ jobs:
         VARIANT="${{ matrix.variant }}"
         echo "Variant selected: $VARIANT"
 
-        # Коммит репозитория приложения варианта (поле variant_commit,
-        # проверен в setup: только hex). part2 берёт по нему версию пакета,
-        # part3 — коммит клона homeproxy и Re:HomeProxy.
-        export VARIANT_COMMIT="${{ matrix.vc }}"
+        # Галочка use_base_commit (поле base матрицы): приложение варианта —
+        # с коммита автора, на который сняты его патчи (первая строка
+        # patches/<feeds|packages>/<имя>/BASE, только hex). part2 берёт по
+        # нему версию пакета, part3 — коммит клона homeproxy и Re:HomeProxy.
+        VARIANT_COMMIT=""
+        if [ "${{ matrix.base }}" = "true" ]; then
+            case "$VARIANT" in
+                homeproxy)   BASE_DIR=packages/luci-app-homeproxy ;;
+                rehomeproxy) BASE_DIR=packages/luci-app-re-homeproxy ;;
+                podkop|netshift|trafira) BASE_DIR=feeds/$VARIANT ;;
+                forkop)      BASE_DIR=feeds/${{ matrix.fk }} ;;
+                passwall)    BASE_DIR=feeds/passwall2 ;;
+                xray)        BASE_DIR=feeds/luciappxray ;;
+                *)           BASE_DIR="" ;;
+            esac
+            if [ -n "$BASE_DIR" ]; then
+                VARIANT_COMMIT=$(grep -m1 -oE '^[0-9a-f]{7,40}' "$GITHUB_WORKSPACE/patches/$BASE_DIR/BASE" 2>/dev/null || true)
+                [ -n "$VARIANT_COMMIT" ] || echo "::warning title=use_base_commit::Нет patches/$BASE_DIR/BASE — приложение берётся с последнего коммита"
+            fi
+        fi
+        export VARIANT_COMMIT
         # feed_line "<имя> <URL>[;ветка]" — строка feeds.conf. С коммитом
         # вместо ветки ставится ^<коммит> и тип src-git-full: scripts/feeds
         # клонирует всю историю (без содержимого старых файлов) и делает
@@ -1157,7 +1163,7 @@ jobs:
                 echo "src-git $1"
             fi
         }
-        [ -n "$VARIANT_COMMIT" ] && echo ">>> Приложение варианта: коммит $VARIANT_COMMIT (поле variant_commit)"
+        [ -n "$VARIANT_COMMIT" ] && echo ">>> Приложение варианта: коммит $VARIANT_COMMIT из patches/$BASE_DIR/BASE"
         
         # Добавление фидов в зависимости от варианта
         if [ "$VARIANT" == "passwall" ]; then
@@ -1846,11 +1852,11 @@ jobs:
       uses: actions/upload-artifact@v7
       with:
         # Порядок: устройство, source, ветка, вариант, патчи, agh, sb, ytb,
-        # zz1, фиды (feeds-tag / feeds-repo), app-<коммит> (только если задан
-        # variant_commit), дата. Все параметры сборки в имени: в combo бывает несколько
+        # zz1, фиды (feeds-tag / feeds-repo), app-base (приложение с коммита
+        # из BASE, галочка use_base_commit), дата. Все параметры сборки в имени: в combo бывает несколько
         # сборок одного устройства и варианта (например homeproxy с 1.12.x и
         # latest), а дата — до минуты; одинаковое имя upload-artifact отверг бы.
-        name: ${{ matrix.target }}_${{ inputs.source }}_${{ inputs.branch }}_${{ matrix.vname }}_${{ matrix.patches && 'patches' || 'nopatches' }}_agh-${{ matrix.agh }}_sb-${{ matrix.sb }}_${{ matrix.ytb && 'ytb' || 'noytb' }}_${{ matrix.zz && 'zz' || 'nozz' }}${{ matrix.feeds && '_feeds-repo' || '_feeds-tag' }}${{ matrix.vc && format('_app-{0}', matrix.vc) || '' }}_${{ steps.get_date.outputs.date }}
+        name: ${{ matrix.target }}_${{ inputs.source }}_${{ inputs.branch }}_${{ matrix.vname }}_${{ matrix.patches && 'patches' || 'nopatches' }}_agh-${{ matrix.agh }}_sb-${{ matrix.sb }}_${{ matrix.ytb && 'ytb' || 'noytb' }}_${{ matrix.zz && 'zz' || 'nozz' }}${{ matrix.feeds && '_feeds-repo' || '_feeds-tag' }}${{ matrix.base && '_app-base' || '' }}_${{ steps.get_date.outputs.date }}
         path: openwrt/bin
         # На ранней ошибке (до создания bin/) не валим джоб красным "no files".
         if-no-files-found: warn
