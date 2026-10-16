@@ -53,13 +53,6 @@ xmux, padding and sc_max_each_post_bytes.
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
- .../resources/view/homeproxy/node.js          | 114 +++++++++-
- root/etc/homeproxy/scripts/generate_client.uc | 197 +++++++++++++++++-
- root/etc/homeproxy/scripts/homeproxy.uc       |  31 ++-
- .../homeproxy/scripts/update_subscriptions.uc |  54 ++++-
- root/usr/share/rpcd/ucode/luci.homeproxy      |  27 ++-
- 5 files changed, 411 insertions(+), 12 deletions(-)
-
 diff --git a/htdocs/luci-static/resources/view/homeproxy/node.js b/htdocs/luci-static/resources/view/homeproxy/node.js
 index de350bc..3648b87 100644
 --- a/htdocs/luci-static/resources/view/homeproxy/node.js
@@ -263,7 +256,7 @@ index de350bc..3648b87 100644
  	o.value('', _('none'));
  	o.value('packetaddr', _('packet addr (v2ray-core v5+)'));
 diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
-index c0538b5..78ad935 100755
+index db4ccbf..280d5a0 100755
 --- a/root/etc/homeproxy/scripts/generate_client.uc
 +++ b/root/etc/homeproxy/scripts/generate_client.uc
 @@ -14,7 +14,7 @@ import { cursor } from 'uci';
@@ -275,7 +268,7 @@ index c0538b5..78ad935 100755
  } from 'homeproxy';
  
  const ubus = connect();
-@@ -263,6 +263,193 @@ function generate_endpoint(node) {
+@@ -247,6 +247,193 @@ function generate_endpoint(node) {
  	return endpoint;
  }
  
@@ -469,7 +462,7 @@ index c0538b5..78ad935 100755
  function generate_outbound(node) {
  	if (type(node) !== 'object' || isEmpty(node))
  		return null;
-@@ -366,7 +553,7 @@ function generate_outbound(node) {
+@@ -350,7 +537,7 @@ function generate_outbound(node) {
  				short_id: node.tls_reality_short_id
  			} : null
  		} : null,
@@ -478,7 +471,7 @@ index c0538b5..78ad935 100755
  			type: node.transport,
  			host: node.http_host || node.httpupgrade_host,
  			path: node.http_path || node.ws_path,
-@@ -1184,6 +1371,12 @@ const known_outbounds = [ 'block', 'direct', 'urltest',
+@@ -1159,6 +1346,12 @@ const known_outbounds = [ 'block', 'direct', 'urltest',
  	'socks', 'ssh', 'trojan', 'tuic', 'vless', 'vmess' ];
  const known_transports = [ 'grpc', 'http', 'httpupgrade', 'quic', 'ws' ];
  
@@ -693,4 +686,3 @@ index c87a954..030f299 100644
  		}
 -- 
 2.43.0
-
