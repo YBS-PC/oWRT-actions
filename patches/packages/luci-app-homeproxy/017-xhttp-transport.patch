@@ -58,6 +58,18 @@ such servers say auto, so every request timed out after 15 s ("context
 deadline exceeded") while Xray clients worked. Checked live against
 Xray 26.10.10 with the server in each mode.
 
+Without an xmux in the extra (share links usually have none) the
+defaults of Xray are taken: max_connections 3, h_max_request_times
+600-900, h_max_reusable_secs 1800-3000. sing-box-extended has no such
+defaults and opens a TCP and TLS connection for every proxied
+connection, so 20 parallel requests made 20 REALITY handshakes. A node
+of 3x-ui timed out that way while Xray clients with the same link
+worked, and worked once the xmux was set. With the defaults 20 parallel
+requests go over 3 connections, an xmux of the link (also inside
+downloadSettings) replaces them, and after a restart of the server the
+node answers again within a second (checked live against Xray
+26.10.10).
+
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
@@ -264,7 +276,7 @@ index de350bc..3648b87 100644
  	o.value('', _('none'));
  	o.value('packetaddr', _('packet addr (v2ray-core v5+)'));
 diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
-index ecc370c..8d4fc9a 100755
+index ecc370c..8872a70 100755
 --- a/root/etc/homeproxy/scripts/generate_client.uc
 +++ b/root/etc/homeproxy/scripts/generate_client.uc
 @@ -14,7 +14,7 @@ import { cursor } from 'uci';
@@ -276,7 +288,7 @@ index ecc370c..8d4fc9a 100755
  } from 'homeproxy';
  
  const ubus = connect();
-@@ -253,6 +253,200 @@ function generate_endpoint(node) {
+@@ -253,6 +253,209 @@ function generate_endpoint(node) {
  	return endpoint;
  }
  
@@ -367,6 +379,15 @@ index ecc370c..8d4fc9a 100755
 +				t.xmux ??= {};
 +				t.xmux[xhttp_xmux_keys[k]] = v;
 +			}
++
++	/* Without an xmux of its own Xray keeps up to 3 connections and reuses
++	 * them, sing-box-extended opens one for every request, and REALITY
++	 * servers may refuse such a flood. Take the defaults of Xray. */
++	t.xmux ??= {
++		max_connections: 3,
++		h_max_request_times: '600-900',
++		h_max_reusable_secs: '1800-3000'
++	};
 +
 +	t.x_padding_bytes = xhttp_padding(t.x_padding_bytes);
 +
@@ -477,7 +498,7 @@ index ecc370c..8d4fc9a 100755
  function generate_outbound(node) {
  	if (type(node) !== 'object' || isEmpty(node))
  		return null;
-@@ -356,7 +550,7 @@ function generate_outbound(node) {
+@@ -356,7 +559,7 @@ function generate_outbound(node) {
  				short_id: node.tls_reality_short_id
  			} : null
  		} : null,
@@ -486,7 +507,7 @@ index ecc370c..8d4fc9a 100755
  			type: node.transport,
  			host: node.http_host || node.httpupgrade_host,
  			path: node.http_path || node.ws_path,
-@@ -1180,6 +1374,12 @@ const known_outbounds = [ 'block', 'direct', 'urltest',
+@@ -1180,6 +1383,12 @@ const known_outbounds = [ 'block', 'direct', 'urltest',
  	'socks', 'ssh', 'trojan', 'tuic', 'vless', 'vmess' ];
  const known_transports = [ 'grpc', 'http', 'httpupgrade', 'quic', 'ws' ];
  
