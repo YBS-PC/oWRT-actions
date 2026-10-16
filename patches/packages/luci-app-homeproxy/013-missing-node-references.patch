@@ -29,11 +29,8 @@ crashed before now pass "sing-box check" on 1.12.22, 1.13.21, 1.14.2 and
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
- root/etc/homeproxy/scripts/generate_client.uc | 86 +++++++++++++++----
- 1 file changed, 67 insertions(+), 19 deletions(-)
-
 diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
-index c2b1621..9058130 100755
+index 62bcfdb..6febd89 100755
 --- a/root/etc/homeproxy/scripts/generate_client.uc
 +++ b/root/etc/homeproxy/scripts/generate_client.uc
 @@ -13,7 +13,7 @@ import { connect } from 'ubus';
@@ -45,7 +42,7 @@ index c2b1621..9058130 100755
  	removeBlankAttrs, validation, HP_DIR, RUN_DIR
  } from 'homeproxy';
  
-@@ -697,19 +697,64 @@ config.outbounds = [
+@@ -672,19 +672,64 @@ config.outbounds = [
  	}
  ];
  
@@ -115,7 +112,7 @@ index c2b1621..9058130 100755
  			interval: strToTime(main_urltest_interval),
  			tolerance: strToInt(main_urltest_tolerance),
  			idle_timeout: (strToInt(main_urltest_interval) > 1800) ? `${main_urltest_interval * 2}s` : null,
-@@ -717,7 +762,9 @@ if (!isEmpty(main_node)) {
+@@ -692,7 +737,9 @@ if (!isEmpty(main_node)) {
  		urltest_nodes = main_urltest_nodes;
  	} else {
  		const main_node_cfg = uci.get_all(uciconfig, main_node) || {};
@@ -126,7 +123,7 @@ index c2b1621..9058130 100755
  			push(config.endpoints, generate_endpoint(main_node_cfg));
  			config.endpoints[length(config.endpoints)-1].tag = 'main-out';
  		} else {
-@@ -727,14 +774,11 @@ if (!isEmpty(main_node)) {
+@@ -702,14 +749,11 @@ if (!isEmpty(main_node)) {
  	}
  
  	if (main_udp_node === 'urltest') {
@@ -143,7 +140,7 @@ index c2b1621..9058130 100755
  			interval: strToTime(main_udp_urltest_interval),
  			tolerance: strToInt(main_udp_urltest_tolerance),
  			idle_timeout: (strToInt(main_udp_urltest_interval) > 1800) ? `${main_udp_urltest_interval * 2}s` : null,
-@@ -742,7 +786,9 @@ if (!isEmpty(main_node)) {
+@@ -717,7 +761,9 @@ if (!isEmpty(main_node)) {
  		urltest_nodes = [...urltest_nodes, ...filter(main_udp_urltest_nodes, (l) => !~index(urltest_nodes, l))];
  	} else if (dedicated_udp_node) {
  		const main_udp_node_cfg = uci.get_all(uciconfig, main_udp_node) || {};
@@ -154,7 +151,7 @@ index c2b1621..9058130 100755
  			push(config.endpoints, generate_endpoint(main_udp_node_cfg));
  			config.endpoints[length(config.endpoints)-1].tag = 'main-udp-out';
  		} else {
-@@ -770,20 +816,22 @@ if (!isEmpty(main_node)) {
+@@ -745,20 +791,22 @@ if (!isEmpty(main_node)) {
  			return;
  
  		if (cfg.node === 'urltest') {
@@ -185,4 +182,3 @@ index c2b1621..9058130 100755
  				config.endpoints[length(config.endpoints)-1].detour = get_outbound(cfg.outbound);
 -- 
 2.43.0
-
