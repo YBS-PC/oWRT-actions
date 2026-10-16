@@ -22,7 +22,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
 diff --git a/.github/workflows/shellcheck.yml b/.github/workflows/shellcheck.yml
-index fbbb8cd..9666e47 100644
+index fbbb8cd9..9666e471 100644
 --- a/.github/workflows/shellcheck.yml
 +++ b/.github/workflows/shellcheck.yml
 @@ -49,6 +49,7 @@ jobs:
@@ -34,10 +34,10 @@ index fbbb8cd..9666e47 100644
                -print0
            )
 diff --git a/build.sh b/build.sh
-index 45b9d70..6ed2861 100755
+index 8ba9b4e1..c081312a 100755
 --- a/build.sh
 +++ b/build.sh
-@@ -172,6 +172,8 @@ build_backend_root() {
+@@ -176,6 +176,8 @@ build_backend_root() {
    make_dir "$output_root/usr/share/trafira"
  
    install -m 0755 "$ROOT_DIR/trafira/files/etc/init.d/trafira" "$output_root/etc/init.d/trafira"
@@ -46,7 +46,7 @@ index 45b9d70..6ed2861 100755
    install -m 0644 "$ROOT_DIR/trafira/files/etc/config/trafira" "$output_root/etc/config/trafira"
    install -m 0755 "$ROOT_DIR/trafira/files/usr/bin/trafira" "$output_root/usr/bin/trafira"
    install -m 0755 "$ROOT_DIR/trafira/files/usr/bin/trafira-config" "$output_root/usr/bin/trafira-config"
-@@ -185,7 +187,8 @@ build_backend_root() {
+@@ -190,7 +192,8 @@ build_backend_root() {
  
    normalize_package_root_modes "$output_root"
    chmod 0755 "$output_root/etc/init.d/trafira" "$output_root/usr/bin/trafira" \
@@ -57,7 +57,7 @@ index 45b9d70..6ed2861 100755
  
  build_app_root() {
 diff --git a/tests/shell_inventory.sh b/tests/shell_inventory.sh
-index c5cd46b..63be4f0 100644
+index c5cd46b7..63be4f0c 100644
 --- a/tests/shell_inventory.sh
 +++ b/tests/shell_inventory.sh
 @@ -44,6 +44,7 @@ shell_scripts="$(
@@ -81,10 +81,10 @@ index c5cd46b..63be4f0 100644
 +
  printf 'shell inventory checks passed\n'
 diff --git a/trafira/Makefile b/trafira/Makefile
-index 999fa8a..bb48cf9 100644
+index 32d40efb..4fad5def 100644
 --- a/trafira/Makefile
 +++ b/trafira/Makefile
-@@ -64,6 +64,9 @@ define Package/trafira/install
+@@ -65,6 +65,9 @@ define Package/trafira/install
  	$(INSTALL_DIR) $(1)/etc/init.d
  	$(INSTALL_BIN) ./files/etc/init.d/trafira $(1)/etc/init.d/trafira
  
@@ -96,7 +96,7 @@ index 999fa8a..bb48cf9 100644
  
 diff --git a/trafira/files/etc/uci-defaults/60_trafira-firewall b/trafira/files/etc/uci-defaults/60_trafira-firewall
 new file mode 100644
-index 0000000..598d242
+index 00000000..598d242d
 --- /dev/null
 +++ b/trafira/files/etc/uci-defaults/60_trafira-firewall
 @@ -0,0 +1,6 @@
@@ -107,7 +107,7 @@ index 0000000..598d242
 +/usr/bin/trafira package_firewall >/dev/null 2>&1 || true
 +exit 0
 diff --git a/trafira/files/usr/bin/trafira b/trafira/files/usr/bin/trafira
-index 0b1eb52..a515408 100755
+index 0b1eb528..a515408e 100755
 --- a/trafira/files/usr/bin/trafira
 +++ b/trafira/files/usr/bin/trafira
 @@ -208,6 +208,7 @@ function command_spec(command) {
@@ -119,7 +119,7 @@ index 0b1eb52..a515408 100755
      };
  
 diff --git a/trafira/files/usr/lib/service/package.uc b/trafira/files/usr/lib/service/package.uc
-index 0703d70..7c5bddd 100644
+index 0703d709..7c5bddd1 100644
 --- a/trafira/files/usr/lib/service/package.uc
 +++ b/trafira/files/usr/lib/service/package.uc
 @@ -258,8 +258,10 @@ function postinst_restore() {
