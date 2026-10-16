@@ -20,10 +20,6 @@ HTML tags as in the original) and po2lmo of LuCI.
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
- po/ru/homeproxy.po | 3278 ++++++++++++++++++++++++++++++++++++++++++++
- 1 file changed, 3278 insertions(+)
- create mode 100644 po/ru/homeproxy.po
-
 diff --git a/po/ru/homeproxy.po b/po/ru/homeproxy.po
 new file mode 100644
 index 0000000..a64c21e
@@ -3310,4 +3306,3 @@ index 0000000..a64c21e
 +msgstr "корректный uuid"
 -- 
 2.43.0
-
