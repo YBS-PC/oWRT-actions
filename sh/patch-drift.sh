@@ -66,3 +66,24 @@ patch_drift_record() {
     printf '%s %s: %s — %s\n' "$1" "$2" "$3" "$_files" >> "$PATCH_DRIFT_FILE"
     echo "::error title=Патч устарел: $2/$3::У автора изменились файлы, к которым применяется патч: $_files"
 }
+
+# patch_base <фид|пакет> <имя> — коммит автора, с которого снята серия
+# патчей (первая строка patches/<feeds|packages>/<имя>/BASE), или пусто.
+# На этом коммите серия ложится точно: его можно вписать в поле формы
+# variant_commit, пока патчи не перевыпущены под новый код автора.
+patch_base() {
+    local _d
+    case "$1" in фид) _d=feeds ;; *) _d=packages ;; esac
+    grep -m1 -oE '^[0-9a-f]{7,40}' "${GITHUB_WORKSPACE:-.}/patches/$_d/$2/BASE" 2>/dev/null
+}
+
+# patch_drift_hints — по строке на каждый фид или пакет из patch_drift.txt,
+# у которого записан BASE: с каким коммитом автора собрать без остановки.
+patch_drift_hints() {
+    local _k _n _b
+    [ -s "$PATCH_DRIFT_FILE" ] || return 0
+    awk '{ sub(/:$/, "", $2); print $1, $2 }' "$PATCH_DRIFT_FILE" | sort -u | while read -r _k _n; do
+        _b=$(patch_base "$_k" "$_n")
+        [ -n "$_b" ] && echo "$_k $_n: серия снята с коммита $_b — до обновления патчей можно собрать с variant_commit=$_b"
+    done
+}
