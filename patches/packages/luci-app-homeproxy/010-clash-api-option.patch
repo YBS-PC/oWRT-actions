@@ -25,15 +25,11 @@ global mode, where there was no experimental section.
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
- root/etc/homeproxy/scripts/generate_client.uc | 16 ++++++++++++++++
- root/etc/init.d/homeproxy                     |  4 ++++
- 2 files changed, 20 insertions(+)
-
 diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
-index ba09f38..c2b1621 100755
+index a0db616..62bcfdb 100755
 --- a/root/etc/homeproxy/scripts/generate_client.uc
 +++ b/root/etc/homeproxy/scripts/generate_client.uc
-@@ -137,6 +137,11 @@ if (match(proxy_mode, /tun/)) {
+@@ -132,6 +132,11 @@ if (match(proxy_mode, /tun/)) {
  }
  
  const log_level = uci.get(uciconfig, ucimain, 'log_level') || 'warn';
@@ -45,7 +41,7 @@ index ba09f38..c2b1621 100755
  /* UCI config end */
  
  /*
-@@ -993,6 +998,17 @@ if (routing_mode in ['bypass_mainland_china', 'custom']) {
+@@ -968,6 +973,17 @@ if (routing_mode in ['bypass_mainland_china', 'custom']) {
  		}
  	};
  }
@@ -80,4 +76,3 @@ index 3349086..b683af0 100755
  			procd_set_param user sing-box
 -- 
 2.43.0
-
