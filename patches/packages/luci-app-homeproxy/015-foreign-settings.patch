@@ -51,12 +51,6 @@ socks passes with socks only.
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
- root/etc/homeproxy/scripts/firewall_post.ut   |  5 +-
- root/etc/homeproxy/scripts/generate_client.uc | 73 ++++++++++++++++++-
- root/etc/homeproxy/scripts/generate_server.uc | 10 ++-
- root/etc/init.d/homeproxy                     | 11 +++
- 4 files changed, 96 insertions(+), 3 deletions(-)
-
 diff --git a/root/etc/homeproxy/scripts/firewall_post.ut b/root/etc/homeproxy/scripts/firewall_post.ut
 index 04a0f6d..9284b3d 100755
 --- a/root/etc/homeproxy/scripts/firewall_post.ut
@@ -74,7 +68,7 @@ index 04a0f6d..9284b3d 100755
  
  if (routing_mode !== 'custom') {
 diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
-index 9058130..a557a77 100755
+index 6febd89..b306af1 100755
 --- a/root/etc/homeproxy/scripts/generate_client.uc
 +++ b/root/etc/homeproxy/scripts/generate_client.uc
 @@ -42,7 +42,24 @@ const uciroutingsetting = 'routing',
@@ -103,7 +97,7 @@ index 9058130..a557a77 100755
  
  let wan_dns = ubus.call('network.interface', 'status', {'interface': 'wan'})?.['dns-server']?.[0];
  if (!wan_dns)
-@@ -392,6 +409,13 @@ function get_outbound(cfg) {
+@@ -376,6 +393,13 @@ function get_outbound(cfg) {
  		case 'direct-out':
  			return cfg;
  		default:
@@ -117,7 +111,7 @@ index 9058130..a557a77 100755
  			const node = uci.get(uciconfig, cfg, 'node');
  			if (isEmpty(node))
  				die(sprintf("%s's node is missing, please check your configuration.", cfg));
-@@ -412,6 +436,13 @@ function get_resolver(cfg) {
+@@ -396,6 +420,13 @@ function get_resolver(cfg) {
  	case 'system-dns':
  		return cfg;
  	default:
@@ -131,7 +125,7 @@ index 9058130..a557a77 100755
  		return 'cfg-' + cfg + '-dns';
  	}
  }
-@@ -1059,5 +1090,45 @@ if (clash_api_controller) {
+@@ -1034,5 +1065,45 @@ if (clash_api_controller) {
  }
  /* Experimental end */
  
@@ -243,4 +237,3 @@ index 34c5a4a..8f9d773 100755
  	else
 -- 
 2.43.0
-
