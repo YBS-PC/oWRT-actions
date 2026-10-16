@@ -31,7 +31,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
 diff --git a/netshift/files/usr/lib/sing_box_config_facade.sh b/netshift/files/usr/lib/sing_box_config_facade.sh
-index d17e568..c2e970b 100644
+index 75442c8..5eedb84 100644
 --- a/netshift/files/usr/lib/sing_box_config_facade.sh
 +++ b/netshift/files/usr/lib/sing_box_config_facade.sh
 @@ -136,10 +136,14 @@ sing_box_cf_add_proxy_outbound() {
@@ -79,7 +79,7 @@ index d17e568..c2e970b 100644
      xhttp | splithttp)
          # `splithttp` is the pre-rename name of the `xhttp` transport (sing-box
          # renamed it). Accept it as an alias and normalize to xhttp downstream:
-@@ -901,7 +916,10 @@ sing_box_cf_prepare_subscription_batch() {
+@@ -917,7 +932,10 @@ sing_box_cf_prepare_subscription_batch() {
            ] as $kept
          # Assign unique tags using a deterministic dedup pass. $state.used is a
          # set (object) of tags already taken, seeded with the existing config tags.
@@ -91,7 +91,7 @@ index d17e568..c2e970b 100644
              {used: ($existing | map({(.): true}) | add // {}), out: []};
              . as $state
              | $kept[$i] as $entry
-@@ -949,7 +967,7 @@ sing_box_cf_prepare_subscription_batch() {
+@@ -965,7 +983,7 @@ sing_box_cf_prepare_subscription_batch() {
                        else . end
                  )
                }]
@@ -101,10 +101,10 @@ index d17e568..c2e970b 100644
              outbounds: [$resolved.out[].outbound],
              tags: [$resolved.out[].tag],
 diff --git a/netshift/files/usr/lib/sing_box_config_manager.sh b/netshift/files/usr/lib/sing_box_config_manager.sh
-index e64577e..e175b85 100644
+index f767922..d344083 100644
 --- a/netshift/files/usr/lib/sing_box_config_manager.sh
 +++ b/netshift/files/usr/lib/sing_box_config_manager.sh
-@@ -1342,7 +1342,9 @@ sing_box_cm_set_tls_for_outbound() {
+@@ -1451,7 +1451,9 @@ sing_box_cm_set_tls_for_outbound() {
                              }
                          } else {} end)
                          + (if $reality_public_key != "" then {
