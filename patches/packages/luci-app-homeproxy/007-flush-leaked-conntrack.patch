@@ -26,9 +26,6 @@ redirected and a router-originated connection carried on.
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
- root/etc/init.d/homeproxy | 13 +++++++++++++
- 1 file changed, 13 insertions(+)
-
 diff --git a/root/etc/init.d/homeproxy b/root/etc/init.d/homeproxy
 index 3167775..a89a49f 100755
 --- a/root/etc/init.d/homeproxy
@@ -55,4 +52,3 @@ index 3167775..a89a49f 100755
  
 -- 
 2.43.0
-
