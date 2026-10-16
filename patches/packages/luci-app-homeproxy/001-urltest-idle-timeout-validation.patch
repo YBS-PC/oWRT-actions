@@ -15,13 +15,11 @@ idle_timeout'.
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01HEQfjBzS7Wos7AvTk18TDQ
 ---
- htdocs/luci-static/resources/view/homeproxy/client.js | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
 diff --git a/htdocs/luci-static/resources/view/homeproxy/client.js b/htdocs/luci-static/resources/view/homeproxy/client.js
-index 08bbc18..0f9d971 100644
+index 7d606a5..f4283b3 100644
 --- a/htdocs/luci-static/resources/view/homeproxy/client.js
 +++ b/htdocs/luci-static/resources/view/homeproxy/client.js
-@@ -533,7 +533,7 @@ return view.extend({
+@@ -528,7 +528,7 @@ return view.extend({
  		so.placeholder = '180';
  		so.validate = function(section_id, value) {
  			if (section_id && value) {
@@ -30,3 +28,5 @@ index 08bbc18..0f9d971 100644
  				if (parseInt(value) > parseInt(idle_timeout))
  					return _('Test interval must be less or equal than idle timeout.');
  			}
+-- 
+2.43.0
