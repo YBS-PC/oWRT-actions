@@ -18,23 +18,34 @@ Checked with sing-box 1.12.25 (config byte-identical), 1.13.21 and
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01HEQfjBzS7Wos7AvTk18TDQ
 ---
- root/etc/homeproxy/scripts/generate_client.uc | 17 ++++++++++++++---
- 1 file changed, 14 insertions(+), 3 deletions(-)
-
 diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
-index 9f30b18..ba09f38 100755
+index ce54caa..a0db616 100755
 --- a/root/etc/homeproxy/scripts/generate_client.uc
 +++ b/root/etc/homeproxy/scripts/generate_client.uc
-@@ -155,6 +155,16 @@ if (sing_box_version_fd) {
- const legacy_inbound_sniff = sing_box_version ?
- 	(int(sing_box_version[1]) < 1 || (int(sing_box_version[1]) === 1 && int(sing_box_version[2]) < 13)) : false;
+@@ -7,7 +7,7 @@
+ 
+ 'use strict';
+ 
+-import { readfile, writefile } from 'fs';
++import { popen, readfile, writefile } from 'fs';
+ import { isnan } from 'math';
+ import { connect } from 'ubus';
+ import { cursor } from 'uci';
+@@ -134,6 +134,21 @@ if (match(proxy_mode, /tun/)) {
+ const log_level = uci.get(uciconfig, ucimain, 'log_level') || 'warn';
+ /* UCI config end */
  
 +/*
-+ * sing-box 1.14 deprecated dns.independent_cache (removed without
-+ * replacement) and cache_file.store_rdrc (replaced by store_dns, which
-+ * older cores reject). Legacy options only below 1.14, store_dns only from
-+ * 1.14 on; with an unknown version neither is written.
++ * sing-box 1.14 deprecated cache_file.store_rdrc (replaced by store_dns, which
++ * older cores reject). store_rdrc is written below 1.14, store_dns from 1.14
++ * on; with an unknown version neither is written.
 + */
++let sing_box_version = null;
++const sing_box_version_fd = popen('/usr/bin/sing-box version 2>/dev/null');
++if (sing_box_version_fd) {
++	sing_box_version = match(sing_box_version_fd.read('all') || '', /^sing-box version ([0-9]+)\.([0-9]+)/);
++	sing_box_version_fd.close();
++}
 +const legacy_dns_cache = sing_box_version ?
 +	(int(sing_box_version[1]) < 1 || (int(sing_box_version[1]) === 1 && int(sing_box_version[2]) < 14)) : false;
 +const modern_dns_cache = sing_box_version ? !legacy_dns_cache : false;
@@ -42,16 +53,7 @@ index 9f30b18..ba09f38 100755
  /* Config helper start */
  function parse_port(strport) {
  	if (type(strport) !== 'array' || isEmpty(strport))
-@@ -451,7 +461,7 @@ config.dns = {
- 	strategy: dns_default_strategy,
- 	disable_cache: strToBool(dns_disable_cache),
- 	disable_expire: strToBool(dns_disable_cache_expire),
--	independent_cache: strToBool(dns_independent_cache),
-+	independent_cache: legacy_dns_cache ? strToBool(dns_independent_cache) : null,
- 	client_subnet: dns_client_subnet
- };
- 
-@@ -977,8 +987,9 @@ if (routing_mode in ['bypass_mainland_china', 'custom']) {
+@@ -947,8 +962,9 @@ if (routing_mode in ['bypass_mainland_china', 'custom']) {
  		cache_file: {
  			enabled: true,
  			path: RUN_DIR + '/cache.db',
@@ -65,4 +67,3 @@ index 9f30b18..ba09f38 100755
  }
 -- 
 2.43.0
-
