@@ -29,9 +29,6 @@ and a start after stop still ran the check.
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
- root/etc/init.d/homeproxy | 89 ++++++++++++++++++++++++++++++++++++++-
- 1 file changed, 87 insertions(+), 2 deletions(-)
-
 diff --git a/root/etc/init.d/homeproxy b/root/etc/init.d/homeproxy
 index a89a49f..30c1352 100755
 --- a/root/etc/init.d/homeproxy
@@ -160,4 +157,3 @@ index a89a49f..30c1352 100755
  service_triggers() {
 -- 
 2.43.0
-
