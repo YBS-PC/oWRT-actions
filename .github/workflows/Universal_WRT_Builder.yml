@@ -133,6 +133,12 @@ on:
         required: false
         default: ''
 
+      variant_commit:
+        description: 'Коммит репозитория приложения варианта (homeproxy, rehomeproxy, podkop, netshift, forkop, forkop-mod, trafira, passwall, xray), 7–40 hex. Пусто — последний. В combo игнорируется'
+        required: false
+        default: ''
+        type: string
+
 env:
   CONFIG_FILE: ./config/WRT.config
   # 1. Источники
@@ -184,6 +190,9 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
       - id: set-matrix
+        env:
+          # Строка формы — через env, а не подстановкой в текст скрипта.
+          INPUT_VCOMMIT: ${{ inputs.variant_commit }}
         run: |
           INPUT_TARGET="${{ inputs.target }}"
           INPUT_VARIANT="${{ inputs.variant }}"
@@ -193,6 +202,16 @@ jobs:
           INPUT_ZZ="${{ inputs.zz }}"
           INPUT_PATCHES="${{ inputs.apply_patches }}"
           INPUT_FEEDS="${{ inputs.feeds_latest }}"
+
+          # Коммит репозитория приложения варианта (поле variant_commit):
+          # только hex, иначе в feeds.conf и git checkout попала бы
+          # произвольная строка. Пусто — последний коммит, как раньше.
+          VCOMMIT="${INPUT_VCOMMIT//[[:space:]]/}"
+          VCOMMIT="${VCOMMIT,,}"
+          if [ -n "$VCOMMIT" ] && ! [[ "$VCOMMIT" =~ ^[0-9a-f]{7,40}$ ]]; then
+            echo "::error::Некорректный variant_commit: '$INPUT_VCOMMIT' (нужно 7–40 hex-символов)"
+            exit 1
+          fi
 
           # Каждая сборка матрицы несёт СВОИ настройки:
           #   agh     — "no" (убрать из прошивки), "feed" (пакет из фида),
@@ -230,7 +249,8 @@ jobs:
           TINY_TARGETS="slateax ax59u"
           NOTES=""
 
-          # entry <target> <variant> <agh> <sb> <ytb> <zz> <patches> <feeds>
+          # entry <target> <variant> <agh> <sb> <ytb> <zz> <patches> <feeds> [vc]
+          # vc — коммит репозитория приложения варианта (пусто — последний).
           # Приводит выбор к тому, что вариант реально допускает, чтобы имя
           # артефакта не врало: clear/crystal_clear/switch вырезают AGH,
           # sing-box и youtubeUnblock; passwall/v2raya/xray — sing-box;
@@ -240,7 +260,7 @@ jobs:
           # и тянут его зависимостью); rehomeproxy (Re:HomeProxy) умеет и hiddify-core,
           # но его приложение ставит само уже на роутере.
           entry() {
-            local t="$1" v="$2" agh="$3" sb="$4" ytb="$5" zz="$6" pt="$7" fd="$8" orig
+            local t="$1" v="$2" agh="$3" sb="$4" ytb="$5" zz="$6" pt="$7" fd="$8" vc="${9:-}" orig
             # vname — имя варианта для людей (имя job и артефакта); fk — фид
             # forkop. forkop-mod внутри сборки — тот же вариант forkop, только
             # с фидом форка: part2/part3/zz1 различать их не нужно.
@@ -278,12 +298,20 @@ jobs:
             if [ "$orig" != "agh=$agh sb=$sb ytb=$ytb zz=$zz" ]; then
               NOTES="${NOTES}${t}/${vname}: ${orig} -> agh=$agh sb=$sb ytb=$ytb zz=$zz\n"
             fi
-            printf '{"target":"%s","variant":"%s","vname":"%s","fk":"%s","agh":"%s","sb":"%s","ytb":%s,"zz":%s,"patches":%s,"feeds":%s}' \
-              "$t" "$v" "$vname" "$fk" "$agh" "$sb" "$ytb" "$zz" "$pt" "$fd"
+            # У clear/crystal_clear/switch нет приложения, v2rayA берётся из
+            # фида packages: закреплять нечего.
+            case "$v" in
+              clear|crystal_clear|switch|v2raya)
+                [ -n "$vc" ] && NOTES="${NOTES}${t}/${vname}: variant_commit=${vc} -> пусто (у варианта нет своего репозитория)\n"
+                vc="" ;;
+            esac
+            printf '{"target":"%s","variant":"%s","vname":"%s","fk":"%s","agh":"%s","sb":"%s","ytb":%s,"zz":%s,"patches":%s,"feeds":%s,"vc":"%s"}' \
+              "$t" "$v" "$vname" "$fk" "$agh" "$sb" "$ytb" "$zz" "$pt" "$fd" "$vc"
           }
 
           if [ "$INPUT_TARGET" == "combo" ]; then
             echo ">>> Generating COMBO matrix..."
+            [ -n "$VCOMMIT" ] && echo "::notice title=variant_commit::В combo поле игнорируется: каждая сборка берёт последний коммит своего приложения."
             # Поля: устройство вариант agh sb ytb zz patches feeds.
             # feeds=true — фиды из репозитория пакетов (обновлений после
             # прошивки почти нет); поставьте false для сборки на коммитах тега.
@@ -319,7 +347,7 @@ jobs:
               [ -n "$json_parts" ] && json_parts="$json_parts,"
               # Без подстановки $(...): entry дописывает NOTES, а подоболочка
               # эти изменения потеряла бы.
-              entry "$t" "$INPUT_VARIANT" "$INPUT_AGH" "$INPUT_SB" "$INPUT_YTB" "$INPUT_ZZ" "$INPUT_PATCHES" "$INPUT_FEEDS" > /tmp/entry.json
+              entry "$t" "$INPUT_VARIANT" "$INPUT_AGH" "$INPUT_SB" "$INPUT_YTB" "$INPUT_ZZ" "$INPUT_PATCHES" "$INPUT_FEEDS" "$VCOMMIT" > /tmp/entry.json
               json_parts="$json_parts$(cat /tmp/entry.json)"
             done
             json="{\"include\":[$json_parts]}"
@@ -412,7 +440,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
     
-    name: ${{ inputs.source }} ${{ inputs.branch }} [${{ matrix.vname }}] - ${{ matrix.target }} (agh:${{ matrix.agh }}, sb:${{ matrix.sb }}, ytb:${{ matrix.ytb }}, zz:${{ matrix.zz }}, patches:${{ matrix.patches }}, feeds:${{ matrix.feeds && 'repo' || 'tag' }})
+    name: ${{ inputs.source }} ${{ inputs.branch }} [${{ matrix.vname }}] - ${{ matrix.target }} (agh:${{ matrix.agh }}, sb:${{ matrix.sb }}, ytb:${{ matrix.ytb }}, zz:${{ matrix.zz }}, patches:${{ matrix.patches }}, feeds:${{ matrix.feeds && 'repo' || 'tag' }}${{ matrix.vc && format(', app:{0}', matrix.vc) || '' }})
 
     steps:
     - name: Free up disk space
@@ -913,6 +941,7 @@ jobs:
         else
             echo "Фиды           : как в теге релиза"
         fi
+        echo "Приложение     : ${{ matrix.vc && format('коммит {0} (поле variant_commit)', matrix.vc) || 'последний коммит репозитория' }}"
         echo "Exclude        : ${SUM_EXCLUDE:-(нет)}"
         echo "Device config  : ./config/conf/${{ matrix.target }}"
         echo "Kernel path    : $KERNEL_PATH"
@@ -1111,21 +1140,39 @@ jobs:
         
         VARIANT="${{ matrix.variant }}"
         echo "Variant selected: $VARIANT"
+
+        # Коммит репозитория приложения варианта (поле variant_commit,
+        # проверен в setup: только hex). part2 берёт по нему версию пакета,
+        # part3 — коммит клона homeproxy и Re:HomeProxy.
+        export VARIANT_COMMIT="${{ matrix.vc }}"
+        # feed_line "<имя> <URL>[;ветка]" — строка feeds.conf. С коммитом
+        # вместо ветки ставится ^<коммит> и тип src-git-full: scripts/feeds
+        # клонирует всю историю (без содержимого старых файлов) и делает
+        # checkout коммита — годится и короткий хеш, а теги нужны part2 для
+        # версии пакета. У src-git с ^ клон мелкий: только полный хеш, без тегов.
+        feed_line() {
+            if [ -n "$VARIANT_COMMIT" ]; then
+                echo "src-git-full ${1%%;*}^$VARIANT_COMMIT"
+            else
+                echo "src-git $1"
+            fi
+        }
+        [ -n "$VARIANT_COMMIT" ] && echo ">>> Приложение варианта: коммит $VARIANT_COMMIT (поле variant_commit)"
         
         # Добавление фидов в зависимости от варианта
         if [ "$VARIANT" == "passwall" ]; then
             # echo -e "\nsrc-git passwall2 https://github.com/xiaorouji/openwrt-passwall2.git" >> feeds.conf.default
-            echo -e "\nsrc-git passwall2 https://github.com/Openwrt-Passwall/openwrt-passwall2.git" >> feeds.conf.default
+            echo -e "\n$(feed_line "passwall2 https://github.com/Openwrt-Passwall/openwrt-passwall2.git")" >> feeds.conf.default
             # echo -e "\nsrc-git passwall_packages https://github.com/xiaorouji/openwrt-passwall-packages.git;main" >> feeds.conf.default
             echo -e "\nsrc-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main" >> feeds.conf.default
         elif [ "$VARIANT" == "xray" ]; then
-            echo -e "\nsrc-git luciappxray https://github.com/yichya/luci-app-xray.git" >> feeds.conf.default
+            echo -e "\n$(feed_line "luciappxray https://github.com/yichya/luci-app-xray.git")" >> feeds.conf.default
         elif [ "$VARIANT" == "podkop" ]; then
-            echo -e "\nsrc-git podkop https://github.com/itdoginfo/podkop.git;main" >> feeds.conf.default
+            echo -e "\n$(feed_line "podkop https://github.com/itdoginfo/podkop.git;main")" >> feeds.conf.default
         elif [ "$VARIANT" == "netshift" ]; then
             # Адрес — NETSHIFT_FEED в env; патчи — patches/feeds/netshift (part2).
             echo ">>> netshift: фид $NETSHIFT_FEED"
-            echo -e "\nsrc-git $NETSHIFT_FEED" >> feeds.conf.default
+            echo -e "\n$(feed_line "$NETSHIFT_FEED")" >> feeds.conf.default
         elif [ "$VARIANT" == "forkop" ]; then
             # Фид выбран полем формы: forkop — оригинал (FORKOP_FEED_ORIG),
             # forkop-mod — форк (FORKOP_FEED_MOD); адреса — в env в начале
@@ -1138,7 +1185,7 @@ jobs:
             fi
             FK_NAME="${FORKOP_FEED%% *}"
             echo ">>> forkop: фид $FORKOP_FEED"
-            echo -e "\nsrc-git $FORKOP_FEED" >> feeds.conf.default
+            echo -e "\n$(feed_line "$FORKOP_FEED")" >> feeds.conf.default
             if [ "${{ matrix.patches }}" != "true" ]; then
                 echo "::warning title=forkop без патчей::Фид ${FK_NAME} собирается без patches/feeds/${FK_NAME} (подробности — в предупреждении job setup)."
             elif ! ls "$GITHUB_WORKSPACE/patches/feeds/${FK_NAME}"/*.patch >/dev/null 2>&1; then
@@ -1147,7 +1194,7 @@ jobs:
         elif [ "$VARIANT" == "trafira" ]; then
             # Адрес — TRAFIRA_FEED в env; патчи — patches/feeds/trafira (part2).
             echo ">>> trafira: фид $TRAFIRA_FEED"
-            echo -e "\nsrc-git $TRAFIRA_FEED" >> feeds.conf.default
+            echo -e "\n$(feed_line "$TRAFIRA_FEED")" >> feeds.conf.default
         fi
 
         # --- ЗАМЕНА ЗЕРКАЛ (FIX 503 ERROR) Меняем git.openwrt.org на github.com---
@@ -1256,6 +1303,11 @@ jobs:
         if [ -s "$GITHUB_WORKSPACE/patch_drift.txt" ]; then
             echo "::error title=Патчи надо обновить::Сборка остановлена до компиляции: у авторов изменились файлы, к которым применяются патчи (список ниже и в Telegram)"
             sed 's/^/    /' "$GITHUB_WORKSPACE/patch_drift.txt"
+            # Базовые коммиты серий (patches/*/<имя>/BASE): с ними патчи ложатся.
+            . "$GITHUB_WORKSPACE/sh/patch-drift.sh"
+            patch_drift_hints | while IFS= read -r h; do
+                echo "::notice title=Коммит, на который сняты патчи::$h"
+            done
             exit 1
         fi
         
@@ -1435,11 +1487,15 @@ jobs:
         if [ "$TOTAL" -gt 15 ]; then
           LIST=$(printf '%s\n… и ещё %s — полный список в журнале сборки' "$LIST" "$((TOTAL - 15))")
         fi
+        # Подсказка: коммит автора, на который сняты патчи (BASE рядом с ними).
+        . "$GITHUB_WORKSPACE/sh/patch-drift.sh"
+        HINTS=$(patch_drift_hints | head -n 5)
         {
           printf '<b>⛔ Патчи надо обновить</b>\n'
           printf '%s\n\n' "$BUILD_NAME" | esc
           printf 'Сборка остановлена до компиляции: у авторов изменились файлы, к которым применяются эти патчи. Остальные сборки запуска продолжаются.\n\n'
           printf '%s\n\n' "$LIST" | esc
+          [ -n "$HINTS" ] && printf '%s\n\n' "$HINTS" | esc
           printf '<a href="%s">Открыть запуск</a>' "$RUN_URL"
         } > /tmp/tg_drift.txt
         HTTP=$(curl -sS -o /tmp/tg.json -w '%{http_code}' --max-time 20 \
@@ -1790,10 +1846,11 @@ jobs:
       uses: actions/upload-artifact@v7
       with:
         # Порядок: устройство, source, ветка, вариант, патчи, agh, sb, ytb,
-        # zz1, фиды (feeds-tag / feeds-repo), дата. Все параметры сборки в имени: в combo бывает несколько
+        # zz1, фиды (feeds-tag / feeds-repo), app-<коммит> (только если задан
+        # variant_commit), дата. Все параметры сборки в имени: в combo бывает несколько
         # сборок одного устройства и варианта (например homeproxy с 1.12.x и
         # latest), а дата — до минуты; одинаковое имя upload-artifact отверг бы.
-        name: ${{ matrix.target }}_${{ inputs.source }}_${{ inputs.branch }}_${{ matrix.vname }}_${{ matrix.patches && 'patches' || 'nopatches' }}_agh-${{ matrix.agh }}_sb-${{ matrix.sb }}_${{ matrix.ytb && 'ytb' || 'noytb' }}_${{ matrix.zz && 'zz' || 'nozz' }}${{ matrix.feeds && '_feeds-repo' || '_feeds-tag' }}_${{ steps.get_date.outputs.date }}
+        name: ${{ matrix.target }}_${{ inputs.source }}_${{ inputs.branch }}_${{ matrix.vname }}_${{ matrix.patches && 'patches' || 'nopatches' }}_agh-${{ matrix.agh }}_sb-${{ matrix.sb }}_${{ matrix.ytb && 'ytb' || 'noytb' }}_${{ matrix.zz && 'zz' || 'nozz' }}${{ matrix.feeds && '_feeds-repo' || '_feeds-tag' }}${{ matrix.vc && format('_app-{0}', matrix.vc) || '' }}_${{ steps.get_date.outputs.date }}
         path: openwrt/bin
         # На ранней ошибке (до создания bin/) не валим джоб красным "no files".
         if-no-files-found: warn
