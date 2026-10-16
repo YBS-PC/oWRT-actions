@@ -11,9 +11,6 @@ under /tmp/run/homeproxy as well (same fix as forkop PR #101).
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01HEQfjBzS7Wos7AvTk18TDQ
 ---
- root/usr/share/rpcd/acl.d/luci-app-homeproxy.json | 5 ++++-
- 1 file changed, 4 insertions(+), 1 deletion(-)
-
 diff --git a/root/usr/share/rpcd/acl.d/luci-app-homeproxy.json b/root/usr/share/rpcd/acl.d/luci-app-homeproxy.json
 index b4b97ea..3e8f5ed 100644
 --- a/root/usr/share/rpcd/acl.d/luci-app-homeproxy.json
@@ -32,4 +29,3 @@ index b4b97ea..3e8f5ed 100644
  				"service": [ "list" ],
 -- 
 2.43.0
-
