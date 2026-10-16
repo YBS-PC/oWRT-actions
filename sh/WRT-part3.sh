@@ -58,8 +58,13 @@ else
 fi
 
 # =========================================================
-# УСЛОВНЫЙ БЛОК: Добавление HomeProxy
-# Если в фидах нет репозитория 'immortalwrt/luci'
+# УСЛОВНЫЙ БЛОК: HomeProxy из immortalwrt/homeproxy (master)
+# На OpenWrt его нет в фидах. В ImmortalWrt LuCI он есть, но в ветках
+# релизов (openwrt-25.12, openwrt-24.10) — старый: generate_client.uc ещё
+# пишет legacy-поля sniff, которых нет в sing-box 1.13+, и патчи
+# patches/packages/luci-app-homeproxy (сняты с master) на него не ложатся.
+# Поэтому master ставится и на ImmortalWrt вместо копии из фида: один код,
+# одна серия патчей, и сверка с исходниками работает на обеих платформах.
 # =========================================================
 if [[ "$VARIANT" != "clear" && "$VARIANT" != "crystal_clear" && "$VARIANT" != "switch" && "$VARIANT" != "passwall" && "$VARIANT" != "xray" && "$VARIANT" != "v2raya" && "$VARIANT" != "podkop" && "$VARIANT" != "netshift" && "$VARIANT" != "forkop" && "$VARIANT" != "trafira" && "$VARIANT" != "rehomeproxy" ]]; then
     if ! grep -q "immortalwrt/luci" feeds.conf.default; then
@@ -68,7 +73,16 @@ if [[ "$VARIANT" != "clear" && "$VARIANT" != "crystal_clear" && "$VARIANT" != "s
         mkdir -p ./package/luci-app-homeproxy
         git clone -b master https://github.com/immortalwrt/homeproxy.git ./package/luci-app-homeproxy/
     else
-        echo ">>> [HomeProxy] Обнаружен фид ImmortalWrt LuCI. HomeProxy должен быть встроен."
+        echo ">>> [HomeProxy] Обнаружен фид ImmortalWrt LuCI: его копия заменяется на immortalwrt/homeproxy (master), как на OpenWrt."
+        mkdir -p ./package/luci-app-homeproxy
+        if git clone -b master https://github.com/immortalwrt/homeproxy.git ./package/luci-app-homeproxy/; then
+            # feeds install уже сделал ссылку package/feeds/luci/luci-app-homeproxy:
+            # без её удаления пакет был бы в дереве дважды.
+            rm -rf ./feeds/luci/applications/luci-app-homeproxy ./package/feeds/luci/luci-app-homeproxy
+        else
+            rm -rf ./package/luci-app-homeproxy
+            echo "::warning title=HomeProxy::Клон immortalwrt/homeproxy не получен, остаётся копия из фида ImmortalWrt LuCI: патчи patches/packages/luci-app-homeproxy на неё могут не лечь"
+        fi
     fi
 fi
 
@@ -109,10 +123,10 @@ fi
 # уже есть в исходниках — пропуск, не подходит — ::warning и сборка
 # дальше (FEED_PATCH_STRICT=1 — остановка).
 # Сверка с исходниками (sh/patch-drift.sh) — только для пакетов, которые
-# клонированы из репозитория автора в package/: патчи сняты с него. Пакет
-# из чужого фида (luci-app-homeproxy в ImmortalWrt LuCI) — отдельная копия
-# со своей историей, сравнение с эталонами давало бы ложные остановки;
-# для него прежнее поведение.
+# клонированы из репозитория автора в package/: патчи сняты с него
+# (luci-app-homeproxy теперь клонируется и на ImmortalWrt, см. выше). Пакет
+# из чужого фида — отдельная копия со своей историей, сравнение с эталонами
+# давало бы ложные остановки; для него прежнее поведение.
 # =========================================================
 # shellcheck source=sh/patch-drift.sh
 if ! . "$GITHUB_WORKSPACE/sh/patch-drift.sh" 2>/dev/null; then
