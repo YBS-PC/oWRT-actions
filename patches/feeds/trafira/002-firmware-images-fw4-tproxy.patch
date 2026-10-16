@@ -107,10 +107,10 @@ index 0000000..598d242
 +/usr/bin/trafira package_firewall >/dev/null 2>&1 || true
 +exit 0
 diff --git a/trafira/files/usr/bin/trafira b/trafira/files/usr/bin/trafira
-index 7b1ee8c..51e90ca 100755
+index 0b1eb52..a515408 100755
 --- a/trafira/files/usr/bin/trafira
 +++ b/trafira/files/usr/bin/trafira
-@@ -204,6 +204,7 @@ function command_spec(command) {
+@@ -208,6 +208,7 @@ function command_spec(command) {
          validate_byedpi_strategy_json: [ "providers/byedpi/validator.uc", "validate-json", 1 ],
          package_prerm: [ "service/package.uc", "prerm", 1 ],
          package_postinst: [ "service/package.uc", "postinst", 0 ],
@@ -134,3 +134,5 @@ index 0703d70..7c5bddd 100644
  
      if (!path_exists(PACKAGE_UPGRADE_STATE))
          return true;
+-- 
+2.43.0
