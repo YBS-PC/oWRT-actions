@@ -237,7 +237,7 @@ index a64c21e..8225866 100644
 +msgid "a DNS server from the list"
 +msgstr "DNS-сервер из списка"
 diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
-index b306af1..db4ccbf 100755
+index ab8c6ec..ecc370c 100755
 --- a/root/etc/homeproxy/scripts/generate_client.uc
 +++ b/root/etc/homeproxy/scripts/generate_client.uc
 @@ -7,7 +7,7 @@
@@ -249,7 +249,7 @@ index b306af1..db4ccbf 100755
  import { isnan } from 'math';
  import { connect } from 'ubus';
  import { cursor } from 'uci';
-@@ -191,6 +191,8 @@ function parse_dnsserver(server_addr, default_protocol) {
+@@ -197,6 +197,8 @@ function parse_dnsserver(server_addr, default_protocol) {
  	if (!match(server_addr, /:\/\//))
  		server_addr = (default_protocol || 'udp') + '://' + (validation('ip6addr', server_addr) ? `[${server_addr}]` : server_addr);
  	server_addr = parseURL(server_addr);
@@ -258,7 +258,7 @@ index b306af1..db4ccbf 100755
  
  	return {
  		type: server_addr.protocol,
-@@ -633,6 +635,89 @@ if (!isEmpty(main_node)) {
+@@ -654,6 +656,89 @@ if (!isEmpty(main_node)) {
  
  	config.dns.final = get_resolver(dns_default_server);
  }
@@ -348,7 +348,7 @@ index b306af1..db4ccbf 100755
  /* DNS end */
  
  /* Inbound start */
-@@ -1106,4 +1191,44 @@ if (length(blocked_tags))
+@@ -1127,4 +1212,44 @@ if (length(blocked_tags))
  		}
  
  system('mkdir -p ' + RUN_DIR);
