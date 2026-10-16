@@ -58,15 +58,15 @@ else
 fi
 
 # checkout_variant_commit <каталог клона> <имя для лога>
-# Поле формы variant_commit (VARIANT_COMMIT, только hex — проверено в
-# workflow): клон переключается на этот коммит. Нет такого коммита — сборка
+# Коммит из patches/packages/<пакет>/BASE (галочка use_base_commit,
+# VARIANT_COMMIT, только hex): клон переключается на этот коммит. Нет такого коммита — сборка
 # останавливается: молча собрать последний код вместо заказанного нельзя.
 checkout_variant_commit() {
     [ -n "$VARIANT_COMMIT" ] || return 0
     if git -C "$1" checkout -q "$VARIANT_COMMIT" 2>/dev/null; then
-        echo ">>> [$2] Коммит $(git -C "$1" rev-parse --short HEAD) из поля variant_commit ($(git -C "$1" log -1 --format=%cd --date=short))"
+        echo ">>> [$2] Коммит $(git -C "$1" rev-parse --short HEAD) из BASE ($(git -C "$1" log -1 --format=%cd --date=short))"
     else
-        echo "::error title=$2::Коммит $VARIANT_COMMIT (поле variant_commit) не найден в репозитории"
+        echo "::error title=$2::Коммит $VARIANT_COMMIT (из BASE) не найден в репозитории"
         exit 1
     fi
 }
@@ -98,7 +98,7 @@ if [[ "$VARIANT" != "clear" && "$VARIANT" != "crystal_clear" && "$VARIANT" != "s
         else
             rm -rf ./package/luci-app-homeproxy
             if [ -n "$VARIANT_COMMIT" ]; then
-                echo "::error title=HomeProxy::Клон immortalwrt/homeproxy не получен, а задан коммит $VARIANT_COMMIT (поле variant_commit)"
+                echo "::error title=HomeProxy::Клон immortalwrt/homeproxy не получен, а задан коммит $VARIANT_COMMIT из BASE (use_base_commit)"
                 exit 1
             fi
             echo "::warning title=HomeProxy::Клон immortalwrt/homeproxy не получен, остаётся копия из фида ImmortalWrt LuCI: патчи patches/packages/luci-app-homeproxy на неё могут не лечь"
