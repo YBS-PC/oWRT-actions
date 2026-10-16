@@ -50,6 +50,14 @@ client: auto, packet-up, stream-up and stream-one, plain and over TLS,
 3 MB files byte-identical, three parallel downloads, extra with headers,
 xmux, padding and sc_max_each_post_bytes.
 
+The mode auto is resolved as Xray does it: stream-one with REALITY
+(stream-up with downloadSettings), packet-up otherwise. sing-box-extended
+takes packet-up for auto, and a REALITY server set to stream-one or
+stream-up refuses it ("packet-up mode is not allowed"): share links of
+such servers say auto, so every request timed out after 15 s ("context
+deadline exceeded") while Xray clients worked. Checked live against
+Xray 26.10.10 with the server in each mode.
+
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
@@ -256,7 +264,7 @@ index de350bc..3648b87 100644
  	o.value('', _('none'));
  	o.value('packetaddr', _('packet addr (v2ray-core v5+)'));
 diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
-index db4ccbf..280d5a0 100755
+index ecc370c..8d4fc9a 100755
 --- a/root/etc/homeproxy/scripts/generate_client.uc
 +++ b/root/etc/homeproxy/scripts/generate_client.uc
 @@ -14,7 +14,7 @@ import { cursor } from 'uci';
@@ -268,7 +276,7 @@ index db4ccbf..280d5a0 100755
  } from 'homeproxy';
  
  const ubus = connect();
-@@ -247,6 +247,193 @@ function generate_endpoint(node) {
+@@ -253,6 +253,200 @@ function generate_endpoint(node) {
  	return endpoint;
  }
  
@@ -448,6 +456,13 @@ index db4ccbf..280d5a0 100755
 +		xhttp_log(node, `mode ${t.mode} is not supported, auto is used`);
 +		t.mode = 'auto';
 +	}
++	/* auto as Xray decides it: stream-one with REALITY (stream-up with
++	 * downloadSettings), otherwise packet-up. sing-box-extended takes
++	 * packet-up for auto, which a REALITY server set to stream-one or
++	 * stream-up refuses ("packet-up mode is not allowed"): its links say
++	 * auto, as made for Xray clients, and every request then timed out. */
++	if (t.mode === 'auto' && node.tls === '1' && node.tls_reality === '1')
++		t.mode = (type(extra.downloadSettings) === 'object') ? 'stream-up' : 'stream-one';
 +	if (!isEmpty(node.xhttp_padding_bytes))
 +		t.x_padding_bytes = xhttp_padding(node.xhttp_padding_bytes);
 +
@@ -462,7 +477,7 @@ index db4ccbf..280d5a0 100755
  function generate_outbound(node) {
  	if (type(node) !== 'object' || isEmpty(node))
  		return null;
-@@ -350,7 +537,7 @@ function generate_outbound(node) {
+@@ -356,7 +550,7 @@ function generate_outbound(node) {
  				short_id: node.tls_reality_short_id
  			} : null
  		} : null,
@@ -471,7 +486,7 @@ index db4ccbf..280d5a0 100755
  			type: node.transport,
  			host: node.http_host || node.httpupgrade_host,
  			path: node.http_path || node.ws_path,
-@@ -1159,6 +1346,12 @@ const known_outbounds = [ 'block', 'direct', 'urltest',
+@@ -1180,6 +1374,12 @@ const known_outbounds = [ 'block', 'direct', 'urltest',
  	'socks', 'ssh', 'trojan', 'tuic', 'vless', 'vmess' ];
  const known_transports = [ 'grpc', 'http', 'httpupgrade', 'quic', 'ws' ];
  
