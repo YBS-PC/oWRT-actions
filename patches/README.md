@@ -68,7 +68,7 @@
 | `feeds/forkop/` | [ushan0v/forkop](https://github.com/ushan0v/forkop) | [`dd48329`](https://github.com/ushan0v/forkop/commit/dd483297be0ac4e52bb8f482e2640238b75af532) | 18.07.2026 |
 | `feeds/forkopmod/` | [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) | [`3ef8330`](https://github.com/Gavr1024/forkop-mod/commit/3ef833010aeb008b935af836a3a8b34f07c986ac) | 11.10.2026 |
 | `feeds/luciappxray/` | [yichya/luci-app-xray](https://github.com/yichya/luci-app-xray) | [`4d5a6fd`](https://github.com/yichya/luci-app-xray/commit/4d5a6fd7fc4d2fbbcd7f70f1319da06b91ec1d56) | 22.09.2026 |
-| `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`f602fdb`](https://github.com/yandexru45/netshift/commit/f602fdbf3e6f68ae948377e647d4d25a2601e43d) | 14.10.2026 |
+| `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`87b4ba2`](https://github.com/yandexru45/netshift/commit/87b4ba2cb64d812400863717c5fe1e144a7d727e) | 16.10.2026 |
 | `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`24595ef`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/24595ef82ed36724ad3a2d10caa45b518917cdaa) | 17.10.2026 |
 | `feeds/podkop/` | [itdoginfo/podkop](https://github.com/itdoginfo/podkop) | [`da8bd40`](https://github.com/itdoginfo/podkop/commit/da8bd40983aaab4d29614d38c8d6214d0a217e3e) | 11.10.2026 |
 | `feeds/trafira/` | [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) | [`6da68a0`](https://github.com/petrouspetr-pixel/trafira/commit/6da68a0d60e2affd0708e265265e8b2d9b66f795) | 16.10.2026 |
@@ -234,7 +234,7 @@
 
 Вариант `netshift`, фид [yandexru45/netshift](https://github.com/yandexru45/netshift).
 
-Патчи сняты с коммита [`f602fdb`](https://github.com/yandexru45/netshift/commit/f602fdbf3e6f68ae948377e647d4d25a2601e43d) от 14.10.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`87b4ba2`](https://github.com/yandexru45/netshift/commit/87b4ba2cb64d812400863717c5fe1e144a7d727e) от 16.10.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Разбор ссылок.** Правильно читаются логин и пароль socks5 со
   спецсимволами, ссылки с транспортом http, ссылки без поля security.
