@@ -69,8 +69,8 @@ patch_drift_record() {
 
 # patch_base <фид|пакет> <имя> — коммит автора, с которого снята серия
 # патчей (первая строка patches/<feeds|packages>/<имя>/BASE), или пусто.
-# На этом коммите серия ложится точно: его можно вписать в поле формы
-# variant_commit, пока патчи не перевыпущены под новый код автора.
+# На этом коммите серия ложится точно: с галочкой формы use_base_commit
+# (по умолчанию включена) сборка берёт приложение с него.
 patch_base() {
     local _d
     case "$1" in фид) _d=feeds ;; *) _d=packages ;; esac
@@ -78,12 +78,12 @@ patch_base() {
 }
 
 # patch_drift_hints — по строке на каждый фид или пакет из patch_drift.txt,
-# у которого записан BASE: с каким коммитом автора собрать без остановки.
+# у которого записан BASE: с каким коммитом автора патчи ложатся.
 patch_drift_hints() {
     local _k _n _b
     [ -s "$PATCH_DRIFT_FILE" ] || return 0
     awk '{ sub(/:$/, "", $2); print $1, $2 }' "$PATCH_DRIFT_FILE" | sort -u | while read -r _k _n; do
         _b=$(patch_base "$_k" "$_n")
-        [ -n "$_b" ] && echo "$_k $_n: серия снята с коммита $_b — до обновления патчей можно собрать с variant_commit=$_b"
+        [ -n "$_b" ] && echo "$_k $_n: серия снята с коммита $_b — включите галочку use_base_commit, и сборка возьмёт его"
     done
 }
