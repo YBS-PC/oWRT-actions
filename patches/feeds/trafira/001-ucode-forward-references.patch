@@ -95,3 +95,5 @@ index 2ed5cd4..96c56f3 100644
  function sing_box_runtime_success(mode, args) {
      let command_args = [ LIB_DIR + "/singbox/runtime.uc", mode ];
      for (let arg in (type(args) == "array" ? args : []))
+-- 
+2.43.0
