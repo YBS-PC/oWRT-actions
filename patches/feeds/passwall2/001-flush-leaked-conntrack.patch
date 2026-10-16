@@ -22,10 +22,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
 diff --git a/luci-app-passwall2/root/usr/share/passwall2/app.sh b/luci-app-passwall2/root/usr/share/passwall2/app.sh
-index 8a5e79e..47f7513 100755
+index d2fff4e..9d9fa7c 100755
 --- a/luci-app-passwall2/root/usr/share/passwall2/app.sh
 +++ b/luci-app-passwall2/root/usr/share/passwall2/app.sh
-@@ -921,6 +921,15 @@ start() {
+@@ -919,6 +919,15 @@ start() {
  		else
  			source $APP_PATH/${USE_TABLES}.sh start
  			set_cache_var "USE_TABLES" "$USE_TABLES"
