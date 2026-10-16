@@ -1,0 +1,40 @@
+From: YBS-PC/oWRT-actions
+Subject: [PATCH] trafira: сжатие исходников при сборке с ucode из OpenWrt 24.10
+ и 25.12
+
+Сборка пакета trafira в OpenWrt падала на compact-sources.py:
+«Cannot verify usr/lib/trafira/components/action.uc: Expected a stripped,
+headerless ucode proof». Скрипт сверяет байткод исходника до и после
+сжатия отступов и требует, чтобы поле флагов заголовка было нулевым. С
+ucode f682ac2 (27.06.2025) в старшем байте этого поля записана версия
+байткода, а OpenWrt 24.10 (ucode 3f64c80) и 25.12 (ucode 85922056)
+собирают именно такой ucode для хоста; нулевое поле даёт только ucode
+до июня 2025 (be92ebd, по нему написан скрипт).
+
+Старший байт с версией теперь допускается, остальные биты флагов
+по-прежнему должны быть нулевыми (байткод без отладочной информации),
+разбор и сравнение байткода не меняются.
+
+Проверено: compact-sources.py на файлах trafira с ucode be92ebd,
+3f64c80 и 85922056 (собраны на хосте) — сжато 102 из 107 файлов, все
+сжатые файлы компилируются; tests/ucode_compaction.sh и
+tests/test_ucode_compaction.py проходят.
+---
+diff --git a/trafira/compact-sources.py b/trafira/compact-sources.py
+index a4511411..705581c8 100644
+--- a/trafira/compact-sources.py
++++ b/trafira/compact-sources.py
+@@ -37,7 +37,10 @@ def normalize_proof(code):
+     def u32():
+         return int.from_bytes(take(4), 'big')
+ 
+-    if take(4) != b'\x1bucb' or u32() != 0:
++    # Since ucode f682ac2 (2025-06-27) the top byte of the header flags holds
++    # the bytecode version (OpenWrt 24.10 and 25.12 build such a host ucode);
++    # the other flag bits must still be zero: stripped, no debug info.
++    if take(4) != b'\x1bucb' or u32() & 0x00ffffff != 0:
+         raise ValueError('Expected a stripped, headerless ucode proof')
+     take(u32() * 8)  # Constant table indices.
+     take(u32())      # Constant data, including original strings/regexps.
+-- 
+2.43.0
