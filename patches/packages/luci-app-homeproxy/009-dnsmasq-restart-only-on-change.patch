@@ -24,9 +24,6 @@ their restart.
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
- root/etc/init.d/homeproxy | 32 ++++++++++++++++++++++++++++++--
- 1 file changed, 30 insertions(+), 2 deletions(-)
-
 diff --git a/root/etc/init.d/homeproxy b/root/etc/init.d/homeproxy
 index 30c1352..3349086 100755
 --- a/root/etc/init.d/homeproxy
@@ -104,4 +101,3 @@ index 30c1352..3349086 100755
  
 -- 
 2.43.0
-
