@@ -31,10 +31,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
 diff --git a/netshift/files/usr/lib/sing_box_config_facade.sh b/netshift/files/usr/lib/sing_box_config_facade.sh
-index 998bc79..046166e 100644
+index d17e568..c2e970b 100644
 --- a/netshift/files/usr/lib/sing_box_config_facade.sh
 +++ b/netshift/files/usr/lib/sing_box_config_facade.sh
-@@ -116,10 +116,14 @@ sing_box_cf_add_proxy_outbound() {
+@@ -136,10 +136,14 @@ sing_box_cf_add_proxy_outbound() {
          port="$url_port"
          version="${scheme#socks}"
          if [ "$scheme" = "socks5" ]; then
@@ -52,7 +52,7 @@ index 998bc79..046166e 100644
              fi
          fi
          config="$(sing_box_cm_add_socks_outbound \
-@@ -407,7 +411,7 @@ _add_outbound_security() {
+@@ -491,7 +495,7 @@ _add_outbound_security() {
                  "$reality_mlkem"
          )
          ;;
@@ -61,7 +61,7 @@ index 998bc79..046166e 100644
      *)
          log "Unknown security '$security' detected." "error"
          ;;
-@@ -473,6 +477,17 @@ _add_outbound_transport() {
+@@ -557,6 +561,17 @@ _add_outbound_transport() {
              sing_box_cm_set_httpupgrade_transport_for_outbound "$config" "$outbound_tag" "$httpupgrade_path" "$httpupgrade_host"
          )
          ;;
@@ -79,7 +79,7 @@ index 998bc79..046166e 100644
      xhttp | splithttp)
          # `splithttp` is the pre-rename name of the `xhttp` transport (sing-box
          # renamed it). Accept it as an alias and normalize to xhttp downstream:
-@@ -809,7 +824,10 @@ sing_box_cf_prepare_subscription_batch() {
+@@ -901,7 +916,10 @@ sing_box_cf_prepare_subscription_batch() {
            ] as $kept
          # Assign unique tags using a deterministic dedup pass. $state.used is a
          # set (object) of tags already taken, seeded with the existing config tags.
@@ -91,7 +91,7 @@ index 998bc79..046166e 100644
              {used: ($existing | map({(.): true}) | add // {}), out: []};
              . as $state
              | $kept[$i] as $entry
-@@ -851,7 +869,7 @@ sing_box_cf_prepare_subscription_batch() {
+@@ -949,7 +967,7 @@ sing_box_cf_prepare_subscription_batch() {
                        else . end
                  )
                }]
@@ -101,10 +101,10 @@ index 998bc79..046166e 100644
              outbounds: [$resolved.out[].outbound],
              tags: [$resolved.out[].tag],
 diff --git a/netshift/files/usr/lib/sing_box_config_manager.sh b/netshift/files/usr/lib/sing_box_config_manager.sh
-index eaa6159..f43fdad 100644
+index e64577e..e175b85 100644
 --- a/netshift/files/usr/lib/sing_box_config_manager.sh
 +++ b/netshift/files/usr/lib/sing_box_config_manager.sh
-@@ -1296,12 +1296,14 @@ sing_box_cm_set_tls_for_outbound() {
+@@ -1342,7 +1342,9 @@ sing_box_cm_set_tls_for_outbound() {
                              }
                          } else {} end)
                          + (if $reality_public_key != "" then {
@@ -115,9 +115,5 @@ index eaa6159..f43fdad 100644
                                  enabled: true,
                                  public_key: $reality_public_key,
                                  short_id: $reality_short_id
-                             }
--                            + (if $reality_mlkem == "true" then {support_x25519mlkem768: true} else {} end)
-+                            + (if $reality_mlkem == "true" then {support_x25519mlkem768: true} else {} end))
-                         } else {} end)
-                     )
-                 }
+-- 
+2.43.0
