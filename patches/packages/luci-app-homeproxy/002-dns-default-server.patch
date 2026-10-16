@@ -47,25 +47,5 @@ index 2b5b93f..827828e 100755
  /* independent_cache was deprecated in sb 1.14 */
  if (!isEmpty(uci.get(uciconfig, ucidns, 'independent_cache')))
  	uci.delete(uciconfig, ucidns, 'independent_cache');
-diff --git a/root/etc/homeproxy/scripts/migrate_config.uc.rej b/root/etc/homeproxy/scripts/migrate_config.uc.rej
-new file mode 100644
-index 0000000..c07f7a7
---- /dev/null
-+++ b/root/etc/homeproxy/scripts/migrate_config.uc.rej
-@@ -0,0 +1,14 @@
-+--- root/etc/homeproxy/scripts/migrate_config.uc
-++++ root/etc/homeproxy/scripts/migrate_config.uc
-+@@ -95,6 +95,11 @@ if (default_dns_server === 'block-dns') {
-+ 	uci.set(uciconfig, ucidns, 'default_server', 'default-dns');
-+ }
-+ 
-++/* local-dns never existed: the shipped default made sing-box fail with
-++ * "default DNS server not found: cfg-local-dns-dns" in custom mode */
-++if (default_dns_server === 'local-dns')
-++	uci.set(uciconfig, ucidns, 'default_server', 'default-dns');
-++
-+ const dns_server_migration = {};
-+ /* DNS servers options */
-+ uci.foreach(uciconfig, ucidnsserver, (cfg) => {
 -- 
 2.43.0
