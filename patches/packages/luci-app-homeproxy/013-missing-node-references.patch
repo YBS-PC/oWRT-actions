@@ -30,7 +30,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
 diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
-index 62bcfdb..6febd89 100755
+index f450bce..7ecd502 100755
 --- a/root/etc/homeproxy/scripts/generate_client.uc
 +++ b/root/etc/homeproxy/scripts/generate_client.uc
 @@ -13,7 +13,7 @@ import { connect } from 'ubus';
@@ -42,7 +42,7 @@ index 62bcfdb..6febd89 100755
  	removeBlankAttrs, validation, HP_DIR, RUN_DIR
  } from 'homeproxy';
  
-@@ -672,19 +672,64 @@ config.outbounds = [
+@@ -693,19 +693,64 @@ config.outbounds = [
  	}
  ];
  
@@ -112,7 +112,7 @@ index 62bcfdb..6febd89 100755
  			interval: strToTime(main_urltest_interval),
  			tolerance: strToInt(main_urltest_tolerance),
  			idle_timeout: (strToInt(main_urltest_interval) > 1800) ? `${main_urltest_interval * 2}s` : null,
-@@ -692,7 +737,9 @@ if (!isEmpty(main_node)) {
+@@ -713,7 +758,9 @@ if (!isEmpty(main_node)) {
  		urltest_nodes = main_urltest_nodes;
  	} else {
  		const main_node_cfg = uci.get_all(uciconfig, main_node) || {};
@@ -123,7 +123,7 @@ index 62bcfdb..6febd89 100755
  			push(config.endpoints, generate_endpoint(main_node_cfg));
  			config.endpoints[length(config.endpoints)-1].tag = 'main-out';
  		} else {
-@@ -702,14 +749,11 @@ if (!isEmpty(main_node)) {
+@@ -723,14 +770,11 @@ if (!isEmpty(main_node)) {
  	}
  
  	if (main_udp_node === 'urltest') {
@@ -140,7 +140,7 @@ index 62bcfdb..6febd89 100755
  			interval: strToTime(main_udp_urltest_interval),
  			tolerance: strToInt(main_udp_urltest_tolerance),
  			idle_timeout: (strToInt(main_udp_urltest_interval) > 1800) ? `${main_udp_urltest_interval * 2}s` : null,
-@@ -717,7 +761,9 @@ if (!isEmpty(main_node)) {
+@@ -738,7 +782,9 @@ if (!isEmpty(main_node)) {
  		urltest_nodes = [...urltest_nodes, ...filter(main_udp_urltest_nodes, (l) => !~index(urltest_nodes, l))];
  	} else if (dedicated_udp_node) {
  		const main_udp_node_cfg = uci.get_all(uciconfig, main_udp_node) || {};
@@ -151,7 +151,7 @@ index 62bcfdb..6febd89 100755
  			push(config.endpoints, generate_endpoint(main_udp_node_cfg));
  			config.endpoints[length(config.endpoints)-1].tag = 'main-udp-out';
  		} else {
-@@ -745,20 +791,22 @@ if (!isEmpty(main_node)) {
+@@ -766,20 +812,22 @@ if (!isEmpty(main_node)) {
  			return;
  
  		if (cfg.node === 'urltest') {
