@@ -21,9 +21,6 @@ forward and input files get their rules, and stop leaves them empty.
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
- root/etc/init.d/homeproxy | 9 +++++++++
- 1 file changed, 9 insertions(+)
-
 diff --git a/root/etc/init.d/homeproxy b/root/etc/init.d/homeproxy
 index b683af0..34c5a4a 100755
 --- a/root/etc/init.d/homeproxy
@@ -46,4 +43,3 @@ index b683af0..34c5a4a 100755
  	fw4 reload >"/dev/null" 2>&1
 -- 
 2.43.0
-
