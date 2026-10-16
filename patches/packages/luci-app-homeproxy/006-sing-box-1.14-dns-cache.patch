@@ -1,25 +1,34 @@
 From 2e936405b650650a8de35d3dd3f1f0145a6165f9 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
-Date: Sat, 26 Sep 2026 21:27:48 +0000
-Subject: [PATCH] feat(client): use the sing-box 1.14 DNS cache options
+Date: Fri, 16 Oct 2026 06:10:00 +0000
+Subject: [PATCH] feat(client): DNS options of sing-box 1.14
 
-sing-box 1.14 deprecated dns.independent_cache (dropped without
-replacement) and experimental.cache_file.store_rdrc (replaced by
-store_dns); both will be removed in 1.16. Older cores reject store_dns.
+sing-box 1.14 deprecated experimental.cache_file.store_rdrc (replaced by
+store_dns, which older cores reject), the strategy of DNS rules and an
+IP rule-set matched against the answer without match_response; they will
+be removed in 1.16. A configuration that has them together with a
+query_type rule is refused at startup, so in the bypass mainland China
+mode with a proxy list (it adds the SVCB/HTTPS filter) sing-box 1.14 did
+not start: "Legacy strategy DNS rule action option is deprecated".
 
-Reuse the version read for the sniff rule: below 1.14 the config is
-unchanged, from 1.14 on 'Store RDRC' maps to store_dns and
-independent_cache is omitted, with an unknown version none of these
-options is written.
+The generator reads the core version: below 1.14 the config is unchanged,
+from 1.14 on 'Store RDRC' maps to store_dns, and the bypass mainland China
+rules leave strategy out and match geoip-cn as the migration guide says,
+with an evaluate action and match_response. With an unknown version the
+cache options are not written and the rules stay as before.
+independent_cache was removed by homeproxy itself.
 
-Checked with sing-box 1.12.25 (config byte-identical), 1.13.21 and
-1.14.2 (check and run, no deprecation warning for these options).
+Checked with sing-box 1.12.22, 1.14.3 and 1.14.1-extended-2.7.2: check
+passes without deprecation warnings, with and without a proxy list (1.14.3
+refused the unpatched one with a proxy list). The rules, run on 1.14.3
+with fake DNS servers: an answer of china-dns inside geoip-cn is returned,
+one outside goes to the main DNS server, geosite-cn goes to china-dns,
+geosite-noncn is not asked there, as with the legacy rules.
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01HEQfjBzS7Wos7AvTk18TDQ
+Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
 diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
-index ce54caa..a0db616 100755
+index ce54caa..b695bc3 100755
 --- a/root/etc/homeproxy/scripts/generate_client.uc
 +++ b/root/etc/homeproxy/scripts/generate_client.uc
 @@ -7,7 +7,7 @@
@@ -31,7 +40,7 @@ index ce54caa..a0db616 100755
  import { isnan } from 'math';
  import { connect } from 'ubus';
  import { cursor } from 'uci';
-@@ -134,6 +134,21 @@ if (match(proxy_mode, /tun/)) {
+@@ -134,6 +134,27 @@ if (match(proxy_mode, /tun/)) {
  const log_level = uci.get(uciconfig, ucimain, 'log_level') || 'warn';
  /* UCI config end */
  
@@ -39,6 +48,12 @@ index ce54caa..a0db616 100755
 + * sing-box 1.14 deprecated cache_file.store_rdrc (replaced by store_dns, which
 + * older cores reject). store_rdrc is written below 1.14, store_dns from 1.14
 + * on; with an unknown version neither is written.
++ *
++ * It also deprecated the strategy of DNS rules and a GeoIP rule-set matched
++ * against the answer without match_response, and refuses to start when they
++ * share the configuration with a query_type rule (the SVCB/HTTPS filter of the
++ * proxy list). From 1.14 on the bypass mainland China rules leave strategy
++ * out and match geoip-cn with evaluate and match_response.
 + */
 +let sing_box_version = null;
 +const sing_box_version_fd = popen('/usr/bin/sing-box version 2>/dev/null');
@@ -53,7 +68,64 @@ index ce54caa..a0db616 100755
  /* Config helper start */
  function parse_port(strport) {
  	if (type(strport) !== 'array' || isEmpty(strport))
-@@ -947,8 +962,9 @@ if (routing_mode in ['bypass_mainland_china', 'custom']) {
+@@ -483,24 +504,39 @@ if (!isEmpty(main_node)) {
+ 			rule_set: 'geosite-cn',
+ 			action: 'route',
+ 			server: 'china-dns',
+-			strategy: 'prefer_ipv6'
+-		});
+-		push(config.dns.rules, {
+-			type: 'logical',
+-			mode: 'and',
+-			rules: [
+-				{
+-					rule_set: 'geosite-noncn',
+-					invert: true
+-				},
+-				{
+-					rule_set: 'geoip-cn'
+-				}
+-			],
+-			action: 'route',
+-			server: 'china-dns',
+-			strategy: 'prefer_ipv6'
++			strategy: modern_dns_cache ? null : 'prefer_ipv6'
+ 		});
++		if (modern_dns_cache) {
++			/* ask china-dns, answer with it if the address is in geoip-cn */
++			push(config.dns.rules, {
++				rule_set: 'geosite-noncn',
++				invert: true,
++				action: 'evaluate',
++				server: 'china-dns',
++				tag: 'china-dns-answer'
++			});
++			push(config.dns.rules, {
++				match_response: 'china-dns-answer',
++				rule_set: 'geoip-cn',
++				action: 'respond'
++			});
++		} else
++			push(config.dns.rules, {
++				type: 'logical',
++				mode: 'and',
++				rules: [
++					{
++						rule_set: 'geosite-noncn',
++						invert: true
++					},
++					{
++						rule_set: 'geoip-cn'
++					}
++				],
++				action: 'route',
++				server: 'china-dns',
++				strategy: 'prefer_ipv6'
++			});
+ 	}
+ } else if (!isEmpty(default_outbound)) {
+ 	/* DNS servers */
+@@ -947,8 +983,9 @@ if (routing_mode in ['bypass_mainland_china', 'custom']) {
  		cache_file: {
  			enabled: true,
  			path: RUN_DIR + '/cache.db',
