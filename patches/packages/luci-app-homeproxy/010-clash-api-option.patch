@@ -26,7 +26,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
 diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
-index a0db616..62bcfdb 100755
+index b695bc3..f450bce 100755
 --- a/root/etc/homeproxy/scripts/generate_client.uc
 +++ b/root/etc/homeproxy/scripts/generate_client.uc
 @@ -132,6 +132,11 @@ if (match(proxy_mode, /tun/)) {
@@ -41,7 +41,7 @@ index a0db616..62bcfdb 100755
  /* UCI config end */
  
  /*
-@@ -968,6 +973,17 @@ if (routing_mode in ['bypass_mainland_china', 'custom']) {
+@@ -989,6 +994,17 @@ if (routing_mode in ['bypass_mainland_china', 'custom']) {
  		}
  	};
  }
