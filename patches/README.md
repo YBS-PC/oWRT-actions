@@ -275,7 +275,7 @@
 
 ### trafira — `feeds/trafira/` (5)
 
-Вариант `trafira`, фид [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) (3.0.7).
+Вариант `trafira`, фид [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) (3.1.1).
 
 - **001. Установка sing-box со страницы «Компоненты».** Без патча она
   падала с ошибкой «left-hand side is not a function». *Всегда.*
