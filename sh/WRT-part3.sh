@@ -728,6 +728,23 @@ find package/ feeds/ -name Makefile 2>/dev/null | grep "luci-app-homeproxy" | xa
 find package/ feeds/ -name Makefile 2>/dev/null | grep "luci-app-homeproxy" | xargs -r sed -i 's/+sing-box//g'
 echo ">>> [HomeProxy] Makefile patched to fix recursion dependency."
 
+# sing-box фида ImmortalWrt (master, с 1.14.3) включает NaiveProxy без
+# вопроса (def_bool y) и тянет libcronet: сборку сетевого стека Chromium
+# (clang и PGO-профиль с серверов Google, gn, ninja) — часы сборки и
+# гигабайты на диске. В прошивку и так кладётся свой бинарник sing-box,
+# поэтому NaiveProxy в пакете фида выключаем. Тонкой версии это не
+# касается: там пункт с вопросом и по умолчанию выключен.
+for SB_MK in feeds/*/net/sing-box/Makefile; do
+    [ -f "$SB_MK" ] || continue
+    grep -q 'config SING_BOX_BUILD_NAIVE_OUTBOUND' "$SB_MK" || continue
+    sed -i '/config SING_BOX_BUILD_NAIVE_OUTBOUND/,/def_bool/ s/def_bool y/def_bool n/' "$SB_MK"
+    if sed -n '/config SING_BOX_BUILD_NAIVE_OUTBOUND/,/def_bool/p' "$SB_MK" | grep -q 'def_bool n'; then
+        echo ">>> [sing-box] $SB_MK: NaiveProxy выключена, libcronet не собирается."
+    else
+        echo "::warning title=sing-box::$SB_MK: не удалось выключить NaiveProxy, libcronet может собираться часами"
+    fi
+done
+
 # =========================================================
 # Настройка сети и часового пояса
 # sed -i "s/192.168.1.1/192.168.2.1/g" ./package/base-files/files/bin/config_generate
