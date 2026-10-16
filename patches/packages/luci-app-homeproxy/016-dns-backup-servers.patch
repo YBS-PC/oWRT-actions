@@ -58,13 +58,8 @@ entered, and saving without touching them writes the same as before.
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
- .../resources/view/homeproxy/client.js        |  78 +++++++++++
- po/ru/homeproxy.po                            |  74 ++++++++++
- root/etc/homeproxy/scripts/generate_client.uc | 127 +++++++++++++++++-
- 3 files changed, 278 insertions(+), 1 deletion(-)
-
 diff --git a/htdocs/luci-static/resources/view/homeproxy/client.js b/htdocs/luci-static/resources/view/homeproxy/client.js
-index 0f9d971..4d6119b 100644
+index f4283b3..46aaac9 100644
 --- a/htdocs/luci-static/resources/view/homeproxy/client.js
 +++ b/htdocs/luci-static/resources/view/homeproxy/client.js
 @@ -213,6 +213,46 @@ return view.extend({
@@ -114,7 +109,7 @@ index 0f9d971..4d6119b 100644
  
  		o = s.taboption('routing', form.Value, 'china_dns_server', _('China DNS server'),
  			_('The dns server for resolving China domains. Support UDP, TCP, DoH, DoQ, DoT.'));
-@@ -896,6 +936,44 @@ return view.extend({
+@@ -891,6 +931,44 @@ return view.extend({
  		so.default = 'default-dns';
  		so.rmempty = false;
  
@@ -242,7 +237,7 @@ index a64c21e..8225866 100644
 +msgid "a DNS server from the list"
 +msgstr "DNS-сервер из списка"
 diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
-index a557a77..c0538b5 100755
+index b306af1..db4ccbf 100755
 --- a/root/etc/homeproxy/scripts/generate_client.uc
 +++ b/root/etc/homeproxy/scripts/generate_client.uc
 @@ -7,7 +7,7 @@
@@ -254,7 +249,7 @@ index a557a77..c0538b5 100755
  import { isnan } from 'math';
  import { connect } from 'ubus';
  import { cursor } from 'uci';
-@@ -207,6 +207,8 @@ function parse_dnsserver(server_addr, default_protocol) {
+@@ -191,6 +191,8 @@ function parse_dnsserver(server_addr, default_protocol) {
  	if (!match(server_addr, /:\/\//))
  		server_addr = (default_protocol || 'udp') + '://' + (validation('ip6addr', server_addr) ? `[${server_addr}]` : server_addr);
  	server_addr = parseURL(server_addr);
@@ -263,7 +258,7 @@ index a557a77..c0538b5 100755
  
  	return {
  		type: server_addr.protocol,
-@@ -650,6 +652,89 @@ if (!isEmpty(main_node)) {
+@@ -633,6 +635,89 @@ if (!isEmpty(main_node)) {
  
  	config.dns.final = get_resolver(dns_default_server);
  }
@@ -353,7 +348,7 @@ index a557a77..c0538b5 100755
  /* DNS end */
  
  /* Inbound start */
-@@ -1131,4 +1216,44 @@ if (length(blocked_tags))
+@@ -1106,4 +1191,44 @@ if (length(blocked_tags))
  		}
  
  system('mkdir -p ' + RUN_DIR);
@@ -400,4 +395,3 @@ index a557a77..c0538b5 100755
  writefile(RUN_DIR + '/sing-box-c.json', sprintf('%.J\n', removeBlankAttrs(config)));
 -- 
 2.43.0
-
