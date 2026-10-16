@@ -45,14 +45,6 @@ support-x25519mlkem768=true and only for REALITY.
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
- .../resources/view/homeproxy/node.js          | 10 +++++++
- po/ru/homeproxy.po                            | 14 +++++++++
- root/etc/homeproxy/scripts/generate_client.uc | 23 +++++++++++++--
- root/etc/homeproxy/scripts/homeproxy.uc       | 29 +++++++++++++++++++
- .../homeproxy/scripts/update_subscriptions.uc |  2 ++
- root/usr/share/rpcd/ucode/luci.homeproxy      | 26 +++++++++++++++++
- 6 files changed, 102 insertions(+), 2 deletions(-)
-
 diff --git a/htdocs/luci-static/resources/view/homeproxy/node.js b/htdocs/luci-static/resources/view/homeproxy/node.js
 index 3648b87..2ff98bf 100644
 --- a/htdocs/luci-static/resources/view/homeproxy/node.js
@@ -104,7 +96,7 @@ index 8225866..9677776 100644
 +"<code>support-x25519mlkem768=true</code>), более старые серверы могут его не "
 +"принять. Передаётся только с отпечатком uTLS chrome."
 diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
-index 78ad935..7271273 100755
+index 280d5a0..2d83095 100755
 --- a/root/etc/homeproxy/scripts/generate_client.uc
 +++ b/root/etc/homeproxy/scripts/generate_client.uc
 @@ -14,7 +14,7 @@ import { cursor } from 'uci';
@@ -116,7 +108,7 @@ index 78ad935..7271273 100755
  } from 'homeproxy';
  
  const ubus = connect();
-@@ -450,6 +450,24 @@ function xhttp_transport(node) {
+@@ -434,6 +434,24 @@ function xhttp_transport(node) {
  }
  /* xhttp transport end */
  
@@ -141,7 +133,7 @@ index 78ad935..7271273 100755
  function generate_outbound(node) {
  	if (type(node) !== 'object' || isEmpty(node))
  		return null;
-@@ -550,7 +568,8 @@ function generate_outbound(node) {
+@@ -534,7 +552,8 @@ function generate_outbound(node) {
  			reality: (node.tls_reality === '1') ? {
  				enabled: true,
  				public_key: node.tls_reality_public_key,
@@ -248,4 +240,3 @@ index 030f299..5f62fd7 100644
  		}
 -- 
 2.43.0
-
