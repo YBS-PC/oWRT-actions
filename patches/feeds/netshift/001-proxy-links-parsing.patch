@@ -10,8 +10,6 @@ Subject: [PATCH 1/2] netshift: proxy links - socks5 credentials, http
   each half.
 - VLESS/Trojan "type=http" (h2): sing-box supports it, but 0.9.10 skips
   such links as an unknown transport. Reuses the VMess HTTP helper.
-- No "security" means none (as in Xray): the config was already right,
-  but every such link logged "Unknown security ''".
 - jq 1.7 (OpenWrt 24.10) syntax, which 0.9.10 claims to support:
   * sing_box_cm_set_tls_for_outbound: "+" in the reality object value
     (reality_mlkem, 0.9.10) is a syntax error before jq 1.8 - no
@@ -21,8 +19,11 @@ Subject: [PATCH 1/2] netshift: proxy links - socks5 credentials, http
     (also in 0.9.9).
   Both only add parentheses; output is identical on jq 1.8.1.
 
-Checked: all 219 jq programs of the backend compile on jq 1.7 and
-1.8.1; link parsing in busybox ash with both jq versions and
+The empty "security" (no TLS, as in Xray) is handled by the author
+since 27ad5f2 and is no longer part of this patch.
+
+Checked: every jq program of the backend that compiles on jq 1.8.1 also
+compiles on jq 1.7 (356 scanned); link parsing in busybox ash with both jq versions and
 `sing-box check` 1.12.22 / 1.14.2; the subscription program gives
 byte-identical output on jq 1.7 and 1.8.1 (with and without
 reality_mlkem).
@@ -31,10 +32,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
 diff --git a/netshift/files/usr/lib/sing_box_config_facade.sh b/netshift/files/usr/lib/sing_box_config_facade.sh
-index 75442c8..5eedb84 100644
+index a4f2117..93c55dd 100644
 --- a/netshift/files/usr/lib/sing_box_config_facade.sh
 +++ b/netshift/files/usr/lib/sing_box_config_facade.sh
-@@ -136,10 +136,14 @@ sing_box_cf_add_proxy_outbound() {
+@@ -159,10 +159,14 @@ sing_box_cf_add_proxy_outbound() {
          port="$url_port"
          version="${scheme#socks}"
          if [ "$scheme" = "socks5" ]; then
@@ -52,16 +53,7 @@ index 75442c8..5eedb84 100644
              fi
          fi
          config="$(sing_box_cm_add_socks_outbound \
-@@ -491,7 +495,7 @@ _add_outbound_security() {
-                 "$reality_mlkem"
-         )
-         ;;
--    none) ;;
-+    "" | none) ;; # no "security" in the link means no TLS (as in Xray)
-     *)
-         log "Unknown security '$security' detected." "error"
-         ;;
-@@ -557,6 +561,17 @@ _add_outbound_transport() {
+@@ -596,6 +600,17 @@ _add_outbound_transport() {
              sing_box_cm_set_httpupgrade_transport_for_outbound "$config" "$outbound_tag" "$httpupgrade_path" "$httpupgrade_host"
          )
          ;;
@@ -79,7 +71,7 @@ index 75442c8..5eedb84 100644
      xhttp | splithttp)
          # `splithttp` is the pre-rename name of the `xhttp` transport (sing-box
          # renamed it). Accept it as an alias and normalize to xhttp downstream:
-@@ -917,7 +932,10 @@ sing_box_cf_prepare_subscription_batch() {
+@@ -956,7 +971,10 @@ sing_box_cf_prepare_subscription_batch() {
            ] as $kept
          # Assign unique tags using a deterministic dedup pass. $state.used is a
          # set (object) of tags already taken, seeded with the existing config tags.
@@ -91,7 +83,7 @@ index 75442c8..5eedb84 100644
              {used: ($existing | map({(.): true}) | add // {}), out: []};
              . as $state
              | $kept[$i] as $entry
-@@ -965,7 +983,7 @@ sing_box_cf_prepare_subscription_batch() {
+@@ -1004,7 +1022,7 @@ sing_box_cf_prepare_subscription_batch() {
                        else . end
                  )
                }]
