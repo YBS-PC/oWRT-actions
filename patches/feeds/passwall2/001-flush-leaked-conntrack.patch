@@ -21,11 +21,8 @@ redirect (по умолчанию) он попадает в redirect, соеди
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
- luci-app-passwall2/root/usr/share/passwall2/app.sh | 9 +++++++++
- 1 file changed, 9 insertions(+)
-
 diff --git a/luci-app-passwall2/root/usr/share/passwall2/app.sh b/luci-app-passwall2/root/usr/share/passwall2/app.sh
-index f11e870..f084f71 100755
+index 8a5e79e..47f7513 100755
 --- a/luci-app-passwall2/root/usr/share/passwall2/app.sh
 +++ b/luci-app-passwall2/root/usr/share/passwall2/app.sh
 @@ -921,6 +921,15 @@ start() {
@@ -43,7 +40,6 @@ index f11e870..f084f71 100755
 +			command -v conntrack >/dev/null && conntrack -D -p tcp --src-nat >/dev/null 2>&1
  		fi
  	}
- 	if [ "$ENABLED_DEFAULT_ACL" == 1 ] || [ "$ENABLED_ACLS" == 1 ]; then
+ 	set_cache_var "ENABLED_DEFAULT_ACL" "$ENABLED_DEFAULT_ACL"
 -- 
 2.43.0
-
