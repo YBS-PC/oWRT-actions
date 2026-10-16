@@ -96,7 +96,7 @@ index 8225866..9677776 100644
 +"<code>support-x25519mlkem768=true</code>), более старые серверы могут его не "
 +"принять. Передаётся только с отпечатком uTLS chrome."
 diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
-index 280d5a0..2d83095 100755
+index 8d4fc9a..0efeae0 100755
 --- a/root/etc/homeproxy/scripts/generate_client.uc
 +++ b/root/etc/homeproxy/scripts/generate_client.uc
 @@ -14,7 +14,7 @@ import { cursor } from 'uci';
@@ -108,7 +108,7 @@ index 280d5a0..2d83095 100755
  } from 'homeproxy';
  
  const ubus = connect();
-@@ -434,6 +434,24 @@ function xhttp_transport(node) {
+@@ -447,6 +447,24 @@ function xhttp_transport(node) {
  }
  /* xhttp transport end */
  
@@ -133,7 +133,7 @@ index 280d5a0..2d83095 100755
  function generate_outbound(node) {
  	if (type(node) !== 'object' || isEmpty(node))
  		return null;
-@@ -534,7 +552,8 @@ function generate_outbound(node) {
+@@ -547,7 +565,8 @@ function generate_outbound(node) {
  			reality: (node.tls_reality === '1') ? {
  				enabled: true,
  				public_key: node.tls_reality_public_key,
