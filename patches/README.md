@@ -49,8 +49,10 @@
 - **Отключение сверки:** галочка `stop_outdated_patches`. Тогда
   неприменившийся патч только даёт предупреждение (остановка — при
   `FEED_PATCH_STRICT=1`).
-- **Не сверяется:** `luci-app-homeproxy` из фида ImmortalWrt LuCI — это
-  отдельная копия со своей историей.
+- **homeproxy сверяется на обеих платформах:** на ImmortalWrt
+  `WRT-part3.sh` ставит immortalwrt/homeproxy (master) вместо копии из
+  фида ImmortalWrt LuCI — в ветках релизов там старый код, на который
+  патчи не ложатся.
 
 ### Как перевыпускать
 
@@ -294,7 +296,8 @@
 ### homeproxy — `packages/luci-app-homeproxy/` (16)
 
 Вариант `homeproxy`, пакет [immortalwrt/homeproxy](https://github.com/immortalwrt/homeproxy):
-на OpenWrt он скачивается отдельно, на ImmortalWrt уже есть в его фиде.
+на OpenWrt и на ImmortalWrt берётся master (на ImmortalWrt — вместо
+копии из фида LuCI: в ветках релизов 25.12 и 24.10 там старый код).
 
 - **001. Проверка интервала URLTest.** Форма проверяла не ту настройку и
   пропускала значения, с которыми sing-box не запускается. *Всегда.*
@@ -305,10 +308,13 @@
 - **004 и 005 удалены.** Их исправления (sniff через действие маршрута
   для sing-box 1.13+ и опечатки `socsk5`, «alrealy», «pubkic») уже есть в
   luci-app-homeproxy ImmortalWrt, а старые патчи на него не ложатся.
-- **006. Кэш DNS в sing-box 1.14.** `cache_file.store_rdrc` заменён на
-  `store_dns`, которые sing-box 1.14 принимает. Настройку независимого
-  кэша (`independent_cache`) ImmortalWrt уже убрал сам. *Само по условию:*
-  `store_rdrc` пишется до 1.14, `store_dns` с 1.14.
+- **006. DNS в sing-box 1.14.** `cache_file.store_rdrc` заменён на
+  `store_dns`. В режиме `bypass_mainland_china` правила DNS без
+  устаревшего `strategy`, а `geoip-cn` сверяется с ответом через
+  `evaluate` и `match_response`: со списком прокси-доменов (он добавляет
+  фильтр SVCB/HTTPS по `query_type`) sing-box 1.14 иначе не запускается.
+  Настройку `independent_cache` автор убрал сам. *Само по условию:* до 1.14
+  конфигурация прежняя.
 - **007. Соединения после перезапуска.** Пока homeproxy перезапускается,
   новые соединения из сети уходят напрямую. После запуска такие
   TCP-соединения сбрасываются и сразу переподключаются уже по правилам.
@@ -419,7 +425,11 @@
   официальном sing-box его нет. Как пользоваться:
   - в узле выбрать транспорт «XHTTP» и задать Host, Path, режим
     (по умолчанию `auto`) и, если нужно, «Padding bytes» (по умолчанию
-    `100-1000`);
+    `100-1000`). `auto` выбирается, как в Xray: с REALITY — `stream-one`
+    (`stream-up`, если есть `downloadSettings`), иначе `packet-up`. Сам
+    sing-box-extended для `auto` берёт `packet-up`, а REALITY-сервер в
+    режиме `stream-one` или `stream-up` его не принимает, и каждое
+    соединение висело до таймаута («context deadline exceeded»);
   - «Extra settings» — JSON `extra` из ссылки Xray: заголовки, `xmux`,
     отдельный сервер для скачивания (`downloadSettings`) и другие
     настройки. Обычно заполнять не нужно: при импорте ссылки или
