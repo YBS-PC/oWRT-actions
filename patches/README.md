@@ -46,6 +46,13 @@
   Шаг **Update Feeds & Config** останавливает эту сборку до компиляции
   (остальные сборки матрицы идут дальше) и отправляет список в Telegram.
   Такой патч надо перевыпустить под новый код автора.
+- **Сборка до обновления патчей:** в каждой папке серии лежит файл
+  `BASE` — коммит автора, на который сняты её патчи (первая строка). При
+  остановке журнал и Telegram подсказывают его. Впишите его в поле формы
+  `variant_commit` (коммит приложения варианта): фид или клон пакета
+  возьмётся с этого коммита, и серия ляжет без расхождений. Пусто —
+  последний коммит, как раньше. В `combo` поле игнорируется.
+
 - **Отключение сверки:** галочка `stop_outdated_patches`. Тогда
   неприменившийся патч только даёт предупреждение (остановка — при
   `FEED_PATCH_STRICT=1`).
@@ -53,6 +60,20 @@
   `WRT-part3.sh` ставит immortalwrt/homeproxy (master) вместо копии из
   фида ImmortalWrt LuCI — в ветках релизов там старый код, на который
   патчи не ложатся.
+
+Для каких коммитов авторов актуальны патчи (из файлов `BASE`):
+
+| Папка | Репозиторий | Коммит | Дата коммита |
+|---|---|---|---|
+| `feeds/forkop/` | [ushan0v/forkop](https://github.com/ushan0v/forkop) | [`dd48329`](https://github.com/ushan0v/forkop/commit/dd483297be0ac4e52bb8f482e2640238b75af532) | 18.07.2026 |
+| `feeds/forkopmod/` | [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) | [`3ef8330`](https://github.com/Gavr1024/forkop-mod/commit/3ef833010aeb008b935af836a3a8b34f07c986ac) | 11.10.2026 |
+| `feeds/luciappxray/` | [yichya/luci-app-xray](https://github.com/yichya/luci-app-xray) | [`4d5a6fd`](https://github.com/yichya/luci-app-xray/commit/4d5a6fd7fc4d2fbbcd7f70f1319da06b91ec1d56) | 22.09.2026 |
+| `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`f602fdb`](https://github.com/yandexru45/netshift/commit/f602fdbf3e6f68ae948377e647d4d25a2601e43d) | 14.10.2026 |
+| `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`24595ef`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/24595ef82ed36724ad3a2d10caa45b518917cdaa) | 17.10.2026 |
+| `feeds/podkop/` | [itdoginfo/podkop](https://github.com/itdoginfo/podkop) | [`da8bd40`](https://github.com/itdoginfo/podkop/commit/da8bd40983aaab4d29614d38c8d6214d0a217e3e) | 11.10.2026 |
+| `feeds/trafira/` | [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) | [`6da68a0`](https://github.com/petrouspetr-pixel/trafira/commit/6da68a0d60e2affd0708e265265e8b2d9b66f795) | 16.10.2026 |
+| `packages/luci-app-homeproxy/` | [immortalwrt/homeproxy](https://github.com/immortalwrt/homeproxy) | [`fadaa67`](https://github.com/immortalwrt/homeproxy/commit/fadaa676104f59ff6ace480a780a258d846d0aec) | 02.10.2026 |
+| `packages/luci-app-re-homeproxy/` | [1andrevich/homeproxy-hiddify](https://github.com/1andrevich/homeproxy-hiddify) | [`a9e3596`](https://github.com/1andrevich/homeproxy-hiddify/commit/a9e359679e08b5642ae66b13dbcf647b382a9edc) | 04.07.2026 |
 
 ### Как перевыпускать
 
@@ -66,6 +87,10 @@
   применён указанный.
 - Пути в патче — от корня репозитория фида или пакета
   (`a/forkop/Makefile`, `a/root/etc/init.d/homeproxy`).
+- После перевыпуска серии в её `BASE` записывается полный хеш коммита
+  автора, на который она снята; тот же коммит — в таблице выше, в строке
+  «Патчи сняты с коммита» раздела пакета и в столбце «Для коммита автора»
+  раздела 07 справочника.
 
 ## Патчи по пакетам
 
@@ -95,6 +120,8 @@
 Вариант `forkop`, фид [ushan0v/forkop](https://github.com/ushan0v/forkop).
 Патчи 001–017 — исправления, которые предложены автору в pull request,
 но ещё не приняты.
+
+Патчи сняты с коммита [`dd48329`](https://github.com/ushan0v/forkop/commit/dd483297be0ac4e52bb8f482e2640238b75af532) от 18.07.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. DNS-перехват только для DNS.** Раньше forkop забирал себе всё,
   что шло на порт 53, даже если это не DNS-запрос. Теперь только DNS.
@@ -184,6 +211,8 @@
 
 Вариант `forkop-mod`, фид [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) (1.0.10).
 
+Патчи сняты с коммита [`3ef8330`](https://github.com/Gavr1024/forkop-mod/commit/3ef833010aeb008b935af836a3a8b34f07c986ac) от 11.10.2026 (файл `BASE`): на нём серия ложится точно.
+
 - **001. Ошибки «left-hand side is not a function» и удаление через
   apk.** В 16 местах функции перенесены выше места, где их вызывают.
   Без этого исключённые устройства идут через прокси, а не напрямую,
@@ -194,6 +223,8 @@
 
 Вариант `xray`, фид [yichya/luci-app-xray](https://github.com/yichya/luci-app-xray).
 
+Патчи сняты с коммита [`4d5a6fd`](https://github.com/yichya/luci-app-xray/commit/4d5a6fd7fc4d2fbbcd7f70f1319da06b91ec1d56) от 22.09.2026 (файл `BASE`): на нём серия ложится точно.
+
 - **001. DNS-сервер без порта и пустой FakeDNS.** Если DNS-сервер указан
   без порта (`8.8.8.8`), подставляется стандартный порт 53. Раньше
   получался порт 0 и DNS-правила не срабатывали. Секция FakeDNS без
@@ -202,6 +233,8 @@
 ### netshift — `feeds/netshift/` (2)
 
 Вариант `netshift`, фид [yandexru45/netshift](https://github.com/yandexru45/netshift).
+
+Патчи сняты с коммита [`f602fdb`](https://github.com/yandexru45/netshift/commit/f602fdbf3e6f68ae948377e647d4d25a2601e43d) от 14.10.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Разбор ссылок.** Правильно читаются логин и пароль socks5 со
   спецсимволами, ссылки с транспортом http, ссылки без поля security.
@@ -216,6 +249,8 @@
 
 Вариант `passwall`, фид [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2).
 
+Патчи сняты с коммита [`24595ef`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/24595ef82ed36724ad3a2d10caa45b518917cdaa) от 17.10.2026 (файл `BASE`): на нём серия ложится точно.
+
 - **001. Соединения после перезапуска.** Пока passwall2 перезапускается,
   правил нет, и новые соединения из сети уходят напрямую. После запуска
   такие TCP-соединения сбрасываются, и программа сразу переподключается
@@ -225,6 +260,8 @@
 ### podkop — `feeds/podkop/` (10)
 
 Вариант `podkop`, фид [itdoginfo/podkop](https://github.com/itdoginfo/podkop) (0.7.24).
+
+Патчи сняты с коммита [`da8bd40`](https://github.com/itdoginfo/podkop/commit/da8bd40983aaab4d29614d38c8d6214d0a217e3e) от 11.10.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Разбор ссылок.** Правильно читаются пароли со спецсимволами,
   IPv6-адреса, VLESS без полей type/security, trojan с портом `443/`.
@@ -275,7 +312,9 @@
 
 ### trafira — `feeds/trafira/` (5)
 
-Вариант `trafira`, фид [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) (3.1.1).
+Вариант `trafira`, фид [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) (3.1.4).
+
+Патчи сняты с коммита [`6da68a0`](https://github.com/petrouspetr-pixel/trafira/commit/6da68a0d60e2affd0708e265265e8b2d9b66f795) от 16.10.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Установка sing-box со страницы «Компоненты».** Без патча она
   падала с ошибкой «left-hand side is not a function». *Всегда.*
@@ -298,6 +337,8 @@
 Вариант `homeproxy`, пакет [immortalwrt/homeproxy](https://github.com/immortalwrt/homeproxy):
 на OpenWrt и на ImmortalWrt берётся master (на ImmortalWrt — вместо
 копии из фида LuCI: в ветках релизов 25.12 и 24.10 там старый код).
+
+Патчи сняты с коммита [`fadaa67`](https://github.com/immortalwrt/homeproxy/commit/fadaa676104f59ff6ace480a780a258d846d0aec) от 02.10.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Проверка интервала URLTest.** Форма проверяла не ту настройку и
   пропускала значения, с которыми sing-box не запускается. *Всегда.*
@@ -469,6 +510,8 @@
 ### Re:HomeProxy — `packages/luci-app-re-homeproxy/` (4)
 
 Вариант `rehomeproxy`, пакет [1andrevich/homeproxy-hiddify](https://github.com/1andrevich/homeproxy-hiddify).
+
+Патчи сняты с коммита [`a9e3596`](https://github.com/1andrevich/homeproxy-hiddify/commit/a9e359679e08b5642ae66b13dbcf647b382a9edc) от 04.07.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Запуск на обычном sing-box.** Без патча Re:HomeProxy работает
   только на сборках sing-box с расширениями (extended, hiddify-core). На
