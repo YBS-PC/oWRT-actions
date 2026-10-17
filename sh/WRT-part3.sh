@@ -389,7 +389,14 @@ SQM_BLOAT=(
 "sqm-scripts"
 "luci-app-sqm"
 "luci-i18n-sqm-ru"
+"kmod-sched-ctinfo"
 )
+
+# Свой SQM-скрипт из files/usr/lib/sqm (cake_ctinfo.qos) — без sqm-scripts он не нужен
+drop_sqm_files() {
+    rm -f ./files/usr/lib/sqm/cake_ctinfo.qos ./files/usr/lib/sqm/cake_ctinfo.qos.help
+    rmdir ./files/usr/lib/sqm 2>/dev/null || true
+}
 
 CLEAR_BLOAT=(
 "adguardhome"
@@ -522,6 +529,7 @@ CRYSTAL_CLEAR_BLOAT=(
 "sqm-scripts"
 "luci-app-sqm"
 "luci-i18n-sqm-ru"
+"kmod-sched-ctinfo"
 "irqbalance"
 "luci-app-irqbalance"
 "luci-i18n-irqbalance-ru"
@@ -606,6 +614,7 @@ if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "rehomeproxy" || "$VARIANT" == 
         sed -i "/${PKG}/Id" ./.config
         echo "# CONFIG_PACKAGE_${PKG} is not set" >> ./.config
     done
+    drop_sqm_files
 fi
 
 # forkop и trafira дополнительно без youtubeUnblock (свои Zapret/ByeDPI)
@@ -665,6 +674,7 @@ if [ "$VARIANT" == "crystal_clear" ]; then
         # echo "# CONFIG_PACKAGE_luci-i18n-${PKG}-ru is not set" >> ./.config
         # echo "# CONFIG_PACKAGE_${PKG} is not set" >> ./.config
     done
+    drop_sqm_files
     sed -i '/CONFIG_PACKAGE_kmod-tcp-bbr=y/d' ./.config
     sed -i '/CONFIG_TCP_CONG_BBR=y/d' ./.config
     echo "# BBR disabled for clear build"
@@ -688,6 +698,7 @@ if [ "$VARIANT" == "switch" ]; then
         # echo "# CONFIG_PACKAGE_luci-i18n-${PKG}-ru is not set" >> ./.config
         # echo "# CONFIG_PACKAGE_${PKG} is not set" >> ./.config
     done
+    drop_sqm_files
     sed -i '/CONFIG_PACKAGE_kmod-tcp-bbr=y/d' ./.config
     sed -i '/CONFIG_TCP_CONG_BBR=y/d' ./.config
     echo "# BBR disabled for clear build"
