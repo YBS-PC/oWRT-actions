@@ -639,10 +639,11 @@ fi
 # Создаются ВСЕГДА, независимо от варианта сборки. Причина: файлы в
 # /etc/nftables.d/ переживают sysupgrade, и ссылка на несуществующий набор
 # роняет весь fw4 reload. Пустой набор безопаснее отсутствующего.
-#   dpi_ips      — youtubeUnblock: reject UDP/443 и очередь TCP/443
+#   dpi_ips      — youtubeUnblock: reject UDP/443 и очередь UDP на прочие порты
+#                  (TCP/443 и UDP/443 идут в очередь к любым адресам)
 #                  (наполняет fwlist-dpi.sh)
 #   bypass_ips   — обход homeproxy по метке 0x64 (RU-трафик мимо VPN)
-#                  И обход очереди youtubeUnblock (наполняет fwlist-bypass.sh)
+#                  И обход очереди youtubeUnblock для UDP кроме 443 (наполняет fwlist-bypass.sh)
 #   bypass_local — обход очереди youtubeUnblock по адресу ИСТОЧНИКА, отсюда
 #                  match=src_net, а не dest_net
 # loadfile обязателен: без него набор создаётся пустым и файлы из
@@ -698,12 +699,21 @@ add chain inet fw4 youtubeUnblock { type filter hook postrouting priority mangle
 # Exclusion of the guest network by tag (traffic will bypass the queue)
 add rule inet fw4 youtubeUnblock meta mark 0x00000042 counter return
 
-# If the destination IP is in the bypass_ips list or source IP in the bypass_local list, we exit the chain.
-add rule inet fw4 youtubeUnblock ip daddr @bypass_ips counter return
+# Source IP in the bypass_local list: exit the chain
 add rule inet fw4 youtubeUnblock ip saddr @bypass_local counter return
 
-# DPI through youtubeUnblock
-add rule inet fw4 youtubeUnblock ip daddr @dpi_ips tcp dport 443 ct original packets < 20 counter queue num 537 bypass
+# TCP/443 and QUIC to any address, before the bypass_ips check: YouTube also
+# serves video from Google caches inside Russian ISP networks (GGC), their
+# addresses are in bypass_ips and not in dpi_ips. youtubeUnblock picks
+# connections by SNI itself (--sni-domains; for QUIC with
+# --udp-filter-quic=parse), the rest pass through unchanged.
+add rule inet fw4 youtubeUnblock tcp dport 443 ct original packets < 20 counter queue num 537 bypass
+add rule inet fw4 youtubeUnblock udp dport 443 ct original packets < 9 counter queue num 537 bypass
+
+# Destination IP in the bypass_ips list: exit the chain
+add rule inet fw4 youtubeUnblock ip daddr @bypass_ips counter return
+
+# Other UDP ports only to DPI IPs
 add rule inet fw4 youtubeUnblock ip daddr @dpi_ips meta l4proto udp ct original packets < 9 counter queue num 537 bypass
 
 # Skipping traffic with the label 0x8000
