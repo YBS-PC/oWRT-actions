@@ -29,7 +29,7 @@ Lock-файл лежит в `/etc`, а не в `/root`: `/root` часто це�
 | Имя | match | loadfile | Назначение |
 |-----|-------|----------|------------|
 | `dpi_ips` | `dest_net` | `/etc/luci-uploads/dpi_ip_list.txt` | адреса для youtubeUnblock |
-| `bypass_ips` | `dest_net` | `/etc/luci-uploads/bypass_ips.txt` | обход homeproxy (метка `0x64`) и очереди youtubeUnblock |
+| `bypass_ips` | `dest_net` | `/etc/luci-uploads/bypass_ips.txt` | обход homeproxy (метка `0x64`) и очереди youtubeUnblock для UDP кроме 443 (порт 443 youtubeUnblock видит всегда) |
 | `bypass_local` | `src_net` | — | обход очереди youtubeUnblock по адресу источника |
 
   Все наборы `family 'ipv4'`. Пустые loadfile-файлы создаются заранее: fw4 читает их на каждом reload.
@@ -171,7 +171,15 @@ grep -n 'clash_api_ui\|fw4_forward.nft' /etc/init.d/homeproxy
 ## 9. `/usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft`
 **Если `/usr/bin/youtubeUnblock` существует** — файл перезаписывается целиком:
 - reject UDP/443 к адресам `@dpi_ips` (блокировка QUIC)
-- цепочка `youtubeUnblock`: пропуск гостевой сети (метка `0x42`), пропуск `@bypass_ips` (по адресу назначения) и `@bypass_local` (по адресу источника), очередь NFQUEUE 537 для TCP/443 и UDP к `@dpi_ips`
+- цепочка `youtubeUnblock` по порядку: пропуск гостевой сети (метка `0x42`) и `@bypass_local` (по адресу источника);
+  очередь NFQUEUE 537 для TCP/443 и UDP/443 (QUIC) к **любым** адресам; пропуск `@bypass_ips` (по адресу назначения);
+  очередь для UDP на прочие порты к `@dpi_ips`.
+  Порт 443 идёт в очередь до проверки `@bypass_ips`, потому что YouTube раздаёт видео и с кэшей Google в сетях
+  российских операторов (GGC): их адреса есть в `@bypass_ips` и нет в `@dpi_ips`, и без этого такие соединения шли
+  бы мимо youtubeUnblock. Какие соединения обрабатывать, youtubeUnblock решает сам по SNI (`--sni-domains`), остальные
+  пропускает без изменений. В очередь уходят только первые пакеты соединения (TCP — 20, UDP — 8).
+  Для QUIC по SNI фильтрует только режим `--udp-filter-quic=parse`; при `all` youtubeUnblock подделывает начало
+  QUIC-соединений со всеми сайтами
 - правило `0x8000` в `output`
 
 **Если НЕ установлен** — файл удаляется (очередь 537 никто не слушает).
