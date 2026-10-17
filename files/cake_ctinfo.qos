@@ -1,0 +1,51 @@
+# Cake diffserv4 + ctinfo
+# piece_of_cake.qos с четырьмя уровнями приоритета (diffserv4) в обе стороны.
+# На отдаче cake берёт DSCP, который поставили правила nftables. На загрузке
+# метку восстанавливает act_ctinfo из ct mark соединения: правило nftables
+# сохраняет DSCP в старших битах ct mark (DSCP << 26) с битом 0x01000000
+# «метка задана», и этот же DSCP получают ответные пакеты из интернета.
+# Без kmod-sched-ctinfo скрипт работает как piece_of_cake.qos с diffserv4.
+#
+# Файл не входит в пакет sqm-scripts: обновление пакета его не трогает.
+
+. ${SQM_LIB_DIR}/piece_of_cake.qos
+
+# cake оставляет последнее из конкурирующих ключевых слов, поэтому diffserv4
+# перекрывает besteffort из piece_of_cake.qos. Опции из LuCI (iqdisc_opts,
+# eqdisc_opts) идут ещё дальше и перекрывают и это.
+INGRESS_CAKE_OPTS="${INGRESS_CAKE_OPTS} diffserv4 dual-dsthost ingress"
+EGRESS_CAKE_OPTS="${EGRESS_CAKE_OPTS} diffserv4 dual-srchost"
+ALL_MODULES="${ALL_MODULES} act_ctinfo"
+
+ingress() {
+    local qdisc
+    sqm_debug "ingress"
+    # select_cake (cake_mq) появилась в sqm-scripts 1.7
+    if fn_exists select_cake; then
+        qdisc=$(select_cake $DEV)
+    else
+        qdisc=cake
+    fi
+
+    SILENT=1 $TC qdisc del dev $IFACE handle ffff: ingress
+    $TC qdisc add dev $IFACE handle ffff: ingress
+    SILENT=1 $TC qdisc del dev $DEV root
+
+    [ "$ZERO_DSCP_INGRESS" -eq "1" ] && INGRESS_CAKE_OPTS="$INGRESS_CAKE_OPTS wash"
+
+    $TC qdisc add dev $DEV root $( get_stab_string ) $qdisc \
+        bandwidth ${DOWNLINK}kbit $( get_cake_lla_string ) ${INGRESS_CAKE_OPTS} ${IQDISC_OPTS}
+
+    $IP link set dev $DEV up
+
+    # Перед перенаправлением в ifb восстанавливаем DSCP из ct mark соединения.
+    # Не вышло (нет act_ctinfo) — тот же фильтр без ctinfo, как в piece_of_cake.
+    if ! SILENT=1 $TC filter add dev $IFACE parent ffff: protocol all prio 10 u32 \
+        match u32 0 0 flowid 1:1 \
+        action ctinfo dscp 0xfc000000 0x01000000 \
+        action mirred egress redirect dev $DEV; then
+        sqm_warn "act_ctinfo недоступен (нет kmod-sched-ctinfo): приоритеты на загрузке не восстанавливаются"
+        $TC filter add dev $IFACE parent ffff: protocol all prio 10 u32 \
+            match u32 0 0 flowid 1:1 action mirred egress redirect dev $DEV
+    fi
+}
