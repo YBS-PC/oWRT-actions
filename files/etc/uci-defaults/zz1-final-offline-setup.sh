@@ -962,39 +962,92 @@ if [ -x /usr/bin/youtubeUnblock ]; then
     done
 fi
 
-# SQM (исправленный патч)
+# SQM: diffserv4 и приоритеты на загрузке — скрипт cake_ctinfo.qos.
+# Он лежит в прошивке (/usr/lib/sqm), в пакет sqm-scripts не входит, поэтому
+# run.sh больше не патчится и apk upgrade sqm-scripts ничего не ломает.
 if [ -f "/usr/lib/sqm/run.sh" ]; then
     log_info "Настройка SQM"
-    mkdir -p /opt
-    CUSTOM_CONF="/opt/sqm_custom.conf"
-    if [ -f "$CUSTOM_CONF" ]; then
-        log_ok "$CUSTOM_CONF уже существует, ручной тюнинг сохранён"
-    else
-    cat > "$CUSTOM_CONF" <<EOF
-option iqdisc_opts 'nat dual-dsthost diffserv4 nowash'
-option eqdisc_opts 'nat dual-srchost diffserv4 nowash'
-EOF
-    _RC=$?; [ $_RC -eq 0 ] && log_ok "Конфиг SQM создан" || log_err "Ошибка создания $CUSTOM_CONF (exit: $_RC)"
+
+    # Прежние zz1 вставляли в run.sh загрузчик /opt/sqm_custom.conf. После
+    # прошивки run.sh и так новый, а при ручном запуске на старой установке
+    # загрузчик надо убрать: он перекрывал бы опции из LuCI.
+    if grep -q "sqm_custom.conf" /usr/lib/sqm/run.sh; then
+        sed -i '/# --- Load Custom Config (\/opt\/sqm_custom.conf) ---/,/^    fi$/d' /usr/lib/sqm/run.sh
+        if grep -q "sqm_custom.conf" /usr/lib/sqm/run.sh; then
+            log_err "Загрузчик /opt/sqm_custom.conf в run.sh не удалён"
+        else
+            log_ok "Загрузчик /opt/sqm_custom.conf удалён из run.sh"
+        fi
     fi
 
-    if ! grep -q "sqm_custom.conf" /usr/lib/sqm/run.sh; then
-        cat <<'EOF' > /tmp/sqm_loader.txt
-
-    # --- Load Custom Config (/opt/sqm_custom.conf) ---
-    if [ -f "/opt/sqm_custom.conf" ]; then
+    # /opt/sqm_custom.conf прежних zz1 → опции UCI (в LuCI: «Qdisc options»).
+    # Переносим только в очереди, где свои опции ещё не заданы; файл
+    # переименовывается, чтобы перенос не повторялся.
+    if [ -f /opt/sqm_custom.conf ]; then
         cust_i=$(grep "^option iqdisc_opts" /opt/sqm_custom.conf | cut -d"'" -f2)
         cust_e=$(grep "^option eqdisc_opts" /opt/sqm_custom.conf | cut -d"'" -f2)
-        [ -n "$cust_i" ] && export IQDISC_OPTS="$cust_i"
-        [ -n "$cust_e" ] && export EQDISC_OPTS="$cust_e"
+        for _q in $(uci -q show sqm | sed -n "s/^sqm\.\([^.=]*\)=queue$/\1/p"); do
+            [ -z "$(uci -q get sqm.$_q.iqdisc_opts)$(uci -q get sqm.$_q.eqdisc_opts)" ] || continue
+            [ -n "$cust_i" ] && uci set sqm.$_q.iqdisc_opts="$cust_i"
+            [ -n "$cust_e" ] && uci set sqm.$_q.eqdisc_opts="$cust_e"
+            # без этих флагов LuCI при сохранении формы удаляет опции
+            uci set sqm.$_q.qdisc_advanced='1'
+            uci set sqm.$_q.qdisc_really_really_advanced='1'
+            log_ok "SQM $_q: опции из /opt/sqm_custom.conf перенесены в UCI"
+        done
+        uci commit sqm
+        mv -f /opt/sqm_custom.conf /opt/sqm_custom.conf.migrated
     fi
-EOF
-        sed -i '/export EQDISC_OPTS/r /tmp/sqm_loader.txt' /usr/lib/sqm/run.sh
-        _RC=$?; rm /tmp/sqm_loader.txt
-        [ $_RC -eq 0 ] && log_ok "run.sh пропатчен" || log_err "Ошибка патча run.sh (exit: $_RC)"
+
+    # piece_of_cake.qos у прежних zz1 и так работал как diffserv4 (через
+    # загрузчик), cake_ctinfo.qos — то же самое плюс приоритеты на загрузке.
+    if [ -f /usr/lib/sqm/cake_ctinfo.qos ]; then
+        for _q in $(uci -q show sqm | sed -n "s/^sqm\.\([^.=]*\)=queue$/\1/p"); do
+            if [ "$(uci -q get sqm.$_q.script)" = "piece_of_cake.qos" ]; then
+                uci set sqm.$_q.script='cake_ctinfo.qos'
+                log_ok "SQM $_q: piece_of_cake.qos → cake_ctinfo.qos"
+            fi
+        done
+        uci commit sqm
     else
-        log_ok "run.sh уже пропатчен"
+        log_err "Нет /usr/lib/sqm/cake_ctinfo.qos"
     fi
-    patch_check /usr/lib/sqm/run.sh 'sqm_custom.conf' "sqm run.sh"
+
+    if [ ! -d /sys/module/act_ctinfo ] && [ -z "$(find /lib/modules/$(uname -r) -name 'act_ctinfo.ko' 2>/dev/null)" ]; then
+        log_info "kmod-sched-ctinfo не установлен: приоритеты будут только на отдаче"
+    fi
+
+    # Шаблон правил приоритета: все строки закомментированы, файл ничего не
+    # делает, пока правила не включены. Свой файл с тем же именем не
+    # трогается: /etc/nftables.d/ переживает sysupgrade.
+    PRIO_NFT="/etc/nftables.d/10-priority-mangle.nft"
+    if [ ! -f "$PRIO_NFT" ]; then
+        mkdir -p /etc/nftables.d
+        cat > "$PRIO_NFT" <<'NFT'
+# Приоритеты для SQM (скрипт cake_ctinfo.qos, diffserv4). Уровни cake:
+#   EF    → Voice       — высший, без очереди до 25% канала (игры, звонки)
+#   AF21  → Video       — нормальный, преимущество до 50% канала
+#   CS0   → Best Effort — низкий
+#   LE    → Bulk        — наименьший (фоновые загрузки)
+# ct mark = (DSCP << 26) | 0x01000000 сохраняет метку в соединении,
+# cake_ctinfo.qos восстанавливает её для входящих пакетов (нужен
+# kmod-sched-ctinfo). Значения: EF 0xb9000000, AF21 0x49000000,
+# CS0 0x01000000, LE 0x05000000.
+# Раскомментируйте цепочку, впишите свои адреса и выполните
+#   fw4 check && service firewall restart
+#
+#chain priority_mangle_prerouting_dscp {
+#	type filter hook prerouting priority mangle; policy accept;
+#	ip saddr 192.168.1.10 meta l4proto udp counter ip dscp set ef ct mark set 0xb9000000 return comment "Console games: Voice"
+#	ip saddr 192.168.1.0/24 counter ip dscp set af21 ct mark set 0x49000000 return comment "LAN: Video"
+#	ip saddr 192.168.2.0/24 counter ip dscp set cs0 ct mark set 0x01000000 return comment "Guest: Best Effort"
+#	ip saddr 192.168.3.0/24 counter ip dscp set lephb ct mark set 0x05000000 return comment "IoT: Bulk"
+#}
+NFT
+        _RC=$?; [ $_RC -eq 0 ] && log_ok "Шаблон $PRIO_NFT создан" || log_err "Ошибка создания $PRIO_NFT (exit: $_RC)"
+    else
+        log_ok "$PRIO_NFT уже существует, не трогаем"
+    fi
 
     SQM_ENABLED=$(uci -q get sqm.@queue[0].enabled)
     if [ "$SQM_ENABLED" = "1" ]; then
