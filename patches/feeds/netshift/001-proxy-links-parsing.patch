@@ -22,8 +22,10 @@ Subject: [PATCH 1/2] netshift: proxy links - socks5 credentials, http
 The empty "security" (no TLS, as in Xray) is handled by the author
 since 27ad5f2 and is no longer part of this patch.
 
-Checked: every jq program of the backend that compiles on jq 1.8.1 also
-compiles on jq 1.7 (356 scanned); link parsing in busybox ash with both jq versions and
+Checked: all 228 jq programs of the backend compile on jq 1.7.1 and
+1.8.1 (without the patch the TLS program fails on 1.7.1; an earlier
+refresh of this patch lost the closing parenthesis of reality and broke
+it on every jq); link parsing in busybox ash with both jq versions and
 `sing-box check` 1.12.22 / 1.14.2; the subscription program gives
 byte-identical output on jq 1.7 and 1.8.1 (with and without
 reality_mlkem).
@@ -93,10 +95,10 @@ index a4f2117..93c55dd 100644
              outbounds: [$resolved.out[].outbound],
              tags: [$resolved.out[].tag],
 diff --git a/netshift/files/usr/lib/sing_box_config_manager.sh b/netshift/files/usr/lib/sing_box_config_manager.sh
-index f767922..d344083 100644
+index dfc3f65..1d07cbc 100644
 --- a/netshift/files/usr/lib/sing_box_config_manager.sh
 +++ b/netshift/files/usr/lib/sing_box_config_manager.sh
-@@ -1451,7 +1451,9 @@ sing_box_cm_set_tls_for_outbound() {
+@@ -1451,14 +1451,16 @@ sing_box_cm_set_tls_for_outbound() {
                              }
                          } else {} end)
                          + (if $reality_public_key != "" then {
@@ -107,5 +109,13 @@ index f767922..d344083 100644
                                  enabled: true,
                                  public_key: $reality_public_key,
                                  short_id: $reality_short_id
+                             }
+                             + (if $reality_mlkem == "true" then {support_x25519mlkem768: true}
+                                elif $reality_mlkem == "false" then {support_x25519mlkem768: false}
+-                               else {} end)
++                               else {} end))
+                         } else {} end)
+                     )
+                 }
 -- 
 2.43.0
