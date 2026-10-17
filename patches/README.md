@@ -72,9 +72,9 @@
 | `feeds/forkopmod/` | [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) | [`3ef8330`](https://github.com/Gavr1024/forkop-mod/commit/3ef833010aeb008b935af836a3a8b34f07c986ac) | 11.10.2026 |
 | `feeds/luciappxray/` | [yichya/luci-app-xray](https://github.com/yichya/luci-app-xray) | [`4d5a6fd`](https://github.com/yichya/luci-app-xray/commit/4d5a6fd7fc4d2fbbcd7f70f1319da06b91ec1d56) | 22.09.2026 |
 | `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`afeca65`](https://github.com/yandexru45/netshift/commit/afeca6526373845564bc8bd60fe048c53bb6ca2a) | 16.10.2026 |
-| `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`24595ef`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/24595ef82ed36724ad3a2d10caa45b518917cdaa) | 17.10.2026 |
+| `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`c2f8389`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/c2f83897a23534407ed5035f51565ae2eb3a1462) | 17.10.2026 |
 | `feeds/podkop/` | [itdoginfo/podkop](https://github.com/itdoginfo/podkop) | [`da8bd40`](https://github.com/itdoginfo/podkop/commit/da8bd40983aaab4d29614d38c8d6214d0a217e3e) | 11.10.2026 |
-| `feeds/trafira/` | [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) | [`6da68a0`](https://github.com/petrouspetr-pixel/trafira/commit/6da68a0d60e2affd0708e265265e8b2d9b66f795) | 16.10.2026 |
+| `feeds/trafira/` | [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) | [`b121b03`](https://github.com/petrouspetr-pixel/trafira/commit/b121b03ec19ad28bfaabb200d2bc2b5fc481fd37) | 17.10.2026 |
 | `packages/luci-app-homeproxy/` | [immortalwrt/homeproxy](https://github.com/immortalwrt/homeproxy) | [`fadaa67`](https://github.com/immortalwrt/homeproxy/commit/fadaa676104f59ff6ace480a780a258d846d0aec) | 02.10.2026 |
 | `packages/luci-app-re-homeproxy/` | [1andrevich/homeproxy-hiddify](https://github.com/1andrevich/homeproxy-hiddify) | [`a9e3596`](https://github.com/1andrevich/homeproxy-hiddify/commit/a9e359679e08b5642ae66b13dbcf647b382a9edc) | 04.07.2026 |
 
@@ -252,7 +252,7 @@
 
 Вариант `passwall`, фид [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2).
 
-Патчи сняты с коммита [`24595ef`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/24595ef82ed36724ad3a2d10caa45b518917cdaa) от 17.10.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`c2f8389`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/c2f83897a23534407ed5035f51565ae2eb3a1462) от 17.10.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Соединения после перезапуска.** Пока passwall2 перезапускается,
   правил нет, и новые соединения из сети уходят напрямую. После запуска
@@ -315,9 +315,9 @@
 
 ### trafira — `feeds/trafira/` (6)
 
-Вариант `trafira`, фид [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) (3.1.4).
+Вариант `trafira`, фид [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) (3.1.6).
 
-Патчи сняты с коммита [`6da68a0`](https://github.com/petrouspetr-pixel/trafira/commit/6da68a0d60e2affd0708e265265e8b2d9b66f795) от 16.10.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`b121b03`](https://github.com/petrouspetr-pixel/trafira/commit/b121b03ec19ad28bfaabb200d2bc2b5fc481fd37) от 17.10.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Установка sing-box со страницы «Компоненты».** Без патча она
   падала с ошибкой «left-hand side is not a function». *Всегда.*
