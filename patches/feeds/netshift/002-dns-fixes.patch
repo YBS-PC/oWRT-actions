@@ -18,10 +18,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
 diff --git a/netshift/files/usr/bin/netshift b/netshift/files/usr/bin/netshift
-index 4141ff7..d9093ed 100755
+index 3eb79c1..2e8fc31 100755
 --- a/netshift/files/usr/bin/netshift
 +++ b/netshift/files/usr/bin/netshift
-@@ -5043,6 +5043,10 @@ sing_box_configure_dns() {
+@@ -5046,6 +5046,10 @@ sing_box_configure_dns() {
      config_foreach configure_ipv6_real_dns_rule "section"
      config=$(sing_box_cm_add_dns_route_rule "$config" "$SB_FAKEIP_DNS_SERVER_TAG" "$SB_FAKEIP_DNS_RULE_TAG")
      config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_FAKEIP_DNS_RULE_TAG" "rewrite_ttl" "$rewrite_ttl")
@@ -32,7 +32,7 @@ index 4141ff7..d9093ed 100755
      service_domains=$(comma_string_to_json_array "$FAKEIP_TEST_DOMAIN,$CHECK_PROXY_IP_DOMAIN")
      config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_FAKEIP_DNS_RULE_TAG" "domain" "$service_domains")
  
-@@ -7707,6 +7711,20 @@ get_status() {
+@@ -7710,6 +7714,20 @@ get_status() {
      echo "{\"enabled\":$enabled,\"status\":\"$status\"}"
  }
  
@@ -53,7 +53,7 @@ index 4141ff7..d9093ed 100755
  check_dns_available() {
      local dns_type dns_server bootstrap_dns_server
      config_get dns_type "settings" "dns_type"
-@@ -7731,28 +7749,33 @@ check_dns_available() {
+@@ -7734,28 +7752,33 @@ check_dns_available() {
          display_dns_server="dns.nextdns.io/$masked_path"
      fi
  
@@ -92,7 +92,7 @@ index 4141ff7..d9093ed 100755
              dns_status=1
          fi
      else
-@@ -7771,7 +7794,9 @@ check_dns_available() {
+@@ -7774,7 +7797,9 @@ check_dns_available() {
  
      # Check bootstrap DNS server
      if [ -n "$bootstrap_dns_server" ]; then
