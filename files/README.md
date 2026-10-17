@@ -199,14 +199,46 @@ sed -i 's/ct original packets ge 30 flow offload @ft/flow offload @ft/' /usr/sha
 - **forkop, trafira, podkop, netshift** (если есть `/etc/config/forkop`, `/etc/config/trafira`, `/etc/config/podkop` или `/etc/config/netshift`): `<пакет>.settings.exclude_ntp='1'` — NTP мимо прокси; если установлен youtubeUnblock — ещё `<пакет>.settings.disable_quic='1'`: QUIC клиента к адресам FakeIP (198.18.0.0/15) не попадает под правило `reject` youtubeUnblock и шёл бы через sing-box в очередь 537, а так sing-box его отклоняет и браузер идёт по TCP
 - **internet-detector**: сервис отключается, `START=99`
 - **phy-leds**: сервис отключается
-- **SQM** (если установлен):
-  - `/opt/sqm_custom.conf` создаётся, если его ещё нет:
-```
-option iqdisc_opts 'nat dual-dsthost diffserv4 nowash'
-option eqdisc_opts 'nat dual-srchost diffserv4 nowash'
-```
-  - `/usr/lib/sqm/run.sh`: после `export EQDISC_OPTS` вставляется блок, читающий этот файл
+- **SQM** (если установлен, вариант `clear`). Скрипт очередей `/usr/lib/sqm/cake_ctinfo.qos` лежит в прошивке
+  (`files/usr/lib/sqm/`), в пакет sqm-scripts не входит, поэтому `run.sh` не патчится и `apk upgrade` его не затирает:
+  - во всех очередях `script='piece_of_cake.qos'` меняется на `cake_ctinfo.qos` (прежние zz1 и так превращали
+    piece_of_cake в diffserv4 через `/opt/sqm_custom.conf`)
+  - загрузчик `/opt/sqm_custom.conf`, вставленный в `/usr/lib/sqm/run.sh` прежними zz1, удаляется
+  - если `/opt/sqm_custom.conf` есть — его строки переносятся в `iqdisc_opts`/`eqdisc_opts` очередей, где свои опции ещё
+    не заданы (плюс `qdisc_advanced='1'`, `qdisc_really_really_advanced='1'`, иначе LuCI сотрёт опции при сохранении),
+    файл переименовывается в `/opt/sqm_custom.conf.migrated`
+  - `/etc/nftables.d/10-priority-mangle.nft` создаётся, если его нет: шаблон правил приоритета, все строки закомментированы
+  - если модуля `act_ctinfo` нет — запись в лог (приоритеты останутся только на отдаче)
   - SQM перезапускается, если включён, иначе сервис отключается
+
+  **Что делает `cake_ctinfo.qos`.** Это `piece_of_cake.qos` с опциями `diffserv4 dual-srchost` на отдаче и
+  `diffserv4 dual-dsthost ingress` на загрузке (опции из LuCI «Qdisc options» идут после и перекрывают их).
+  Фильтр на входе WAN перед перенаправлением в IFB выполняет
+  `action ctinfo dscp 0xfc000000 0x01000000`: DSCP, сохранённый правилом nftables в `ct mark` соединения, ставится
+  и входящим пакетам, поэтому загрузка делится по тем же уровням, что и отдача. Без `kmod-sched-ctinfo` фильтр
+  ставится без ctinfo, как в piece_of_cake.
+
+  | Уровень cake | DSCP | `ct mark` |
+  |--------------|------|-----------|
+  | Voice — высший, без очереди до 25% канала | EF | `0xb9000000` |
+  | Video — нормальный, преимущество до 50% | AF21 | `0x49000000` |
+  | Best Effort — низкий | CS0 | `0x01000000` |
+  | Bulk — наименьший | LE | `0x05000000` |
+
+  Пример правил (`/etc/nftables.d/10-priority-mangle.nft`, адреса свои; `comment` — последним, после `return`):
+```
+chain priority_mangle_prerouting_dscp {
+	type filter hook prerouting priority mangle; policy accept;
+	ip saddr 192.168.1.10 meta l4proto udp counter ip dscp set ef ct mark set 0xb9000000 return comment "Console games: Voice"
+	ip saddr 192.168.1.0/24 counter ip dscp set af21 ct mark set 0x49000000 return comment "LAN: Video"
+	ip saddr 192.168.2.0/24 counter ip dscp set cs0 ct mark set 0x01000000 return comment "Guest: Best Effort"
+	ip saddr 192.168.3.0/24 counter ip dscp set lephb ct mark set 0x05000000 return comment "IoT: Bulk"
+}
+```
+  Проверка: `fw4 check && service firewall restart`; `tc filter show dev <wan> parent ffff:` — есть `ctinfo`;
+  `tc -s qdisc show dev ifb4<wan>` — под нагрузкой пакеты во всех четырёх колонках.
+
+  **Чтобы откатить:** `uci set sqm.<очередь>.script='piece_of_cake.qos'; uci commit sqm; service sqm restart`.
 - **`/etc/config/attendedsysupgrade`**: на OpenWrt URL → `https://sysupgrade.openwrt.org`, на ImmortalWrt → `https://asu-2.kyarucloud.moe`
 
 ## 12. `/etc/sysctl.conf`
@@ -285,6 +317,8 @@ cp /etc/banner.bak /etc/banner
 | `/opt/AdGuardHome/` | если AGH есть | директория для данных |
 | `/opt/yacd/` | если homeproxy есть | панель YACD (или заглушка) |
 | `/etc/group`, `/etc/passwd` | если AGH есть и записи нет | пользователь и группа adguardhome |
+| `/etc/nftables.d/10-priority-mangle.nft` | если SQM есть и файла нет | шаблон правил приоритета (закомментирован) |
+| `/opt/sqm_custom.conf.migrated` | если был `/opt/sqm_custom.conf` | старый файл после переноса в UCI |
 
 ## Быстрая проверка после прошивки
 ### Лог выполнения
@@ -302,6 +336,10 @@ uci get dhcp.@dnsmasq[0].port
 ### Hostname
 ```
 uci get system.@system[0].hostname
+```
+### SQM (вариант clear)
+```
+uci show sqm | grep script; tc filter show dev pppoe-wan parent ffff: | grep ctinfo
 ```
 ### BBR
 ```
