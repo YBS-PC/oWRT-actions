@@ -119,7 +119,7 @@ index 89c3ba7a..f6cc4184 100644
    grep -Fq "uses XHTTP transport, but sing-box-extended is not installed" "$WORK_DIR/$fixture-stable.stderr" ||
      fail "explicit $fixture XHTTP failure should explain the extended requirement"
 diff --git a/trafira/files/usr/lib/singbox/generator.uc b/trafira/files/usr/lib/singbox/generator.uc
-index 46c91f32..258fefd9 100644
+index da4d1f4b..21512e61 100644
 --- a/trafira/files/usr/lib/singbox/generator.uc
 +++ b/trafira/files/usr/lib/singbox/generator.uc
 @@ -27,6 +27,9 @@ let runtime_supports_xhttp = true;
@@ -191,7 +191,7 @@ index 46c91f32..258fefd9 100644
  
      if (section_needs_country_is(section)) {
          let previous_state = read_json_file(runtime_subscription.section_cache_path(section_name));
-@@ -2942,6 +2962,35 @@ function unsupported_matcher_key(section) {
+@@ -2949,6 +2969,35 @@ function unsupported_matcher_key(section) {
      return "";
  }
  
@@ -227,7 +227,7 @@ index 46c91f32..258fefd9 100644
  function add_outbound_for_section(config, section, taken, sections) {
      let action = option(section, "action", "");
      let section_name = section[".name"];
-@@ -2952,7 +3001,7 @@ function add_outbound_for_section(config, section, taken, sections) {
+@@ -2959,7 +3008,7 @@ function add_outbound_for_section(config, section, taken, sections) {
          runtime_generate_unsupported("section has unsupported matcher " + unsupported_matcher);
  
      if (connections.is_connections_action(action))
