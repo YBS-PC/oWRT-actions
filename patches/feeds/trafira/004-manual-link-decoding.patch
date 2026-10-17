@@ -174,7 +174,7 @@ index c8330029..becd529b 100644
      query_params
  };
 diff --git a/trafira/files/usr/lib/singbox/generator.uc b/trafira/files/usr/lib/singbox/generator.uc
-index e251a391..46c91f32 100644
+index e528883e..da4d1f4b 100644
 --- a/trafira/files/usr/lib/singbox/generator.uc
 +++ b/trafira/files/usr/lib/singbox/generator.uc
 @@ -50,6 +50,8 @@ let url_strip_fragment_value = runtime_url.strip_fragment;
