@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: 'Target Device (combo: R6S homeproxy ×3 — без патчей, с патчами, sb-extended; RB5009 clear, RB5009 switch; agh/sb/ytb/zz/patches/feeds задаёт сам)'
+        description: 'Target Device (combo: R6S homeproxy sb-extended с патчами, RB5009 clear, RB5009 switch; agh/sb/ytb/zz/patches/feeds задаёт сам)'
         required: true
         default: 'combo'
         type: choice
@@ -304,24 +304,22 @@ jobs:
             # Поля: устройство вариант agh sb ytb zz patches feeds.
             # feeds=true — фиды из репозитория пакетов (обновлений после
             # прошивки почти нет); поставьте false для сборки на коммитах тега.
-            #   R6S homeproxy: AGH latest, sing-box latest, ytb, zz1, без патчей
-            #     (код immortalwrt/homeproxy как есть)
-            #   R6S homeproxy: AGH latest, sing-box latest, ytb, zz1, патчи
-            #     (с sing-box 1.14 опции DNS — патч 006)
             #   R6S homeproxy: AGH latest, sing-box-extended, ytb, zz1, патчи
             #     (XHTTP и ключ X25519MLKEM768 для REALITY — патчи 017–018)
             #   RB5009 clear и RB5009 switch: без AGH/sing-box/ytb, zz1, без патчей
             # $(entry ...) — подстановка: в ней NOTES не сохраняется, для
             # combo это и не нужно (значения ниже уже согласованы с вариантами).
             # Запасные сборки (дописать в include через запятую):
+            #   $(entry nanopi-r6s homeproxy latest latest true true false true),
+            #   (код immortalwrt/homeproxy как есть, без патчей)
             #   $(entry nanopi-r6s homeproxy latest 1.12.x true true false true),
             #   $(entry nanopi-r6s forkop latest extended false true true true),
             #   $(entry nanopi-r6s homeproxy latest latest true true true true),
+            #   (с sing-box 1.14 опции DNS — патч 006)
             #   $(entry nanopi-r6s trafira latest extended false true true true),
             #   $(entry nanopi-r6s podkop latest podkop-engine-full true true true true),
-            #   $(entry nanopi-r6s homeproxy latest extended true true true true),
-            #   (homeproxy с sing-box-extended: только в этой связке
-            #   применяются патчи XHTTP и ключ X25519MLKEM768 для REALITY, Build-If)
+            # homeproxy с sing-box-extended: только в этой связке применяются
+            # патчи XHTTP и ключ X25519MLKEM768 для REALITY (Build-If).
             json="{\"include\":[$(entry nanopi-r6s homeproxy latest extended true true true true),$(entry rb5009 clear no no false true false true),$(entry rb5009 switch no no false true false true)]}"
           else
             # Все устройства из config/conf/ — при добавлении нового дописать сюда.
@@ -367,9 +365,9 @@ jobs:
           # immortalwrt/homeproxy принимает sing-box 1.13+, но на 1.14+ пишет
           # устаревший store_rdrc, а в режиме bypass_mainland_china со списком
           # прокси-доменов sing-box 1.14 не запускается (патч 006). В фиде
-          # 25.12: в теге 25.12.5 — 1.12.x, в репозитории пакетов
-          # (feeds_latest) — 1.13.x; на slateax/ax59u — sing-box-tiny (sb=tiny).
-          echo "$json" | jq -r '.include[] | select(.variant == "homeproxy" and .patches == false and (.sb != "1.12.x")) | "\(.target) \(.sb)"' |
+          # 25.12 (тег 25.12.6 и репозиторий пакетов) — 1.13.x, на slateax/ax59u
+          # — sing-box-tiny (sb=tiny) той же версии: им предупреждение не нужно.
+          echo "$json" | jq -r '.include[] | select(.variant == "homeproxy" and .patches == false and (.sb | IN("no","feed","tiny","1.12.x","1.13.x") | not)) | "\(.target) \(.sb)"' |
           while read -r t sbv; do
             echo "::warning title=${t}: homeproxy без патчей (sb=${sbv})::Без патча 006 на sing-box 1.14+ homeproxy пишет устаревший store_rdrc, а в режиме bypass_mainland_china со списком прокси-доменов не запускается. Включите apply_patches или выберите sb=1.12.x."
           done
