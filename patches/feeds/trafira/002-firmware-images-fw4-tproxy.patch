@@ -22,10 +22,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
 diff --git a/.github/workflows/shellcheck.yml b/.github/workflows/shellcheck.yml
-index fbbb8cd9..9666e471 100644
+index 0c0a568a..0e8a3b8a 100644
 --- a/.github/workflows/shellcheck.yml
 +++ b/.github/workflows/shellcheck.yml
-@@ -49,6 +49,7 @@ jobs:
+@@ -51,6 +51,7 @@ jobs:
              find . -type f \
                \( -name '*.sh' -o -path './build.sh' -o -path './install.sh' \
                   -o -path './trafira/files/etc/init.d/*' \
@@ -107,7 +107,7 @@ index 00000000..598d242d
 +/usr/bin/trafira package_firewall >/dev/null 2>&1 || true
 +exit 0
 diff --git a/trafira/files/usr/bin/trafira b/trafira/files/usr/bin/trafira
-index 0b1eb528..a515408e 100755
+index 90e10c2f..8bef652b 100755
 --- a/trafira/files/usr/bin/trafira
 +++ b/trafira/files/usr/bin/trafira
 @@ -208,6 +208,7 @@ function command_spec(command) {
@@ -119,7 +119,7 @@ index 0b1eb528..a515408e 100755
      };
  
 diff --git a/trafira/files/usr/lib/service/package.uc b/trafira/files/usr/lib/service/package.uc
-index 0703d709..7c5bddd1 100644
+index 3046a1aa..bd05c090 100644
 --- a/trafira/files/usr/lib/service/package.uc
 +++ b/trafira/files/usr/lib/service/package.uc
 @@ -258,8 +258,10 @@ function postinst_restore() {
