@@ -74,7 +74,7 @@
 | `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`885127e`](https://github.com/yandexru45/netshift/commit/885127e166e5c53becef5f4c2d12d1fbb06d081c) | 18.10.2026 |
 | `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`e378885`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/e3788855d3cb3ddc3f4027ea2480d7c19019f033) | 17.10.2026 |
 | `feeds/podkop/` | [itdoginfo/podkop](https://github.com/itdoginfo/podkop) | [`da8bd40`](https://github.com/itdoginfo/podkop/commit/da8bd40983aaab4d29614d38c8d6214d0a217e3e) | 11.10.2026 |
-| `feeds/trafira/` | [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) | [`0be71a2`](https://github.com/petrouspetr-pixel/trafira/commit/0be71a2156c8c3ca1e4c500b43676dc9f2577ac1) | 17.10.2026 |
+| `feeds/trafira/` | [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) | [`857382d`](https://github.com/petrouspetr-pixel/trafira/commit/857382d39af6418288a85a5be542398dc690724d) | 19.10.2026 |
 | `packages/luci-app-homeproxy/` | [immortalwrt/homeproxy](https://github.com/immortalwrt/homeproxy) | [`fadaa67`](https://github.com/immortalwrt/homeproxy/commit/fadaa676104f59ff6ace480a780a258d846d0aec) | 02.10.2026 |
 | `packages/luci-app-re-homeproxy/` | [1andrevich/homeproxy-hiddify](https://github.com/1andrevich/homeproxy-hiddify) | [`a9e3596`](https://github.com/1andrevich/homeproxy-hiddify/commit/a9e359679e08b5642ae66b13dbcf647b382a9edc) | 04.07.2026 |
 
@@ -316,9 +316,9 @@
 
 ### trafira — `feeds/trafira/` (6)
 
-Вариант `trafira`, фид [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) (3.1.8).
+Вариант `trafira`, фид [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) (3.1.10).
 
-Патчи сняты с коммита [`0be71a2`](https://github.com/petrouspetr-pixel/trafira/commit/0be71a2156c8c3ca1e4c500b43676dc9f2577ac1) от 17.10.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`857382d`](https://github.com/petrouspetr-pixel/trafira/commit/857382d39af6418288a85a5be542398dc690724d) от 19.10.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Установка sing-box со страницы «Компоненты».** Без патча она
   падала с ошибкой «left-hand side is not a function». *Всегда.*
