@@ -1,23 +1,20 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
-Date: Sun, 11 Oct 2026 15:00:00 +0000
-Subject: [PATCH] forkop-mod 1.0.10: вызовы ucode-функций до объявления и prerm
- для apk
+Date: Tue, 20 Oct 2026 12:00:00 +0000
+Subject: [PATCH] forkop-mod 1.0.12: вызовы ucode-функций до объявления и
+ prerm для apk
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
 
 ucode связывает имя функции в момент её объявления. Если функция A
 вызывает функцию B, объявленную ниже в том же файле, A получает null и
-падает с «left-hand side is not a function». В 1.0.10 таких мест 16
-(14 прежних из 1.0.9 и 2 новых):
+падает с «left-hand side is not a function». В 1.0.12 таких мест 13.
+Три места в singbox/generator.uc (исключённые устройства и восстановление
+входа OpenConnect) автор в 1.0.11 исправил сам, остальные на месте:
 
-  singbox/generator.uc   single_or_array, ips_from_dhcp_lease_name —
-                         исключённые устройства (routing_excluded_ips);
-                         enabled_sections (новое) — восстановление входа
-                         OpenConnect (repair-openconnect-auth) при старте
   providers/byedpi/strategy_test.uc
-                         status_view (новое) — проверка стратегий ByeDPI
+                         status_view — проверка стратегий ByeDPI
   nft/apply.uc           apply_ips_from_lease_name
   service/ui.uc          xray_running, file_executable, release_dir_lock
   service/initd.uc       owner_pid_value, release_runtime_dir_lock
@@ -28,42 +25,35 @@ ucode связывает имя функции в момент её объявл
   config/validator.uc    uci_core
   server/service.uc      safe_filename_string
 
-Проверено на самих файлах 1.0.10:
-- генератор с routing_excluded_ips ловит «left-hand side is not a
-  function» и молча не создаёт правило «напрямую» для исключённого
-  устройства (его трафик идёт через прокси);
-- «generator.uc repair-openconnect-auth» (его вызывает каждый старт
-  forkop) при установленном openconnect падает в
-  openconnect_servers_without_cookie — восстановление входа OpenConnect
-  не выполняется;
-- «strategy_test.uc start» запускает проверку стратегий и падает на
-  ответе: вместо {"success": true, "message": "started"} — Type error.
-  То же при повторном старте (already_running) и при отказе воркера,
-  поэтому интерфейс показывает общую ошибку вместо причины.
-С патчем все три пути отвечают как задумано.
+Проверено на самих файлах 1.0.12: «strategy_test.uc start» запускает
+проверку стратегий и падает на ответе («access to undeclared variable
+status_view» в start_test) вместо {"success": true, "message":
+"started"}; с патчем отвечает как задумано. list_update_if_missing,
+которую 1.0.11 переписал для интервала «Никогда», при любом другом
+интервале и кэше списков во флеше вызывает list_update_if_due,
+объявленную ниже.
 
-Функции перенесены ниже/выше без изменения кода (start_test — ниже
-status_view, openconnect_servers_without_cookie — ниже enabled_sections).
-После патча вызовов до объявления нет (кроме filter() в
-routing/list_cache.uc — это встроенная функция ucode), все 69 модулей
-компилируются (ucode -c), self-check проверки стратегий проходит.
+Функции перенесены без изменения кода (list_update_if_missing 1.0.12 —
+ниже list_update_if_due, start_test — ниже status_view). После патча
+вызовов до объявления нет (кроме filter() в routing/list_cache.uc — это
+встроенная функция ucode), изменённые модули компилируются (ucode -c).
 
 prerm: с apk (OpenWrt 25.12+) тело Package/forkop/prerm встраивается в
 общий /bin/sh-скрипт pre-deinstall, поэтому ucode-код там — синтаксическая
 ошибка, и «apk del forkop» падал. Переписан на POSIX sh, логика прежняя.
 
-Тесты проекта: 59 из 80 проходят и без патча, и с ним; провалы те же
-(тесты автора расходятся с кодом), кроме package_lifecycle — он
-проверяет ucode в prerm, именно это и исправлено.
+Тесты проекта: без патча проходят 56 из 80, с патчем 55; провалы те же
+(тесты автора расходятся с кодом), кроме package_lifecycle — он требует
+ucode в prerm, именно это и исправлено.
 
-Заменяет 001 для 1.0.9.
+Заменяет 001 для 1.0.10.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
  forkop/Makefile                               | 12 +--
  forkop/files/usr/lib/components/action.uc     |  8 +-
- forkop/files/usr/lib/components/updates.uc    | 42 +++++-----
+ forkop/files/usr/lib/components/updates.uc    | 40 +++++-----
  forkop/files/usr/lib/config/validator.uc      | 12 +--
  forkop/files/usr/lib/nft/apply.uc             | 10 +--
  .../usr/lib/providers/byedpi/strategy_test.uc | 80 +++++++++----------
@@ -71,8 +61,7 @@ Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
  forkop/files/usr/lib/service/initd.uc         | 28 +++----
  forkop/files/usr/lib/service/state.uc         | 18 ++---
  forkop/files/usr/lib/service/ui.uc            | 42 +++++-----
- forkop/files/usr/lib/singbox/generator.uc     | 74 ++++++++---------
- 11 files changed, 175 insertions(+), 171 deletions(-)
+ 10 files changed, 137 insertions(+), 133 deletions(-)
 
 diff --git a/forkop/Makefile b/forkop/Makefile
 index 8218f63e..4a6f1428 100644
@@ -131,7 +120,7 @@ index 5210a316..45f91c8c 100644
  function install_package_sing_box(action, tiny) {
      let package_name = tiny ? "sing-box-tiny" : "sing-box";
 diff --git a/forkop/files/usr/lib/components/updates.uc b/forkop/files/usr/lib/components/updates.uc
-index a18a753b..f215c6b5 100644
+index 2ee5f877..84844930 100644
 --- a/forkop/files/usr/lib/components/updates.uc
 +++ b/forkop/files/usr/lib/components/updates.uc
 @@ -2495,6 +2495,10 @@ function finish_list_update(ok) {
@@ -145,8 +134,8 @@ index a18a753b..f215c6b5 100644
  function list_update() {
      log_message("Starting lists update", "info");
      if (!list_update_pid_begin())
-@@ -2653,23 +2657,6 @@ function selected_lists_ready() {
-     return true;
+@@ -2680,22 +2684,6 @@ function list_update_missing() {
+     exit(ok ? 0 : 1);
  }
  
 -function list_update_if_missing() {
@@ -159,17 +148,16 @@ index a18a753b..f215c6b5 100644
 -            log_message("List auto-update is off; keeping flash cache on start", "info");
 -            exit(0);
 -        }
--        log_message("Selected lists are missing from cache; running lists update now", "info");
--        list_update();
+-        list_update_missing();
 -        return;
 -    }
 -    list_update_if_due();
 -}
 -
- function list_update_if_due() {
-     let interval = settings_update_interval(uci_settings());
-     if (interval == "")
-@@ -2697,6 +2684,23 @@ function list_update_if_due() {
+ function list_update_unless_disabled() {
+     if (list_cache.persist_enabled() && settings_update_interval(uci_settings()) == "") {
+         list_update_missing();
+@@ -2731,6 +2719,22 @@ function list_update_if_due() {
      exit(1);
  }
  
@@ -183,8 +171,7 @@ index a18a753b..f215c6b5 100644
 +            log_message("List auto-update is off; keeping flash cache on start", "info");
 +            exit(0);
 +        }
-+        log_message("Selected lists are missing from cache; running lists update now", "info");
-+        list_update();
++        list_update_missing();
 +        return;
 +    }
 +    list_update_if_due();
@@ -193,7 +180,7 @@ index a18a753b..f215c6b5 100644
  function stop_list_update() {
      let pid = trim(as_string(fs.readfile(LIST_UPDATE_PID_FILE) || ""));
      if (pid != "" && runtime_pid_running(pid)) {
-@@ -2785,10 +2789,6 @@ function write_current_reload_state_clean() {
+@@ -2819,10 +2823,6 @@ function write_current_reload_state_clean() {
      ]);
  }
  
@@ -205,10 +192,10 @@ index a18a753b..f215c6b5 100644
      service_state_success([ "run-pending-reload-if-requested", PENDING_RELOAD_FILE, SERVICE_INIT ]);
  }
 diff --git a/forkop/files/usr/lib/config/validator.uc b/forkop/files/usr/lib/config/validator.uc
-index 70643bab..5ed06615 100644
+index 4313b5a3..4fc0edd8 100644
 --- a/forkop/files/usr/lib/config/validator.uc
 +++ b/forkop/files/usr/lib/config/validator.uc
-@@ -698,6 +698,12 @@ function mwan3_has_enabled_interface() {
+@@ -774,6 +774,12 @@ function mwan3_has_enabled_interface() {
      return mwan3_has_enabled_interface_text(read_stdin());
  }
  
@@ -221,7 +208,7 @@ index 70643bab..5ed06615 100644
  function mwan3_has_enabled_interface_from_sections() {
      for (let section in uci_core().section_objects("mwan3", "interface"))
          if (option(section, "enabled", "0") == "1")
-@@ -774,12 +780,6 @@ function runtime_constants() {
+@@ -850,12 +856,6 @@ function runtime_constants() {
      return constants_module;
  }
  
@@ -399,7 +386,7 @@ index a3b9b3ed..59ad97b2 100644
      let protocol = config_get(section, "protocol", "vless");
      if (!(protocol == "shadowsocks" || protocol == "socks" || protocol == "vmess" || protocol == "vless" ||
 diff --git a/forkop/files/usr/lib/service/initd.uc b/forkop/files/usr/lib/service/initd.uc
-index 164a19c3..8f14c841 100644
+index 308421a6..9ccc2a75 100644
 --- a/forkop/files/usr/lib/service/initd.uc
 +++ b/forkop/files/usr/lib/service/initd.uc
 @@ -181,6 +181,15 @@ function lock_dir_write_owner(lock_dir, owner_pid) {
@@ -459,7 +446,7 @@ index 164a19c3..8f14c841 100644
      let data = command_output_from_args([ BIN_PATH, "get_status" ]);
      try {
 diff --git a/forkop/files/usr/lib/service/state.uc b/forkop/files/usr/lib/service/state.uc
-index 96b15333..c0b47af7 100644
+index b0887bb5..db5b0c96 100644
 --- a/forkop/files/usr/lib/service/state.uc
 +++ b/forkop/files/usr/lib/service/state.uc
 @@ -286,6 +286,15 @@ function lock_dir_write_owner(lock_dir, owner_pid) {
@@ -495,7 +482,7 @@ index 96b15333..c0b47af7 100644
      if (!ensure_parent_dir(path))
          exit(1);
 diff --git a/forkop/files/usr/lib/service/ui.uc b/forkop/files/usr/lib/service/ui.uc
-index b2d389c6..1caa1d05 100644
+index d18a9fa6..9f24b790 100644
 --- a/forkop/files/usr/lib/service/ui.uc
 +++ b/forkop/files/usr/lib/service/ui.uc
 @@ -290,6 +290,22 @@ function print_service_status_text(running, enabled) {
@@ -575,133 +562,6 @@ index b2d389c6..1caa1d05 100644
  function forkop_running() {
      return module_success(LIB_DIR + "/service/state.uc", [
          "forkop-stably-running",
-diff --git a/forkop/files/usr/lib/singbox/generator.uc b/forkop/files/usr/lib/singbox/generator.uc
-index b7ba566a..471cffd0 100644
---- a/forkop/files/usr/lib/singbox/generator.uc
-+++ b/forkop/files/usr/lib/singbox/generator.uc
-@@ -2502,24 +2502,6 @@ function openconnect_cookie_auto(client) {
-     return bool_option(client, "cookie_auto", true);
- }
- 
--function openconnect_servers_without_cookie() {
--    let disabled = {};
--    uci_cursor().load(CONFIG_NAME);
--    for (let section in enabled_sections("")) {
--        for (let client in connections.openconnect_clients(section)) {
--            if (openconnect_cookie_auto(client))
--                continue;
--            let server = trim(option(client, "server", ""));
--            if (server == "")
--                continue;
--            let target = openconnect_server_target(server);
--            let key = target.port == "" ? target.host : target.host + ":" + target.port;
--            disabled[openconnect_peer_key(key)] = true;
--        }
--    }
--    return disabled;
--}
--
- function openconnect_servercert(fingerprint) {
-     fingerprint = trim(as_string(fingerprint));
-     if (fingerprint == "")
-@@ -3976,11 +3958,6 @@ function ip_from_hosts_line(line, wanted) {
-     return "";
- }
- 
--function ip_from_dhcp_lease_name(name) {
--    let ips = ips_from_dhcp_lease_name(name);
--    return length(ips) > 0 ? ips[0] : "";
--}
--
- function lease_lookup_paths() {
-     return [
-         "/tmp/dhcp.leases",
-@@ -3992,16 +3969,6 @@ function lease_lookup_paths() {
-     ];
- }
- 
--function append_unique_ip(result, seen, ip) {
--    ip = trim(as_string(ip));
--    if (ip == "" || seen[ip])
--        return;
--    if (is_valid_ip(ip) != true)
--        return;
--    seen[ip] = true;
--    push(result, ip);
--}
--
- function note_lease_pair(ip_to_name, name_to_ips, ip, name) {
-     ip = trim(as_string(ip));
-     name = hostname_key(name);
-@@ -4056,6 +4023,21 @@ function ips_from_dhcp_lease_name(name) {
-     return index.name_to_ips[wanted];
- }
- 
-+function ip_from_dhcp_lease_name(name) {
-+    let ips = ips_from_dhcp_lease_name(name);
-+    return length(ips) > 0 ? ips[0] : "";
-+}
-+
-+function append_unique_ip(result, seen, ip) {
-+    ip = trim(as_string(ip));
-+    if (ip == "" || seen[ip])
-+        return;
-+    if (is_valid_ip(ip) != true)
-+        return;
-+    seen[ip] = true;
-+    push(result, ip);
-+}
-+
- function expanded_ips_for_source_value(value) {
-     value = trim(as_string(value));
-     let result = [];
-@@ -4277,6 +4259,10 @@ function excluded_non_fakeip_rule(inbound, source) {
-     };
- }
- 
-+function single_or_array(values) {
-+    return length(values) == 1 ? values[0] : values;
-+}
-+
- function add_global_routing_exclusions(config) {
-     let excluded = [];
-     try {
-@@ -4442,10 +4428,6 @@ function section_dns_server(section) {
-         : runtime_constants.FAKEIP_DNS_SERVER_TAG;
- }
- 
--function single_or_array(values) {
--    return length(values) == 1 ? values[0] : values;
--}
--
- function copy_dns_matchers(matchers) {
-     let copy = {};
-     for (let key, value in matchers)
-@@ -4980,6 +4962,24 @@ function enabled_sections(deferred_sections) {
-     return result;
- }
- 
-+function openconnect_servers_without_cookie() {
-+    let disabled = {};
-+    uci_cursor().load(CONFIG_NAME);
-+    for (let section in enabled_sections("")) {
-+        for (let client in connections.openconnect_clients(section)) {
-+            if (openconnect_cookie_auto(client))
-+                continue;
-+            let server = trim(option(client, "server", ""));
-+            if (server == "")
-+                continue;
-+            let target = openconnect_server_target(server);
-+            let key = target.port == "" ? target.host : target.host + ":" + target.port;
-+            disabled[openconnect_peer_key(key)] = true;
-+        }
-+    }
-+    return disabled;
-+}
-+
- function enabled_servers() {
-     let result = [];
-     uci_cursor().foreach(CONFIG_NAME, "server", function(section) {
 -- 
 2.43.0
 
