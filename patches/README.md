@@ -72,9 +72,9 @@
 | `feeds/forkopmod/` | [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) | [`2575a32`](https://github.com/Gavr1024/forkop-mod/commit/2575a321f088124d18f2710c9d9b1058e007bb37) | 20.10.2026 |
 | `feeds/luciappxray/` | [yichya/luci-app-xray](https://github.com/yichya/luci-app-xray) | [`4d5a6fd`](https://github.com/yichya/luci-app-xray/commit/4d5a6fd7fc4d2fbbcd7f70f1319da06b91ec1d56) | 22.09.2026 |
 | `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`885127e`](https://github.com/yandexru45/netshift/commit/885127e166e5c53becef5f4c2d12d1fbb06d081c) | 18.10.2026 |
-| `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`20ecdbe`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/20ecdbeed1c2f58bcf730e05284f9ff9a236f805) | 20.10.2026 |
+| `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`300ea00`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/300ea00edaec392e935a83f019aa2a5053683652) | 20.10.2026 |
 | `feeds/podkop/` | [itdoginfo/podkop](https://github.com/itdoginfo/podkop) | [`da8bd40`](https://github.com/itdoginfo/podkop/commit/da8bd40983aaab4d29614d38c8d6214d0a217e3e) | 11.10.2026 |
-| `feeds/trafira/` | [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) | [`857382d`](https://github.com/petrouspetr-pixel/trafira/commit/857382d39af6418288a85a5be542398dc690724d) | 19.10.2026 |
+| `feeds/trafira/` | [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) | [`41d1d50`](https://github.com/petrouspetr-pixel/trafira/commit/41d1d50e8e98ddd749fd5a527a40efc713f0f094) | 20.10.2026 |
 | `packages/luci-app-homeproxy/` | [immortalwrt/homeproxy](https://github.com/immortalwrt/homeproxy) | [`fadaa67`](https://github.com/immortalwrt/homeproxy/commit/fadaa676104f59ff6ace480a780a258d846d0aec) | 02.10.2026 |
 | `packages/luci-app-re-homeproxy/` | [1andrevich/homeproxy-hiddify](https://github.com/1andrevich/homeproxy-hiddify) | [`a9e3596`](https://github.com/1andrevich/homeproxy-hiddify/commit/a9e359679e08b5642ae66b13dbcf647b382a9edc) | 04.07.2026 |
 
@@ -97,7 +97,7 @@
 
 ## Патчи по пакетам
 
-Всего 68 патчей для 9 пакетов. Номер — порядок применения. Ссылки
+Всего 67 патчей для 9 пакетов. Номер — порядок применения. Ссылки
 вида `#98` / `PR #103` — обсуждение и предложенное исправление в
 репозитории автора.
 
@@ -254,7 +254,7 @@
 
 Вариант `passwall`, фид [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2).
 
-Патчи сняты с коммита [`20ecdbe`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/20ecdbeed1c2f58bcf730e05284f9ff9a236f805) от 20.10.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`300ea00`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/300ea00edaec392e935a83f019aa2a5053683652) от 20.10.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Соединения после перезапуска.** Пока passwall2 перезапускается,
   правил нет, и новые соединения из сети уходят напрямую. После запуска
@@ -315,14 +315,14 @@
   исключённых должен быть хотя бы один IP, иначе в журнале
   предупреждение.
 
-### trafira — `feeds/trafira/` (6)
+### trafira — `feeds/trafira/` (5)
 
-Вариант `trafira`, фид [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) (3.1.10).
+Вариант `trafira`, фид [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) (3.1.11).
 
-Патчи сняты с коммита [`857382d`](https://github.com/petrouspetr-pixel/trafira/commit/857382d39af6418288a85a5be542398dc690724d) от 19.10.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`41d1d50`](https://github.com/petrouspetr-pixel/trafira/commit/41d1d50e8e98ddd749fd5a527a40efc713f0f094) от 20.10.2026 (файл `BASE`): на нём серия ложится точно.
 
-- **001. Установка sing-box со страницы «Компоненты».** Без патча она
-  падала с ошибкой «left-hand side is not a function». *Всегда.*
+- **001 удалён.** Вызовы ucode до объявления в установщике sing-box
+  автор исправил сам в 3.1.11 (с тестами).
 - **002. Гостевые сети в прошивке.** Если trafira встроена в образ
   прошивки, правило файрвола для перенаправленного трафика создаётся при
   первой загрузке. *Всегда.*
