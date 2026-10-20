@@ -1,0 +1,242 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 13 Oct 2026 06:26:16 +0000
+Subject: [PATCH] feat: REALITY with the X25519MLKEM768 key share
+ (sing-box-extended)
+
+Build-If: variant=homeproxy sb=extended
+
+REALITY servers of Xray-core 26.9.8 and newer (xtls/reality 8cdf7bf,
+2026-09-08) refuse a ClientHello that does not offer X25519MLKEM768 before
+X25519. sing-box strips that key share, so with such a server every REALITY
+node fails with "reality verification failed": the server hands the
+connection to its target site, whose certificate the client then rejects.
+The official sing-box cannot keep the key share; sing-box-extended 2.7.2+
+can, with "support_x25519mlkem768" in the REALITY options, off by default
+because older servers may refuse it. Share links of such servers say
+support-x25519mlkem768=true.
+
+- homeproxy.uc and rpcd: singBoxHasRealityMLKEM() / hp_has_reality_mlkem
+  ask the core with "sing-box check", cached per binary like the xhttp
+  probe.
+- node.js: "X25519MLKEM768 key share" for REALITY nodes when the core has
+  it; the share link import reads support-x25519mlkem768.
+- Subscriptions read it too.
+- generate_client.uc writes support_x25519mlkem768 for such a node. Without
+  a core that has it the node is written as before, with a log line on why
+  the server may refuse it; uTLS sends the key share only in its Chrome
+  ClientHello, so another fingerprint gets a log line as well.
+- Russian translation of the new strings.
+
+Checked: live against Xray 26.10.10 with REALITY (raw with vision, and
+xhttp in auto, packet-up, stream-up and stream-one) and the outbound the
+generator writes on sing-box-extended 2.7.2: without the option the server
+refuses the client (the target site answers, as in the failing setup),
+with it the data goes through. ClientHello captured: chrome and chrome_pq
+send X25519MLKEM768 before X25519 only with the option; firefox, safari,
+edge, ios and the others never do. Without the option the configuration is
+byte-identical to before (31 test configurations, official and extended
+core). The probe returns true on extended 2.7.2, false on 1.14.2 and
+1.12.22. LuCI (luci-base in Chromium, mocked ubus): the field shows for a
+REALITY node only when the core has it and follows the REALITY flag, no
+errors. The share link import and the subscription parser set it from
+support-x25519mlkem768=true and only for REALITY.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
+---
+diff --git a/htdocs/luci-static/resources/view/homeproxy/node.js b/htdocs/luci-static/resources/view/homeproxy/node.js
+index 3648b87..2ff98bf 100644
+--- a/htdocs/luci-static/resources/view/homeproxy/node.js
++++ b/htdocs/luci-static/resources/view/homeproxy/node.js
+@@ -332,6 +332,9 @@ function parseShareLink(uri, features) {
+ 				tls_reality: (params.get('security') === 'reality') ? '1' : '0',
+ 				tls_reality_public_key: params.get('pbk') ? decodeURIComponent(params.get('pbk')) : null,
+ 				tls_reality_short_id: params.get('sid'),
++				/* Xray-core 26.9.8+ servers: keep the X25519MLKEM768 key share */
++				tls_reality_x25519mlkem768: (params.get('security') === 'reality' &&
++					['true', '1'].includes(params.get('support-x25519mlkem768'))) ? '1' : null,
+ 				tls_utls: features.with_utls ? params.get('fp') : null,
+ 				vless_flow: ['tls', 'reality'].includes(params.get('security')) ? params.get('flow') : null
+ 			};
+@@ -1275,6 +1278,13 @@ function renderNodeSettings(section, data, features, main_node, routing_mode) {
+ 		o.password = true;
+ 		o.depends('tls_reality', '1');
+ 		o.modalonly = true;
++
++		if (features.hp_has_reality_mlkem) {
++			o = s.option(form.Flag, 'tls_reality_x25519mlkem768', _('X25519MLKEM768 key share'),
++				_('Needed by REALITY servers of Xray-core 26.9.8 or newer (a share link says so with <code>support-x25519mlkem768=true</code>), older servers may refuse it. Only sent with the chrome uTLS fingerprint.'));
++			o.depends('tls_reality', '1');
++			o.modalonly = true;
++		}
+ 	}
+ 	/* TLS config end */
+ 
+diff --git a/po/ru/homeproxy.po b/po/ru/homeproxy.po
+index 8225866..9677776 100644
+--- a/po/ru/homeproxy.po
++++ b/po/ru/homeproxy.po
+@@ -3350,3 +3350,17 @@ msgstr "Спрашиваются в этом порядке, после DNS-се
+ #: htdocs/luci-static/resources/view/homeproxy/client.js
+ msgid "a DNS server from the list"
+ msgstr "DNS-сервер из списка"
++
++#: htdocs/luci-static/resources/view/homeproxy/node.js
++msgid "X25519MLKEM768 key share"
++msgstr "Ключ X25519MLKEM768"
++
++#: htdocs/luci-static/resources/view/homeproxy/node.js
++msgid ""
++"Needed by REALITY servers of Xray-core 26.9.8 or newer (a share link says so "
++"with <code>support-x25519mlkem768=true</code>), older servers may refuse it. "
++"Only sent with the chrome uTLS fingerprint."
++msgstr ""
++"Нужен REALITY-серверам на Xray-core 26.9.8 и новее (в ссылке это указано как "
++"<code>support-x25519mlkem768=true</code>), более старые серверы могут его не "
++"принять. Передаётся только с отпечатком uTLS chrome."
+diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
+index 482fa01..134c4d6 100755
+--- a/root/etc/homeproxy/scripts/generate_client.uc
++++ b/root/etc/homeproxy/scripts/generate_client.uc
+@@ -14,7 +14,7 @@ import { cursor } from 'uci';
+ 
+ import {
+ 	getTime, isEmpty, parseURL, strToBool, strToInt, strToTime,
+-	removeBlankAttrs, validation, singBoxHasXHTTP, HP_DIR, RUN_DIR
++	removeBlankAttrs, validation, singBoxHasXHTTP, singBoxHasRealityMLKEM, HP_DIR, RUN_DIR
+ } from 'homeproxy';
+ 
+ const ubus = connect();
+@@ -532,6 +532,24 @@ function xhttp_transport(node) {
+ }
+ /* xhttp transport end */
+ 
++/* The X25519MLKEM768 key share for REALITY servers of Xray-core 26.9.8+
++ * (see singBoxHasRealityMLKEM). Without a core that has the option the node
++ * is written as before and the log says why the server may refuse it. */
++function reality_mlkem(node) {
++	if (node.tls_reality_x25519mlkem768 !== '1')
++		return null;
++
++	if (singBoxHasRealityMLKEM()) {
++		/* uTLS has the key share in its Chrome ClientHello only */
++		if (!match(node.tls_utls || '', /^chrome/))
++			warn(`${getTime()} [DAEMON] REALITY node "${node.label || node['.name']}": the X25519MLKEM768 key share is only sent with the chrome uTLS fingerprint, not with "${node.tls_utls || 'none'}"\n`);
++		return true;
++	}
++
++	warn(`${getTime()} [DAEMON] REALITY node "${node.label || node['.name']}": the sing-box core cannot keep the X25519MLKEM768 key share (sing-box-extended 2.7.2 or newer is needed), a server of Xray-core 26.9.8 or newer may refuse it\n`);
++	return null;
++}
++
+ function generate_outbound(node) {
+ 	if (type(node) !== 'object' || isEmpty(node))
+ 		return null;
+@@ -632,7 +650,8 @@ function generate_outbound(node) {
+ 			reality: (node.tls_reality === '1') ? {
+ 				enabled: true,
+ 				public_key: node.tls_reality_public_key,
+-				short_id: node.tls_reality_short_id
++				short_id: node.tls_reality_short_id,
++				support_x25519mlkem768: reality_mlkem(node)
+ 			} : null
+ 		} : null,
+ 		transport: (node.transport === 'xhttp') ? xhttp_transport(node) : !isEmpty(node.transport) ? {
+diff --git a/root/etc/homeproxy/scripts/homeproxy.uc b/root/etc/homeproxy/scripts/homeproxy.uc
+index 222d579..82e2824 100644
+--- a/root/etc/homeproxy/scripts/homeproxy.uc
++++ b/root/etc/homeproxy/scripts/homeproxy.uc
+@@ -256,4 +256,33 @@ export function singBoxHasXHTTP() {
+ 
+ 	return supported;
+ };
++
++/* REALITY servers of Xray-core 26.9.8 and newer refuse a ClientHello without
++ * the X25519MLKEM768 key share. sing-box strips it; sing-box-extended 2.7.2+
++ * keeps it with "support_x25519mlkem768" (older servers may refuse it, so it
++ * is per node). The core is asked as for xhttp, with its own cache. */
++export const REALITY_MLKEM_PROBE_CACHE = '/var/run/homeproxy-reality-mlkem.probe';
++
++export function singBoxHasRealityMLKEM() {
++	const bin = '/usr/bin/sing-box';
++	const st = stat(bin);
++	if (!st)
++		return false;
++
++	const key = `${st.size}-${st.mtime}`;
++	const cached = split(trim(readfile(REALITY_MLKEM_PROBE_CACHE) || ''), ' ');
++	if (cached[0] === key)
++		return (cached[1] === '1');
++
++	const probe = '/var/run/homeproxy-reality-mlkem-probe.json';
++	writefile(probe, '{"outbounds":[{"type":"vless","tag":"probe","server":"127.0.0.1","server_port":1,' +
++		'"uuid":"00000000-0000-0000-0000-000000000000","tls":{"enabled":true,"server_name":"probe",' +
++		'"utls":{"enabled":true,"fingerprint":"chrome"},"reality":{"enabled":true,' +
++		'"public_key":"tqhSkeDR6jsqC-BYCnZWBrdL33g705ba8tV5-ZboWTM","support_x25519mlkem768":true}}}]}\n');
++	const supported = (system(`${bin} check -c ${probe} >/dev/null 2>&1`) === 0);
++	unlink(probe);
++	writefile(REALITY_MLKEM_PROBE_CACHE, `${key} ${supported ? 1 : 0}\n`);
++
++	return supported;
++};
+ /* Core features end */
+diff --git a/root/etc/homeproxy/scripts/update_subscriptions.uc b/root/etc/homeproxy/scripts/update_subscriptions.uc
+index 8ee9ece..44522b3 100755
+--- a/root/etc/homeproxy/scripts/update_subscriptions.uc
++++ b/root/etc/homeproxy/scripts/update_subscriptions.uc
+@@ -407,6 +407,8 @@ function parse_uri(uri) {
+ 				tls_reality: (params.security === 'reality') ? '1' : '0',
+ 				tls_reality_public_key: params.pbk ? urldecode(params.pbk) : null,
+ 				tls_reality_short_id: params.sid,
++				/* Xray-core 26.9.8+ servers: keep the X25519MLKEM768 key share */
++				tls_reality_x25519mlkem768: (params.security === 'reality' && params['support-x25519mlkem768'] in ['true', '1']) ? '1' : null,
+ 				tls_utls: sing_features.with_utls ? params.fp : null,
+ 				vless_flow: (params.security in ['tls', 'reality']) ? params.flow : null
+ 			};
+diff --git a/root/usr/share/rpcd/ucode/luci.homeproxy b/root/usr/share/rpcd/ucode/luci.homeproxy
+index 030f299..5f62fd7 100644
+--- a/root/usr/share/rpcd/ucode/luci.homeproxy
++++ b/root/usr/share/rpcd/ucode/luci.homeproxy
+@@ -45,6 +45,31 @@ function hasXHTTP() {
+ 	return supported;
+ }
+ 
++/* The same check as singBoxHasRealityMLKEM() of homeproxy.uc, with the same
++ * cache: "support_x25519mlkem768" of REALITY, sing-box-extended 2.7.2+. */
++function hasRealityMLKEM() {
++	const bin = '/usr/bin/sing-box', cache = '/var/run/homeproxy-reality-mlkem.probe';
++	const st = stat(bin);
++	if (!st)
++		return false;
++
++	const key = `${st.size}-${st.mtime}`;
++	const cached = split(trim(readfile(cache) || ''), ' ');
++	if (cached[0] === key)
++		return (cached[1] === '1');
++
++	const probe = '/var/run/homeproxy-reality-mlkem-probe.json';
++	writefile(probe, '{"outbounds":[{"type":"vless","tag":"probe","server":"127.0.0.1","server_port":1,' +
++		'"uuid":"00000000-0000-0000-0000-000000000000","tls":{"enabled":true,"server_name":"probe",' +
++		'"utls":{"enabled":true,"fingerprint":"chrome"},"reality":{"enabled":true,' +
++		'"public_key":"tqhSkeDR6jsqC-BYCnZWBrdL33g705ba8tV5-ZboWTM","support_x25519mlkem768":true}}}]}\n');
++	const supported = (system(`${bin} check -c ${probe} >/dev/null 2>&1`) === 0);
++	unlink(probe);
++	writefile(cache, `${key} ${supported ? 1 : 0}\n`);
++
++	return supported;
++}
++
+ const methods = {
+ 	acllist_read: {
+ 		args: { type: 'type' },
+@@ -251,6 +276,7 @@ const methods = {
+ 			features.hp_has_tproxy = hasKernelModule('nft_tproxy.ko') || access('/etc/modules.d/nft-tproxy');
+ 			features.hp_has_tun = hasKernelModule('tun.ko') || access('/etc/modules.d/30-tun');
+ 			features.hp_has_xhttp = hasXHTTP();
++			features.hp_has_reality_mlkem = hasRealityMLKEM();
+ 
+ 			return features;
+ 		}
+-- 
+2.43.0

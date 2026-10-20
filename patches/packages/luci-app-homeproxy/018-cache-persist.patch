@@ -1,0 +1,129 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 20 Oct 2026 11:31:49 +0000
+Subject: [PATCH] feat: keep the cache of remote rule sets across reboots
+
+In the bypass_mainland_china and custom modes sing-box keeps its cache
+(remote rule sets, DNS cache, selected outbounds) in
+/var/run/homeproxy/cache.db, in RAM. After a reboot or a sysupgrade a
+remote rule set is not in it, sing-box downloads it while starting, and
+when one download fails sing-box does not start at all ("initial
+rule-set: ..."): with no WAN yet, the list server unreachable or the
+node its download goes through down, the router is left without the
+proxy, the more remote rule sets the likelier. A database that survives
+the reboot makes the start independent of the network; sing-box then
+refreshes the rule sets by their update interval.
+
+- init: with at least one remote rule set in the generated configuration
+  cache.db is copied to /etc/homeproxy/cache.db after sing-box has
+  stopped (reload, restart, shutdown), not on every rule set update, and
+  only when it changed; through a temporary file, so a power cut does
+  not leave half a file. At start it is put back when RAM has none
+  (after a reboot or a sysupgrade). sing-box resets a database it cannot
+  read, and a stale one only means the rule sets are refreshed after
+  the start.
+- Without remote rule sets, in the other routing modes, or with
+  infra.cache_persist=0 nothing is written and a saved copy is removed:
+  with local rule sets everything is as before.
+- Makefile: /etc/homeproxy/cache.db is a conffile, so a sysupgrade keeps
+  it (and a backup of the settings carries it).
+
+Checked with the functions of the init script and stubs: first start,
+save after a reload (waiting for sing-box to exit), no write when
+unchanged, restore after a reboot, the database in RAM kept on a reload,
+save at shutdown, rule sets switched to local, the global mode and
+cache_persist=0. The generated configuration has "type": "remote" only
+for remote rule sets.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
+---
+diff --git a/Makefile b/Makefile
+index 1416658..0958f64 100644
+--- a/Makefile
++++ b/Makefile
+@@ -18,6 +18,7 @@ define Package/luci-app-homeproxy/conffiles
+ /etc/config/homeproxy
+ /etc/homeproxy/certs/
+ /etc/homeproxy/ruleset/
++/etc/homeproxy/cache.db
+ /etc/homeproxy/resources/direct_list.txt
+ /etc/homeproxy/resources/proxy_list.txt
+ endef
+diff --git a/root/etc/init.d/homeproxy b/root/etc/init.d/homeproxy
+index e4b2318..c4a20be 100755
+--- a/root/etc/init.d/homeproxy
++++ b/root/etc/init.d/homeproxy
+@@ -262,6 +262,8 @@ start_service() {
+ 	procd_set_param respawn
+ 	procd_close_instance
+ 
++	[ "$outbound_node" = "nil" ] || cache_restore "$routing_mode"
++
+ 	case "$routing_mode" in
+ 	"bypass_mainland_china")
+ 		# Prepare cache db
+@@ -395,6 +397,61 @@ service_stopped() {
+ 	# TUN
+ 	ip link set "$tun_name" down 2>"/dev/null"
+ 	ip tuntap del mode tun name "$tun_name" 2>"/dev/null"
++
++	cache_save
++}
++
++# cache.db (rule sets, DNS cache, selected outbounds) lives in RAM. A remote
++# rule set that is not in it is downloaded when sing-box starts, and when one
++# download fails sing-box does not start at all: after a reboot or a sysupgrade
++# without a working download path (no WAN yet, the list server or the node
++# unreachable) the router is left without the proxy. With remote rule sets
++# the database is kept in $CACHE_PERSIST: written after sing-box has stopped
++# (reload, restart, shutdown; not on every update, flash is spared), put back
++# when there is none in RAM. sing-box resets a database it cannot read, and a
++# stale one only means the rule sets are refreshed after the start.
++# infra.cache_persist=0 turns it off; without remote rule sets nothing is kept.
++CACHE_PERSIST="$HP_DIR/cache.db"
++
++cache_restore() {
++	local persist
++	config_get_bool persist "infra" "cache_persist" "1"
++	rm -f "$RUN_DIR/cache.persist"
++	# Only these two modes have a cache_file (generate_client.uc)
++	case "$1" in
++	"bypass_mainland_china"|"custom") ;;
++	*) persist="0" ;;
++	esac
++	if [ "$persist" = "0" ] || ! grep -q '"type": "remote"' "$RUN_DIR/sing-box-c.json" 2>"/dev/null"; then
++		rm -f "$CACHE_PERSIST"
++		return 0
++	fi
++
++	: > "$RUN_DIR/cache.persist"
++	if [ ! -s "$RUN_DIR/cache.db" ] && [ -s "$CACHE_PERSIST" ]; then
++		cp -p "$CACHE_PERSIST" "$RUN_DIR/cache.db" && \
++			log "Restored the cache of rule sets saved $(date -r "$CACHE_PERSIST" "+%Y-%m-%d %H:%M")."
++	fi
++}
++
++cache_save() {
++	[ -e "$RUN_DIR/cache.persist" ] && [ -s "$RUN_DIR/cache.db" ] || return 0
++
++	# sing-box closes the database when it is stopped; wait for that
++	local i=0
++	while [ "$i" -lt 10 ] && pgrep -f "$RUN_DIR/sing-box-c.json" >"/dev/null" 2>&1; do
++		sleep 1
++		i=$((i + 1))
++	done
++
++	cmp -s "$RUN_DIR/cache.db" "$CACHE_PERSIST" && return 0
++	if cp "$RUN_DIR/cache.db" "$CACHE_PERSIST.tmp" 2>"/dev/null" && \
++	   mv -f "$CACHE_PERSIST.tmp" "$CACHE_PERSIST"; then
++		:
++	else
++		rm -f "$CACHE_PERSIST.tmp"
++		log "Error: failed to save the cache of rule sets to $CACHE_PERSIST."
++	fi
+ }
+ 
+ # A reload or restart first stops the service: the firewall rules go and the
+-- 
+2.43.0

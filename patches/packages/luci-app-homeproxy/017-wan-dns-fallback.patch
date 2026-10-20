@@ -1,0 +1,126 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 19 Oct 2026 20:27:08 +0000
+Subject: [PATCH] fix: default-dns without the DNS of WAN, missed WAN events
+
+"DNS of WAN" (default-dns, which also resolves DNS servers and nodes
+given by name unless another resolver is set) is read once, when the
+configuration is made. With no DNS on WAN at that moment it became
+223.5.5.5 (8.8.8.8 in the global and proxy_mainland_china modes) and
+stayed so until the next reload.
+
+That moment comes often. procd removes the WAN trigger of the service
+when a reload stops it and adds it back only after start_service has
+returned, a few seconds later. An upstream router that reboots makes
+WAN go down and up within such seconds: the reload for "down" made a
+configuration without DNS and the "up" came while the trigger was
+missing, so the router ran on the public resolver for hours. At boot
+the same happens when WAN gets its lease while homeproxy is starting.
+The trigger "interface.*.up" also matched "interface.down" (procd takes
+everything after ".*" as a wildcard), so WAN going down reloaded the
+service for nothing.
+
+- generate_client.uc: without DNS on WAN take the DNS server WAN had
+  last (wan-dns.last in the run directory, kept across reloads), then
+  the first nameserver of resolv.conf.auto that is not loopback (IPv6
+  only with IPv6 support on), and the public resolver only after them.
+  The log says which one is used and why. What WAN had is written to
+  wan-dns.
+- init: at the end of start_service, when WAN now has a DNS server
+  other than the one in wan-dns, reload once more after 5 s, when the
+  trigger is back. The configuration then has the DNS of WAN again.
+- The trigger is "interface.update" for wan: netifd sends it when the
+  interface is up and when its data (the DNS servers) change; WAN going
+  down no longer reloads.
+
+With DNS on WAN the generated configuration is byte-identical to before
+(4 test configurations). Checked with the generator: boot with nothing
+known, a DNS server only in resolv.conf.auto (loopback and IPv6 entries
+skipped), WAN up, WAN down after up (the last one is kept) and a new
+DNS server on WAN; the end of start_service with the old and new DNS of
+WAN equal, missing on either side and different.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
+---
+diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
+index ecc370c..9591499 100755
+--- a/root/etc/homeproxy/scripts/generate_client.uc
++++ b/root/etc/homeproxy/scripts/generate_client.uc
+@@ -61,9 +61,38 @@ if (!(routing_mode in [ 'bypass_mainland_china', 'custom', 'gfwlist', 'global',
+ 	routing_mode = 'global';
+ }
+ 
++/* The DNS server of WAN, for default-dns and the "wan" choices. WAN has none
++ * at boot and while it reconnects, and a configuration made then kept a
++ * public resolver until the next reload. Take the DNS server WAN had last,
++ * then one netifd got from another interface, and the public resolver only
++ * when there is none. wan-dns says what WAN had, the init script reloads
++ * when that is no longer so. */
+ let wan_dns = ubus.call('network.interface', 'status', {'interface': 'wan'})?.['dns-server']?.[0];
+-if (!wan_dns)
+-	wan_dns = (routing_mode in ['proxy_mainland_china', 'global']) ? '8.8.8.8' : '223.5.5.5';
++writefile(RUN_DIR + '/wan-dns', `${wan_dns ?? ''}\n`);
++if (wan_dns)
++	writefile(RUN_DIR + '/wan-dns.last', `${wan_dns}\n`);
++else {
++	let source = 'the last one of WAN';
++	wan_dns = trim(readfile(RUN_DIR + '/wan-dns.last') ?? '');
++
++	if (!wan_dns) {
++		source = 'resolv.conf.auto';
++		const ipv6 = (uci.get(uciconfig, ucimain, 'ipv6_support') === '1');
++		for (let line in split(readfile('/tmp/resolv.conf.d/resolv.conf.auto') ?? '', '\n')) {
++			const m = match(line, /^nameserver[ \t]+([0-9A-Fa-f.:]+)[ \t]*$/);
++			if (m && !match(m[1], /^(127\.|::1$)/) && (ipv6 || index(m[1], ':') < 0)) {
++				wan_dns = m[1];
++				break;
++			}
++		}
++	}
++
++	if (!wan_dns) {
++		source = 'none known';
++		wan_dns = (routing_mode in ['proxy_mainland_china', 'global']) ? '8.8.8.8' : '223.5.5.5';
++	}
++	foreign_warn('WAN', `no DNS server yet, ${wan_dns} is used (${source}), a reload follows when WAN has one`);
++}
+ 
+ const dns_port = uci.get(uciconfig, uciinfra, 'dns_port') || '5333';
+ 
+diff --git a/root/etc/init.d/homeproxy b/root/etc/init.d/homeproxy
+index 8f9d773..e4b2318 100755
+--- a/root/etc/init.d/homeproxy
++++ b/root/etc/init.d/homeproxy
+@@ -309,6 +309,19 @@ start_service() {
+ 		conntrack -D -p tcp --src-nat >"/dev/null" 2>&1
+ 	fi
+ 
++	# procd takes the WAN trigger away while a reload runs and puts it back
++	# only after start_service, so DNS that WAN gets meanwhile (at boot, after
++	# a reconnect of WAN) is missed and default-dns stays on the fallback.
++	# Reload once more if WAN's DNS is not the one the configuration has.
++	if [ "$outbound_node" != "nil" ]; then
++		local wan_dns
++		wan_dns="$(ubus call network.interface.wan status 2>"/dev/null" | jsonfilter -e '@["dns-server"][0]')"
++		if [ -n "$wan_dns" ] && [ "$wan_dns" != "$(cat "$RUN_DIR/wan-dns" 2>"/dev/null")" ]; then
++			log "WAN got DNS server $wan_dns while starting, reloading."
++			( sleep 5; /etc/init.d/$CONF reload ) >"/dev/null" 2>&1 &
++		fi
++	fi
++
+ 	log "sing-box $(sing-box version -n) started."
+ }
+ 
+@@ -484,5 +497,8 @@ restart() {
+ 
+ service_triggers() {
+ 	procd_add_reload_trigger "$CONF"
+-	procd_add_interface_trigger "interface.*.up" wan /etc/init.d/$CONF reload
++	# procd reads "interface.*.up" as "interface" and anything after it, so
++	# WAN going down reloaded too, with no DNS and for nothing. netifd sends
++	# interface.update when WAN is up and when its data (DNS) changes.
++	procd_add_interface_trigger "interface.update" wan /etc/init.d/$CONF reload
+ }
+-- 
+2.43.0
