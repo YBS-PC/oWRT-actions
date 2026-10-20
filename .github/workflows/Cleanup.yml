@@ -1,14 +1,12 @@
+
 name: Cleanup
 
-# Удаляет завершённые запуски всех workflow старше суток вместе с их
-# логами и артефактами, а завершённые «pages build and deployment» — сразу
-# (кроме самого нового). Нужен, когда новых сборок нет: шаг «Delete workflow
-# runs» в Universal_WRT_Builder.yml срабатывает только в конце сборки.
-# Артефакты сборки и сами истекают через сутки (retention-days: 1).
+# Удаляет все завершённые запуски workflow старше 12 часов,
+# включая GitHub Pages, вместе с логами и артефактами.
 on:
   schedule:
-    # Каждые 6 часов: запуск живёт не дольше ~30 ч. Время — UTC.
-    - cron: '23 */6 * * *'
+    # Каждые 3 часа. Время — UTC.
+    - cron: '23 */3 * * *'
   workflow_dispatch:
 
 permissions:
@@ -23,36 +21,38 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-    - name: Delete runs older than 1 day
+    - name: Delete completed runs older than 12 hours
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         GH_REPO: ${{ github.repository }}
       run: |
-        # createdAt у GitHub всегда в UTC с 'Z', jq сравнивает строки —
-        # поэтому и границу берём в UTC с 'Z'.
-        CUTOFF=$(date -u -d "1 day ago" +"%Y-%m-%dT%H:%M:%SZ")
-        echo ">>> Удаляются завершённые запуски, созданные до $CUTOFF (UTC)"
-        RUNS=$(gh run list --limit 500 --json databaseId,createdAt,status,event,name,workflowName)
-        OLD=$(printf '%s' "$RUNS" | jq -r --arg c "$CUTOFF" \
+        # Рассчитываем границу: 12 часов назад, UTC.
+        CUTOFF=$(date -u -d "12 hours ago" +"%Y-%m-%dT%H:%M:%SZ")
+
+        echo ">>> Удаляются все завершённые запуски старше $CUTOFF (UTC)"
+
+        # Получаем последние 500 запусков всех workflow.
+        RUNS=$(gh run list --limit 500 \
+          --json databaseId,createdAt,status)
+
+        # Выбираем завершённые запуски, созданные более 12 часов назад.
+        IDS=$(printf '%s' "$RUNS" | jq -r --arg c "$CUTOFF" \
           '.[] | select(.status == "completed" and .createdAt < $c) | .databaseId')
-        # «pages build and deployment» GitHub запускает сам (event dynamic)
-        # при каждом изменении файлов. После публикации запуск не нужен —
-        # сайт остаётся, — поэтому завершённые удаляются сразу, без суток.
-        # Самый новый (список идёт от новых к старым) остаётся: по нему
-        # видно, чем закончилась последняя публикация.
-        # У gh name — имя запуска («pages build and deployment»), workflowName —
-        # имя workflow («pages-build-deployment»): проверяются оба.
-        PAGES=$(printf '%s' "$RUNS" | jq -r \
-          '[.[] | select(.event == "dynamic" and (.name == "pages build and deployment" or .workflowName == "pages-build-deployment"))]
-           | .[1:][] | select(.status == "completed") | .databaseId')
-        echo ">>> pages build and deployment: к удалению $(printf '%s\n' "$PAGES" | grep -c .)"
-        IDS=$(printf '%s\n%s\n' "$OLD" "$PAGES" | grep . | sort -u)
+
         if [ -z "$IDS" ]; then
-          echo ">>> Старых запусков нет."
+          echo ">>> Нет завершённых запусков старше 12 часов."
           exit 0
         fi
+
         n=0
+
+        # Удаляем каждый подходящий запуск.
         for ID in $IDS; do
-          if gh run delete "$ID" >/dev/null; then n=$((n + 1)); else echo "::warning::Не удалось удалить запуск $ID"; fi
+          if gh run delete "$ID" >/dev/null; then
+            n=$((n + 1))
+          else
+            echo "::warning::Не удалось удалить запуск $ID"
+          fi
         done
+
         echo ">>> Удалено запусков: $n"
