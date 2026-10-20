@@ -69,7 +69,7 @@
 | Папка | Репозиторий | Коммит | Дата коммита |
 |---|---|---|---|
 | `feeds/forkop/` | [ushan0v/forkop](https://github.com/ushan0v/forkop) | [`dd48329`](https://github.com/ushan0v/forkop/commit/dd483297be0ac4e52bb8f482e2640238b75af532) | 18.07.2026 |
-| `feeds/forkopmod/` | [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) | [`3ef8330`](https://github.com/Gavr1024/forkop-mod/commit/3ef833010aeb008b935af836a3a8b34f07c986ac) | 11.10.2026 |
+| `feeds/forkopmod/` | [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) | [`2575a32`](https://github.com/Gavr1024/forkop-mod/commit/2575a321f088124d18f2710c9d9b1058e007bb37) | 20.10.2026 |
 | `feeds/luciappxray/` | [yichya/luci-app-xray](https://github.com/yichya/luci-app-xray) | [`4d5a6fd`](https://github.com/yichya/luci-app-xray/commit/4d5a6fd7fc4d2fbbcd7f70f1319da06b91ec1d56) | 22.09.2026 |
 | `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`885127e`](https://github.com/yandexru45/netshift/commit/885127e166e5c53becef5f4c2d12d1fbb06d081c) | 18.10.2026 |
 | `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`e378885`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/e3788855d3cb3ddc3f4027ea2480d7c19019f033) | 17.10.2026 |
@@ -212,15 +212,16 @@
 
 ### forkop-mod — `feeds/forkopmod/` (1)
 
-Вариант `forkop-mod`, фид [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) (1.0.10).
+Вариант `forkop-mod`, фид [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) (1.0.12).
 
-Патчи сняты с коммита [`3ef8330`](https://github.com/Gavr1024/forkop-mod/commit/3ef833010aeb008b935af836a3a8b34f07c986ac) от 11.10.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`2575a32`](https://github.com/Gavr1024/forkop-mod/commit/2575a321f088124d18f2710c9d9b1058e007bb37) от 20.10.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Ошибки «left-hand side is not a function» и удаление через
-  apk.** В 16 местах функции перенесены выше места, где их вызывают.
-  Без этого исключённые устройства идут через прокси, а не напрямую,
-  падают проверка стратегий ByeDPI и восстановление входа OpenConnect.
-  Скрипт удаления переписан, чтобы `apk del` работал. *Всегда.*
+  apk.** В 13 местах функции перенесены выше места, где их вызывают
+  (ещё три, в генераторе sing-box, автор исправил сам в 1.0.11). Без
+  этого падают проверка стратегий ByeDPI и проверка обновления списков
+  при старте, а также части интерфейса и службы. Скрипт удаления
+  переписан, чтобы `apk del` работал. *Всегда.*
 
 ### luci-app-xray — `feeds/luciappxray/` (1)
 
@@ -342,7 +343,7 @@
   падала: «Expected a stripped, headerless ucode proof». Теперь версия в
   старшем байте допускается, остальная сверка прежняя. *Всегда.*
 
-### homeproxy — `packages/luci-app-homeproxy/` (17)
+### homeproxy — `packages/luci-app-homeproxy/` (18)
 
 Вариант `homeproxy`, пакет [immortalwrt/homeproxy](https://github.com/immortalwrt/homeproxy):
 на OpenWrt и на ImmortalWrt берётся master (на ImmortalWrt — вместо
@@ -541,6 +542,25 @@
     поменялись данные, в том числе DNS).
 
   Если у WAN есть DNS, конфиг такой же, как без патча. *Всегда.*
+- **020. Кэш удалённых наборов правил переживает перезагрузку.** В
+  режимах Custom и «Обход материкового Китая» sing-box хранит кэш
+  (удалённые наборы правил, кэш DNS, выбранные узлы) в
+  `/var/run/homeproxy/cache.db`, то есть в RAM. После перезагрузки или
+  перепрошивки удалённые наборы скачиваются заново при старте, и если
+  хоть один не скачался (WAN ещё не поднялся, сервер списков или узел
+  недоступен), sing-box не запускается вовсе. Теперь, если в конфиге
+  есть хотя бы один удалённый набор:
+  - после остановки sing-box (перезапуск, выключение роутера) кэш
+    копируется в `/etc/homeproxy/cache.db` — только если изменился и
+    через временный файл, чтобы обрыв питания не оставил половину файла;
+  - при старте, если в RAM кэша нет, копия возвращается: sing-box
+    стартует без сети, а наборы обновляет потом по своему интервалу;
+  - файл входит в список сохраняемых при перепрошивке (и попадает в
+    архив настроек).
+
+  Без удалённых наборов (только `local`), в других режимах или с
+  `uci set homeproxy.infra.cache_persist=0` ничего не пишется, а старая
+  копия удаляется — всё как без патча. *Всегда.*
 
 ### Re:HomeProxy — `packages/luci-app-re-homeproxy/` (4)
 
