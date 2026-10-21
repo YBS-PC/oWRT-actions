@@ -1080,6 +1080,26 @@ if [ -f "/lib/modules/$(uname -r)/nft_fullcone.ko" ] || lsmod | grep -q nft_full
     uci commit firewall
 fi
 
+# MPTCP
+# Сам роутер Multipath TCP не использует (транзитный трафик устройств эта
+# настройка не затрагивает), а мешает он так: Go 1.24+ (sing-box, Xray)
+# по умолчанию слушает с MPTCP. MPTCP-соединение устройства из LAN
+# (так делают, например, iPhone для сервисов Apple) попадает на вход
+# redirect, а исходный адрес (SO_ORIGINAL_DST) ядро для MPTCP-сокета не
+# отдаёт: соединение обрывается с «get redirect destination: operation not
+# supported». Без MPTCP Go слушает обычный TCP, и устройство переходит на
+# него само. Своя строка net.mptcp.enabled в sysctl.conf (например, = 1)
+# не трогается; /etc/sysctl.conf сохраняется при перепрошивке.
+if [ -f /proc/sys/net/mptcp/enabled ]; then
+    if grep -q '^[[:space:]]*net\.mptcp\.enabled' /etc/sysctl.conf 2>/dev/null; then
+        log_info "net.mptcp.enabled уже задан в /etc/sysctl.conf — оставлен как есть"
+    else
+        sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' /etc/sysctl.conf
+        echo -e "\n# MPTCP\nnet.mptcp.enabled = 0" >> /etc/sysctl.conf
+        log_ok "MPTCP выключен"
+    fi
+fi
+
 # TCP BBR
 if [ -f "/lib/modules/$(uname -r)/tcp_bbr.ko" ] || grep -q bbr /proc/sys/net/ipv4/tcp_available_congestion_control; then
     sed -i '/# TCP BBR/d; /net\.core\.default_qdisc.*fq/d; /net\.ipv4\.tcp_congestion_control.*bbr/d' /etc/sysctl.conf
@@ -1087,6 +1107,7 @@ if [ -f "/lib/modules/$(uname -r)/tcp_bbr.ko" ] || grep -q bbr /proc/sys/net/ipv
     echo -e "\n# TCP BBR\nnet.core.default_qdisc = fq_codel\nnet.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.conf
     log_ok "TCP BBR включён"
 fi
+
 
 [ -x "/etc/init.d/phy-leds" ] && run_cmd "Отключение phy-leds" /etc/init.d/phy-leds disable
 
