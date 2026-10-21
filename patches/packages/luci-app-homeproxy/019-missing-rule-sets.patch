@@ -1,0 +1,147 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 21 Oct 2026 16:40:07 +0000
+Subject: [PATCH] fix(client): a rule set that is off does not stop the
+ configuration
+
+A DNS or routing rule can name a rule set that is switched off or removed:
+the rule set is unticked in LuCI, the rules that use it are not. sing-box
+then refuses the whole configuration ("initialize dns router: dns
+rule[3]: rule-set not found: cfg-geosite_tmdb-rule"), and homeproxy
+either keeps the old instance (patch 008) or does not start at all.
+
+- generate_client.uc: such a rule set is left out of the rule, with a log
+  line naming the rule and the rule set; a rule with none of its rule
+  sets left is skipped (it would match far more than meant otherwise),
+  also with a log line.
+- init: "sing-box check" runs with --disable-color. Its errors went to
+  homeproxy.log with terminal colour codes (ESC[31mFATAL ESC[0m): LuCI
+  showed "[31m" garbage, and LuCI custom commands that print the log
+  (ESC is a control character) showed "Binary data not displayed"
+  instead of their output.
+
+Without such rules the generated configuration is byte-identical to
+before. Checked with a custom routing configuration: a DNS rule with one
+rule set off and one on keeps the one on, a DNS rule with only the
+rule set off is skipped, a routing rule naming a removed rule set keeps
+the rest; "sing-box check" passes on 1.14.3-extended-2.7.3, where the
+old generator gives the "rule-set not found" error above.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
+---
+diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
+index 9591499..a75fe68 100755
+--- a/root/etc/homeproxy/scripts/generate_client.uc
++++ b/root/etc/homeproxy/scripts/generate_client.uc
+@@ -468,15 +468,35 @@ function get_resolver(cfg) {
+ 	}
+ }
+ 
+-function get_ruleset(cfg) {
++/* A rule set that is off or gone while a rule still names it made sing-box
++ * refuse the whole configuration ("rule-set not found"). It is left out of
++ * the rule, and the log says so; a rule with none of its rule sets left is
++ * skipped by the caller, it would match far more than meant otherwise. */
++function get_ruleset(cfg, user) {
+ 	if (isEmpty(cfg))
+ 		return null;
+ 
+ 	let rules = [];
+-	for (let i in cfg)
++	for (let i in cfg) {
++		if (!isEmpty(i) && (uci.get(uciconfig, i) !== uciruleset || uci.get(uciconfig, i, 'enabled') !== '1')) {
++			foreign_warn(user, `rule set "${i}" is off or gone and is left out`);
++			continue;
++		}
+ 		push(rules, isEmpty(i) ? null : 'cfg-' + i + '-rule');
++	}
+ 	return rules;
+ }
++
++function rule_user(kind, cfg) {
++	return `${kind} "${cfg.label || cfg['.name']}"`;
++}
++
++function ruleset_left_none(rules, kind, cfg) {
++	if (rules === null || length(rules))
++		return false;
++	foreign_warn(rule_user(kind, cfg), 'none of its rule sets is on, the rule is skipped');
++	return true;
++}
+ /* Config helper end */
+ 
+ const config = {};
+@@ -639,6 +659,10 @@ if (!isEmpty(main_node)) {
+ 		if (cfg.enabled !== '1')
+ 			return;
+ 
++		const rule_set = get_ruleset(cfg.rule_set, rule_user('DNS rule', cfg));
++		if (ruleset_left_none(rule_set, 'DNS rule', cfg))
++			return;
++
+ 		push(config.dns.rules, {
+ 			ip_version: strToInt(cfg.ip_version),
+ 			query_type: parse_dnsquery(cfg.query_type),
+@@ -660,7 +684,7 @@ if (!isEmpty(main_node)) {
+ 			process_path: cfg.process_path,
+ 			process_path_regex: cfg.process_path_regex,
+ 			user: cfg.user,
+-			rule_set: get_ruleset(cfg.rule_set),
++			rule_set: rule_set,
+ 			rule_set_ip_cidr_match_source: strToBool(cfg.rule_set_ip_cidr_match_source),
+ 			rule_set_ip_cidr_accept_empty: strToBool(cfg.rule_set_ip_cidr_accept_empty),
+ 			invert: strToBool(cfg.invert),
+@@ -1119,6 +1143,10 @@ if (!isEmpty(main_node)) {
+ 		if (cfg.enabled !== '1')
+ 			return null;
+ 
++		const rule_set = get_ruleset(cfg.rule_set, rule_user('Routing rule', cfg));
++		if (ruleset_left_none(rule_set, 'Routing rule', cfg))
++			return null;
++
+ 		push(config.route.rules, {
+ 			ip_version: strToInt(cfg.ip_version),
+ 			protocol: cfg.protocol,
+@@ -1139,7 +1167,7 @@ if (!isEmpty(main_node)) {
+ 			process_path: cfg.process_path,
+ 			process_path_regex: cfg.process_path_regex,
+ 			user: cfg.user,
+-			rule_set: get_ruleset(cfg.rule_set),
++			rule_set: rule_set,
+ 			rule_set_ip_cidr_match_source: strToBool(cfg.rule_set_ip_cidr_match_source),
+ 			invert: strToBool(cfg.invert),
+ 			action: cfg.action,
+diff --git a/root/etc/init.d/homeproxy b/root/etc/init.d/homeproxy
+index c4a20be..fb93673 100755
+--- a/root/etc/init.d/homeproxy
++++ b/root/etc/init.d/homeproxy
+@@ -90,7 +90,7 @@ start_service() {
+ 		if [ ! -e "$RUN_DIR/sing-box-c.json" ]; then
+ 			log "Error: failed to generate client configuration."
+ 			return 1
+-		elif ! config_was_checked "c" && ! "$PROG" check --config "$RUN_DIR/sing-box-c.json" 2>>"$LOG_PATH"; then
++		elif ! config_was_checked "c" && ! "$PROG" --disable-color check --config "$RUN_DIR/sing-box-c.json" 2>>"$LOG_PATH"; then
+ 			log "Error: wrong client configuration detected."
+ 			return 1
+ 		fi
+@@ -219,7 +219,7 @@ start_service() {
+ 		if [ ! -e "$RUN_DIR/sing-box-s.json" ]; then
+ 			log "Error: failed to generate server configuration."
+ 			return 1
+-		elif ! config_was_checked "s" && ! "$PROG" check --config "$RUN_DIR/sing-box-s.json" 2>>"$LOG_PATH"; then
++		elif ! config_was_checked "s" && ! "$PROG" --disable-color check --config "$RUN_DIR/sing-box-s.json" 2>>"$LOG_PATH"; then
+ 			log "Error: wrong server configuration detected."
+ 			return 1
+ 		fi
+@@ -503,7 +503,7 @@ check_new_config() {
+ 		generated="$generated $name"
+ 		ucode -S "$HP_DIR/scripts/$gen" 2>>"$LOG_PATH"
+ 		if [ -e "$RUN_DIR/sing-box-$name.json" ] && \
+-		   "$PROG" check --config "$RUN_DIR/sing-box-$name.json" 2>>"$LOG_PATH"; then
++		   "$PROG" --disable-color check --config "$RUN_DIR/sing-box-$name.json" 2>>"$LOG_PATH"; then
+ 			cp -p "$RUN_DIR/sing-box-$name.json" "$RUN_DIR/sing-box-$name.json.checked"
+ 		else
+ 			ret=1
+-- 
+2.43.0
