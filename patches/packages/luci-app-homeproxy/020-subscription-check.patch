@@ -1,0 +1,127 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 21 Oct 2026 20:13:46 +0000
+Subject: [PATCH] fix(subscribe): check the updated nodes before applying them
+
+Updating subscriptions stops the service first (unless the update goes
+through the proxy) and starts it again at the end; through the proxy it
+is restarted when the main node is gone. The new nodes were not checked
+before that: a node sing-box does not accept left the router without
+the proxy (start_service refuses the configuration) until someone
+noticed. The check before stopping (patch 008) does not help here, the
+service is already stopped or restarted by hand.
+
+- init: a "check_config" command generates and checks the configuration
+  as reload and restart do, nothing is stopped.
+- update_subscriptions.uc: /etc/config/homeproxy is copied to the run
+  directory before the update. Before the service is started (or
+  restarted) the new configuration is checked; on an error the copy is
+  put back, the log says the previous nodes are restored, and the
+  service starts with them. When the check passes, start does not run
+  "sing-box check" a second time (patch 008).
+
+An update through the proxy that does not need a restart is applied
+later, as before (a reload then keeps the running instance, patch 008).
+
+Checked with the real update_subscriptions.uc (stubs for uci, ubus, wget
+and the init script) in custom and global mode, updating directly and
+through the proxy, with the check passing and failing: on a failure the
+configuration file is byte-identical to the one before the update; and
+with the rc.common of OpenWrt 25.12: "check_config" is listed and returns
+the result of the check.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+diff --git a/root/etc/homeproxy/scripts/update_subscriptions.uc b/root/etc/homeproxy/scripts/update_subscriptions.uc
+index d5b1a1e..848f980 100755
+--- a/root/etc/homeproxy/scripts/update_subscriptions.uc
++++ b/root/etc/homeproxy/scripts/update_subscriptions.uc
+@@ -97,6 +97,35 @@ function service_action(action) {
+ 	return system([ '/etc/init.d/homeproxy', action ]);
+ }
+ 
++/* The configuration as it was before the update. Nodes from a subscription
++ * can give a configuration sing-box does not accept, and the service was
++ * already stopped (or is restarted) to apply them: the router was left
++ * without the proxy until someone noticed. Now the new configuration is
++ * checked first, and on an error the previous nodes are put back. */
++const config_file = `/etc/config/${uciconfig}`,
++      config_backup = `${RUN_DIR}/${uciconfig}.subscription.bak`;
++
++function apply_update() {
++	if (service_action('check_config') !== 0) {
++		log('The updated nodes give a configuration that fails the check, the previous nodes are restored.');
++		system([ 'cp', '-p', config_backup, config_file ]);
++		if (via_proxy !== '1') {
++			log('Starting service...');
++			service_action('start');
++		}
++		return false;
++	}
++
++	if (via_proxy !== '1') {
++		log('Starting service...');
++		service_action('start');
++	} else {
++		log('Restarting service...');
++		service_action('restart');
++	}
++	return true;
++}
++
+ function parse_uri(uri) {
+ 	let config, url, params;
+ 
+@@ -499,6 +528,8 @@ function parse_uri(uri) {
+ }
+ 
+ function main() {
++	system([ 'cp', '-p', config_file, config_backup ]);
++
+ 	if (via_proxy !== '1') {
+ 		log('Stopping service...');
+ 		service_action('stop');
+@@ -670,11 +701,8 @@ function main() {
+ 		}
+ 	}
+ 
+-	if (need_restart) {
+-		log('Restarting service...');
+-		service_action('stop');
+-		service_action('start');
+-	}
++	if (need_restart && !apply_update())
++		return false;
+ 
+ 	log(sprintf('%s nodes added, %s removed.', added, removed));
+ 	log('Successfully updated subscriptions.');
+@@ -688,7 +716,5 @@ if (!isEmpty(subscription_urls))
+ 		log(sprintf('%s: %s', e.type, e.message));
+ 		log(e.stacktrace[0].context);
+ 
+-		log('Restarting service...');
+-		service_action('stop');
+-		service_action('start');
++		apply_update();
+ 	}
+diff --git a/root/etc/init.d/homeproxy b/root/etc/init.d/homeproxy
+index fb93673..1e37e69 100755
+--- a/root/etc/init.d/homeproxy
++++ b/root/etc/init.d/homeproxy
+@@ -528,6 +528,13 @@ check_new_config() {
+ 	return "$ret"
+ }
+ 
++# Generates and checks the configuration as reload and restart do, nothing is
++# stopped. update_subscriptions.uc runs it before applying updated nodes.
++extra_command "check_config" "Generate and check the configuration, the running service is kept"
++check_config() {
++	check_new_config
++}
++
+ reload_service() {
+ 	log "Reloading service..."
+ 
+-- 
+2.43.0
+
