@@ -262,6 +262,24 @@ net.ipv4.tcp_congestion_control = bbr
 sed -i '/# TCP BBR/d; /net\.core\.default_qdisc/d; /net\.ipv4\.tcp_congestion_control/d' /etc/sysctl.conf
 ```
 
+**Если в ядре есть MPTCP** (`/proc/sys/net/mptcp/enabled`) и в файле ещё нет
+строки `net.mptcp.enabled`, в конец добавляется:
+```
+# MPTCP
+net.mptcp.enabled = 0
+```
+Самому роутеру Multipath TCP не нужен, а транзитный трафик устройств эта
+настройка не затрагивает. Зато sing-box и Xray (Go 1.24+) по умолчанию слушают
+с MPTCP, и MPTCP-соединение устройства из LAN (так делают, например, iPhone
+для сервисов Apple), попавшее на вход redirect, обрывается: ядро не отдаёт для
+него исходный адрес, в журнале `get redirect destination: operation not
+supported`. Без MPTCP устройство само переходит на обычный TCP. Опция
+«MultiPath TCP» в узлах и серверах homeproxy при этом не работает.
+
+**Чтобы оставить MPTCP включённым:** заменить строку на
+`net.mptcp.enabled = 1` (zz1 при следующей прошивке её не тронет) и выполнить
+`sysctl -w net.mptcp.enabled=1`, затем перезапустить прокси.
+
 ## 13. Пакетный менеджер
 **APK:**
 - `/etc/apk/arch` — дописывается архитектура из `/etc/os-release`, если её нет
