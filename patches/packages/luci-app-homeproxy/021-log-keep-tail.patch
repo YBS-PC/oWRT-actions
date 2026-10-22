@@ -1,0 +1,55 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 22 Oct 2026 11:37:21 +0000
+Subject: [PATCH] fix(log): a log over the limit keeps its last lines
+
+clean_log.sh emptied homeproxy.log, sing-box-c.log and sing-box-s.log
+once they grew over 50 KB. A log grows like that when something goes
+wrong (a burst of errors, or the info level while looking into a
+problem), and within three minutes those lines were gone together with
+the rest: the log page showed an empty log just when it was needed.
+
+Now such a log keeps its last half (25 KB, whole lines). sing-box opens
+its logs with O_APPEND and the init script appends with >>, so the file
+is rewritten in place and writers go on at its end. If the copy fails,
+the log is emptied as before.
+
+Checked with busybox sh: a 58 KB log is cut to 25 KB of whole lines
+ending with the newest one, the inode is kept, a writer holding the file
+open with O_APPEND goes on at the new end with no NUL bytes, a small log
+is left alone and no temporary file remains.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+diff --git a/root/etc/homeproxy/scripts/clean_log.sh b/root/etc/homeproxy/scripts/clean_log.sh
+index c0d8f10..f0cae46 100755
+--- a/root/etc/homeproxy/scripts/clean_log.sh
++++ b/root/etc/homeproxy/scripts/clean_log.sh
+@@ -6,6 +6,10 @@
+ NAME="homeproxy"
+ 
+ log_max_size="50" #KB
++# A log over the limit keeps its last half (whole lines) instead of being
++# emptied: the lines that made it grow are usually the ones that matter.
++# sing-box opens its logs with O_APPEND, so rewriting a file in place is safe.
++log_keep_size="$((log_max_size * 1024 / 2))" #bytes
+ main_log_file="/var/run/$NAME/$NAME.log"
+ singc_log_file="/var/run/$NAME/sing-box-c.log"
+ sings_log_file="/var/run/$NAME/sing-box-s.log"
+@@ -14,6 +18,12 @@ while true; do
+ 	sleep 180
+ 	for i in "$main_log_file" "$singc_log_file" "$sings_log_file"; do
+ 		[ -s "$i" ] || continue
+-		[ "$(( $(ls -l "$i" | awk -F ' ' '{print $5}') / 1024 >= log_max_size))" -eq "0" ] || echo "" > "$i"
++		[ "$(( $(ls -l "$i" | awk -F ' ' '{print $5}') / 1024 >= log_max_size))" -eq "0" ] && continue
++		if tail -c "$log_keep_size" "$i" | sed '1d' > "$i.tmp"; then
++			cat "$i.tmp" > "$i"
++		else
++			echo "" > "$i"
++		fi
++		rm -f "$i.tmp"
+ 	done
+ done
+-- 
+2.43.0
+
