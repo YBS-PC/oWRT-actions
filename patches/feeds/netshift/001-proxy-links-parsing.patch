@@ -1,0 +1,121 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 4 Oct 2026 19:17:57 +0000
+Subject: [PATCH 1/2] netshift: proxy links - socks5 credentials, http
+ transport, jq 1.7 syntax
+
+- socks5: user and password were split AFTER percent-decoding, so an
+  escaped ':' moved into the wrong field ('us%3Aer:p%3Aass' became user
+  'us', password 'er:p:ass'). Split on the raw ':' first, then decode
+  each half.
+- VLESS/Trojan "type=http" (h2): sing-box supports it, but 0.9.10 skips
+  such links as an unknown transport. Reuses the VMess HTTP helper.
+- jq 1.7 (OpenWrt 24.10) syntax, which 0.9.10 claims to support:
+  * sing_box_cm_set_tls_for_outbound: "+" in the reality object value
+    (reality_mlkem, 0.9.10) is a syntax error before jq 1.8 - no
+    TLS/Reality/Hysteria2 outbound could be built on 24.10;
+  * subscription batch: "reduce ... (...) as $resolved" needs
+    parentheses before jq 1.8 - every subscription failed on 24.10
+    (also in 0.9.9).
+  Both only add parentheses; output is identical on jq 1.8.1.
+
+The empty "security" (no TLS, as in Xray) is handled by the author
+since 27ad5f2 and is no longer part of this patch.
+
+Checked: all 228 jq programs of the backend compile on jq 1.7.1 and
+1.8.1 (without the patch the TLS program fails on 1.7.1; an earlier
+refresh of this patch lost the closing parenthesis of reality and broke
+it on every jq); link parsing in busybox ash with both jq versions and
+`sing-box check` 1.12.22 / 1.14.2; the subscription program gives
+byte-identical output on jq 1.7 and 1.8.1 (with and without
+reality_mlkem).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
+---
+diff --git a/netshift/files/usr/lib/sing_box_config_facade.sh b/netshift/files/usr/lib/sing_box_config_facade.sh
+index 6e7cc35e..074ecf8b 100644
+--- a/netshift/files/usr/lib/sing_box_config_facade.sh
++++ b/netshift/files/usr/lib/sing_box_config_facade.sh
+@@ -159,10 +159,14 @@ sing_box_cf_add_proxy_outbound() {
+         port="$url_port"
+         version="${scheme#socks}"
+         if [ "$scheme" = "socks5" ]; then
+-            userinfo="$url_userinfo"
++            # Split on the RAW ':' first, then decode each half: an escaped
++            # '%3A' belongs to the username or the password. Splitting the
++            # already decoded url_userinfo moved it into the wrong field
++            # ('us%3Aer:p%3Aass' became user 'us', password 'er:p:ass').
++            userinfo=$(url_get_userinfo "$url")
+             if [ -n "$userinfo" ]; then
+-                username="${userinfo%%:*}"
+-                password="${userinfo#*:}"
++                username=$(url_decode_component "${userinfo%%:*}")
++                password=$(url_decode_component "${userinfo#*:}")
+             fi
+         fi
+         config="$(sing_box_cm_add_socks_outbound \
+@@ -796,6 +800,17 @@ _add_outbound_transport() {
+             sing_box_cm_set_httpupgrade_transport_for_outbound "$config" "$outbound_tag" "$httpupgrade_path" "$httpupgrade_host"
+         )
+         ;;
++    http | h2)
++        # HTTP/2 transport (VLESS/Trojan "type=http"): sing-box supports it,
++        # the VMess path already uses the same helper.
++        local http_path http_host
++        http_path=$(url_get_query_param "$url" "path")
++        http_host=$(url_get_query_param "$url" "host")
++
++        config=$(
++            sing_box_cm_set_http_transport_for_outbound "$config" "$outbound_tag" "$http_path" "$http_host"
++        )
++        ;;
+     xhttp | splithttp)
+         # `splithttp` is the pre-rename name of the `xhttp` transport (sing-box
+         # renamed it). Accept it as an alias and normalize to xhttp downstream:
+@@ -1156,7 +1171,10 @@ sing_box_cf_prepare_subscription_batch() {
+           ] as $kept
+         # Assign unique tags using a deterministic dedup pass. $state.used is a
+         # set (object) of tags already taken, seeded with the existing config tags.
+-        | reduce range(0; ($kept | length)) as $i (
++        # reduce is parenthesized before "as": jq 1.7 (OpenWrt 24.10) rejects
++        # "reduce ... (...) as $x" with a syntax error, which broke every
++        # subscription there.
++        | (reduce range(0; ($kept | length)) as $i (
+             {used: ($existing | map({(.): true}) | add // {}), out: []};
+             . as $state
+             | $kept[$i] as $entry
+@@ -1204,7 +1222,7 @@ sing_box_cf_prepare_subscription_batch() {
+                       else . end
+                 )
+               }]
+-          ) as $resolved
++          )) as $resolved
+         | {
+             outbounds: [$resolved.out[].outbound],
+             tags: [$resolved.out[].tag],
+diff --git a/netshift/files/usr/lib/sing_box_config_manager.sh b/netshift/files/usr/lib/sing_box_config_manager.sh
+index c640255c..d96a45ab 100644
+--- a/netshift/files/usr/lib/sing_box_config_manager.sh
++++ b/netshift/files/usr/lib/sing_box_config_manager.sh
+@@ -1525,14 +1525,16 @@ sing_box_cm_set_tls_for_outbound() {
+                             }
+                         } else {} end)
+                         + (if $reality_public_key != "" then {
+-                            reality: {
++                            # Parenthesized: jq 1.7 (OpenWrt 24.10) does not
++                            # accept a bare "+" in an object value.
++                            reality: ({
+                                 enabled: true,
+                                 public_key: $reality_public_key,
+                                 short_id: $reality_short_id
+                             }
+                             + (if $reality_mlkem == "true" then {support_x25519mlkem768: true}
+                                elif $reality_mlkem == "false" then {support_x25519mlkem768: false}
+-                               else {} end)
++                               else {} end))
+                         } else {} end)
+                     )
+                 }
+-- 
+2.43.0

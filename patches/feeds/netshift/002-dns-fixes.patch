@@ -1,0 +1,107 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 4 Oct 2026 19:18:46 +0000
+Subject: [PATCH 2/2] netshift: DNS - SRV/PTR/TXT past FakeIP, diagnostics for
+ servers with a port
+
+- FakeIP answers only A/AAAA. The FakeIP DNS rule now carries
+  query_type A/AAAA, so other query types for the same domains (SRV,
+  PTR, TXT, MX ...) go on to the DNS sections, the pool and the final
+  server. Before, sing-box answered nothing and clients waited for a
+  timeout (checked with sing-box 1.12.22 and 1.14.2).
+- check_dns_available: a server "host:port[/path]" or "[v6]:port" is
+  passed to dig as @host -p port. "@host:port" never resolves, so the
+  diagnostics reported such a DNS/bootstrap server as unavailable
+  (itdoginfo/podkop#444). A bare IPv6 address keeps working.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
+---
+diff --git a/netshift/files/usr/bin/netshift b/netshift/files/usr/bin/netshift
+index ab5f74b2..e0619998 100755
+--- a/netshift/files/usr/bin/netshift
++++ b/netshift/files/usr/bin/netshift
+@@ -5367,6 +5367,10 @@ sing_box_configure_dns() {
+     config_foreach configure_ipv6_real_dns_rule "section"
+     config=$(sing_box_cm_add_dns_route_rule "$config" "$SB_FAKEIP_DNS_SERVER_TAG" "$SB_FAKEIP_DNS_RULE_TAG")
+     config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_FAKEIP_DNS_RULE_TAG" "rewrite_ttl" "$rewrite_ttl")
++    # FakeIP can only answer A/AAAA. Other query types for the same domains
++    # (SRV, PTR, TXT, MX ...) fall through to the rules below (DNS sections,
++    # pool, final server) instead of being left without an answer.
++    config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_FAKEIP_DNS_RULE_TAG" "query_type" '["A","AAAA"]')
+     service_domains=$(comma_string_to_json_array "$FAKEIP_TEST_DOMAIN,$CHECK_PROXY_IP_DOMAIN")
+     config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_FAKEIP_DNS_RULE_TAG" "domain" "$service_domains")
+ 
+@@ -8414,6 +8418,20 @@ get_status() {
+     echo "{\"enabled\":$enabled,\"status\":\"$status\"}"
+ }
+ 
++# Split a DNS server setting "host[:port][/path]" ("[v6]:port" for IPv6) for
++# dig, which takes the port as a separate -p argument: "@host:port" never
++# resolves, so the diagnostics always reported such a server as unavailable.
++# A bare IPv6 address without brackets is taken as a host without a port.
++# Outputs "host port" (port may be empty).
++dns_server_host_port() {
++    local server="${1%%/*}"
++    case "$server" in
++    \[*) echo "$(url_get_host "$server") $(url_get_port "$server")" ;;
++    *:*:*) echo "$server" ;;
++    *) echo "$(url_get_host "$server") $(url_get_port "$server")" ;;
++    esac
++}
++
+ check_dns_available() {
+     local dns_type dns_server bootstrap_dns_server
+     config_get dns_type "settings" "dns_type"
+@@ -8441,28 +8459,33 @@ check_dns_available() {
+         display_dns_server="dns.nextdns.io/$masked_path"
+     fi
+ 
++    local dns_host dns_port
++    # shellcheck disable=SC2046
++    set -- $(dns_server_host_port "$dns_server")
++    dns_host="$1"
++    dns_port="$2"
++
+     if [ "$dns_type" = "doh" ]; then
+         # Check if dns_server already contains a path
+         local doh_path="/dns-query"
+         if echo "$dns_server" | grep -q "/"; then
+             # Path is already present, extract it
+             doh_path="/$(echo "$dns_server" | cut -d'/' -f2-)"
+-            dns_server="$(echo "$dns_server" | cut -d'/' -f1)"
+         fi
+ 
+-        if dig @"$dns_server" "$domain" +https="$doh_path" +timeout=2 +tries=1 > /dev/null 2>&1; then
++        if dig @"$dns_host" -p "${dns_port:-443}" "$domain" +https="$doh_path" +timeout=2 +tries=1 > /dev/null 2>&1; then
+             dns_status=1
+         fi
+     elif [ "$dns_type" = "dot" ]; then
+-        if dig @"$dns_server" "$domain" +tls +timeout=2 +tries=1 > /dev/null 2>&1; then
++        if dig @"$dns_host" -p "${dns_port:-853}" "$domain" +tls +timeout=2 +tries=1 > /dev/null 2>&1; then
+             dns_status=1
+         fi
+     elif [ "$dns_type" = "udp" ]; then
+-        if dig @"$dns_server" "$domain" +timeout=2 +tries=1 > /dev/null 2>&1; then
++        if dig @"$dns_host" -p "${dns_port:-53}" "$domain" +timeout=2 +tries=1 > /dev/null 2>&1; then
+             dns_status=1
+         fi
+     elif [ "$dns_type" = "tcp" ]; then
+-        if dig @"$dns_server" "$domain" +tcp +timeout=2 +tries=1 > /dev/null 2>&1; then
++        if dig @"$dns_host" -p "${dns_port:-53}" "$domain" +tcp +timeout=2 +tries=1 > /dev/null 2>&1; then
+             dns_status=1
+         fi
+     else
+@@ -8481,7 +8504,9 @@ check_dns_available() {
+ 
+     # Check bootstrap DNS server
+     if [ -n "$bootstrap_dns_server" ]; then
+-        if dig @"$bootstrap_dns_server" "$domain" +timeout=2 +tries=1 > /dev/null 2>&1; then
++        # shellcheck disable=SC2046
++        set -- $(dns_server_host_port "$bootstrap_dns_server")
++        if dig @"$1" -p "${2:-53}" "$domain" +timeout=2 +tries=1 > /dev/null 2>&1; then
+             bootstrap_dns_status=1
+         fi
+     fi
+-- 
+2.43.0
