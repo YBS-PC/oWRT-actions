@@ -305,7 +305,7 @@ jobs:
             # feeds=true — фиды из репозитория пакетов (обновлений после
             # прошивки почти нет); поставьте false для сборки на коммитах тега.
             #   R6S homeproxy: AGH latest, sing-box-extended, ytb, zz1, патчи
-            #     (XHTTP и ключ X25519MLKEM768 для REALITY — патчи 021–022)
+            #     (XHTTP и ключ X25519MLKEM768 для REALITY)
             #   RB5009 clear и RB5009 switch: без AGH/sing-box/ytb, zz1, без патчей
             # $(entry ...) — подстановка: в ней NOTES не сохраняется, для
             # combo это и не нужно (значения ниже уже согласованы с вариантами).
