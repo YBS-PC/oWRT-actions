@@ -18,10 +18,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
 diff --git a/netshift/files/usr/bin/netshift b/netshift/files/usr/bin/netshift
-index ab5f74b2..e0619998 100755
+index 6adc0857..66de74ab 100755
 --- a/netshift/files/usr/bin/netshift
 +++ b/netshift/files/usr/bin/netshift
-@@ -5367,6 +5367,10 @@ sing_box_configure_dns() {
+@@ -5385,6 +5385,10 @@ sing_box_configure_dns() {
      config_foreach configure_ipv6_real_dns_rule "section"
      config=$(sing_box_cm_add_dns_route_rule "$config" "$SB_FAKEIP_DNS_SERVER_TAG" "$SB_FAKEIP_DNS_RULE_TAG")
      config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_FAKEIP_DNS_RULE_TAG" "rewrite_ttl" "$rewrite_ttl")
@@ -32,9 +32,9 @@ index ab5f74b2..e0619998 100755
      service_domains=$(comma_string_to_json_array "$FAKEIP_TEST_DOMAIN,$CHECK_PROXY_IP_DOMAIN")
      config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_FAKEIP_DNS_RULE_TAG" "domain" "$service_domains")
  
-@@ -8414,6 +8418,20 @@ get_status() {
-     echo "{\"enabled\":$enabled,\"status\":\"$status\"}"
- }
+@@ -8355,6 +8359,20 @@ get_system_info() {
+ 
+ 
  
 +# Split a DNS server setting "host[:port][/path]" ("[v6]:port" for IPv6) for
 +# dig, which takes the port as a separate -p argument: "@host:port" never
@@ -53,7 +53,7 @@ index ab5f74b2..e0619998 100755
  check_dns_available() {
      local dns_type dns_server bootstrap_dns_server
      config_get dns_type "settings" "dns_type"
-@@ -8441,28 +8459,33 @@ check_dns_available() {
+@@ -8382,28 +8400,33 @@ check_dns_available() {
          display_dns_server="dns.nextdns.io/$masked_path"
      fi
  
@@ -92,7 +92,7 @@ index ab5f74b2..e0619998 100755
              dns_status=1
          fi
      else
-@@ -8481,7 +8504,9 @@ check_dns_available() {
+@@ -8422,7 +8445,9 @@ check_dns_available() {
  
      # Check bootstrap DNS server
      if [ -n "$bootstrap_dns_server" ]; then
