@@ -71,8 +71,8 @@
 | `feeds/forkop/` | [ushan0v/forkop](https://github.com/ushan0v/forkop) | [`dd48329`](https://github.com/ushan0v/forkop/commit/dd483297be0ac4e52bb8f482e2640238b75af532) | 18.07.2026 |
 | `feeds/forkopmod/` | [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) | [`2575a32`](https://github.com/Gavr1024/forkop-mod/commit/2575a321f088124d18f2710c9d9b1058e007bb37) | 20.10.2026 |
 | `feeds/luciappxray/` | [yichya/luci-app-xray](https://github.com/yichya/luci-app-xray) | [`4d5a6fd`](https://github.com/yichya/luci-app-xray/commit/4d5a6fd7fc4d2fbbcd7f70f1319da06b91ec1d56) | 22.09.2026 |
-| `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`f24f4f4`](https://github.com/yandexru45/netshift/commit/f24f4f4af88c2c976aac9801b84eec5719f499cc) | 22.10.2026 |
-| `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`300ea00`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/300ea00edaec392e935a83f019aa2a5053683652) | 20.10.2026 |
+| `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`723261a`](https://github.com/yandexru45/netshift/commit/723261ad0bdcbbfd469a75650cbcf470edea19ef) | 22.10.2026 |
+| `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`0f923be`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/0f923be3f00f9fb8db9591c9ecab41e7de5ec75e) | 23.10.2026 |
 | `feeds/podkop/` | [itdoginfo/podkop](https://github.com/itdoginfo/podkop) | [`da8bd40`](https://github.com/itdoginfo/podkop/commit/da8bd40983aaab4d29614d38c8d6214d0a217e3e) | 11.10.2026 |
 | `feeds/trafira/` | [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) | [`ce5e4f3`](https://github.com/petrouspetr-pixel/trafira/commit/ce5e4f33253c74664f6d4a7727918a30bb011217) | 21.10.2026 |
 | `packages/luci-app-homeproxy/` | [immortalwrt/homeproxy](https://github.com/immortalwrt/homeproxy) | [`fadaa67`](https://github.com/immortalwrt/homeproxy/commit/fadaa676104f59ff6ace480a780a258d846d0aec) | 02.10.2026 |
@@ -241,7 +241,7 @@
 
 Вариант `netshift`, фид [yandexru45/netshift](https://github.com/yandexru45/netshift).
 
-Патчи сняты с коммита [`f24f4f4`](https://github.com/yandexru45/netshift/commit/f24f4f4af88c2c976aac9801b84eec5719f499cc) от 22.10.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`723261a`](https://github.com/yandexru45/netshift/commit/723261ad0bdcbbfd469a75650cbcf470edea19ef) от 22.10.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Разбор ссылок.** Правильно читаются логин и пароль socks5 со
   спецсимволами и ссылки VLESS/Trojan с транспортом http (ссылки без
@@ -257,7 +257,7 @@
 
 Вариант `passwall`, фид [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2).
 
-Патчи сняты с коммита [`300ea00`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/300ea00edaec392e935a83f019aa2a5053683652) от 20.10.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`0f923be`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/0f923be3f00f9fb8db9591c9ecab41e7de5ec75e) от 23.10.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Соединения после перезапуска.** Пока passwall2 перезапускается,
   правил нет, и новые соединения из сети уходят напрямую. После запуска
