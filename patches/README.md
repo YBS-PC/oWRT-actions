@@ -71,10 +71,10 @@
 | `feeds/forkop/` | [ushan0v/forkop](https://github.com/ushan0v/forkop) | [`dd48329`](https://github.com/ushan0v/forkop/commit/dd483297be0ac4e52bb8f482e2640238b75af532) | 18.07.2026 |
 | `feeds/forkopmod/` | [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) | [`2575a32`](https://github.com/Gavr1024/forkop-mod/commit/2575a321f088124d18f2710c9d9b1058e007bb37) | 20.10.2026 |
 | `feeds/luciappxray/` | [yichya/luci-app-xray](https://github.com/yichya/luci-app-xray) | [`4d5a6fd`](https://github.com/yichya/luci-app-xray/commit/4d5a6fd7fc4d2fbbcd7f70f1319da06b91ec1d56) | 22.09.2026 |
-| `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`885127e`](https://github.com/yandexru45/netshift/commit/885127e166e5c53becef5f4c2d12d1fbb06d081c) | 18.10.2026 |
+| `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`f24f4f4`](https://github.com/yandexru45/netshift/commit/f24f4f4af88c2c976aac9801b84eec5719f499cc) | 22.10.2026 |
 | `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`300ea00`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/300ea00edaec392e935a83f019aa2a5053683652) | 20.10.2026 |
 | `feeds/podkop/` | [itdoginfo/podkop](https://github.com/itdoginfo/podkop) | [`da8bd40`](https://github.com/itdoginfo/podkop/commit/da8bd40983aaab4d29614d38c8d6214d0a217e3e) | 11.10.2026 |
-| `feeds/trafira/` | [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) | [`41d1d50`](https://github.com/petrouspetr-pixel/trafira/commit/41d1d50e8e98ddd749fd5a527a40efc713f0f094) | 20.10.2026 |
+| `feeds/trafira/` | [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) | [`ce5e4f3`](https://github.com/petrouspetr-pixel/trafira/commit/ce5e4f33253c74664f6d4a7727918a30bb011217) | 21.10.2026 |
 | `packages/luci-app-homeproxy/` | [immortalwrt/homeproxy](https://github.com/immortalwrt/homeproxy) | [`fadaa67`](https://github.com/immortalwrt/homeproxy/commit/fadaa676104f59ff6ace480a780a258d846d0aec) | 02.10.2026 |
 | `packages/luci-app-re-homeproxy/` | [1andrevich/homeproxy-hiddify](https://github.com/1andrevich/homeproxy-hiddify) | [`a9e3596`](https://github.com/1andrevich/homeproxy-hiddify/commit/a9e359679e08b5642ae66b13dbcf647b382a9edc) | 04.07.2026 |
 
@@ -84,7 +84,10 @@
   (`git diff` по очереди), иначе его «хеш до» не совпадёт.
 - Патчи с `Build-If:` ставятся **последними** в серии (несколько — с
   одинаковым условием): в сборке, где они пропущены, у патчей после них
-  «хеш до» не совпал бы, и сверка остановила бы сборку.
+  «хеш до» не совпал бы, и сверка остановила бы сборку. Поэтому их номер
+  начинается с буквы: `x01`, `x02`… Патчи применяются в порядке имён, а
+  буква идёт после всех цифр, так что новый обычный патч (`022`, `023`…)
+  встаёт перед ними, и переименовывать их не нужно.
 - Заголовок патча (`Subject`, описание, `Requires: <имя>`,
   `Build-If: …`) переносится. `Requires:` — патч применяется, только если
   применён указанный.
@@ -97,7 +100,7 @@
 
 ## Патчи по пакетам
 
-Всего 69 патчей для 9 пакетов. Номер — порядок применения. Ссылки
+Всего 70 патчей для 9 пакетов. Номер — порядок применения. Ссылки
 вида `#98` / `PR #103` — обсуждение и предложенное исправление в
 репозитории автора.
 
@@ -238,7 +241,7 @@
 
 Вариант `netshift`, фид [yandexru45/netshift](https://github.com/yandexru45/netshift).
 
-Патчи сняты с коммита [`885127e`](https://github.com/yandexru45/netshift/commit/885127e166e5c53becef5f4c2d12d1fbb06d081c) от 18.10.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`f24f4f4`](https://github.com/yandexru45/netshift/commit/f24f4f4af88c2c976aac9801b84eec5719f499cc) от 22.10.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Разбор ссылок.** Правильно читаются логин и пароль socks5 со
   спецсимволами и ссылки VLESS/Trojan с транспортом http (ссылки без
@@ -317,9 +320,9 @@
 
 ### trafira — `feeds/trafira/` (5)
 
-Вариант `trafira`, фид [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) (3.1.11).
+Вариант `trafira`, фид [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) (3.1.14).
 
-Патчи сняты с коммита [`41d1d50`](https://github.com/petrouspetr-pixel/trafira/commit/41d1d50e8e98ddd749fd5a527a40efc713f0f094) от 20.10.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`ce5e4f3`](https://github.com/petrouspetr-pixel/trafira/commit/ce5e4f33253c74664f6d4a7727918a30bb011217) от 21.10.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001 удалён.** Вызовы ucode до объявления в установщике sing-box
   автор исправил сам в 3.1.11 (с тестами).
@@ -343,7 +346,7 @@
   падала: «Expected a stripped, headerless ucode proof». Теперь версия в
   старшем байте допускается, остальная сверка прежняя. *Всегда.*
 
-### homeproxy — `packages/luci-app-homeproxy/` (20)
+### homeproxy — `packages/luci-app-homeproxy/` (21)
 
 Вариант `homeproxy`, пакет [immortalwrt/homeproxy](https://github.com/immortalwrt/homeproxy):
 на OpenWrt и на ImmortalWrt берётся master (на ImmortalWrt — вместо
@@ -545,7 +548,13 @@
   Обновление через прокси, после которого перезапуск не нужен, как и
   раньше применится при следующем сохранении настроек (тогда работает
   патч 008). *Всегда.*
-- **021. Транспорт XHTTP.** Узлы VLESS, Trojan и VMess с транспортом
+- **021. Журнал не стирается целиком.** Раз в 3 минуты журналы homeproxy
+  и sing-box больше 50 КБ стирались полностью. Журнал так вырастает, когда
+  что-то идёт не так (поток ошибок или уровень «информация» на время
+  разбора), и через пару минут на странице журнала было пусто. Теперь у
+  такого журнала остаётся последняя половина, около 25 КБ целыми строками,
+  а sing-box продолжает дописывать в конец того же файла. *Всегда.*
+- **x01. Транспорт XHTTP.** Узлы VLESS, Trojan и VMess с транспортом
   XHTTP (как в Xray). *Только в сборке* варианта `homeproxy` с полем
   `sb=extended` и включёнными патчами: XHTTP есть в sing-box-extended, в
   официальном sing-box его нет. Как пользоваться:
@@ -579,13 +588,13 @@
   идёт, но и напрямую не уходит, а остальные узлы работают как обычно.
   Режимы XHTTP из Re:HomeProxy (`bidi`, `packet-down`, `stream-down`)
   заменяются на `auto`.
-- **022. REALITY с ключом X25519MLKEM768.** REALITY-серверы на Xray-core
+- **x02. REALITY с ключом X25519MLKEM768.** REALITY-серверы на Xray-core
   26.9.8 и новее не принимают подключение без «постквантового» ключа
   X25519MLKEM768: в журнале homeproxy `reality verification failed`, узел
   не работает (с любым транспортом). Обычный sing-box этот ключ не
   отправляет никогда, sing-box-extended — только если включить. *Только в
   сборке* варианта `homeproxy` с `sb=extended` и включёнными патчами, как
-  021. *Опция* у REALITY-узла: «Ключ X25519MLKEM768». Ставится сама при
+  x01. *Опция* у REALITY-узла: «Ключ X25519MLKEM768». Ставится сама при
   импорте ссылки или подписки, где есть `support-x25519mlkem768=true`;
   для старых узлов её можно включить вручную в настройках узла. По
   умолчанию выключена: более старые серверы такой ключ могут не принять.
