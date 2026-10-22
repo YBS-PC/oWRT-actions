@@ -962,9 +962,15 @@ jobs:
         #   из архива Ubuntu, а медленный PPA держал «apt-get update»;
         # - таймауты и повторы скачивания, без конвейерных запросов
         #   (Pipeline-Depth=0: на части зеркал из-за них соединение зависает);
-        # - отдельные ограничения: update — 5 минут, install — 20 минут;
+        # - отдельные ограничения: update — 5 минут, install — 10 минут
+        #   (~115 МБ; при медленном зеркале следующая попытка идёт через
+        #   другое и докачивает: скачанное остаётся в кэше apt);
         # - вывод apt виден в логе (-q без -qq): видно, на чём он стоит;
         # - каждая следующая попытка идёт через другое зеркало Ubuntu;
+        # - без «рекомендуемых» пакетов (--no-install-recommends): с ними
+        #   texinfo, asciidoc и другие тянули texlive, шрифты и dblatex —
+        #   ~630 МБ вместо ~115 МБ (22.10.2026 зеркало отдавало 100 КБ/с,
+        #   и шаг шёл час). Сами пакеты списка и их зависимости ставятся;
         # - триггер man-db (индекс man на каждый пакет) отключён.
         echo 'man-db man-db/auto-update boolean false' | sudo debconf-set-selections
         sudo rm -f /var/lib/man-db/auto-update
@@ -980,17 +986,28 @@ jobs:
         done
 
         # Где лежат адреса архива Ubuntu: 24.04 — ubuntu.sources (deb822),
-        # 22.04 — sources.list. Зеркало раннера (azure.archive.ubuntu.com)
-        # меняется на запасные только при неудачной попытке.
+        # 22.04 — sources.list. Вместо адреса там может стоять
+        # «mirror+file:/etc/apt/apt-mirrors.txt» (список зеркал в файле, так
+        # у раннеров GitHub): раньше такой источник не узнавался («зеркало
+        # Ubuntu — не найдено»), и все три попытки 22.10.2026 шли через одно
+        # и то же медленное зеркало. Зеркало раннера меняется на запасные
+        # только при неудачной попытке; заменяется и адрес, и mirror+file.
         APT_SRC=""
+        APT_URI_RE='mirror\+file:[^ ]+|https?://[^ ]*/ubuntu/?'
         for f in /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list; do
-            [ -f "$f" ] && grep -q '^[^#]*https\?://[^ ]*/ubuntu' "$f" && APT_SRC="$APT_SRC $f"
+            [ -f "$f" ] && grep -qE "^[^#]*($APT_URI_RE)" "$f" && APT_SRC="$APT_SRC $f"
         done
-        CUR_MIRROR=$(grep -ho 'https\?://[^ ]*/ubuntu/\?' $APT_SRC 2>/dev/null | grep -v security | head -n1 | sed 's|/$||')
+        CUR_MIRROR=$(grep -hoE "$APT_URI_RE" $APT_SRC 2>/dev/null | grep -v security | head -n1)
+        case "$CUR_MIRROR" in
+            mirror+file:*)
+                _mf=${CUR_MIRROR#mirror+file:}
+                [ -f "$_mf" ] && echo ">>> apt: список зеркал $_mf: $(awk '{print $1}' "$_mf" | tr '\n' ' ')" ;;
+        esac
         echo ">>> apt: зеркало Ubuntu — ${CUR_MIRROR:-не найдено}"
+        [ -n "$CUR_MIRROR" ] || grep -hE '^(URIs:|deb )' /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list 2>/dev/null | sed 's/^/>>> apt: источник: /'
         set_mirror() {
             [ -n "$CUR_MIRROR" ] && [ -n "$APT_SRC" ] || return 0
-            sudo sed -i "s|$CUR_MIRROR|$1|g" $APT_SRC
+            sudo sed -i -E "s#$APT_URI_RE#$1#g" $APT_SRC
             echo ">>> apt: зеркало $CUR_MIRROR -> $1"
             CUR_MIRROR="$1"
         }
@@ -1004,7 +1021,7 @@ jobs:
             esac
             if ! sudo -E timeout 5m apt-get -q $APT_OPTS update; then
                 STAGE="update"
-            elif ! sudo -E timeout 20m apt-get -q -y $APT_OPTS install $PKGS; then
+            elif ! sudo -E timeout 10m apt-get -q -y --no-install-recommends $APT_OPTS install $PKGS; then
                 STAGE="install"
             else
                 STAGE=""
