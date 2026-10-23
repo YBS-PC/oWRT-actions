@@ -444,6 +444,89 @@ else
                 echo "✓ Обновление успешно завершено!"
             fi
         fi
+
+        # Патчи исходников youtubeUnblock: patches/src/youtubeUnblock/*.patch
+        # (если патчи в форме выключены, папки нет и ничего не делается).
+        # Исходники скачивает сама сборка OpenWrt по PKG_REV, а патчи из
+        # patches/ рядом с Makefile накладывает при подготовке пакета. Патч,
+        # который там не лёг, остановил бы всю сборку, поэтому каждый сначала
+        # проверяется на файлах того коммита, что пойдёт в сборку:
+        #   - исправление уже есть у автора   -> пропуск;
+        #   - файлы патча у автора изменились  -> пропуск с предупреждением:
+        #     youtubeUnblock соберётся как у автора (FEED_PATCH_STRICT=1 —
+        #     остановить сборку; PATCH_DRIFT_CHECK=0 — без сверки);
+        #   - ложится без сдвига контекста     -> кладётся в patches/ пакета;
+        #   - иначе                            -> пропуск с предупреждением.
+        # Build/Prepare пакета вызывает $(Build/Prepare/Default), который уже
+        # накладывает patches/, и затем ещё раз $(Build/Patch) — второй раз
+        # патч не ляжет («Patch failed!»). Лишний вызов убирается, когда
+        # кладётся хотя бы один патч.
+        YTB_SRC_PATCHES="$GITHUB_WORKSPACE/patches/src/youtubeUnblock"
+        if [ -d "$YTB_SRC_PATCHES" ]; then
+            YTB_SRC_REV=$(sed -n 's/^PKG_REV:=[[:space:]]*//p' "$PKG_FILE_YTB" | head -n 1)
+            [[ "$YTB_SRC_REV" =~ ^[0-9a-f]{7,40}$ ]] ||
+                YTB_SRC_REV=$(sed -n 's/^PKG_SOURCE_VERSION:=[[:space:]]*//p' "$PKG_FILE_YTB" | head -n 1)
+            YTB_PKG_PATCHES="$(dirname "$PKG_FILE_YTB")/patches"
+            _ytb_applied=0; _ytb_present=0; _ytb_failed=""
+            for _p in "$YTB_SRC_PATCHES"/*.patch; do
+                [ -f "$_p" ] || continue
+                _n=$(basename "$_p")
+                _why=""
+                _t=$(mktemp -d)
+                sed 's/\r$//' "$_p" > "$_t/p.patch"
+                if ! [[ "$YTB_SRC_REV" =~ ^[0-9a-f]{7,40}$ ]]; then
+                    _why="в $PKG_FILE_YTB нет коммита исходников"
+                else
+                    for _f in $(awk '/^--- a\// { p = $2; sub(/^a\//, "", p); print p }' "$_t/p.patch"); do
+                        mkdir -p "$_t/src/$(dirname "$_f")"
+                        curl -sfL --max-time 30 -o "$_t/src/$_f" \
+                            "https://raw.githubusercontent.com/Waujito/youtubeUnblock/$YTB_SRC_REV/$_f" ||
+                            { _why="не удалось скачать $_f коммита ${YTB_SRC_REV:0:7}"; break; }
+                    done
+                fi
+                if [ -n "$_why" ]; then
+                    :
+                elif patch -p1 -d "$_t/src" -R -F 0 -f -s --dry-run < "$_t/p.patch" >/dev/null 2>&1; then
+                    echo "✓ youtubeUnblock: ${_n%.patch} уже есть в исходниках ${YTB_SRC_REV:0:7}, пропуск"
+                    _ytb_present=$((_ytb_present + 1))
+                elif [ "${PATCH_DRIFT_CHECK:-1}" = "1" ] && _d=$(patch_drift "$_t/p.patch" "$_t/src") && [ -n "$_d" ]; then
+                    _why="у автора изменились файлы: $(printf '%s\n' "$_d" | tr '\n' ',' | sed 's/,$//; s/,/, /g')"
+                elif patch -p1 -d "$_t/src" -F 0 -f -s --dry-run < "$_t/p.patch" >/dev/null 2>&1; then
+                    mkdir -p "$YTB_PKG_PATCHES"
+                    cp "$_t/p.patch" "$YTB_PKG_PATCHES/$_n"
+                    echo "✓ youtubeUnblock: ${_n%.patch} будет наложен на исходники ${YTB_SRC_REV:0:7}"
+                    _ytb_applied=$((_ytb_applied + 1))
+                else
+                    _why="не ложится на исходники ${YTB_SRC_REV:0:7}"
+                fi
+                rm -rf "$_t"
+                if [ -n "$_why" ]; then
+                    echo "::warning title=youtubeUnblock::${_n%.patch} пропущен — $_why"
+                    _ytb_failed="$_ytb_failed ${_n%.patch}"
+                fi
+            done
+            if [ "$_ytb_applied" -gt 0 ]; then
+                awk '
+                    /^define Build\/Prepare[[:space:]]*$/ { inb = 1; n = 0; def = 0 }
+                    inb {
+                        buf[++n] = $0
+                        if ($0 ~ /\$\(Build\/Prepare\/Default\)/) def = 1
+                        if ($0 ~ /^endef/) {
+                            for (i = 1; i <= n; i++)
+                                if (!(def && buf[i] ~ /^[[:space:]]*\$\(Build\/Patch\)[[:space:]]*$/)) print buf[i]
+                            inb = 0
+                        }
+                        next
+                    }
+                    { print }
+                ' "$PKG_FILE_YTB" > "$PKG_FILE_YTB.new" && mv "$PKG_FILE_YTB.new" "$PKG_FILE_YTB"
+            fi
+            echo ">>> youtubeUnblock (исходники): применено $_ytb_applied, уже было $_ytb_present, пропущено $(printf '%s\n' $_ytb_failed | grep -c .)"
+            if [ -n "$_ytb_failed" ] && [ "${FEED_PATCH_STRICT:-0}" = "1" ]; then
+                echo "::error::FEED_PATCH_STRICT=1: сборка остановлена из-за непримененных патчей youtubeUnblock:$_ytb_failed"
+                exit 1
+            fi
+        fi
     fi
 fi
 
