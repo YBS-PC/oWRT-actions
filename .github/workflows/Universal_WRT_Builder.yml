@@ -224,6 +224,7 @@ jobs:
           # В combo значения заданы здесь и не зависят от полей формы.
           # Специализированные патчи:
           #   patches/feeds/*    -> WRT-part2.sh
+          #   patches/src/youtubeUnblock -> WRT-part2.sh (исходники пакета)
           #   patches/packages/* -> WRT-part3.sh
           # Обычные патчи к дереву OpenWrt применяются этим workflow.
           #
