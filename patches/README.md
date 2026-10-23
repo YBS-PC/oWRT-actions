@@ -18,6 +18,7 @@
 |---|---|---|
 | `patches/feeds/<фид>/*.patch` | к фиду `feeds/<фид>/` (имя подпапки = имя фида в `feeds.conf`) | `sh/WRT-part2.sh`, между `feeds update` и `feeds install` |
 | `patches/packages/<пакет>/*.patch` | к пакету, который `sh/WRT-part3.sh` клонирует в `package/<пакет>` (или к его копии в фиде) | `sh/WRT-part3.sh`, сразу после клонирования |
+| `patches/src/youtubeUnblock/*.patch` | к исходникам youtubeUnblock: `sh/WRT-part2.sh` проверяет патч на файлах коммита, который пойдёт в сборку, и кладёт его в `patches/` пакета, а накладывает сборка OpenWrt | `sh/WRT-part2.sh`, после обновления версии youtubeUnblock |
 | `patches/*.patch` (сейчас нет) | к дереву OpenWrt / ImmortalWrt | шаг **Apply custom patches**, до `feeds update` |
 
 - Патчи серии применяются по порядку номеров. Пропуски в нумерации
@@ -77,6 +78,7 @@
 | `feeds/trafira/` | [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) | [`ce5e4f3`](https://github.com/petrouspetr-pixel/trafira/commit/ce5e4f33253c74664f6d4a7727918a30bb011217) | 21.10.2026 |
 | `packages/luci-app-homeproxy/` | [immortalwrt/homeproxy](https://github.com/immortalwrt/homeproxy) | [`fadaa67`](https://github.com/immortalwrt/homeproxy/commit/fadaa676104f59ff6ace480a780a258d846d0aec) | 02.10.2026 |
 | `packages/luci-app-re-homeproxy/` | [1andrevich/homeproxy-hiddify](https://github.com/1andrevich/homeproxy-hiddify) | [`a9e3596`](https://github.com/1andrevich/homeproxy-hiddify/commit/a9e359679e08b5642ae66b13dbcf647b382a9edc) | 04.07.2026 |
+| `src/youtubeUnblock/` | [Waujito/youtubeUnblock](https://github.com/Waujito/youtubeUnblock) | [`4a223b0`](https://github.com/Waujito/youtubeUnblock/commit/4a223b03508e564dace57c1a7f3fc6bc2636b8cd) | 08.04.2026 |
 
 ### Как перевыпускать
 
@@ -100,7 +102,7 @@
 
 ## Патчи по пакетам
 
-Всего 70 патчей для 9 пакетов. Номер — порядок применения. Ссылки
+Всего 71 патч для 10 пакетов. Номер — порядок применения. Ссылки
 вида `#98` / `PR #103` — обсуждение и предложенное исправление в
 репозитории автора.
 
@@ -625,3 +627,32 @@
   автора. *Всегда.*
 - **004. Соединения после перезапуска.** То же, что homeproxy 007.
   *Всегда*, но нужна утилита `conntrack` (в наших сборках есть).
+
+### youtubeUnblock — `src/youtubeUnblock/` (1)
+
+Варианты с youtubeUnblock (поле `ytb`), исходники
+[Waujito/youtubeUnblock](https://github.com/Waujito/youtubeUnblock).
+
+Патч снят с коммита [`4a223b0`](https://github.com/Waujito/youtubeUnblock/commit/4a223b03508e564dace57c1a7f3fc6bc2636b8cd) от 08.04.2026 (файл `BASE`; исходники те же, что в коммите `ec242d0` из ветки `openwrt`).
+
+Исходники youtubeUnblock скачивает сама сборка OpenWrt, поэтому патч не
+применяется сразу. `WRT-part2.sh` проверяет его на файлах того коммита,
+который пойдёт в сборку, и кладёт в `patches/` пакета. Не подошёл (у
+автора изменились файлы или не удалось их скачать) — предупреждение, и
+youtubeUnblock собирается как у автора; сборку это не останавливает
+(с `FEED_PATCH_STRICT=1` — останавливает). Makefile пакета накладывает
+`patches/` дважды (`$(Build/Prepare/Default)` и ещё раз `$(Build/Patch)`),
+второй раз патч не лёг бы, поэтому лишний вызов убирается.
+
+- **001. Оригинал датаграммы при UDP-фейках не теряется.** В режиме
+  `udp_mode fake` youtubeUnblock отправляет фейки, затем заново отправляет
+  оригинал и удаляет его из очереди. Результат этой отправки не
+  проверялся, и оригинал пропадал: датаграмма больше 1400 байт (в журнале
+  `tcp_frag: tcp_payload_split: Invalid argument`), UDP GSO-пакет
+  программы самого роутера (все датаграммы в нём). Датаграмма самого
+  роутера (например, прокси, который выходит напрямую) уходила с
+  недосчитанной контрольной суммой UDP, и получатель её отбрасывал.
+  Теперь сумма считается заново, длинная датаграмма отправляется целиком,
+  GSO-пакет пропускается как есть (разделить его может только ядро), а
+  если отправка всё же не удалась — оригинал идёт из очереди. TCP не
+  меняется. *Всегда.*
