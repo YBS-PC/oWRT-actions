@@ -1,0 +1,149 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 23 Oct 2026 17:37:27 +0000
+Subject: [PATCH] fix(udp): the original of a faked datagram is not lost
+
+In UDP fake mode (--udp-mode=fake) the fakes are sent through the raw
+socket, then the original is sent again the same way and dropped from
+the queue, so that it leaves after the fakes. The result of that send
+was not checked, and the original was lost when it failed:
+
+- a datagram over AVAILABLE_MTU (1400 bytes with headers) went to
+  tcp_frag, which takes only TCP: "tcp_frag: tcp_payload_split:
+  Invalid argument" in the log, and the datagram was gone. QUIC sends
+  such datagrams once it has probed the path MTU;
+- a UDP GSO packet of a router socket (several datagrams in one) was
+  over that size as well, and all of its datagrams were lost;
+- a datagram of the router itself (a proxy going direct) is queued
+  with an unfinished UDP checksum (CHECKSUM_PARTIAL, as the queue is
+  bound with NFQA_CFG_F_GSO) and was sent out like that, so the
+  receiver discarded it.
+
+Now the checksum is computed on a copy of the original before it is
+sent; a datagram over AVAILABLE_MTU is sent whole (only TCP is split,
+and the fakes are at most 1300 bytes of payload); a UDP GSO packet is
+let through as it is, as only the kernel can split it; and if the send
+fails all the same (EMSGSIZE for a datagram over the link MTU) the
+original goes on from the queue. TCP is not changed.
+
+Checked with veth namespaces, NFQUEUE in POSTROUTING and a sniffer on
+the far end, datagrams of 1200, 1350, 1372, 1380, 1450 and 1600 bytes
+from a local socket (--udp-fake-seq-len=2, --udp-filter-quic=all):
+before, none of the 6 originals reached the receiving socket (3 were
+lost with a tcp_frag error each, 3 went out with a bad checksum); now it
+gets all 6, every one after its fakes with a valid checksum (the
+1600-byte one, fragmented, comes from the queue before its fakes), and
+the log has no errors. A GSO packet of three 1200-byte datagrams:
+before, none arrived; now all three. TLS over TCP with --fake-sni and
+--frag=tcp: 200 KB arrive intact, as before.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ src/dpi.c            | 34 +++++++++++++++++++++++++++++++---
+ src/youtubeUnblock.c | 24 +++++++++++++++++++++---
+ 2 files changed, 52 insertions(+), 6 deletions(-)
+
+diff --git a/src/dpi.c b/src/dpi.c
+index 314dc91..7160e92 100644
+--- a/src/dpi.c
++++ b/src/dpi.c
+@@ -485,9 +485,37 @@ erret:
+ 			goto accept;
+ 		}
+ 
+-		
+-		// requeue
+-		ret = instance_config.send_raw_packet(pkt->raw_payload, pkt->raw_payload_len);
++		/*
++		 * The original is sent again through the raw socket after the
++		 * fakes and dropped from the queue: so it leaves after them even
++		 * when the fakes come back into the queue. Two flaws of this are
++		 * fixed here. A datagram of the router itself is queued with an
++		 * unfinished UDP checksum (CHECKSUM_PARTIAL, NFQA_CFG_F_GSO) and
++		 * went out like that, so the receiver discarded it; and a
++		 * datagram over AVAILABLE_MTU could not be sent ("tcp_frag:
++		 * tcp_payload_split: Invalid argument") but was dropped all the
++		 * same. Now the checksum is computed on a copy, a long datagram
++		 * is sent whole, and if the send fails anyway (EMSGSIZE) the
++		 * original goes on from the queue as it is.
++		 */
++		uint8_t *orig = malloc(pkt->raw_payload_len);
++		if (orig == NULL)
++			goto accept;
++		memcpy(orig, pkt->raw_payload, pkt->raw_payload_len);
++
++		void *oiph;
++		size_t oiph_len;
++		struct udphdr *oudph;
++		if (udp_payload_split(orig, pkt->raw_payload_len, &oiph, &oiph_len,
++				      &oudph, NULL, NULL) == 0)
++			set_udp_checksum(oudph, oiph, oiph_len);
++
++		ret = instance_config.send_raw_packet(orig, pkt->raw_payload_len);
++		free(orig);
++		if (ret < 0) {
++			lgtrace_addp("resend of the original failed (%d), it goes on from the queue", ret);
++			goto accept;
++		}
+ 		goto drop;
+ 	}
+ 
+diff --git a/src/youtubeUnblock.c b/src/youtubeUnblock.c
+index 793dc66..7ab48d2 100644
+--- a/src/youtubeUnblock.c
++++ b/src/youtubeUnblock.c
+@@ -202,7 +202,8 @@ static int close_raw6_socket(void) {
+ 
+ static int send_raw_ipv4(const uint8_t *pkt, size_t pktlen) {
+ 	int ret;
+-	if (pktlen > AVAILABLE_MTU) return -ENOMEM;
++	/* TCP over AVAILABLE_MTU is split before it gets here. */
++	if (pktlen > MAX_PACKET_SIZE) return -ENOMEM;
+ 
+ 	struct iphdr *iph;
+ 
+@@ -239,7 +240,8 @@ static int send_raw_ipv4(const uint8_t *pkt, size_t pktlen) {
+ 
+ static int send_raw_ipv6(const uint8_t *pkt, size_t pktlen) {
+ 	int ret;
+-	if (pktlen > AVAILABLE_MTU) return -ENOMEM;
++	/* TCP over AVAILABLE_MTU is split before it gets here. */
++	if (pktlen > MAX_PACKET_SIZE) return -ENOMEM;
+ 
+ 	struct ip6_hdr *iph;
+ 
+@@ -277,7 +279,10 @@ static int send_raw_ipv6(const uint8_t *pkt, size_t pktlen) {
+ static int send_raw_socket(const uint8_t *pkt, size_t pktlen) {
+ 	int ret;
+ 
+-	if (pktlen > AVAILABLE_MTU) {
++	/* Only TCP can be split here; a larger packet of another protocol (a
++	 * UDP fake with a big --udp-fake-len) is sent whole. */
++	if (pktlen > AVAILABLE_MTU &&
++	    tcp_payload_split((uint8_t *)pkt, pktlen, NULL, NULL, NULL, NULL, NULL, NULL) == 0) {
+ 		lgtrace("Split packet!");
+ 
+ 		size_t buff1_size = pktlen;
+@@ -695,6 +700,19 @@ static int queue_cb(const struct nlmsghdr *nlh, void *data) {
+ 		}
+ 	}
+ 
++	/*
++	 * A UDP GSO packet of a local socket holds several datagrams; sent
++	 * again through the raw socket it would leave as one. Only the
++	 * kernel can split it, so it is let through as it is.
++	 */
++	if (attr[NFQA_SKB_INFO] != NULL &&
++	    (ntohl(mnl_attr_get_u32(attr[NFQA_SKB_INFO])) & NFQA_SKB_GSO) &&
++	    udp_payload_split((uint8_t *)packet.payload, packet.payload_len,
++			      NULL, NULL, NULL, NULL, NULL) == 0) {
++		lgtrace("UDP GSO packet, accept");
++		return fallback_accept_packet(id, *qdata);
++	}
++
+ 	if (attr[NFQA_CT] != NULL) {
+ 		ret = yct_payload_parse(
+ 			mnl_attr_get_payload(attr[NFQA_CT]),
+-- 
+2.43.0
+
