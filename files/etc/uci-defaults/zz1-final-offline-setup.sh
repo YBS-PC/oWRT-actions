@@ -686,7 +686,38 @@ patch_check /usr/share/firewall4/templates/ruleset.uc 'ct original packets ge 30
 if [ -x "/usr/bin/youtubeUnblock" ]; then
     run_cmd "Остановка youtubeUnblock" /etc/init.d/youtubeUnblock stop
     run_cmd "Отключение youtubeUnblock" /etc/init.d/youtubeUnblock disable
-    cat << "EOF" > /usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft
+    # Метка и номер очереди — из настроек youtubeUnblock (packet_mark и
+    # queue_num в /etc/config/youtubeUnblock): своей меткой youtubeUnblock
+    # помечает отправленные им пакеты, и правила ниже должны совпадать с
+    # ней. Пакет ставит правило на 0x8000, и с другой меткой (524288 —
+    # обход для GL-iNet из issue #185) оно не срабатывало. Файл пишется
+    # здесь: если метку или очередь потом поменять в LuCI, этот скрипт надо
+    # запустить снова.
+    # Метка в uci десятичная (youtubeUnblock читает её как %ld); ведущие
+    # нули снимаются, иначе printf принял бы число за восьмеричное. Метка
+    # пакета — 32 бита.
+    YTB_MARK_RAW=$(uci -q get youtubeUnblock.youtubeUnblock.packet_mark)
+    YTB_MARK=$(echo "${YTB_MARK_RAW:-32768}" | sed 's/^0*//; s/^$/0/')
+    case "$YTB_MARK" in
+    *[!0-9]*|???????????*) YTB_MARK=0 ;;
+    esac
+    [ "$YTB_MARK" -le 4294967295 ] || YTB_MARK=0
+    YTB_MARK=$(printf '0x%x' "$YTB_MARK")
+    if [ "$YTB_MARK" = 0x0 ]; then
+        log_err "youtubeUnblock: packet_mark '$YTB_MARK_RAW' — не число от 1 до 4294967295, в правилах 0x8000"
+        YTB_MARK=0x8000
+    fi
+    YTB_QUEUE=$(uci -q get youtubeUnblock.youtubeUnblock.queue_num)
+    YTB_QUEUE=${YTB_QUEUE:-537}
+    case "$YTB_QUEUE" in
+    *[!0-9]*) YTB_QUEUE=-1 ;;
+    esac
+    if [ "$YTB_QUEUE" -lt 0 ] || [ "$YTB_QUEUE" -gt 65535 ]; then
+        log_err "youtubeUnblock: queue_num — не число от 0 до 65535, в правилах 537"
+        YTB_QUEUE=537
+    fi
+    log_info "youtubeUnblock: метка $YTB_MARK, очередь $YTB_QUEUE"
+    cat << EOF > /usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft
 #!/usr/sbin/nft -f
 # This file will be applied automatically for nftables <table> <chain> position <number> <condition> <action>
 
@@ -695,6 +726,11 @@ add rule inet fw4 prerouting ip daddr @dpi_ips udp dport 443 reject with icmp po
 
 # DPI through youtubeUnblock
 add chain inet fw4 youtubeUnblock { type filter hook postrouting priority mangle - 1; policy accept; }
+
+# Packets of youtubeUnblock itself (its mark $YTB_MARK: fakes and resent
+# originals) go out at once instead of waiting in the queue behind the packet
+# being handled, so the fakes leave before the original
+add rule inet fw4 youtubeUnblock meta mark and $YTB_MARK == $YTB_MARK counter return
 
 # Exclusion of the guest network by tag (traffic will bypass the queue)
 add rule inet fw4 youtubeUnblock meta mark 0x00000042 counter return
@@ -707,17 +743,18 @@ add rule inet fw4 youtubeUnblock ip saddr @bypass_local counter return
 # addresses are in bypass_ips and not in dpi_ips. youtubeUnblock picks
 # connections by SNI itself (--sni-domains; for QUIC with
 # --udp-filter-quic=parse), the rest pass through unchanged.
-add rule inet fw4 youtubeUnblock tcp dport 443 ct original packets < 20 counter queue num 537 bypass
-add rule inet fw4 youtubeUnblock udp dport 443 ct original packets < 9 counter queue num 537 bypass
+add rule inet fw4 youtubeUnblock tcp dport 443 ct original packets < 20 counter queue num $YTB_QUEUE bypass
+add rule inet fw4 youtubeUnblock udp dport 443 ct original packets < 9 counter queue num $YTB_QUEUE bypass
 
 # Destination IP in the bypass_ips list: exit the chain
 add rule inet fw4 youtubeUnblock ip daddr @bypass_ips counter return
 
 # Other UDP ports only to DPI IPs
-add rule inet fw4 youtubeUnblock ip daddr @dpi_ips meta l4proto udp ct original packets < 9 counter queue num 537 bypass
+add rule inet fw4 youtubeUnblock ip daddr @dpi_ips meta l4proto udp ct original packets < 9 counter queue num $YTB_QUEUE bypass
 
-# Skipping traffic with the label 0x8000
-insert rule inet fw4 output mark and 0x8000 == 0x8000 counter accept
+# Packets of youtubeUnblock (mark $YTB_MARK) are accepted at the start of
+# output: a fake is out of state for conntrack and must not be dropped
+insert rule inet fw4 output mark and $YTB_MARK == $YTB_MARK counter accept
 EOF
     _RC=$?; [ $_RC -eq 0 ] && log_ok "Файл youtubeUnblock.nft записан" || log_err "Ошибка записи правил (exit: $_RC)"
     chmod 0644 /usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft
