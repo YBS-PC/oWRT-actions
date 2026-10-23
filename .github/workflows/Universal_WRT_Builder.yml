@@ -962,8 +962,10 @@ jobs:
         #   из архива Ubuntu, а медленный PPA держал «apt-get update»;
         # - таймауты и повторы скачивания, без конвейерных запросов
         #   (Pipeline-Depth=0: на части зеркал из-за них соединение зависает);
-        # - отдельные ограничения: update — 5 минут, install — 10 минут
-        #   (~115 МБ; при медленном зеркале следующая попытка идёт через
+        # - перед установкой замеряется скорость зеркала раннера, медленное
+        #   сразу меняется на самое быстрое из запасных (см. ниже);
+        # - отдельные ограничения: update — 5 минут, install — 5 минут
+        #   (~85 МБ; при медленном зеркале следующая попытка идёт через
         #   другое и докачивает: скачанное остаётся в кэше apt);
         # - вывод apt виден в логе (-q без -qq): видно, на чём он стоит;
         # - каждая следующая попытка идёт через другое зеркало Ubuntu;
@@ -1012,6 +1014,35 @@ jobs:
             CUR_MIRROR="$1"
         }
 
+        # Скорость зеркала до установки: 6 с качаем индекс Contents
+        # (~50 МБ) и смотрим скорость. 22.10.2026 зеркало раннера отдавало
+        # 30–100 КБ/с, и первая попытка уходила в таймаут (10–20 минут), а
+        # archive.ubuntu.com в то же время — 2–3 МБ/с. Если зеркало
+        # раннера медленнее 1 МБ/с, замеряются запасные и берётся самое
+        # быстрое (только если оно быстрее).
+        APT_CODENAME=$(. /etc/os-release; echo "$VERSION_CODENAME")
+        mirror_kbps() {
+            curl -s -o /dev/null --max-time 6 -w '%{http_code} %{speed_download}' \
+                "${1%/}/dists/$APT_CODENAME/Contents-amd64.gz" 2>/dev/null |
+                awk '{ printf "%d", ($1 == "200") ? $2 / 1024 : 0 }' || true
+        }
+        case "$CUR_MIRROR" in
+            mirror+file:*) _first=$(awk 'NR == 1 { print $1 }' "${CUR_MIRROR#mirror+file:}" 2>/dev/null) ;;
+            *)             _first="$CUR_MIRROR" ;;
+        esac
+        if [ -n "$_first" ] && [ -n "$APT_CODENAME" ]; then
+            _best=""; _best_kbps=$(mirror_kbps "$_first"); _best_kbps=${_best_kbps:-0}
+            echo ">>> apt: скорость $_first — $_best_kbps КБ/с"
+            if [ "$_best_kbps" -lt 1024 ]; then
+                for _m in http://archive.ubuntu.com/ubuntu https://mirrors.edge.kernel.org/ubuntu; do
+                    _k=$(mirror_kbps "$_m"); _k=${_k:-0}
+                    echo ">>> apt: скорость $_m — $_k КБ/с"
+                    if [ "$_k" -gt "$_best_kbps" ]; then _best="$_m"; _best_kbps="$_k"; fi
+                done
+                [ -z "$_best" ] || set_mirror "$_best"
+            fi
+        fi
+
         APT_OPTS="-o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::http::Pipeline-Depth=0 -o DPkg::Lock::Timeout=120 -o Dpkg::Use-Pty=0"
         PKGS=$(tr '\n' ' ' < "$DEPENDS_FILE")
         for try in 1 2 3; do
@@ -1021,7 +1052,7 @@ jobs:
             esac
             if ! sudo -E timeout 5m apt-get -q $APT_OPTS update; then
                 STAGE="update"
-            elif ! sudo -E timeout 10m apt-get -q -y --no-install-recommends $APT_OPTS install $PKGS; then
+            elif ! sudo -E timeout 5m apt-get -q -y --no-install-recommends $APT_OPTS install $PKGS; then
                 STAGE="install"
             else
                 STAGE=""
