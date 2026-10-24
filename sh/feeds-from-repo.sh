@@ -23,8 +23,9 @@
 #     пакетов, бывает новее репозитория — тогда фид не откатывается назад.
 # Не прошёл проверку — фид остаётся на коммите тега.
 #
-# Окружение: REPO_URL, REPO_BRANCH, PKG_ARCH. Сбой скачивания — не ошибка:
-# сборка идёт на коммитах тега с предупреждением.
+# Окружение: REPO_URL, REPO_BRANCH, PKG_ARCH, OPENWRT_MIRRORS (зеркала, к
+# которым идём, если основной сервер не отдал файл). Сбой скачивания со всех
+# — не ошибка: сборка идёт на коммитах тега с предупреждением.
 #=================================================
 
 FEEDS_FILE="feeds.conf.default"
@@ -58,7 +59,8 @@ if [ -n "$FEEDS_REPO_SERVERS" ]; then
 elif [[ "$REPO_URL" == *immortalwrt* ]]; then
     SERVERS="https://downloads.immortalwrt.org https://immortalwrt.kyarucloud.moe"
 else
-    SERVERS="https://downloads.openwrt.org"
+    # Основной сервер, затем зеркала (OPENWRT_MIRRORS из env workflow)
+    SERVERS="https://downloads.openwrt.org ${OPENWRT_MIRRORS:-}"
 fi
 
 REMOTE_CONF=$(mktemp)
@@ -69,7 +71,8 @@ SRC_URL=""
 for _srv in $SERVERS; do
     _url="$_srv/releases/packages-${BRANCH_VER}/${PKG_ARCH}/feeds.conf"
     echo ">>> Загрузка $_url"
-    if curl -fsSL --retry 3 --max-time 30 -o "$REMOTE_CONF" "$_url" && [ -s "$REMOTE_CONF" ]; then
+    if curl -fsSL --retry 3 --retry-all-errors --connect-timeout 10 --max-time 30 -o "$REMOTE_CONF" "$_url" &&
+        [ -s "$REMOTE_CONF" ] && grep -qE '^src-git(-full)?[[:space:]]+packages[[:space:]]' "$REMOTE_CONF"; then
         SRC_URL="$_url"
         break
     fi
