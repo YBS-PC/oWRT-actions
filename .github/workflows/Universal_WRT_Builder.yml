@@ -1867,7 +1867,7 @@ jobs:
             else
                 WHY="ни сервер, ни зеркала не ответили, сохранённого хеша для ядра ${KVER:-?} нет${C_KVER:+ (есть только для $C_KVER)}"
             fi
-            echo "::warning title=Локальный хеш ядра::$WHY. Прошивка собирается с локальным хешем ядра: официальные kmod-пакеты на неё не встанут, строка kmods в distfeeds.list будет вести на несуществующую папку. Чтобы получить официальный — пересоберите, когда сервер ответит."
+            echo "::warning title=Локальный хеш ядра::$WHY. Прошивка собирается с локальным хешем ядра: официальные kmod-пакеты на неё не встанут (zz1 не добавит строку kmods в distfeeds.list). Чтобы получить официальный — пересоберите, когда сервер ответит."
             LATEST_HASH="LOCAL (Calculated during build)"
             SOURCE=local
             # sed не выполняем: в Makefile остаётся $(MKHASH) md5
@@ -1885,6 +1885,11 @@ jobs:
             echo "cache_key=kernel-hash-v1-${TARGET_RELEASE}-${KERNEL_PATH}-${KVER:-x}-${LATEST_HASH}" >> "$GITHUB_OUTPUT"
         fi
         echo "source=$SOURCE" >> "$GITHUB_OUTPUT"
+        # Откуда хеш — в прошивку (/etc/build_kernel_hash): с локальным хешем
+        # zz1 не добавляет строку kmods в distfeeds.list (такой папки на
+        # сервере нет, apk update падал бы на ней).
+        mkdir -p files/etc
+        echo "$SOURCE ${LATEST_HASH%% *}" > files/etc/build_kernel_hash
 
         echo "=========================================="
         echo "       [KERNEL HASH SUMMARY]              "
