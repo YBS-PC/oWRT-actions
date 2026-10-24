@@ -197,10 +197,22 @@ if [ -f "$DISTFEEDS_FILE" ]; then
 
     if command -v apk >/dev/null 2>&1; then
         KERNEL_PKG=$(apk list -I kernel 2>/dev/null | head -n1 | awk '{print $1}')
+        # Откуда при сборке взят хеш ядра (шаг Kernel Hash): server, cache,
+        # snapshot или local. С локальным хешем официальной папки kmods нет —
+        # строку не добавляем, иначе apk update падал бы на ней.
+        KHASH_SRC=$(awk 'NR == 1 {print $1}' /etc/build_kernel_hash 2>/dev/null)
+        if [ "$KHASH_SRC" = local ]; then
+            sed -i '\|/kmods/|d' "$DISTFEEDS_FILE"
+            log_info "Прошивка собрана с локальным хешем ядра: репозиторий kmods не добавлен (официальные kmod-пакеты на неё не встанут)"
+            KERNEL_PKG=""
+        fi
         if [ -n "$KERNEL_PKG" ]; then
+            # kernel-<версия>~<хеш>-r<release> -> <версия>-<release>-<хеш>
+            # (имя папки kmods, как в include/feeds.mk OpenWrt)
+            K_REL=${KERNEL_PKG##*-r}
             K_VER_TEMP=${KERNEL_PKG#kernel-}
             K_VER_TEMP=${K_VER_TEMP%-r*}
-            K_MODS_DIR=$(echo "$K_VER_TEMP" | sed 's/~/-1-/')
+            K_MODS_DIR="${K_VER_TEMP%%~*}-${K_REL}-${K_VER_TEMP#*~}"
             BASE_REPO_URL=$(grep "/targets/.*/packages/packages.adb" "$DISTFEEDS_FILE" | head -n1)
             if [ -n "$BASE_REPO_URL" ]; then
                 TARGET_BASE=$(echo "$BASE_REPO_URL" | sed 's|/packages/packages\.adb||')
