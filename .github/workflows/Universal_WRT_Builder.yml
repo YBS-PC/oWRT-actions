@@ -150,6 +150,16 @@ env:
 
   TZ: Europe/Moscow
 
+  # Зеркала downloads.openwrt.org (полные, с releases/): к ним идут шаг
+  # Kernel Hash и sh/feeds-from-repo.sh, когда основной сервер не отвечает.
+  # Через пробел, без «/» в конце; путь от корня — как на основном сервере.
+  OPENWRT_MIRRORS: >-
+    https://ftp.halifax.rwth-aachen.de/openwrt
+    https://mirror.accum.se/mirror/openwrt.org
+    https://ftp.snt.utwente.nl/pub/software/openwrt
+    https://ftp.nluug.nl/os/Linux/distr/openwrt
+    https://mirror.berlin.freifunk.net/downloads.openwrt.org
+
   # Сверка исходников с патчами (sh/patch-drift.sh): если у автора фида или
   # пакета изменился файл, к которому применяется наш патч, эта сборка
   # останавливается до компиляции и в Telegram приходит список патчей,
@@ -1711,7 +1721,19 @@ jobs:
         fi
         echo ">>> OK: homeproxy совместим с sing-box ${SB_VER}"
 
+    # Хеш ядра, найденный на сервере в прошлых сборках того же релиза и
+    # платформы (сохраняется шагом «Kernel Hash: сохранить» ниже). Нужен,
+    # только если сервер и все зеркала недоступны.
+    - name: "Kernel Hash: сохранённый"
+      id: khash_cache
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ runner.temp }}/kernel-hash
+        key: kernel-hash-v1-${{ env.TARGET_RELEASE }}-${{ env.KERNEL_PATH }}-none
+        restore-keys: kernel-hash-v1-${{ env.TARGET_RELEASE }}-${{ env.KERNEL_PATH }}-
+
     - name: Kernel Hash
+      id: khash
       run: |
         cd openwrt
         # Хеш ядра (vermagic) официальной сборки того же релиза: с ним в
@@ -1720,23 +1742,25 @@ jobs:
         # (<версия ядра>-<release>-<хеш>) и подставляется вместо локального
         # $(MKHASH) md5 в include/kernel-defaults.mk.
         #
-        # Сервер отвечает не всегда: 23.10.2026 в 18:09 все запросы упали за
-        # доли секунды, хотя до и после хеш 25.12.6 находился, и прошивка
-        # собралась с локальным хешем — официальные kmods на неё не ставятся.
-        # Поэтому:
-        #   - каждый адрес — до 4 попыток с паузой;
-        #   - папки нет (404: релиз ещё не выложен) — SNAPSHOT ветки;
-        #   - сервер так и не ответил — сборка останавливается здесь, до
-        #     компиляции (перезапустить позже);
-        #   - берётся только папка с той же версией ядра, что в исходниках
-        #     (у SNAPSHOT ветки она может быть уже другой); такой нет —
-        #     локальный хеш с предупреждением.
+        # Сервер отвечает не всегда (23.10.2026: в 18:09 запросы падали за
+        # доли секунды, в 21:32 — 502 Bad Gateway на все попытки, хотя
+        # feeds.conf с того же сервера скачивался). Поэтому по порядку:
+        #   1. основной сервер — до 4 попыток с паузой;
+        #   2. зеркала (OPENWRT_MIRRORS в env) — по 2 попытки;
+        #   папки релиза нет нигде (404: ещё не выложен) — то же для
+        #   SNAPSHOT ветки;
+        #   3. никто не ответил — хеш этого релиза и платформы, найденный в
+        #      прошлой сборке (кэш Actions);
+        #   4. нет и его — локальный хеш с предупреждением: прошивка
+        #      собирается, но официальные kmod-пакеты на неё не встанут.
+        # Берётся только папка с той же версией ядра, что в исходниках (у
+        # SNAPSHOT ветки или у отставшего зеркала она может быть другой).
         if [[ "$REPO_URL" == *"immortalwrt"* ]]; then
-            # DOMAIN="downloads.immortalwrt.org"
-            DOMAIN="immortalwrt.kyarucloud.moe"
+            SERVERS="https://immortalwrt.kyarucloud.moe https://downloads.immortalwrt.org"
         else
-            DOMAIN="downloads.openwrt.org"
+            SERVERS="https://downloads.openwrt.org $OPENWRT_MIRRORS"
         fi
+        PRIMARY="${SERVERS%% *}"
 
         # Версия ядра в исходниках: KERNEL_PATCHVER платформы и
         # LINUX_VERSION-<patchver> из target/linux/generic/kernel-<patchver>
@@ -1747,69 +1771,105 @@ jobs:
         if [ -n "$PATCHVER" ]; then
             for kf in "target/linux/generic/kernel-$PATCHVER" "include/kernel-$PATCHVER"; do
                 [ -f "$kf" ] || continue
-                KMINOR=$(sed -n "s/^LINUX_VERSION-$PATCHVER[[:space:]]*=[[:space:]]*//p" "$kf" | head -n 1)
+                KMINOR=$(sed -n "s/^LINUX_VERSION-${PATCHVER}[[:space:]]*=[[:space:]]*//p" "$kf" | head -n 1)
                 [ -n "$KMINOR" ] && KVER="$PATCHVER$KMINOR" && break
             done
         fi
         echo ">>> Ядро в исходниках: ${KVER:-не определено (будет взята последняя версия из списка)}"
 
-        # fetch_kmods <URL> — печатает записи <версия>-<release>-<хеш> из
-        # списка папки. Код возврата: 0 — список получен, 4 — папки нет
-        # (404), 1 — сервер не ответил за все попытки.
+        # fetch_kmods <URL> <попыток> <пауза> — печатает записи
+        # <версия>-<release>-<хеш> из списка папки. Код возврата: 0 — список
+        # получен, 4 — папки нет (404), 1 — не ответил за все попытки.
         KTMP=$(mktemp)
         fetch_kmods() {
             local try code
-            for try in 1 2 3 4; do
-                code=$(curl -sS -L --max-time 30 -o "$KTMP" -w '%{http_code}' "$1" 2>"$KTMP.err" || true)
+            for try in $(seq 1 "$2"); do
+                code=$(curl -sS -L --connect-timeout 10 --max-time 30 -o "$KTMP" -w '%{http_code}' "$1" 2>"$KTMP.err" || true)
                 case "$code" in
                     200) grep -oE '[0-9]+\.[0-9]+\.[0-9]+-[0-9]+-[0-9a-f]{32}' "$KTMP" | sort -u; return 0 ;;
                     404) return 4 ;;
                 esac
-                echo ">>> $1: попытка $try из 4 — HTTP ${code:-нет ответа} $(head -c 200 "$KTMP.err" | tr '\n' ' ')" >&2
-                [ "$try" -lt 4 ] && sleep $((try * 15))
+                echo ">>> $1: попытка $try из $2 — HTTP ${code:-нет ответа} $(head -c 200 "$KTMP.err" | tr '\n' ' ')" >&2
+                [ "$try" -lt "$2" ] && sleep $(($3 * try))
             done
             return 1
         }
 
-        FULL_URL="https://$DOMAIN/$TARGET_RELEASE/targets/$KERNEL_PATH/kmods/"
-        echo ">>> [Primary] Checking Kernel at: $FULL_URL"
-        RC=0
-        KERNEL_LIST=$(fetch_kmods "$FULL_URL") || RC=$?
+        # pick <список> — хеш записи с версией ядра из исходников (версия не
+        # определена — последней по версии)
+        pick() {
+            if [ -n "$KVER" ]; then
+                printf '%s\n' "$1" | grep -E "^${KVER//./\\.}-" | head -n 1 | cut -d'-' -f3
+            else
+                printf '%s\n' "$1" | sed '/^$/d' | sort -t- -k1,1V | tail -n 1 | cut -d'-' -f3
+            fi
+        }
 
-        # Папки релиза нет — SNAPSHOT ветки (кроме master/main)
-        if [ "$RC" = 4 ] && [[ "$REPO_BRANCH" != "main" && "$REPO_BRANCH" != "master" ]] &&
-           [[ "$TARGET_RELEASE" != *-SNAPSHOT ]]; then
-            echo ">>> Папки релиза нет на сервере (404)."
-            FULL_URL="https://$DOMAIN/releases/${REPO_BRANCH#openwrt-}-SNAPSHOT/targets/$KERNEL_PATH/kmods/"
-            echo ">>> [Fallback] Trying Snapshot URL: $FULL_URL"
-            RC=0
-            KERNEL_LIST=$(fetch_kmods "$FULL_URL") || RC=$?
+        # try_release <путь от корня сервера> — обходит сервер и зеркала.
+        # Ставит FOUND_URL/LATEST_HASH (хеш найден), ALL_404=1 (основной
+        # сервер ответил 404 и ни у кого нет списка: релиз не выложен; 404
+        # отставшего зеркала при молчащем основном — не довод), LISTS — что
+        # видели.
+        try_release() {
+            local srv url rc list h
+            LATEST_HASH=""; FOUND_URL=""; ALL_404=0
+            for srv in $SERVERS; do
+                url="$srv/$1/targets/$KERNEL_PATH/kmods/"
+                echo ">>> Checking Kernel at: $url"
+                rc=0
+                if [ "$srv" = "$PRIMARY" ]; then
+                    list=$(fetch_kmods "$url" 4 10) || rc=$?
+                else
+                    list=$(fetch_kmods "$url" 2 5) || rc=$?
+                fi
+                [ "$srv" = "$PRIMARY" ] && [ "$rc" = 4 ] && ALL_404=1
+                case "$rc" in
+                    0) h=$(pick "$list")
+                       if [ -n "$h" ]; then LATEST_HASH="$h"; FOUND_URL="$url"; return 0; fi
+                       LISTS="$LISTS $(printf '%s\n' "$list" | cut -d'-' -f1 | sort -uV | tr '\n' ' ')"
+                       echo ">>> $url: ядра ${KVER:-?} нет" ;;
+                    4) echo ">>> $url: папки нет (404)" ;;
+                esac
+            done
+            [ -n "$LISTS" ] && ALL_404=0
+            return 1
+        }
+
+        SOURCE=""; LISTS=""; SNAP_TRIED=""
+        if try_release "$TARGET_RELEASE"; then
+            SOURCE=server
+        elif [ "$ALL_404" = 1 ] && [[ "$REPO_BRANCH" != "main" && "$REPO_BRANCH" != "master" ]] &&
+             [[ "$TARGET_RELEASE" != *-SNAPSHOT ]]; then
+            echo ">>> Папки релиза $TARGET_RELEASE нет на серверах — SNAPSHOT ветки"
+            # Хеш SNAPSHOT в кэш релиза не пишется (SOURCE=snapshot)
+            SNAP_TRIED=1
+            try_release "releases/${REPO_BRANCH#openwrt-}-SNAPSHOT" && SOURCE=snapshot
         fi
         rm -f "$KTMP" "$KTMP.err"
 
-        if [ "$RC" = 1 ]; then
-            echo "::error title=Хеш ядра не получен::$DOMAIN не ответил за 4 попытки ($FULL_URL). Без официального хеша ядра в прошивку не встанут официальные kmod-пакеты — сборка остановлена до компиляции, перезапустите её позже."
-            exit 1
-        fi
-
-        # Выбор записи: с версией ядра из исходников, иначе (версия не
-        # определена) — последняя по версии
-        if [ -n "$KVER" ]; then
-            LATEST_HASH=$(printf '%s\n' "$KERNEL_LIST" | grep -E "^${KVER//./\\.}-" | head -n 1 | cut -d'-' -f3)
-        else
-            LATEST_HASH=$(printf '%s\n' "$KERNEL_LIST" | sed '/^$/d' | sort -t- -k1,1V | tail -n 1 | cut -d'-' -f3)
-        fi
-
-        if [ -z "$LATEST_HASH" ]; then
-            if [ "$RC" = 4 ]; then
-                WHY="папки $FULL_URL нет"
-            elif [ -z "$(printf '%s' "$KERNEL_LIST" | tr -d '[:space:]')" ]; then
-                WHY="в $FULL_URL нет папок ядра"
+        CACHE_DIR="$RUNNER_TEMP/kernel-hash"
+        C_KVER=""
+        if [ -z "$SOURCE" ] && [ -f "$CACHE_DIR/hash" ]; then
+            read -r C_KVER C_HASH C_URL < "$CACHE_DIR/hash" || true
+            if [[ "$C_HASH" =~ ^[0-9a-f]{32}$ ]] && { [ -z "$KVER" ] || [ "$C_KVER" = "$KVER" ]; }; then
+                LATEST_HASH="$C_HASH"; FOUND_URL="$C_URL"; SOURCE=cache
+                echo "::warning title=Хеш ядра из прошлой сборки::Серверы не дали хеш ядра $KVER, взят найденный в прошлой сборке на $C_URL"
             else
-                WHY="в $FULL_URL нет ядра $KVER (есть: $(printf '%s\n' "$KERNEL_LIST" | cut -d'-' -f1 | sort -uV | tr '\n' ' '))"
+                echo ">>> Сохранённый хеш для другого ядра ($C_KVER), не подходит"
             fi
-            echo "::warning title=Локальный хеш ядра::$WHY. Прошивка собирается с локальным хешем ядра: официальные kmod-пакеты на неё не встанут."
+        fi
+
+        if [ -z "$SOURCE" ]; then
+            if [ -n "$LISTS" ]; then
+                WHY="на серверах нет ядра $KVER (есть:$LISTS)"
+            elif [ "$ALL_404" = 1 ]; then
+                WHY="папки kmods для $TARGET_RELEASE на сервере нет${SNAP_TRIED:+, для SNAPSHOT ветки тоже}"
+            else
+                WHY="ни сервер, ни зеркала не ответили, сохранённого хеша для ядра ${KVER:-?} нет${C_KVER:+ (есть только для $C_KVER)}"
+            fi
+            echo "::warning title=Локальный хеш ядра::$WHY. Прошивка собирается с локальным хешем ядра: официальные kmod-пакеты на неё не встанут, строка kmods в distfeeds.list будет вести на несуществующую папку. Чтобы получить официальный — пересоберите, когда сервер ответит."
             LATEST_HASH="LOCAL (Calculated during build)"
+            SOURCE=local
             # sed не выполняем: в Makefile остаётся $(MKHASH) md5
         else
             echo ">>> Found Official Hash: ${LATEST_HASH}"
@@ -1819,14 +1879,28 @@ jobs:
                 echo "::warning title=Локальный хеш ядра::в include/kernel-defaults.mk нет \$(MKHASH) md5 — официальный хеш не подставлен, официальные kmod-пакеты на прошивку не встанут"
         fi
 
+        if [ "$SOURCE" = server ]; then
+            mkdir -p "$CACHE_DIR"
+            echo "${KVER:-?} $LATEST_HASH $FOUND_URL" > "$CACHE_DIR/hash"
+            echo "cache_key=kernel-hash-v1-${TARGET_RELEASE}-${KERNEL_PATH}-${KVER:-x}-${LATEST_HASH}" >> "$GITHUB_OUTPUT"
+        fi
+        echo "source=$SOURCE" >> "$GITHUB_OUTPUT"
+
         echo "=========================================="
         echo "       [KERNEL HASH SUMMARY]              "
         echo "=========================================="
-        echo "Download Domain : $DOMAIN"
         echo "Kernel          : ${KVER:-?}"
-        echo "Final URL       : $FULL_URL"
+        echo "Source          : $SOURCE${FOUND_URL:+ ($FOUND_URL)}"
         echo "Applied Hash    : $LATEST_HASH"
         echo "=========================================="
+
+    # Хеш с сервера — в кэш для следующих сборок (если такого ещё нет)
+    - name: "Kernel Hash: сохранить"
+      if: steps.khash.outputs.source == 'server' && steps.khash.outputs.cache_key != steps.khash_cache.outputs.cache-matched-key
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ runner.temp }}/kernel-hash
+        key: ${{ steps.khash.outputs.cache_key }}
     
     - name: Download sources
       run: |
