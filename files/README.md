@@ -297,10 +297,15 @@ supported`. Без MPTCP устройство само переходит на �
 **`distfeeds.list` / `distfeeds.conf`:**
 - Бэкап `*.bak` делается один раз (на повторных прогонах оригинал не затирается)
 - Оставляются только строки с `targets` и `packages/<arch>/(base|luci|packages|routing|telephony|video)`
-- APK: старые строки `/kmods/` удаляются, добавляется актуальная для установленного ядра:
+- APK: старые строки `/kmods/` удаляются, добавляется актуальная для установленного ядра
+  (`kernel-<версия>~<хеш>-r<release>` → папка `<версия>-<release>-<хеш>`, как в `include/feeds.mk` OpenWrt):
 ```
-https://.../kmods/6.12.74-1-e30f543625.../packages.adb
+https://downloads.openwrt.org/releases/25.12.6/targets/rockchip/armv8/kmods/6.12.112-1-5eacf764.../packages.adb
 ```
+  Адрес — тот же сервер, что в строке `targets` (его ставит сборка OpenWrt, `CONFIG_VERSION_REPO`), даже если хеш
+  при сборке взят с зеркала: на зеркалах те же папки. Если в `/etc/build_kernel_hash` (пишет шаг Kernel Hash
+  при сборке) стоит `local` — прошивка собрана с локальным хешем ядра, официальной папки kmods для неё нет, и
+  строка не добавляется (иначе `apk update` падал бы на ней).
 
 **`customfeeds.list` / `customfeeds.conf` (firstboot):** перезаписывается пустым шаблоном.
 
