@@ -70,7 +70,7 @@
 | Папка | Репозиторий | Коммит | Дата коммита |
 |---|---|---|---|
 | `feeds/forkop/` | [ushan0v/forkop](https://github.com/ushan0v/forkop) | [`dd48329`](https://github.com/ushan0v/forkop/commit/dd483297be0ac4e52bb8f482e2640238b75af532) | 18.07.2026 |
-| `feeds/forkopmod/` | [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) | [`2575a32`](https://github.com/Gavr1024/forkop-mod/commit/2575a321f088124d18f2710c9d9b1058e007bb37) | 20.10.2026 |
+| `feeds/forkopmod/` | [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) | [`05817dc`](https://github.com/Gavr1024/forkop-mod/commit/05817dcd7079bd12e74c342e400edae960fdb798) | 24.10.2026 |
 | `feeds/luciappxray/` | [yichya/luci-app-xray](https://github.com/yichya/luci-app-xray) | [`4d5a6fd`](https://github.com/yichya/luci-app-xray/commit/4d5a6fd7fc4d2fbbcd7f70f1319da06b91ec1d56) | 22.09.2026 |
 | `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`723261a`](https://github.com/yandexru45/netshift/commit/723261ad0bdcbbfd469a75650cbcf470edea19ef) | 22.10.2026 |
 | `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`0f923be`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/0f923be3f00f9fb8db9591c9ecab41e7de5ec75e) | 23.10.2026 |
@@ -217,9 +217,9 @@
 
 ### forkop-mod — `feeds/forkopmod/` (1)
 
-Вариант `forkop-mod`, фид [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) (1.0.12).
+Вариант `forkop-mod`, фид [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) (1.0.13).
 
-Патчи сняты с коммита [`2575a32`](https://github.com/Gavr1024/forkop-mod/commit/2575a321f088124d18f2710c9d9b1058e007bb37) от 20.10.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`05817dc`](https://github.com/Gavr1024/forkop-mod/commit/05817dcd7079bd12e74c342e400edae960fdb798) от 24.10.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Ошибки «left-hand side is not a function» и удаление через
   apk.** В 13 местах функции перенесены выше места, где их вызывают
