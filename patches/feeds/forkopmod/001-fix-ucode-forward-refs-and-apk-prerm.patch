@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
-Date: Tue, 20 Oct 2026 12:00:00 +0000
-Subject: [PATCH] forkop-mod 1.0.12: вызовы ucode-функций до объявления и
+Date: Sat, 24 Oct 2026 12:00:00 +0000
+Subject: [PATCH] forkop-mod 1.0.13: вызовы ucode-функций до объявления и
  prerm для apk
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -9,7 +9,7 @@ Content-Transfer-Encoding: 8bit
 
 ucode связывает имя функции в момент её объявления. Если функция A
 вызывает функцию B, объявленную ниже в том же файле, A получает null и
-падает с «left-hand side is not a function». В 1.0.12 таких мест 13.
+падает с «left-hand side is not a function». В 1.0.13 таких мест 13.
 Три места в singbox/generator.uc (исключённые устройства и восстановление
 входа OpenConnect) автор в 1.0.11 исправил сам, остальные на месте:
 
@@ -25,7 +25,7 @@ ucode связывает имя функции в момент её объявл
   config/validator.uc    uci_core
   server/service.uc      safe_filename_string
 
-Проверено на самих файлах 1.0.12: «strategy_test.uc start» запускает
+Проверено на самих файлах 1.0.13: «strategy_test.uc start» запускает
 проверку стратегий и падает на ответе («access to undeclared variable
 status_view» в start_test) вместо {"success": true, "message":
 "started"}; с патчем отвечает как задумано. list_update_if_missing,
@@ -33,7 +33,7 @@ status_view» в start_test) вместо {"success": true, "message":
 интервале и кэше списков во флеше вызывает list_update_if_due,
 объявленную ниже.
 
-Функции перенесены без изменения кода (list_update_if_missing 1.0.12 —
+Функции перенесены без изменения кода (list_update_if_missing 1.0.12 и 1.0.13 —
 ниже list_update_if_due, start_test — ниже status_view). После патча
 вызовов до объявления нет (кроме filter() в routing/list_cache.uc — это
 встроенная функция ucode), изменённые модули компилируются (ucode -c).
@@ -46,25 +46,26 @@ prerm: с apk (OpenWrt 25.12+) тело Package/forkop/prerm встраивае�
 (тесты автора расходятся с кодом), кроме package_lifecycle — он требует
 ucode в prerm, именно это и исправлено.
 
-Заменяет 001 для 1.0.10.
+Заменяет 001 для 1.0.12 (в 1.0.13 автор изменил Makefile, service/initd.uc и
+service/state.uc, к остальным файлам патч тот же).
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
- forkop/Makefile                               | 12 +--
- forkop/files/usr/lib/components/action.uc     |  8 +-
- forkop/files/usr/lib/components/updates.uc    | 40 +++++-----
- forkop/files/usr/lib/config/validator.uc      | 12 +--
- forkop/files/usr/lib/nft/apply.uc             | 10 +--
- .../usr/lib/providers/byedpi/strategy_test.uc | 80 +++++++++----------
- forkop/files/usr/lib/server/service.uc        | 20 ++---
- forkop/files/usr/lib/service/initd.uc         | 28 +++----
- forkop/files/usr/lib/service/state.uc         | 18 ++---
- forkop/files/usr/lib/service/ui.uc            | 42 +++++-----
+ forkop/Makefile                                   | 12 ++--
+ forkop/files/usr/lib/components/action.uc         |  8 ++-
+ forkop/files/usr/lib/components/updates.uc        | 40 +++++------
+ forkop/files/usr/lib/config/validator.uc          | 12 ++--
+ forkop/files/usr/lib/nft/apply.uc                 | 10 +--
+ .../usr/lib/providers/byedpi/strategy_test.uc     | 80 ++++++++++-----------
+ forkop/files/usr/lib/server/service.uc            | 20 +++---
+ forkop/files/usr/lib/service/initd.uc             | 28 ++++----
+ forkop/files/usr/lib/service/state.uc             | 18 ++---
+ forkop/files/usr/lib/service/ui.uc                | 42 +++++------
  10 files changed, 137 insertions(+), 133 deletions(-)
 
 diff --git a/forkop/Makefile b/forkop/Makefile
-index 8218f63e..4a6f1428 100644
+index 50b0185..0e165db 100644
 --- a/forkop/Makefile
 +++ b/forkop/Makefile
 @@ -40,12 +40,12 @@ define Build/Compile
@@ -87,7 +88,7 @@ index 8218f63e..4a6f1428 100644
  
  define Package/forkop/postinst
 diff --git a/forkop/files/usr/lib/components/action.uc b/forkop/files/usr/lib/components/action.uc
-index 5210a316..45f91c8c 100644
+index 5210a31..45f91c8 100644
 --- a/forkop/files/usr/lib/components/action.uc
 +++ b/forkop/files/usr/lib/components/action.uc
 @@ -1557,6 +1557,10 @@ function fail_package_sing_box_install(action, tiny, reason, current_version, la
@@ -120,7 +121,7 @@ index 5210a316..45f91c8c 100644
  function install_package_sing_box(action, tiny) {
      let package_name = tiny ? "sing-box-tiny" : "sing-box";
 diff --git a/forkop/files/usr/lib/components/updates.uc b/forkop/files/usr/lib/components/updates.uc
-index 2ee5f877..84844930 100644
+index 2ee5f87..8484493 100644
 --- a/forkop/files/usr/lib/components/updates.uc
 +++ b/forkop/files/usr/lib/components/updates.uc
 @@ -2495,6 +2495,10 @@ function finish_list_update(ok) {
@@ -192,7 +193,7 @@ index 2ee5f877..84844930 100644
      service_state_success([ "run-pending-reload-if-requested", PENDING_RELOAD_FILE, SERVICE_INIT ]);
  }
 diff --git a/forkop/files/usr/lib/config/validator.uc b/forkop/files/usr/lib/config/validator.uc
-index 4313b5a3..4fc0edd8 100644
+index 4313b5a..4fc0edd 100644
 --- a/forkop/files/usr/lib/config/validator.uc
 +++ b/forkop/files/usr/lib/config/validator.uc
 @@ -774,6 +774,12 @@ function mwan3_has_enabled_interface() {
@@ -222,7 +223,7 @@ index 4313b5a3..4fc0edd8 100644
      let value = object_or_empty(fixture_uci_data)[type_name];
      if (type(value) == "array")
 diff --git a/forkop/files/usr/lib/nft/apply.uc b/forkop/files/usr/lib/nft/apply.uc
-index b2e235eb..93ef3d66 100644
+index b2e235e..93ef3d6 100644
 --- a/forkop/files/usr/lib/nft/apply.uc
 +++ b/forkop/files/usr/lib/nft/apply.uc
 @@ -2149,11 +2149,6 @@ function apply_hostname_key(value) {
@@ -250,7 +251,7 @@ index b2e235eb..93ef3d66 100644
      value = trim(as_string(value));
      let result = [];
 diff --git a/forkop/files/usr/lib/providers/byedpi/strategy_test.uc b/forkop/files/usr/lib/providers/byedpi/strategy_test.uc
-index 0e47736e..0b47430b 100644
+index 0e47736..0b47430 100644
 --- a/forkop/files/usr/lib/providers/byedpi/strategy_test.uc
 +++ b/forkop/files/usr/lib/providers/byedpi/strategy_test.uc
 @@ -946,6 +946,46 @@ function normalize_request(raw) {
@@ -348,7 +349,7 @@ index 0e47736e..0b47430b 100644
      if (!ensure_state_dir()) {
          write_json(status_view(empty_state()));
 diff --git a/forkop/files/usr/lib/server/service.uc b/forkop/files/usr/lib/server/service.uc
-index a3b9b3ed..59ad97b2 100644
+index a3b9b3e..59ad97b 100644
 --- a/forkop/files/usr/lib/server/service.uc
 +++ b/forkop/files/usr/lib/server/service.uc
 @@ -919,6 +919,16 @@ function server_prepare_legacy_user_defaults(section, protocol) {
@@ -386,10 +387,10 @@ index a3b9b3ed..59ad97b2 100644
      let protocol = config_get(section, "protocol", "vless");
      if (!(protocol == "shadowsocks" || protocol == "socks" || protocol == "vmess" || protocol == "vless" ||
 diff --git a/forkop/files/usr/lib/service/initd.uc b/forkop/files/usr/lib/service/initd.uc
-index 308421a6..9ccc2a75 100644
+index bf9063c..d2cb4e0 100644
 --- a/forkop/files/usr/lib/service/initd.uc
 +++ b/forkop/files/usr/lib/service/initd.uc
-@@ -181,6 +181,15 @@ function lock_dir_write_owner(lock_dir, owner_pid) {
+@@ -188,6 +188,15 @@ function lock_dir_write_owner(lock_dir, owner_pid) {
      return write_text_file(as_string(lock_dir) + "/pid", as_string(owner_pid) + "\n");
  }
  
@@ -405,7 +406,7 @@ index 308421a6..9ccc2a75 100644
  function acquire_runtime_dir_lock(lock_dir, owner_pid) {
      lock_dir = as_string(lock_dir);
      owner_pid = as_string(owner_pid);
-@@ -210,15 +219,6 @@ function acquire_runtime_dir_lock(lock_dir, owner_pid) {
+@@ -217,15 +226,6 @@ function acquire_runtime_dir_lock(lock_dir, owner_pid) {
      return false;
  }
  
@@ -421,7 +422,7 @@ index 308421a6..9ccc2a75 100644
  function mark_pending_reload(path, reason) {
      path = as_string(path || PENDING_RELOAD_FILE);
      reason = as_string(reason || "pending");
-@@ -398,6 +398,11 @@ function restore_dnsmasq_failsafe() {
+@@ -405,6 +405,11 @@ function restore_dnsmasq_failsafe() {
      return module_status(DNS_APPLY_UC, [ "failsafe-restore" ]);
  }
  
@@ -433,7 +434,7 @@ index 308421a6..9ccc2a75 100644
  function begin_external_service_action(action, source, owner_pid) {
      if (as_string(getenv("FORKOP_UI_ACTION_TRACKED") || "0") == "1")
          return "";
-@@ -417,11 +422,6 @@ function finish_external_service_action(action, job_id, status) {
+@@ -424,11 +429,6 @@ function finish_external_service_action(action, job_id, status) {
      return module_status(UI_UC, [ "service-action-finish-after-command", action, job_id, as_string(status) ]);
  }
  
@@ -446,7 +447,7 @@ index 308421a6..9ccc2a75 100644
      let data = command_output_from_args([ BIN_PATH, "get_status" ]);
      try {
 diff --git a/forkop/files/usr/lib/service/state.uc b/forkop/files/usr/lib/service/state.uc
-index b0887bb5..db5b0c96 100644
+index 030d78d..baecdb5 100644
 --- a/forkop/files/usr/lib/service/state.uc
 +++ b/forkop/files/usr/lib/service/state.uc
 @@ -286,6 +286,15 @@ function lock_dir_write_owner(lock_dir, owner_pid) {
@@ -482,7 +483,7 @@ index b0887bb5..db5b0c96 100644
      if (!ensure_parent_dir(path))
          exit(1);
 diff --git a/forkop/files/usr/lib/service/ui.uc b/forkop/files/usr/lib/service/ui.uc
-index d18a9fa6..9f24b790 100644
+index d18a9fa..9f24b79 100644
 --- a/forkop/files/usr/lib/service/ui.uc
 +++ b/forkop/files/usr/lib/service/ui.uc
 @@ -290,6 +290,22 @@ function print_service_status_text(running, enabled) {
