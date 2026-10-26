@@ -1180,18 +1180,26 @@ jobs:
         echo "=========================================="
 
     - name: Update Feeds & Config
+      # Значения matrix — только через env, не ${{ }} в тексте скрипта: текст
+      # run со вставками ${{ }} GitHub превращает в одно выражение длиной не
+      # больше 21000 символов, а этот шаг длиннее — файл workflow перестаёт
+      # загружаться («Exceeded max expression length 21000»).
       env:
         EXCLUDE_INPUT: ${{ inputs.exclude_keywords }}
+        VARIANT: ${{ matrix.variant }}
+        CURRENT_MATRIX_TARGET: ${{ matrix.target }}
+        # Выбор компонентов для part2/part3 (значения уже согласованы в setup)
+        AGH_MODE: ${{ matrix.agh }}
+        SB_MODE: ${{ matrix.sb }}
+        YTB: ${{ matrix.ytb }}
+        ZZ: ${{ matrix.zz }}
+        M_BASE: ${{ matrix.base }}
+        M_FK: ${{ matrix.fk }}
+        M_PATCHES: ${{ matrix.patches }}
+        M_FEEDS: ${{ matrix.feeds }}
       run: |
         cd openwrt
 
-        export VARIANT="${{ matrix.variant }}"
-        export CURRENT_MATRIX_TARGET="${{ matrix.target }}"
-        # Выбор компонентов для part2/part3 (значения уже согласованы в setup)
-        export AGH_MODE="${{ matrix.agh }}"
-        export SB_MODE="${{ matrix.sb }}"
-        export YTB="${{ matrix.ytb }}"
-        export ZZ="${{ matrix.zz }}"
         echo ">>> Выбран: Variant=$VARIANT, Target=$CURRENT_MATRIX_TARGET, agh=$AGH_MODE, sb=$SB_MODE, ytb=$YTB, zz=$ZZ"
 
         mkdir -p files/etc
@@ -1201,7 +1209,6 @@ jobs:
         chmod +x $GITHUB_WORKSPACE/$DIY_P1_SH
         $GITHUB_WORKSPACE/$DIY_P1_SH
         
-        VARIANT="${{ matrix.variant }}"
         echo "Variant selected: $VARIANT"
 
         # Галочка use_base_commit (поле base матрицы): приложение варианта —
@@ -1209,12 +1216,12 @@ jobs:
         # patches/<feeds|packages>/<имя>/BASE, только hex). part2 берёт по
         # нему версию пакета, part3 — коммит клона homeproxy и Re:HomeProxy.
         VARIANT_COMMIT=""
-        if [ "${{ matrix.base }}" = "true" ]; then
+        if [ "$M_BASE" = "true" ]; then
             case "$VARIANT" in
                 homeproxy)   BASE_DIR=packages/luci-app-homeproxy ;;
                 rehomeproxy) BASE_DIR=packages/luci-app-re-homeproxy ;;
                 podkop|netshift|trafira) BASE_DIR=feeds/$VARIANT ;;
-                forkop)      BASE_DIR=feeds/${{ matrix.fk }} ;;
+                forkop)      BASE_DIR=feeds/$M_FK ;;
                 passwall)    BASE_DIR=feeds/passwall2 ;;
                 xray)        BASE_DIR=feeds/luciappxray ;;
                 *)           BASE_DIR="" ;;
@@ -1258,7 +1265,7 @@ jobs:
             # forkop-mod — форк (FORKOP_FEED_MOD); адреса — в env в начале
             # файла. Патчи фида — patches/feeds/<имя фида>, их применяет
             # WRT-part2.sh.
-            if [ "${{ matrix.fk }}" = "forkopmod" ]; then
+            if [ "$M_FK" = "forkopmod" ]; then
                 FORKOP_FEED="$FORKOP_FEED_MOD"
             else
                 FORKOP_FEED="$FORKOP_FEED_ORIG"
@@ -1266,7 +1273,7 @@ jobs:
             FK_NAME="${FORKOP_FEED%% *}"
             echo ">>> forkop: фид $FORKOP_FEED"
             echo -e "\n$(feed_line "$FORKOP_FEED")" >> feeds.conf.default
-            if [ "${{ matrix.patches }}" != "true" ]; then
+            if [ "$M_PATCHES" != "true" ]; then
                 echo "::warning title=forkop без патчей::Фид ${FK_NAME} собирается без patches/feeds/${FK_NAME} (подробности — в предупреждении job setup)."
             elif ! ls "$GITHUB_WORKSPACE/patches/feeds/${FK_NAME}"/*.patch >/dev/null 2>&1; then
                 echo "::warning title=forkop: нет патчей для фида::Для фида ${FK_NAME} нет patches/feeds/${FK_NAME}/*.patch — пакет соберётся без исправлений."
@@ -1288,7 +1295,7 @@ jobs:
         # пакетов ветки (поле feeds матрицы: форма feeds_latest или пресет combo). После замены зеркал: коммит
         # проверяется на том адресе, откуда его возьмёт feeds update.
         cp feeds.conf.default /tmp/feeds.conf.tag
-        if [ "${{ matrix.feeds }}" = "true" ]; then
+        if [ "$M_FEEDS" = "true" ]; then
             bash "$GITHUB_WORKSPACE/sh/feeds-from-repo.sh"
         fi
         echo ">>> feeds.conf.default:"
@@ -1341,7 +1348,7 @@ jobs:
         }
         trap restore_patches EXIT
 
-        if [ "${{ matrix.patches }}" != "true" ] && [ -d "$GITHUB_WORKSPACE/patches" ]; then
+        if [ "$M_PATCHES" != "true" ] && [ -d "$GITHUB_WORKSPACE/patches" ]; then
             PATCHES_TMP_DIR="$(mktemp -d)"
             PATCHES_BACKUP="$PATCHES_TMP_DIR/patches"
             mv "$GITHUB_WORKSPACE/patches" "$PATCHES_BACKUP"
