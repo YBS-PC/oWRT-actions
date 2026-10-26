@@ -1,16 +1,31 @@
 #!/bin/sh
 
-# Датчик вентилятора для fancontrol (GL.iNet Slate AX: фид fancontrol
-# подключается только для slateax, см. sh/WRT-part1.sh). Признак пакета —
-# его конфиг: так не зависит от менеджера пакетов (apk / opkg) и от формата
-# их вывода.
+# fancontrol (GL.iNet Slate AX: фид JiaY-shi/fancontrol подключается только
+# для slateax, см. sh/WRT-part1.sh). Признак пакета — его конфиг: так не
+# зависит от менеджера пакетов (apk / opkg) и от формата их вывода.
+#
+# С версии 30.07.2026 демон при fan_file 'auto' сам находит PWM-выход hwmon
+# (у Slate AX — pwmfan, kmod-hwmon-pwmfan) и отвергает путь
+# cooling_deviceN/cur_state: «discrete cooling state, not a continuous PWM
+# output» — с ним он не запускается. Прежний 99_fans и старые версии пакета
+# прописывали как раз cooling_device…/cur_state; такой конфиг мог остаться
+# после прошивки с сохранением настроек — возвращаем auto.
 if [ -f /etc/config/fancontrol ]; then
-    uci set fancontrol.settings.fan_file='/sys/devices/virtual/thermal/cooling_device1/cur_state'
-    uci commit fancontrol
-    logger -t "99_fans" "Fancontrol configuration updated"
+    FAN_FILE=$(uci -q get fancontrol.settings.fan_file)
+    case "$FAN_FILE" in
+        */cooling_device*/cur_state)
+            uci set fancontrol.settings.fan_file='auto'
+            uci commit fancontrol
+            logger -t "99_fans" "fancontrol: fan_file $FAN_FILE -> auto"
+            ;;
+        *)
+            logger -t "99_fans" "fancontrol: fan_file '${FAN_FILE:-не задан}' не трогаем"
+            ;;
+    esac
 else
     logger -t "99_fans" "Fancontrol is not installed, skipping configuration"
 fi
 
 # Всегда завершаем успешно, чтобы скрипт удалился
 exit 0
+
