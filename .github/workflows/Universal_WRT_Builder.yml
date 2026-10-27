@@ -82,6 +82,9 @@ on:
           - 'extended'
           - 'podkop-engine'
           - 'podkop-engine-full'
+          - 'forkop-base'
+          - 'forkop-full'
+          - 'forkop-tiny'
 
       ytb:
         description: 'youtubeUnblock *'
@@ -179,7 +182,12 @@ env:
   # подпапки с его патчами: patches/feeds/<имя>/ (WRT-part2.sh применяет
   # подпапку того фида, который реально загружен, остальные пропускает).
   # Версия пакета берётся из тегов этого же репозитория.
-  #   патчи patches/feeds/forkop (включая всё рабочее из форка)
+  # forkop (оригинал) с 2.0 работает только на своём ядре sing-box-forkop
+  # (ushan0v/sing-box-forkop): пакет forkop зависит от него, а служба не
+  # стартует на другом sing-box. Ядро скачивается пакетом из релиза (поле sb:
+  # forkop-base/full/tiny, setup ставит forkop-base сам) и собирается в образ
+  # как package/sing-box-forkop. forkop-mod — форк ветки 1.x, ядро у него
+  # прежнее (sing-box из фида).
   FORKOP_FEED_ORIG: "forkop https://github.com/ushan0v/forkop.git;main"
 
   FORKOP_FEED_MOD: "forkopmod https://github.com/Gavr1024/forkop-mod.git;main"
@@ -226,8 +234,11 @@ jobs:
           #             бинарник поверх пакета), "podkop-engine" /
           #             "podkop-engine-full" (FiyeroT/podkop-engine: бинарник и
           #             файлы пакета поверх sing-box из фида; только podkop и
-          #             netshift) или "tiny" (выставляется здесь для
-          #             slateax/ax59u: part3 ставит им sing-box-tiny);
+          #             netshift), "forkop-base" / "forkop-full" / "forkop-tiny"
+          #             (пакет sing-box-forkop из релиза вместо sing-box; только
+          #             forkop, ему без этого ядра нельзя) или "tiny"
+          #             (выставляется здесь для slateax/ax59u: part3 ставит им
+          #             sing-box-tiny);
           #   ytb     — true/false (JSON-булево), ставить ли youtubeUnblock;
           #   zz      — true/false, класть ли zz1-final-offline-setup.sh;
           #   patches — true/false, применять ли ЛЮБЫЕ пользовательские
@@ -248,7 +259,8 @@ jobs:
           #
           # ВНИМАНИЕ: slateax и ax59u — «тонкие» устройства: part3 ставит им
           # пакет sing-box-tiny из фида и удаляет скачанный бинарник, поэтому
-          # выбор версии sing-box на них не влияет (в матрице sb=tiny). С
+          # выбор версии sing-box на них не влияет (в матрице sb=tiny; у forkop
+          # — сборка ядра tiny, sb=forkop-tiny). С
           # патчем homeproxy 006 (patches/packages/luci-app-homeproxy) генератор
           # сам подстраивается под версию из фида; если ядро что-то не примет,
           # сборка честно упадёт на «Check sing-box compatibility» (до
@@ -261,11 +273,13 @@ jobs:
           # Приводит выбор к тому, что вариант реально допускает, чтобы имя
           # артефакта не врало: clear/crystal_clear/switch вырезают AGH,
           # sing-box и youtubeUnblock; passwall/v2raya/xray — sing-box;
-          # forkop и trafira — youtubeUnblock (у них свой Zapret/ByeDPI на
-          # nfqueue); crystal_clear — zz1. homeproxy, rehomeproxy
+          # forkop-mod и trafira — youtubeUnblock (у них свой Zapret/ByeDPI на
+          # nfqueue; в forkop 2.0 их нет, youtubeUnblock ему можно);
+          # crystal_clear — zz1. homeproxy, rehomeproxy
           # podkop и netshift без sing-box не работают (podkop и netshift ещё
           # и тянут его зависимостью); rehomeproxy (Re:HomeProxy) умеет и hiddify-core,
-          # но его приложение ставит само уже на роутере.
+          # но его приложение ставит само уже на роутере. forkop работает только
+          # на sing-box-forkop: любой другой выбор sb (и no) для него — forkop-base.
           entry() {
             local t="$1" v="$2" agh="$3" sb="$4" ytb="$5" zz="$6" pt="$7" fd="$8" orig
             # vname — имя варианта для людей (имя job и артефакта); fk — фид
@@ -280,7 +294,8 @@ jobs:
             case "$v" in
               clear|crystal_clear|switch) agh=no; sb=no; ytb=false ;;
               passwall|v2raya|xray)       sb=no ;;
-              forkop|trafira)             ytb=false ;;
+              trafira)                    ytb=false ;;
+              forkop) [ "$fk" = "forkop" ] || ytb=false ;;
             esac
             [ "$v" = "crystal_clear" ] && zz=false
             case "$v" in
@@ -288,9 +303,9 @@ jobs:
             esac
             # podkop-engine — sing-box под podkop: входы только tproxy, direct и
             # mixed, без TUN и redirect (их берут homeproxy и rehomeproxy), а
-            # forkop и trafira ставят ядро сами со страницы «Компоненты». Поэтому
-            # только podkop и netshift. netshift пишет и выходы vmess/http,
-            # которые есть лишь в podkop-engine-full.
+            # у forkop своё ядро, trafira ставит ядро сам со страницы
+            # «Компоненты». Поэтому только podkop и netshift. netshift пишет и
+            # выходы vmess/http, которые есть лишь в podkop-engine-full.
             case "$sb" in
               podkop-engine|podkop-engine-full)
                 case "$v" in
@@ -299,8 +314,18 @@ jobs:
                   *)        sb=feed ;;
                 esac ;;
             esac
+            # sing-box-forkop — ядро forkop 2.x (fk=forkop): без него пакет
+            # forkop не выбирается (DEPENDS +sing-box-forkop), а служба
+            # отказывается стартовать на другом sing-box. Остальным вариантам
+            # (и forkop-mod, ветка 1.x) — sing-box из фида.
+            if [ "$fk" = "forkop" ]; then
+              case "$sb" in forkop-base|forkop-full|forkop-tiny) ;; *) sb=forkop-base ;; esac
+            else
+              case "$sb" in forkop-base|forkop-full|forkop-tiny) sb=feed ;; esac
+            fi
             case " $TINY_TARGETS " in
-              *" $t "*) case "$v" in homeproxy|rehomeproxy|podkop|netshift|forkop|trafira) [ "$sb" != "no" ] && sb=tiny ;; esac ;;
+              *" $t "*) case "$v" in homeproxy|rehomeproxy|podkop|netshift|forkop|trafira)
+                case "$sb" in no) ;; forkop-*) sb=forkop-tiny ;; *) sb=tiny ;; esac ;; esac ;;
             esac
             if [ "$orig" != "agh=$agh sb=$sb ytb=$ytb zz=$zz" ]; then
               NOTES="${NOTES}${t}/${vname}: ${orig} -> agh=$agh sb=$sb ytb=$ytb zz=$zz\n"
@@ -329,7 +354,8 @@ jobs:
             #   $(entry nanopi-r6s homeproxy latest latest true true false true),
             #   (код immortalwrt/homeproxy как есть, без патчей)
             #   $(entry nanopi-r6s homeproxy latest 1.12.x true true false true),
-            #   $(entry nanopi-r6s forkop latest extended false true true true),
+            #   $(entry nanopi-r6s forkop latest forkop-base true true true true),
+            #   (forkop 2.x на ядре sing-box-forkop, сборка base)
             #   $(entry nanopi-r6s homeproxy latest latest true true true true),
             #   (с sing-box 1.14 опции DNS — патч 006)
             #   $(entry nanopi-r6s trafira latest extended false true true true),
@@ -398,13 +424,14 @@ jobs:
           done
 
           # forkop без патчей (фид — поле fk матрицы, адреса — в env):
-          #   ushan0v/forkop 1.0.5 не стартует на sing-box 1.14 (issue #98);
+          #   ushan0v/forkop 2.x без патча 001 — prerm на ucode, а buildroot
+          #   выполняет его как sh: удаление пакета не чистит за forkop;
           #   Gavr1024/forkop-mod без патча 001 — вызовы ucode до объявления
           #   (падают проверка стратегий ByeDPI и проверка обновления списков при
           #   старте, интерфейс и служба в части путей) и prerm на ucode (apk).
           for FK_NAME in $(echo "$json" | jq -r '[.include[] | select(.variant == "forkop" and .patches == false) | .fk] | unique | .[]'); do
             case "$FK_NAME" in
-              forkop)    FK_WHY="Пока автор не внёс исправления, оригинал ushan0v/forkop несовместим с sing-box 1.14 (issue #98): не скачивайте sing-box 1.14.x/latest/extended для этой сборки" ;;
+              forkop)    FK_WHY="Без патча 001 «apk del forkop» не выполнит очистку forkop (prerm на ucode, а сборка OpenWrt запускает его как sh): остаются запись таблицы маршрутизации и файлы в /var/run/forkop" ;;
               forkopmod) FK_WHY="Без патча 001 в форке Gavr1024/forkop-mod проверка стратегий ByeDPI и проверка обновления списков при старте падают (ucode: left-hand side is not a function), а «apk del forkop» падает на prerm" ;;
               *)         FK_WHY="Исправления из patches/feeds/${FK_NAME} не будут применены" ;;
             esac
@@ -616,6 +643,138 @@ jobs:
             # Имя ассета по той же схеме, что у SagerNet:
             # sing-box-1.14.1-extended-2.7.2-linux-arm64.tar.gz
             SB_URL="https://github.com/${SB_REPO}/releases/download/${SB_TAG}/sing-box-${SB_TAG#v}-linux-arm64.tar.gz"
+        elif [[ "$SB_VERSION_CHOICE" == forkop-* ]]; then
+            # ushan0v/sing-box-forkop — ядро forkop 2.x. Пакет forkop зависит от
+            # sing-box-forkop, а служба проверяет «sing-box version»
+            # (X.Y.Z-rN, не старше требуемой), так что подмена бинарника не
+            # годится: ядро ставится настоящим пакетом. Из релиза берётся .ipk
+            # под архитектуру устройства (tar.gz, внутри те же файлы, что в
+            # .apk), его содержимое и Makefile без сборки кладутся в
+            # sbfk-pkg/sing-box-forkop; шаг Update Feeds & Config переносит
+            # каталог в package/, part3 включает пакет вместо sing-box.
+            # Сборка (base/full/tiny) — из выбора sb. Без ядра forkop в образе
+            # не заработает, поэтому любая ошибка здесь останавливает сборку.
+            SB_REPO="ushan0v/sing-box-forkop"
+            FK_VARIANT="${SB_VERSION_CHOICE#forkop-}"
+            case "$FK_VARIANT" in base|full|tiny) ;; *)
+                echo "::error::Неизвестная сборка sing-box-forkop: '$FK_VARIANT'"; exit 1 ;;
+            esac
+            FK_ARCH=$(sed -n 's/.*CONFIG_TARGET_ARCH_PACKAGES="\([^"]*\)".*/\1/p' "./config/conf/${{ matrix.target }}" | head -n1)
+            if [ -z "$FK_ARCH" ]; then
+                echo "::error title=sing-box-forkop::Не найдена архитектура пакетов в config/conf/${{ matrix.target }}"
+                exit 1
+            fi
+            # Релизы — теги vX.Y.Z-rN; сборки между релизами тегов не имеют.
+            SB_TAG=$(git ls-remote --tags --refs "https://github.com/${SB_REPO}.git" 2>/dev/null \
+                | awk '{print $2}' | sed 's|refs/tags/||' \
+                | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-r[0-9]+$' | sort -V | tail -n1)
+            if [ -z "$SB_TAG" ]; then
+                echo "::error title=sing-box-forkop::Не найден ни один релиз ${SB_REPO} (теги vX.Y.Z-rN)"
+                exit 1
+            fi
+            FK_VER="${SB_TAG#v}"
+            # sing-box-forkop_1.14.4-r1_base_aarch64_generic.ipk
+            FK_ASSET="sing-box-forkop_${FK_VER}_${FK_VARIANT}_${FK_ARCH}.ipk"
+            SB_URL="https://github.com/${SB_REPO}/releases/download/${SB_TAG}/${FK_ASSET}"
+            if ! curl -fsSL --retry 3 -o sbfk.ipk "$SB_URL" || [ ! -s sbfk.ipk ]; then
+                echo "::error title=sing-box-forkop::Не удалось скачать $SB_URL (релиз ещё черновик или нет сборки $FK_VARIANT для $FK_ARCH)"
+                rm -f sbfk.ipk
+                exit 1
+            fi
+            if ! bash ./sh/verify-sha256.sh sbfk.ipk "$SB_REPO" "$SB_TAG" "$FK_ASSET" \
+                    "https://github.com/${SB_REPO}/releases/download/${SB_TAG}/SHA256SUMS"; then
+                echo "::error title=sing-box-forkop::$FK_ASSET: сумма SHA-256 не совпала"
+                rm -f sbfk.ipk
+                exit 1
+            fi
+            FK_PKG="$GITHUB_WORKSPACE/sbfk-pkg/sing-box-forkop"
+            FK_UNPACK=$(mktemp -d)
+            rm -rf "$FK_PKG" && mkdir -p "$FK_PKG/files"
+            if ! tar -xzf sbfk.ipk -C "$FK_UNPACK" || ! tar -xzf "$FK_UNPACK/data.tar.gz" -C "$FK_PKG/files" \
+                    || [ ! -f "$FK_PKG/files/usr/bin/sing-box" ] || [ ! -f "$FK_PKG/files/etc/init.d/sing-box" ]; then
+                echo "::error title=sing-box-forkop::$FK_ASSET не распаковался или в нём нет usr/bin/sing-box и etc/init.d/sing-box"
+                exit 1
+            fi
+            SB_INTERP=$(readelf -l "$FK_PKG/files/usr/bin/sing-box" 2>/dev/null | sed -n 's/.*interpreter: \(.*\)]/\1/p')
+            if [ -n "$SB_INTERP" ] && [[ "$SB_INTERP" != *ld-musl* ]]; then
+                echo "::error title=sing-box-forkop не для musl::$FK_ASSET собран под $SB_INTERP"
+                exit 1
+            fi
+            rm -rf sbfk.ipk "$FK_UNPACK"
+            # Версия пакета — как у релиза: 1.14.4-r1 → PKG_VERSION 1.14.4,
+            # PKG_RELEASE 1; apk покажет 1.14.4-r1, и install.sh и вкладка
+            # «Компоненты» forkop сравнят её с новыми релизами.
+            # Метаданные — из release/forkop/package.sh ядра. Бинарник не
+            # пересобирается и не обрезается (RSTRIP). Автозапуск службы
+            # sing-box убирается: forkop запускает ядро сам и сам снимает
+            # S99sing-box, а в образе её включил бы default_postinst — и на
+            # первой загрузке ядро стартовало бы с примером
+            # /etc/sing-box/config.json пакета (shadowsocks на :8080).
+            cat > "$FK_PKG/Makefile" <<EOF
+        include \$(TOPDIR)/rules.mk
+
+        PKG_NAME:=sing-box-forkop
+        PKG_VERSION:=${FK_VER%-r*}
+        PKG_RELEASE:=${FK_VER##*-r}
+        PKG_LICENSE:=GPL-3.0-or-later
+        PKG_MAINTAINER:=ushan0v
+
+        include \$(INCLUDE_DIR)/package.mk
+
+        RSTRIP:=:
+        STRIP:=:
+
+        define Package/sing-box-forkop
+          SECTION:=net
+          CATEGORY:=Network
+          TITLE:=sing-box for Forkop, ${FK_VARIANT} build (${SB_TAG}, prebuilt)
+          URL:=https://github.com/${SB_REPO}
+          DEPENDS:=+ca-bundle
+        endef
+
+        define Package/sing-box-forkop/conffiles
+        /etc/config/sing-box
+        /etc/sing-box/config.json
+        endef
+
+        define Build/Prepare
+        endef
+
+        define Build/Configure
+        endef
+
+        define Build/Compile
+        endef
+
+        define Package/sing-box-forkop/install
+        	\$(CP) ./files/. \$(1)/
+        endef
+
+        define Package/sing-box-forkop/postinst
+        #!/bin/sh
+        rm -f "\$\${IPKG_INSTROOT}"/etc/rc.d/S??sing-box "\$\${IPKG_INSTROOT}"/etc/rc.d/K??sing-box
+        exit 0
+        endef
+
+        \$(eval \$(call BuildPackage,sing-box-forkop))
+        EOF
+            # Тело heredoc стоит на отступе блока run (YAML его снимает), а
+            # рецепт install в Makefile обязан начинаться с табуляции.
+            grep -q "$(printf '^\t')" "$FK_PKG/Makefile" || { echo "::error::sing-box-forkop: в Makefile нет табуляции в рецепте install"; exit 1; }
+            echo "SB_DOWNLOADED_TAG=$SB_TAG" >> $GITHUB_ENV
+            echo "SB_DOWNLOADED_REPO=$SB_REPO" >> $GITHUB_ENV
+            echo "=========================================="
+            echo "       [SING-BOX DOWNLOAD SUMMARY]        "
+            echo "=========================================="
+            echo "Version choice : $SB_VERSION_CHOICE"
+            echo "Repository     : $SB_REPO"
+            echo "Downloaded tag : $SB_TAG"
+            echo "Asset          : $FK_ASSET"
+            echo "Linkage        : ${SB_INTERP:-static}"
+            echo "Package dir    : $FK_PKG"
+            find "$FK_PKG" -type f | sed "s|^$FK_PKG/||" | sort
+            echo "=========================================="
+            exit 0
         elif [ "$SB_VERSION_CHOICE" == "podkop-engine" ] || [ "$SB_VERSION_CHOICE" == "podkop-engine-full" ]; then
             # FiyeroT/podkop-engine: sing-box с патчами под podkop (REALITY для
             # Xray 26.9+, xhttp, tools decode-link, резервные выходы urltest,
@@ -1362,7 +1521,19 @@ jobs:
         fi
 
         ./scripts/feeds install -a
-        
+
+        # sing-box-forkop (sb=forkop-*): пакет из релиза, подготовленный шагом
+        # Download Sing-box. part3 включает его вместо sing-box.
+        if [[ "$SB_MODE" == forkop-* ]]; then
+            if [ ! -f "$GITHUB_WORKSPACE/sbfk-pkg/sing-box-forkop/Makefile" ]; then
+                echo "::error title=sing-box-forkop::Нет пакета sbfk-pkg/sing-box-forkop (шаг Download Sing-box)"
+                exit 1
+            fi
+            rm -rf package/sing-box-forkop
+            cp -r "$GITHUB_WORKSPACE/sbfk-pkg/sing-box-forkop" package/
+            echo ">>> sing-box-forkop: package/sing-box-forkop ($(sed -n 's/^PKG_VERSION:=//p' package/sing-box-forkop/Makefile)-r$(sed -n 's/^PKG_RELEASE:=//p' package/sing-box-forkop/Makefile))"
+        fi
+
         [ -e $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE ./.config
         # Нормализация DOS-переводов строк: WRT.config может прийти в CRLF (загрузка
         # через веб-интерфейс GitHub обходит .gitattributes), а .config дальше
@@ -1590,14 +1761,29 @@ jobs:
         fi
 
         make defconfig
-        
+
+        # forkop 2.x: ядро — только sing-box-forkop. Пакеты sing-box и
+        # sing-box-tiny кладут тот же /usr/bin/sing-box (образ не собрался бы
+        # на конфликте файлов), а forkop без ядра defconfig молча выключает.
+        if [[ "$SB_MODE" == forkop-* ]]; then
+            FK_BAD=""
+            grep -q '^CONFIG_PACKAGE_sing-box-forkop=y' .config || FK_BAD="$FK_BAD sing-box-forkop не включён;"
+            grep -q '^CONFIG_PACKAGE_forkop=y' .config || FK_BAD="$FK_BAD forkop не включён;"
+            grep -Eq '^CONFIG_PACKAGE_sing-box(-tiny)?=y' .config && FK_BAD="$FK_BAD включён sing-box или sing-box-tiny;"
+            if [ -n "$FK_BAD" ]; then
+                echo "::error title=forkop и sing-box-forkop::После make defconfig:$FK_BAD"
+                grep -E '^CONFIG_PACKAGE_(forkop|luci-app-forkop|sing-box[a-z-]*)=' .config || true
+                exit 1
+            fi
+        fi
+
         echo "=========================================="
         echo "       [CONFIG SUMMARY]                   "
         echo "=========================================="
         echo "Variant selected: $VARIANT"
         echo "Checking key packages in .config:"
         # Проверяем наличие ключевых пакетов для уверенности
-        grep -E "CONFIG_PACKAGE_(luci-app-homeproxy|sing-box|luci-app-passwall2|luci-app-v2raya|luci-app-xray|xray-core|v2ray-geoip|v2ray-geosite|luci-app-podkop|luci-app-netshift|luci-app-forkop|luci-app-trafira|luci-app-re-homeproxy)=" .config || echo "None found"
+        grep -E "CONFIG_PACKAGE_(luci-app-homeproxy|sing-box|sing-box-forkop|luci-app-passwall2|luci-app-v2raya|luci-app-xray|xray-core|v2ray-geoip|v2ray-geosite|luci-app-podkop|luci-app-netshift|luci-app-forkop|luci-app-trafira|luci-app-re-homeproxy)=" .config || echo "None found"
         echo "=========================================="
 
     - name: Telegram — патчи надо обновить
