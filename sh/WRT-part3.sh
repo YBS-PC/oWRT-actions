@@ -365,7 +365,9 @@ echo 'CONFIG_BUSYBOX_DEFAULT_FEATURE_USE_INITTAB=y' >> ./.config
 echo ">>> [Heavy packages] Тяжелые пакеты отключены."
         # Для сборок с homeproxy и podkop/netshift/forkop/trafira ставим Tiny версию sing-box
         # (если sing-box не отключён полем sb; job setup тогда пишет sb=tiny).
-        if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "rehomeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "netshift" || "$VARIANT" == "forkop" || "$VARIANT" == "trafira" ]] && [ "${SB_MODE:-feed}" != "no" ]; then
+        # forkop 2.x — на своём ядре (sb=forkop-tiny), его ставит блок
+        # «ВЫБОР КОМПОНЕНТОВ» ниже.
+        if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "rehomeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "netshift" || "$VARIANT" == "forkop" || "$VARIANT" == "trafira" ]] && [ "${SB_MODE:-feed}" != "no" ] && [[ "${SB_MODE:-feed}" != forkop-* ]]; then
             echo ">>> [Heavy packages] Sing-box Tiny for $VARIANT compatibility..."
             sed -i '/sing-box/Id' ./.config
             echo '# CONFIG_PACKAGE_sing-box is not set' >> ./.config
@@ -618,8 +620,11 @@ if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "rehomeproxy" || "$VARIANT" == 
     drop_sqm_files
 fi
 
-# forkop и trafira дополнительно без youtubeUnblock (свои Zapret/ByeDPI)
-if [[ "$VARIANT" == "forkop" || "$VARIANT" == "trafira" ]]; then
+# trafira дополнительно без youtubeUnblock (свои Zapret/ByeDPI). forkop-mod
+# (ветка 1.x, тоже с Zapret/ByeDPI) сюда приходит как VARIANT=forkop с ytb=false
+# от job setup и выключается общим блоком YTB ниже; в forkop 2.x Zapret и ByeDPI
+# убраны, youtubeUnblock ему можно.
+if [[ "$VARIANT" == "trafira" ]]; then
     sed -i '/youtubeUnblock/Id' ./.config
     echo "# CONFIG_PACKAGE_youtubeUnblock is not set" >> ./.config
     echo "# CONFIG_PACKAGE_luci-app-youtubeUnblock is not set" >> ./.config
@@ -738,6 +743,19 @@ if [ "$SB_MODE" = "no" ]; then
     drop_pkgs sing-box sing-box sing-box-tiny
     rm -f ./files/usr/bin/sing-box
 fi
+
+# sing-box-forkop (sb=forkop-base/full/tiny, только forkop 2.x): пакет из
+# релиза уже лежит в package/sing-box-forkop (workflow). Он ставит тот же
+# /usr/bin/sing-box и /etc/init.d/sing-box, что sing-box и sing-box-tiny,
+# поэтому они выключаются.
+case "$SB_MODE" in
+forkop-*)
+    echo "   > sing-box: sing-box-forkop (${SB_MODE#forkop-}) вместо sing-box"
+    drop_pkgs sing-box sing-box sing-box-tiny
+    echo 'CONFIG_PACKAGE_sing-box-forkop=y' >> ./.config
+    rm -f ./files/usr/bin/sing-box
+    ;;
+esac
 
 if [ "$YTB" != "true" ]; then
     echo "   > youtubeUnblock: убираем из прошивки"
