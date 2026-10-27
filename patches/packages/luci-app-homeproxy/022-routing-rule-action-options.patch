@@ -1,0 +1,62 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 27 Oct 2026 15:31:46 +0000
+Subject: [PATCH] fix(client): routing rules pass the reject method and resolve
+ options
+
+Since "feat(client): add route action support" (2025-08-22) the form of a
+routing rule offers a method for the reject action (drop packets, don't
+drop) and a DNS server, strategy, cache, TTL and client subnet for the
+resolve action, but generate_client.uc never put them in the rule: a rule
+set to drop packets answered with TCP RST / ICMP port unreachable, and a
+resolve rule always went through DNS routing with its defaults.
+
+They are passed now, each only with its own action (sing-box refuses a
+field of another action, and a value left over from an earlier action
+must not reach the rule). The default reject method writes nothing, so a
+configuration without these options is generated as before.
+
+Checked with sing-box 1.12.22, 1.13.11 and 1.14.4 ("sing-box check"): a
+drop rule, a reject rule with no_drop, a resolve rule with all five
+options and a route rule with leftover reject and resolve values; on a
+real configuration only "method": "drop" of its drop rule is added.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
+
+diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
+index a75fe68..ef5be18 100755
+--- a/root/etc/homeproxy/scripts/generate_client.uc
++++ b/root/etc/homeproxy/scripts/generate_client.uc
+@@ -1147,6 +1147,12 @@ if (!isEmpty(main_node)) {
+ 		if (ruleset_left_none(rule_set, 'Routing rule', cfg))
+ 			return null;
+ 
++		/* The form has a method for reject and a DNS server, strategy, cache,
++		 * TTL and client subnet for resolve; sing-box takes each of them only
++		 * with its own action. */
++		const reject = (cfg.action === 'reject'),
++		      resolve = (cfg.action === 'resolve');
++
+ 		push(config.route.rules, {
+ 			ip_version: strToInt(cfg.ip_version),
+ 			protocol: cfg.protocol,
+@@ -1179,7 +1185,14 @@ if (!isEmpty(main_node)) {
+ 			udp_timeout: strToTime(cfg.udp_timeout),
+ 			tls_fragment: strToBool(cfg.tls_fragment),
+ 			tls_fragment_fallback_delay: strToTime(cfg.tls_fragment_fallback_delay),
+-			tls_record_fragment: strToBool(cfg.tls_record_fragment)
++			tls_record_fragment: strToBool(cfg.tls_record_fragment),
++			method: (reject && cfg.reject_method === 'drop') ? 'drop' : null,
++			no_drop: reject ? strToBool(cfg.reject_no_drop) : null,
++			server: resolve ? get_resolver(cfg.resolve_server) : null,
++			strategy: resolve ? cfg.resolve_strategy : null,
++			disable_cache: resolve ? strToBool(cfg.resolve_disable_cache) : null,
++			rewrite_ttl: resolve ? strToInt(cfg.resolve_rewrite_ttl) : null,
++			client_subnet: resolve ? cfg.resolve_client_subnet : null
+ 		});
+ 	});
+ 
+-- 
+2.43.0
+
