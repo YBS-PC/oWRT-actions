@@ -1,0 +1,46 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 27 Oct 2026 12:00:00 +0000
+Subject: [PATCH] Makefile: prerm hook in POSIX sh for buildroot packages
+
+The buildroot (include/package-pack.mk) drops the shebang of
+Package/forkop/prerm and runs its body as shell: with CONFIG_USE_APK
+(OpenWrt 25.12) it is appended to the generated /bin/sh pre-deinstall,
+with opkg default_prerm sources it. The ucode body is a syntax error
+there ("word unexpected"), so `apk del forkop` / `opkg remove forkop`
+of a firmware or SDK build never ran `forkop package_prerm`: the
+routing table entry and the runtime files stayed.
+
+The same call in sh. The action comes from PKG_UPGRADE, set by opkg on
+an upgrade; apk runs pre-deinstall only on removal.
+
+diff --git a/forkop/Makefile b/forkop/Makefile
+index 71e1a8cd..b32396e1 100644
+--- a/forkop/Makefile
++++ b/forkop/Makefile
+@@ -38,13 +38,17 @@ endef
+ define Build/Compile
+ endef
+ 
++# POSIX sh: the buildroot drops the shebang and runs this body as shell, appended
++# to its /bin/sh pre-deinstall with apk and sourced by default_prerm with opkg.
++# There $1 is not the action, so an upgrade is told by PKG_UPGRADE.
+ define Package/forkop/prerm
+-#!/usr/bin/ucode
+-
+-if (getenv("IPKG_INSTROOT") == null || getenv("IPKG_INSTROOT") == "")
+-	system("/usr/bin/forkop package_prerm " + (ARGV[0] || "") + " >/dev/null 2>&1");
++#!/bin/sh
+ 
+-exit(0);
++[ -n "$${IPKG_INSTROOT}" ] && exit 0
++action=remove
++[ "$${PKG_UPGRADE}" = "1" ] && action=upgrade
++/usr/bin/forkop package_prerm "$$action" >/dev/null 2>&1
++exit 0
+ endef
+ 
+ define Package/forkop/postinst
+-- 
+2.43.0
+

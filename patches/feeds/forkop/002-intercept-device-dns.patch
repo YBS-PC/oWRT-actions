@@ -1,0 +1,182 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 27 Oct 2026 13:00:00 +0000
+Subject: [PATCH] Add intercept_device_dns for a resolver in front of Forkop
+
+New settings option intercept_device_dns (UCI only, default on: no
+behaviour change). Forkop 2.0 redirects every plain DNS query of the
+source interfaces to its source DNS inbound (:1603). With a resolver
+such as AdGuard Home on port 53 that forwards to 127.0.0.42, the
+resolver then only sees 127.0.0.1: no per-client statistics, query log,
+client rules or parental control.
+
+With the option off:
+
+- only the devices named in section device filters (source_ip_cidr) or
+  as fully routed devices (fully_routed_ips) still go to :1603, the DNS
+  rules of those sections match the client address;
+- a query for an address other than the router's is sent to the
+  router's resolver on :53 (like netshift's dns_hijack), so a device
+  with a DNS server of its own still gets FakeIP answers through it;
+  a query for the router itself is left as it is.
+
+Excluded devices and an excluded router: a resolver that forwards to
+127.0.0.42 hands them FakeIP answers, while nft left all their traffic
+untouched, so those connections went nowhere. Their connections to the
+FakeIP ranges are now marked for TProxy, and a route rule placed before
+the section rules sends them direct (sing-box restores the domain).
+The rest of their traffic and their DNS stay untouched, as before.
+
+diff --git a/forkop/files/usr/lib/nft/apply.uc b/forkop/files/usr/lib/nft/apply.uc
+index e762019e..5d4c4c85 100644
+--- a/forkop/files/usr/lib/nft/apply.uc
++++ b/forkop/files/usr/lib/nft/apply.uc
+@@ -27,6 +27,8 @@ const TPROXY6_ADDRESS = singbox_constants.TPROXY_INBOUND6_ADDRESS;
+ const BOUND_RULE_PRIORITY = "106";
+ const EXCLUDED4 = "forkop_excluded";
+ const EXCLUDED6 = "forkop_excluded6";
++const DNS_DEVICES4 = "forkop_dns_devices";
++const DNS_DEVICES6 = "forkop_dns_devices6";
+ const ELEMENTS_PER_COMMAND = 5000;
+ 
+ const IPV4_SET = "{ type ipv4_addr; flags interval; auto-merge; }";
+@@ -131,7 +133,68 @@ function capture_command(active) {
+     return [ "nft", join("; ", map(commands, (command) => join(" ", command))) ];
+ }
+ 
+-function add_base(settings, excluded_router, excluded) {
++// Devices whose DNS Forkop has to answer itself with intercept_device_dns off: the DNS rules of
++// sections with a device filter or fully routed devices match the client address, which a
++// resolver in front of Forkop would hide.
++function dns_device_addresses(sections) {
++    let result = [];
++    for (let section in sections) {
++        if (!nft_sections.enabled(section))
++            continue;
++        for (let key in [ "source_ip_cidr", "fully_routed_ips" ])
++            for (let ip in connections.device_matchers(section, key).ips)
++                if (index(result, ip) < 0)
++                    push(result, ip);
++    }
++    return result;
++}
++
++// intercept_device_dns '1' (the default): every plain DNS query of the source interfaces is
++// answered by Forkop. '0', for a resolver on port 53 that forwards to Forkop's 127.0.0.42, such
++// as AdGuard Home: the resolver keeps seeing each client. Only the devices of dns_device_addresses
++// still go to Forkop; a query for an address other than the router's goes to the router's resolver.
++function add_dns_redirect(settings, excluded, sections) {
++    let intercept = common.bool_option(settings, "intercept_device_dns", true);
++    let devices = intercept ? [] : dns_device_addresses(sections);
++
++    add_chain("dns_redirect", "{ type nat hook prerouting priority " + constants.NFT_DNS_REDIRECT_PRIORITY + "; policy accept; }");
++    add_rule("dns_redirect", [ "jump", PAUSE_CHAIN ]);
++    add_excluded_returns("dns_redirect", excluded);
++    if (intercept) {
++        for (let proto in [ "tcp", "udp" ])
++            add_rule("dns_redirect", [ "iifname", "@" + INTERFACES, proto, "dport", "53", "counter", "redirect", "to", ":" + singbox_constants.SOURCE_DNS_INBOUND_PORT ]);
++        return;
++    }
++
++    if (length(devices) > 0) {
++        add_set(DNS_DEVICES4, IPV4_SET);
++        add_set(DNS_DEVICES6, IPV6_SET);
++        add_addresses(devices, DNS_DEVICES4, DNS_DEVICES6, "DNS of section devices");
++        for (let pair in [ [ "ip", DNS_DEVICES4 ], [ "ip6", DNS_DEVICES6 ] ])
++            for (let proto in [ "tcp", "udp" ])
++                add_rule("dns_redirect", [ "iifname", "@" + INTERFACES, pair[0], "saddr", "@" + pair[1], proto, "dport", "53",
++                    "counter", "redirect", "to", ":" + singbox_constants.SOURCE_DNS_INBOUND_PORT ]);
++    }
++    add_rule("dns_redirect", [ "iifname", "@" + INTERFACES, "fib", "daddr", "type", "local", "return" ]);
++    for (let proto in [ "tcp", "udp" ])
++        add_rule("dns_redirect", [ "iifname", "@" + INTERFACES, proto, "dport", "53", "counter", "redirect", "to", ":53" ]);
++}
++
++// An excluded device or router still gets FakeIP answers from a resolver that forwards to
++// 127.0.0.42. Such a connection goes to sing-box, which sends it direct (route.uc); the rest of
++// their traffic leaves the chain untouched.
++function add_excluded_fakeip(chain, saddr_sets, mark) {
++    for (let pair in [ [ "ip", FAKEIP4, saddr_sets?.[0] ], [ "ip6", FAKEIP6, saddr_sets?.[1] ] ])
++        for (let proto in [ "tcp", "udp" ]) {
++            let rule = chain == "mangle" ? [ "iifname", "@" + INTERFACES ] : [];
++            if (pair[2] != null)
++                push(rule, pair[0], "saddr", "@" + pair[2]);
++            push(rule, pair[0], "daddr", pair[1], "meta", "l4proto", proto, "meta", "mark", "set", mark, "counter", "return");
++            add_rule(chain, rule);
++        }
++}
++
++function add_base(settings, excluded_router, excluded, sections) {
+     let system_tproxy_port = singbox_constants.SYSTEM_TPROXY_INBOUND_PORT;
+ 
+     nft([ "add", "table", "inet", TABLE ]);
+@@ -157,13 +220,11 @@ function add_base(settings, excluded_router, excluded) {
+     add_chain("proxy", "{ type filter hook prerouting priority -100; policy accept; }");
+     add_chain(PAUSE_CHAIN, "{ }");
+ 
+-    add_chain("dns_redirect", "{ type nat hook prerouting priority " + constants.NFT_DNS_REDIRECT_PRIORITY + "; policy accept; }");
+-    add_rule("dns_redirect", [ "jump", PAUSE_CHAIN ]);
+-    add_excluded_returns("dns_redirect", excluded);
+-    for (let proto in [ "tcp", "udp" ])
+-        add_rule("dns_redirect", [ "iifname", "@" + INTERFACES, proto, "dport", "53", "counter", "redirect", "to", ":" + singbox_constants.SOURCE_DNS_INBOUND_PORT ]);
++    add_dns_redirect(settings, excluded, sections);
+ 
+     add_held_flow_rule("mangle", FAKEIP_MARK);
++    if (length(excluded) > 0)
++        add_excluded_fakeip("mangle", [ EXCLUDED4, EXCLUDED6 ], FAKEIP_MARK);
+     add_excluded_returns("mangle", excluded);
+     add_rule("mangle", [ "ct", "status", "dnat", "return" ]);
+     add_rule("mangle", REPLY_RETURN);
+@@ -190,8 +251,10 @@ function add_base(settings, excluded_router, excluded) {
+                 "tproxy", family == 6 ? "ip6" : "ip", "to", tproxy_target(family, TPROXY_PORT), "counter" ]);
+ 
+     add_held_flow_rule("mangle_output", ROUTER_MARK);
+-    if (excluded_router)
++    if (excluded_router) {
++        add_excluded_fakeip("mangle_output", null, ROUTER_MARK);
+         add_rule("mangle_output", [ "counter", "return" ]);
++    }
+     add_rule("mangle_output", REPLY_RETURN);
+     add_rule("mangle_output", [ "ip", "daddr", "@" + LOCAL4, "return" ]);
+     add_rule("mangle_output", [ "ip6", "daddr", "@" + LOCAL6, "ip6", "daddr", "!=", FAKEIP6, "return" ]);
+@@ -340,7 +403,7 @@ function build() {
+         push(kept, ...nft_sections.provider_sets(entry.matchers));
+     lines = [];
+     skipped = [];
+-    add_base(settings, excluded.router, excluded.addresses);
++    add_base(settings, excluded.router, excluded.addresses, sections);
+     for (let entry in planned.sections)
+         add_section_rules(entry.matchers);
+     add_fakeip_output();
+diff --git a/forkop/files/usr/lib/singbox/route.uc b/forkop/files/usr/lib/singbox/route.uc
+index e77f30f4..32a1a5a6 100644
+--- a/forkop/files/usr/lib/singbox/route.uc
++++ b/forkop/files/usr/lib/singbox/route.uc
+@@ -1,6 +1,7 @@
+ #!/usr/bin/env ucode
+ 
+ let common = require("core.common");
++let core_ip = require("core.ip");
+ let connections = require("config.connections");
+ let runtime_constants = require("singbox.constants");
+ 
+@@ -43,6 +44,16 @@ function config(settings, runtime) {
+     push(result.rules, { action: "reject", inbound: runtime_constants.DNS_INBOUND_TAG });
+     push(result.rules, { action: "reject", inbound: runtime_constants.SOURCE_DNS_INBOUND_TAG });
+     push(result.rules, { action: "reject", inbound: runtime_constants.SYSTEM_DNS_INBOUND_TAG });
++    // nft hands sing-box only the FakeIP connections of excluded devices and of an excluded
++    // router (nft/apply.uc): they go direct, before any rule of a section.
++    let excluded = connections.excluded_devices(settings);
++    let excluded_ips = filter(excluded.addresses, (value) => core_ip.ip_family(value) != 0);
++    if (length(excluded_ips) > 0)
++        push(result.rules, { action: "route", inbound: [ runtime_constants.TPROXY_INBOUND_TAG, runtime_constants.TPROXY_INBOUND6_TAG ],
++            source_ip_cidr: excluded_ips, outbound: runtime_constants.DIRECT_OUTBOUND_TAG });
++    if (excluded.router)
++        push(result.rules, { action: "route", inbound: [ runtime_constants.SYSTEM_TPROXY_INBOUND_TAG, runtime_constants.SYSTEM_TPROXY_INBOUND6_TAG ],
++            outbound: runtime_constants.DIRECT_OUTBOUND_TAG });
+     if (output_network_interface != "")
+         result.default_interface = output_network_interface;
+     if (bool_option(settings, "disable_quic", false))
+-- 
+2.43.0
+
