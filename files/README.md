@@ -109,7 +109,8 @@ option group 'root'
 - `/etc/init.d/adguardhome`: `--logfile syslog` (или `/var/AdGuardHome.log` прежних версий) → `--logfile /tmp/log/AdGuardHome.log` — журнал в файл, а не в syslog
 - `/etc/config/adguardhome`: `list jail_mount_rw '/tmp/log'` — каталог журнала доступен для записи из песочницы ujail
 - `/etc/adguardhome/adguardhome.yaml` — upstream DNS зависит от варианта:
-  - `forkop`, `trafira`, `podkop`, `netshift` → `127.0.0.42:53` (DNS их sing-box), плюс `<вариант>.settings.dont_touch_dhcp='1'` (у forkop ещё `intercept_device_dns='0'`)
+  - `forkop`, `trafira`, `podkop`, `netshift` → `127.0.0.42:53` (DNS их sing-box), плюс `<вариант>.settings.dont_touch_dhcp='1'`
+  - forkop 2.x вместо `dont_touch_dhcp` (опции нет: dnsmasq он не трогает) получает `forkop.settings.intercept_device_dns='0'` (наш патч 002) и `forkop.settings.unmatched_dns_mode='router'`. Без перехвата запросы клиентов идут в AGH, и он видит каждого; AGH пересылает их на `127.0.0.42:53`, где домены секций получают FakeIP, а остальные отвечают DNS-серверы forkop (правило «вне секций → роутер» на этом входе не действует, петли нет). Запросы на чужой DNS (8.8.8.8 и т.п.) патч тоже отправляет в AGH. Перехватываются только устройства из фильтров секций (им нужен ответ по адресу клиента) и сам роутер; их DNS вне секций с `router` уходит в AGH. FakeIP-соединения исключённых устройств патч 002 отправляет через sing-box напрямую. Без патча (сборка без `apply_patches`) опция ни на что не влияет, и клиенты в журнале AGH видны как `127.0.0.1`. forkop 2.x отличается от forkop-mod (ветка 1.x) по опции `unmatched_dns_mode` в `/usr/share/forkop/default-config`
   - `xray` → `127.0.0.1:5300` (DNS-вход Xray luci-app-xray)
   - `passwall`, `v2raya` → `127.0.0.1:54` (dnsmasq): passwall2 при `dns_redirect=0` вписывает в dnsmasq свои правила (по умолчанию — DNS-вход своего Xray, порт которого выбирается при каждом запуске); v2rayA при занятом AGH порте 53 свой DNS не поднимает
   - остальные → `127.0.0.1:5333` (DNS homeproxy sing-box)
@@ -217,7 +218,7 @@ sed -i 's/ct original packets ge 30 flow offload @ft/flow offload @ft/' /usr/sha
 ## 11. Прочие сервисы
 - **Passwall2** (вариант `passwall`, firstboot): `dns_redirect='0'`, `enabled='1'`. В обоих режимах: `remote_dns='127.0.0.1:53'`, который ставили прежние версии zz1, меняется на `1.1.1.1` (удалённый DNS ходит через узел, адрес роутера там недоступен), опции passwall 1 `dns_shunt`, `china_dns`, `adblock` удаляются
 - **luci-app-xray** (вариант `xray`, firstboot, только если в `xray_core` остались заводские «китайские» значения: GeoIP direct `cn`, bypassed `geosite:cn`, Fast DNS не задан): напрямую — GeoIP `ru` (IPv4 и IPv6) и домены `geosite:category-ru`, Fast DNS `77.88.8.8:53`; Forwarded/Blocked domain rules не трогаются. Если нет `/usr/share/xray/geoip.dat` или `geosite.dat`, в лог пишется ошибка
-- **forkop, trafira, podkop, netshift** (если есть `/etc/config/forkop`, `/etc/config/trafira`, `/etc/config/podkop` или `/etc/config/netshift`): `<пакет>.settings.exclude_ntp='1'` — NTP мимо прокси; если установлен youtubeUnblock — ещё `<пакет>.settings.disable_quic='1'`: QUIC клиента к адресам FakeIP (198.18.0.0/15) не попадает под правило `reject` youtubeUnblock и шёл бы через sing-box в очередь 537, а так sing-box его отклоняет и браузер идёт по TCP
+- **forkop, trafira, podkop, netshift** (если есть `/etc/config/forkop`, `/etc/config/trafira`, `/etc/config/podkop` или `/etc/config/netshift`): `<пакет>.settings.exclude_ntp='1'` — NTP мимо прокси (кроме forkop 2.x: опции нет, NTP-серверы роутера он резолвит через bootstrap DNS, а трафик роутера в секции не берёт без пункта «Система»); если установлен youtubeUnblock — ещё `<пакет>.settings.disable_quic='1'`: QUIC клиента к адресам FakeIP (198.18.0.0/15) не попадает под правило `reject` youtubeUnblock и шёл бы через sing-box в очередь 537, а так sing-box его отклоняет и браузер идёт по TCP
 - **internet-detector**: сервис отключается, `START=99`
 - **phy-leds**: сервис отключается
 - **SQM** (если установлен, вариант `clear`). Скрипт очередей `/usr/lib/sqm/cake_ctinfo.qos` лежит в прошивке
@@ -321,7 +322,7 @@ cp /etc/apk/repositories.d/distfeeds.list.bak /etc/apk/repositories.d/distfeeds.
 ## 14. Локальные бинарники из `/root/apps/`
 | Файл | Куда |
 |------|------|
-| `sing-box.tar.gz`, `sing-box` | `/usr/bin/sing-box` (сервис sing-box останавливается) |
+| `sing-box.tar.gz`, `sing-box` | `/usr/bin/sing-box` (сервис sing-box останавливается). Если стоит пакет `sing-box-forkop` (ядро forkop 2.x), не ставится: forkop на другом sing-box не запускается, файл остаётся в `/root/apps` |
 | `AdGuardHome` | `/usr/bin/AdGuardHome` (сервис останавливается) |
 | `speedtest.tar.gz`, `speedtest` | `/usr/bin/speedtest` |
 
@@ -337,7 +338,8 @@ podkop-engine) и AdGuard Home (`agh` = latest), как и бинарники и
 - OPKG: `opkg flag hold <пакет>`
 
 `apk upgrade` и кнопка «Обновить» в LuCI закреплённый пакет не трогают, остальные обновляются как обычно. Версии
-совпадают — пакет не закрепляется. Обходят закрепление `apk upgrade --available` и `apk fix sing-box`: если в
+совпадают — пакет не закрепляется. У forkop 2.x (`sb` = `forkop-*`) ядро — настоящий пакет `sing-box-forkop`, пакета
+`sing-box` нет, закреплять нечего. Обходят закрепление `apk upgrade --available` и `apk fix sing-box`: если в
 репозитории есть та же версия пакета, они переставят его оттуда и вернут бинарник фида. Снять закрепление и обновить:
 ```sh
 apk add sing-box && apk upgrade          # opkg: opkg flag user sing-box && opkg upgrade sing-box
