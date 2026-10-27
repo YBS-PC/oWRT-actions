@@ -336,8 +336,9 @@ apply_feed_patches
 # --------------------------------------------------------------------------
 
 # YTB — поле формы ytb (workflow экспортирует его; без него считаем «да»).
-# Варианты без youtubeUnblock job setup и так приводит к ytb=false.
-if [[ "$VARIANT" == "clear" || "$VARIANT" == "crystal_clear" || "$VARIANT" == "switch" || "$VARIANT" == "forkop" || "$VARIANT" == "trafira" || "${YTB:-true}" != "true" ]]; then
+# Варианты без youtubeUnblock job setup и так приводит к ytb=false (forkop-mod —
+# тоже: внутри сборки это VARIANT=forkop, а forkop 2.x youtubeUnblock можно).
+if [[ "$VARIANT" == "clear" || "$VARIANT" == "crystal_clear" || "$VARIANT" == "switch" || "$VARIANT" == "trafira" || "${YTB:-true}" != "true" ]]; then
     echo ">>> Variant '$VARIANT', ytb=${YTB:-true}. Skipping youtubeUnblock update."
 else
     echo "=================================================="
