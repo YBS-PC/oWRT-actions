@@ -129,6 +129,14 @@ HOSTNAME_PATTERN="${ROUTER_MODEL_NAME}-${ROUTER_NAME}"
 CURRENT_VARIANT=$(cat /etc/build_variant 2>/dev/null | head -n 1)
 log_ok "Build Variant: ${CURRENT_VARIANT:-unknown}"
 
+# forkop 2.x (ushan0v/forkop 2.0+, ядро sing-box-forkop) или ветка 1.x
+# (forkop-mod; внутри сборки оба — вариант forkop). У 2.x другие настройки:
+# dont_touch_dhcp, exclude_ntp и intercept_device_dns убраны, DNS вне секций —
+# unmatched_dns_mode. Признак — эта опция в конфиге по умолчанию из пакета.
+forkop_v2() {
+    grep -qs "option unmatched_dns_mode" /usr/share/forkop/default-config
+}
+
 # --- БЛОК ЗАЩИТЫ ОТ ПОВТОРНОГО ЗАПУСКА ---
 # LOCK_FILE определён выше, вместе с MODE
 #if [ -f "$LOCK_FILE" ]; then
@@ -244,7 +252,11 @@ fi
 # Установка локальных пакетов
 # Архив удаляем только после успешной установки: иначе падение tar
 # оставило бы и без бинарника, и без исходного архива.
-if [ -f /root/apps/sing-box.tar.gz ]; then
+# Ядро forkop 2.x (пакет sing-box-forkop) не подменяем: forkop не запускается
+# на другом sing-box. Файлы в /root/apps тогда остаются как есть.
+if [ -f /usr/share/sing-box-forkop/version ] && { [ -f /root/apps/sing-box.tar.gz ] || [ -f /root/apps/sing-box ]; }; then
+    log_info "sing-box из /root/apps не ставим: установлен sing-box-forkop $(cat /usr/share/sing-box-forkop/version), ядро forkop 2.x"
+elif [ -f /root/apps/sing-box.tar.gz ]; then
     [ -x /etc/init.d/sing-box ] && run_cmd "Остановка sing-box" /etc/init.d/sing-box stop
     if run_cmd "Распаковка sing-box" tar -xzf /root/apps/sing-box.tar.gz -C /tmp/ \
        && run_cmd "Копирование sing-box" cp /tmp/sing-box /usr/bin/sing-box; then
@@ -266,7 +278,7 @@ if [ -f /root/apps/speedtest.tar.gz ]; then
 fi
 
 # Установка неархивированных локальных пакетов
-if [ -f /root/apps/sing-box ]; then
+if [ -f /root/apps/sing-box ] && [ ! -f /usr/share/sing-box-forkop/version ]; then
     [ -x /etc/init.d/sing-box ] && run_cmd "Остановка sing-box" /etc/init.d/sing-box stop
     run_cmd "Копирование sing-box" cp /root/apps/sing-box /usr/bin/sing-box
     run_cmd "Права sing-box" chmod +x /usr/bin/sing-box
@@ -972,23 +984,33 @@ EOF
             log_err "adguardhome.yaml: не удалось заменить upstream DNS"
         fi
         rm -f "$AGH_YAML.zz1"
-        if [ "$_AGH_EXPECTED" = '127.0.0.42:53' ]; then
+        if [ "$_AGH_EXPECTED" = '127.0.0.42:53' ] && [ "$CURRENT_VARIANT" = "forkop" ] && forkop_v2; then
+            # forkop 2.x dnsmasq не трогает, а DNS клиентов (порт 53 с
+            # интерфейсов источника) и самого роутера (127.0.0.1:53) забирает
+            # себе nft-перенаправлением. Наш патч 002 (patches/feeds/forkop)
+            # добавляет intercept_device_dns: с '0' запросы клиентов идут в AGH,
+            # и он видит каждого; в forkop — только устройства из фильтров
+            # секций, им нужен свой ответ. AGH отправляет запросы на 127.0.0.42:
+            # там домены секций получают FakeIP, остальные отвечают DNS-серверы
+            # forkop (правила «вне секций → роутер» на этом входе нет, петли
+            # нет). FakeIP-соединения исключённых устройств патч 002 отправляет
+            # напрямую. Без патча опция ни на что не влияет: клиенты в журнале
+            # AGH видны как 127.0.0.1.
+            # unmatched_dns_mode=router — для тех, кого forkop перехватывает
+            # (устройства из фильтров, сам роутер): DNS вне секций — тоже через
+            # AGH (его сокет помечен, повторно не перехватывается).
+            uci -q set forkop.settings.intercept_device_dns='0' 2>/dev/null \
+                && uci -q set forkop.settings.unmatched_dns_mode='router' 2>/dev/null \
+                && uci commit forkop 2>/dev/null \
+                && log_ok "forkop 2.x: intercept_device_dns=0 (AGH видит клиентов), unmatched_dns_mode=router"
+            log_ok "AGH upstream → forkop sing-box ($_AGH_EXPECTED)"
+        elif [ "$_AGH_EXPECTED" = '127.0.0.42:53' ]; then
             # Все они по умолчанию сами перенастраивают dnsmasq на 127.0.0.42
             # (dont_touch_dhcp=0). Хозяин :53 — AGH, dnsmasq на :54 — поэтому
             # выставляем флаг, чтобы они dnsmasq не трогали.
             uci -q set "$CURRENT_VARIANT".settings.dont_touch_dhcp='1' 2>/dev/null \
                 && uci commit "$CURRENT_VARIANT" 2>/dev/null \
                 && log_ok "$CURRENT_VARIANT: dont_touch_dhcp=1 (AGH остаётся хозяином на :53)"
-            if [ "$CURRENT_VARIANT" = "forkop" ]; then
-                # Аналог dns_hijacked='1' для homeproxy (патч 025): forkop не
-                # перехватывает DNS исключённых устройств и устройств из фильтров
-                # секций, поэтому AGH видит каждого клиента. Их трафик к FakeIP
-                # forkop всё равно направляет правильно (исключённые — напрямую).
-                # Без патча 025 опция ни на что не влияет.
-                uci -q set forkop.settings.intercept_device_dns='0' 2>/dev/null \
-                    && uci commit forkop 2>/dev/null \
-                    && log_ok "forkop: intercept_device_dns=0 (DNS всех клиентов идёт через AGH)"
-            fi
             # trafira: такой опции нет. По умолчанию (Alice Mode выключен, без
             # секций с DNS по устройствам) он DNS клиентов не перехватывает и
             # AGH видит каждого. С включённым Alice Mode DNS клиентов «в обход»
@@ -1063,6 +1085,12 @@ fi
 # что была с ntpd на homeproxy.
 for _pk in forkop trafira podkop netshift; do
     [ -f "/etc/config/$_pk" ] || continue
+    # forkop 2.x: опции нет, NTP-серверы роутера он сам резолвит через
+    # bootstrap DNS, а трафик роутера в секции не берёт без пункта «Система»
+    if [ "$_pk" = "forkop" ] && forkop_v2; then
+        log_info "forkop 2.x: exclude_ntp нет — пропуск"
+        continue
+    fi
     if [ "$(uci -q get "$_pk".settings.exclude_ntp)" = "1" ]; then
         log_ok "$_pk: exclude_ntp уже включён"
     elif uci -q set "$_pk".settings.exclude_ntp='1' && uci commit "$_pk"; then
@@ -1081,7 +1109,8 @@ done
 # опция disable_quic ставит в sing-box правило reject для QUIC на входе tproxy:
 # браузер сразу переходит на TCP, который youtubeUnblock обрабатывает. HTTP/3
 # при этом не используется и для сайтов через VPS — для прокси это обычно лучше.
-# Без youtubeUnblock (forkop, trafira — у них свой Zapret) опцию не трогаем.
+# Без youtubeUnblock (forkop-mod и trafira — у них свой Zapret; forkop 2.x —
+# если youtubeUnblock не выбран) опцию не трогаем.
 if [ -x /usr/bin/youtubeUnblock ]; then
     for _pk in forkop trafira podkop netshift; do
         [ -f "/etc/config/$_pk" ] || continue
