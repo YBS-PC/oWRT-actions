@@ -17,7 +17,7 @@ echo ">>>>>>>>> WRT-part2 start. Использование: после feeds up
 #   podkop/Makefile       PODKOP_VERSION  -> без неё PKG_VERSION=0.<дата>
 #   netshift/Makefile     NETSHIFT_VERSION -> без неё версия, зашитая в
 #                         Makefile автора (а у luci-app-netshift — 0.<дата>)
-#   proton2025/Makefile   PROTON_VERSION  -> без неё зашитый дефолт 1.4.0
+#   proton2025/Makefile   PROTON_VERSION  -> без неё дефолт из Makefile (сейчас 1.4.5)
 #
 # Тег тянем через git ls-remote: не требует ни токена, ни клона. Фолбэк —
 # GitHub API (с токеном, если он проброшен в шаг). part2 вызывается из yml
