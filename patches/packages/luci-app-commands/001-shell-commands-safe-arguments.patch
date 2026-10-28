@@ -1,0 +1,481 @@
+From 3ad417f738cd82951d6636547cbc942ea64ab5f4 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 28 Oct 2026 20:38:27 +0000
+Subject: [PATCH] commands: run commands by the shell, pass arguments safely
+
+The command line was split into words and every word with characters
+other than [A-Za-z0-9_./|-] was quoted again. Because of this:
+
+- pipes worked, but redirections, ";", "&&", variables, globs and
+  scripts of several lines did not: "echo $HOME" printed "$HOME";
+- an argument typed by the user went to the shell unquoted when it held
+  only such characters, so "|reboot" ran reboot. For a command with
+  "Public access" and "Custom arguments" anyone could run anything
+  without logging in;
+- "\ " and "\"" kept their backslash, unlike the shell;
+- the public download link passed its arguments as an array and lost
+  them; a command reading stdin waited on the HTTP request body.
+
+Now the configured command is a piece of shell script run by /bin/sh -c,
+as in a terminal. The arguments never reach the shell parser: they are
+the positional parameters $1, $2, ... (set -- 'quoted' ...), and a
+one-line command that does not use $1...$9 or "$@" itself gets "$@" at
+its end, as before. After ";", "|", "&&", "then" or "do" nothing is
+appended, so the arguments cannot become a command of their own. The
+arguments are split by the shell rules for quotes and backslashes and
+are never expanded: $(...), `...`, $HOME and * stay as typed. stdin is
+/dev/null.
+
+The helpers move to ucode/commands.uc (luci.commands), shared with the
+rpcd plugin of the next patch. ESC of color codes no longer marks the
+output as binary data. The public result page wraps long lines.
+
+Checked: the argument parser against dash on 21 strings (quotes,
+backslashes, Cyrillic, empty arguments); 78 checks of the parser,
+positional detection, script building and binary test in node with the
+ucode builtins; the built scripts run by dash keep "$(reboot)", "|",
+";reboot" and "`id`" as plain text.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
+---
+ ucode/commands.uc                 | 209 ++++++++++++++++++++++++++++++
+ ucode/controller/commands.uc      | 146 +++------------------
+ ucode/template/commands_public.ut |   5 +
+ 3 files changed, 235 insertions(+), 125 deletions(-)
+ create mode 100644 ucode/commands.uc
+
+diff --git a/ucode/commands.uc b/ucode/commands.uc
+new file mode 100644
+index 0000000..3d26fdf
+--- /dev/null
++++ b/ucode/commands.uc
+@@ -0,0 +1,209 @@
++// Copyright 2012-2022 Jo-Philipp Wich <jow@openwrt.org>
++// Licensed to the public under the Apache License 2.0.
++
++'use strict';
++
++// Helpers shared by the web controller (run, download, public links) and
++// the rpcd plugin luci.commands (background jobs), so that both build the
++// command line the same way.
++
++// Decode a given string into arguments following shell quoting rules
++// [[abc\ def "foo\"bar" abc'def']] -> [[abc def]] [[foo"bar]] [[abcdef]]
++// Nothing is expanded: $, ` and * stay as typed.
++export function parse_args(str) {
++	let args = [];
++
++	function isspace(c) {
++		if (c == 9 || c == 10 || c == 11 || c == 12 || c == 13 || c == 32)
++			return c;
++	}
++
++	function isquote(c) {
++		if (c == 34 || c == 39)
++			return c;
++	}
++
++	function isescape(c) {
++		if (c == 92)
++			return c;
++	}
++
++	// Inside double quotes a backslash only escapes " $ \ and `
++	function isdqmeta(c) {
++		if (c == 34 || c == 36 || c == 92 || c == 96)
++			return c;
++	}
++
++	// Scan substring defined by the indexes [s, e] of the string "str",
++	// perform unquoting and de-escaping on the fly and store the result
++	function unquote(start, end) {
++		let esc = false, quote = null, res = [];
++
++		for (let off = start; off < end; off++) {
++			const byte = ord(str, off);
++			const q = isquote(byte);
++			const e = isescape(byte);
++
++			if (esc) {
++				if (quote == 34 && !isdqmeta(byte) && byte != 10)
++					push(res, 92);
++
++				// backslash-newline continues the line
++				if (byte != 10)
++					push(res, byte);
++
++				esc = false;
++			}
++			else if (e && quote != 39) {
++				esc = true;
++			}
++			else if (q && quote && q == quote) {
++				quote = null;
++			}
++			else if (q && !quote) {
++				quote = q;
++			}
++			else {
++				push(res, byte);
++			}
++		}
++
++		// a lone backslash at the very end is kept
++		if (esc)
++			push(res, 92);
++
++		push(args, chr(...res));
++	}
++
++	// Find substring boundaries in "str". Ignore escaped or quoted
++	// whitespace, pass found start- and end-index for each substring
++	// to unquote()
++	let esc = false, start = null, quote = null;
++
++	for (let off = 0; off <= length(str); off++) {
++		const byte = ord(str, off);
++		const q = isquote(byte);
++		const s = isspace(byte) ?? (byte === null);
++		const e = isescape(byte);
++
++		if (esc) {
++			esc = false;
++		}
++		else if (e && quote != 39) {
++			esc = true;
++			start ??= off;
++		}
++		else if (q && quote && q == quote) {
++			quote = null;
++		}
++		else if (q && !quote) {
++			start ??= off;
++			quote = q;
++		}
++		else if (s && !quote) {
++			if (start !== null) {
++				unquote(start, off);
++				start = null;
++			}
++		}
++		else {
++			start ??= off;
++		}
++	}
++
++	// If the "quote" is still set we encountered an unfinished string
++	if (quote)
++		unquote(start, length(str));
++
++	return args;
++}
++
++export function shellquote(s) {
++	return `'${replace(s, "'", "'\\''")}'`;
++}
++
++// Whether the command refers to its positional parameters ($1 ... $9,
++// ${10}, ${1:-default}, ${#1}, $@, $*, $#) anywhere outside of single
++// quotes, i.e. where the shell expands them. "awk '{ print $1 }'" does
++// not count.
++export function uses_positional(cmd) {
++	let squote = false, dquote = false, esc = false;
++
++	for (let off = 0; off < length(cmd); off++) {
++		const c = substr(cmd, off, 1);
++
++		if (esc) {
++			esc = false;
++		}
++		else if (squote) {
++			if (c == "'")
++				squote = false;
++		}
++		else if (c == '\\') {
++			esc = true;
++		}
++		else if (c == '"') {
++			dquote = !dquote;
++		}
++		else if (c == "'" && !dquote) {
++			squote = true;
++		}
++		else if (c == '$' && match(substr(cmd, off + 1, 16), /^([1-9@*#]|\{#?([0-9]|[@*#][}:#%=+?-]))/)) {
++			return true;
++		}
++	}
++
++	return false;
++}
++
++// "$@" may be appended to a one-line command that does not end with an
++// operator or a keyword: after ";", "|", "&&" or "then" the arguments
++// would run as a command of their own.
++function appendable(cmd) {
++	cmd = rtrim(cmd);
++
++	return length(cmd) && index(cmd, '\n') < 0 &&
++		!match(cmd, /[;&|(){!]$/) &&
++		!match(cmd, /(^|[ ;&|])(do|then|else|elif|time)$/);
++}
++
++// The configured command is a piece of shell script: pipes, redirections,
++// variables and several lines work as in a terminal. User supplied
++// arguments never reach the shell parser: they become the positional
++// parameters $1, $2, ... and are appended to a one-line command as "$@"
++// unless the command uses them itself.
++export function build_script(cmd, args) {
++	let script = cmd ?? '';
++
++	if (length(args)) {
++		if (!uses_positional(script) && appendable(script))
++			script = rtrim(script) + ' "$@"';
++
++		script = `set -- ${join(' ', map(args, shellquote))}\n${script}`;
++	}
++
++	return script;
++}
++
++// The command line as shown to the user
++export function display_cmdline(cmd, args) {
++	return join(' ', [ cmd ?? '', ...map(args ?? [], shellquote) ]);
++}
++
++// File name for downloads: the first word of the command
++export function download_name(cmd) {
++	const word = match(trim(cmd ?? ''), /^[^ \t\n;|&<>()]+/)?.[0] ?? 'command';
++	const parts = split(word, '/');
++
++	return replace(parts[length(parts) - 1], /[^A-Za-z0-9_-]+/g, '.') || 'command';
++}
++
++// Control characters other than the ones a terminal handles
++// (\a \b \t \n \v \f \r and ESC of color codes) mean binary data
++export function test_binary(str) {
++	for (let off = 0, byte = ord(str); off < length(str); byte = ord(str, ++off))
++		if (byte == 0 || (byte <= 6) || (byte >= 14 && byte <= 31 && byte != 27))
++			return true;
++
++	return false;
++}
+diff --git a/ucode/controller/commands.uc b/ucode/controller/commands.uc
+index 9126d59..048d03b 100644
+--- a/ucode/controller/commands.uc
++++ b/ucode/controller/commands.uc
+@@ -3,144 +3,40 @@
+ 
+ 'use strict';
+ 
+-import { basename, mkstemp, popen } from 'fs';
++import { mkstemp, popen } from 'fs';
+ import { urldecode } from 'luci.http';
+-
+-// Decode a given string into arguments following shell quoting rules
+-// [[abc\ def "foo\"bar" abc'def']] -> [[abc def]] [[foo"bar]] [[abcdef]]
+-function parse_args(str) {
+-	let args = [];
+-
+-	function isspace(c) {
+-		if (c == 9 || c == 10 || c == 11 || c == 12 || c == 13 || c == 32)
+-			return c;
+-	}
+-
+-	function isquote(c) {
+-		if (c == 34 || c == 39 || c == 96)
+-			return c;
+-	}
+-
+-	function isescape(c) {
+-		if (c == 92)
+-			return c;
+-	}
+-
+-	function ismeta(c) {
+-		if (c == 36 || c == 92 || c == 96)
+-			return c;
+-	}
+-
+-	// Scan substring defined by the indexes [s, e] of the string "str",
+-	// perform unquoting and de-escaping on the fly and store the result
+-	function unquote(start, end) {
+-		let esc, quote, res = [];
+-
+-		for (let off = start; off < end; off++) {
+-			const byte = ord(str, off);
+-			const q = isquote(byte);
+-			const e = isescape(byte);
+-			const m = ismeta(byte);
+-
+-			if (esc) {
+-				if (!m)
+-					push(res, 92);
+-
+-				push(res, byte);
+-				esc = false;
+-			}
+-			else if (e && quote != 39) {
+-				esc = true;
+-			}
+-			else if (q && quote && q == quote) {
+-				quote = null;
+-			}
+-			else if (q && !quote) {
+-				quote = q;
+-			}
+-			else {
+-				push(res, byte);
+-			}
+-		}
+-
+-		push(args, chr(...res));
+-	}
+-
+-	// Find substring boundaries in "str". Ignore escaped or quoted
+-	// whitespace, pass found start- and end-index for each substring
+-	// to unquote()
+-	let esc, start, quote;
+-
+-	for (let off = 0; off <= length(str); off++) {
+-		const byte = ord(str, off);
+-		const q = isquote(byte);
+-		const s = isspace(byte) ?? (byte === null);
+-		const e = isescape(byte);
+-
+-		if (esc) {
+-			esc = false;
+-		}
+-		else if (e && quote != 39) {
+-			esc = true;
+-			start ??= off;
+-		}
+-		else if (q && quote && q == quote) {
+-			quote = null;
+-		}
+-		else if (q && !quote) {
+-			start ??= off;
+-			quote = q;
+-		}
+-		else if (s && !quote) {
+-			if (start !== null) {
+-				unquote(start, off);
+-				start = null;
+-			}
+-		}
+-		else {
+-			start ??= off;
+-		}
+-	}
+-
+-	// If the "quote" is still set we encountered an unfinished string
+-	if (quote)
+-		unquote(start, length(str));
+-
+-	return args;
+-}
+-
+-function test_binary(str) {
+-	for (let off = 0, byte = ord(str); off < length(str); byte = ord(str, ++off))
+-		if (byte <= 8 || (byte >= 14 && byte <= 31))
+-			return true;
+-
+-	return false;
+-}
++import {
++	parse_args, shellquote, build_script, display_cmdline, download_name, test_binary
++} from 'luci.commands';
+ 
+ function parse_cmdline(cmdid, args) {
+ 	if (uci.get('luci', cmdid) == 'command') {
+ 		let cmd = uci.get_all('luci', cmdid);
+-		let argv = parse_args(cmd?.command);
++		let argv = [];
+ 
+ 		if (cmd?.param == '1') {
+ 			if (length(args))
+-				push(argv, ...(parse_args(urldecode(args)) ?? []));
++				argv = parse_args(urldecode(args)) ?? [];
+ 			else if (length(args = http.formvalue('args')))
+-				push(argv, ...(parse_args(args) ?? []));
++				argv = parse_args(args) ?? [];
+ 		}
+ 
+-		return map(argv, v => match(v, /[^\w.\/|-]/) ? `'${replace(v, "'", "'\\''")}'` : v);
++		return {
++			script:  build_script(cmd?.command, argv),
++			display: display_cmdline(cmd?.command, argv),
++			name:    download_name(cmd?.command)
++		};
+ 	}
+ }
+ 
+ function execute_command(callback, ...args) {
+-	let argv = parse_cmdline(...args);
++	let cmdline = parse_cmdline(...args);
+ 
+-	if (argv) {
++	if (cmdline) {
+ 		let outfd = mkstemp();
+ 		let errfd = mkstemp();
+ 
+-		const exitcode = system(`${join(' ', argv)} >&${outfd.fileno()} 2>&${errfd.fileno()}`);
++		const exitcode = system(`/bin/sh -c ${shellquote(cmdline.script)} </dev/null >&${outfd.fileno()} 2>&${errfd.fileno()}`);
+ 
+ 		outfd.seek(0);
+ 		errfd.seek(0);
+@@ -155,7 +51,7 @@ function execute_command(callback, ...args) {
+ 
+ 		callback({
+ 			ok:      true,
+-			command: join(' ', argv),
++			command: cmdline.display,
+ 			stdout:  binary ? null : stdout,
+ 			stderr,
+ 			exitcode,
+@@ -197,13 +93,13 @@ return {
+ 	},
+ 
+ 	action_download: function(...args) {
+-		const argv = parse_cmdline(...args);
++		const cmdline = parse_cmdline(...args);
+ 
+-		if (argv) {
+-			const fd = popen(`${join(' ', argv)} 2>/dev/null`);
++		if (cmdline) {
++			const fd = popen(`/bin/sh -c ${shellquote(cmdline.script)} </dev/null 2>/dev/null`);
+ 
+ 			if (fd) {
+-				let filename = replace(basename(argv[0]), /\W+/g, '.');
++				let filename = cmdline.name;
+ 				let chunk = fd.read(4096) ?? '';
+ 				let name;
+ 
+@@ -247,7 +143,7 @@ return {
+ 			if (disp)
+ 				execute_command(return_html, cmdid, ...args);
+ 			else
+-				this.action_download(cmdid, args);
++				this.action_download(cmdid, ...args);
+ 		}
+ 		else {
+ 			http.status(403, "Access to command denied");
+diff --git a/ucode/template/commands_public.ut b/ucode/template/commands_public.ut
+index aef072f..0e25482 100644
+--- a/ucode/template/commands_public.ut
++++ b/ucode/template/commands_public.ut
+@@ -24,6 +24,11 @@
+             background-color: #fcf8e3;
+             border-color: #faebcc;
+         }
++
++        pre {
++            white-space: pre-wrap;
++            overflow-wrap: anywhere;
++        }
+     ` });
+ -%}
+ 
+-- 
+2.43.0
+

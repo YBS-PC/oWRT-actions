@@ -1,0 +1,399 @@
+From 5e0c4c8032ad69b147a540d4a9ed9f106ab9454f Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 28 Oct 2026 20:38:28 +0000
+Subject: [PATCH] commands: run commands as background jobs
+
+A command ran inside the HTTP request: the page waited without any
+output until the command ended, a command longer than the script
+timeout of the web server was cut off, the output was read up to 512 KiB
+and the command could not be stopped.
+
+The new rpcd plugin luci.commands (ucode) runs a command as a job:
+
+- start: start-stop-daemon -b runs /usr/libexec/luci-commands-job,
+  detached from rpcd and holding none of its file descriptors. The job
+  directory in /tmp/luci-commands gets the output (stdout and stderr
+  together, as they come), the PID and, last, the exit code;
+- poll: the output from an offset, up to 128 KiB a call, with the
+  state, exit code and run time. A UTF-8 character cut at the end of a
+  chunk waits for the next call, NUL bytes are shown as U+FFFD;
+- stop: SIGTERM to the process group of the command, SIGKILL on a
+  later poll when it is still alive after 3 s;
+- jobs: the jobs that are kept, so the page shows the state and the
+  output of a command after a reload.
+
+The command runs in its own session (setsid): stop and the optional
+time limit (option timeout, seconds) reach its children. The output is
+limited to 8 MiB (ulimit -f), the job of a command is replaced by its
+next run, finished jobs are kept for a day, at most 16.
+
+The ACL grants jobs and poll for reading, start and stop for writing.
+
+Checked: the runner under dash with exit code, arguments with spaces
+and quotes, stop of the process group, time limit with a command that
+ignores SIGTERM (SIGKILL after 3 s), the output limit, background
+children; the plugin in node with its ucode builtins and fs emulated,
+together with the real runner: start, poll, stop, jobs, cleanup, wrong
+ids, binary output, UTF-8 cut into 48 chunks of 1001 bytes.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
+---
+ root/usr/libexec/luci-commands-job            |  57 ++++
+ .../share/rpcd/acl.d/luci-app-commands.json   |   6 +
+ root/usr/share/rpcd/ucode/luci.commands       | 259 ++++++++++++++++++
+ 3 files changed, 322 insertions(+)
+ create mode 100755 root/usr/libexec/luci-commands-job
+ create mode 100644 root/usr/share/rpcd/ucode/luci.commands
+
+diff --git a/root/usr/libexec/luci-commands-job b/root/usr/libexec/luci-commands-job
+new file mode 100755
+index 0000000..c913998
+--- /dev/null
++++ b/root/usr/libexec/luci-commands-job
+@@ -0,0 +1,57 @@
++#!/bin/sh
++# Runs one job of luci-app-commands. The rpcd plugin luci.commands starts
++# it with "start-stop-daemon -b", so it is detached from rpcd and holds
++# none of its file descriptors.
++#
++# $1 is the job directory with the files written by the plugin:
++#   script    "set -- <arguments>" and the configured command
++#   timeout   run time limit in seconds, 0 for none
++#   limit     output size limit in KiB
++# The job writes:
++#   out       stdout and stderr of the command, as they come
++#   pid       PID of the command, the leader of its process group
++#   timedout  present when the time limit stopped the command
++#   rc        exit code, written last (128+N when killed by signal N)
++
++dir=$1
++[ -n "$dir" ] && [ -f "$dir/script" ] || exit 1
++
++timeout=$(cat "$dir/timeout" 2>/dev/null)
++limit=$(cat "$dir/limit" 2>/dev/null)
++case "$timeout" in '' | *[!0-9]*) timeout=0 ;; esac
++case "$limit" in '' | *[!0-9]*) limit=8192 ;; esac
++
++cd / || exit 1
++
++# The command gets its own session and process group: "stop" and the time
++# limit signal the whole group, this script stays alive to record the exit
++# code. ulimit -f counts 512 byte blocks, a write past it gets SIGXFSZ.
++(
++	ulimit -f $((limit * 2))
++	exec setsid /bin/sh "$dir/script"
++) </dev/null >"$dir/out" 2>&1 &
++pid=$!
++echo "$pid" >"$dir/pid"
++
++watchdog=
++if [ "$timeout" -gt 0 ]; then
++	(
++		trap 'kill "$s" 2>/dev/null; exit 0' TERM
++		sleep "$timeout" &
++		s=$!
++		wait "$s"
++		: >"$dir/timedout"
++		kill -TERM -"$pid" 2>/dev/null
++		sleep 3 &
++		s=$!
++		wait "$s"
++		kill -KILL -"$pid" 2>/dev/null
++	) </dev/null >/dev/null 2>&1 &
++	watchdog=$!
++fi
++
++wait "$pid"
++rc=$?
++
++[ -n "$watchdog" ] && kill "$watchdog" 2>/dev/null
++echo "$rc" >"$dir/rc.tmp" && mv -f "$dir/rc.tmp" "$dir/rc"
+diff --git a/root/usr/share/rpcd/acl.d/luci-app-commands.json b/root/usr/share/rpcd/acl.d/luci-app-commands.json
+index 45facdf..3b30a33 100644
+--- a/root/usr/share/rpcd/acl.d/luci-app-commands.json
++++ b/root/usr/share/rpcd/acl.d/luci-app-commands.json
+@@ -2,9 +2,15 @@
+ 	"luci-app-commands": {
+ 		"description": "Grant UCI access for luci-app-commands",
+ 		"read": {
++			"ubus": {
++				"luci.commands": [ "jobs", "poll" ]
++			},
+ 			"uci": [ "luci" ]
+ 		},
+ 		"write": {
++			"ubus": {
++				"luci.commands": [ "start", "stop" ]
++			},
+ 			"uci": [ "luci" ]
+ 		}
+ 	}
+diff --git a/root/usr/share/rpcd/ucode/luci.commands b/root/usr/share/rpcd/ucode/luci.commands
+new file mode 100644
+index 0000000..13893e9
+--- /dev/null
++++ b/root/usr/share/rpcd/ucode/luci.commands
+@@ -0,0 +1,259 @@
++// Licensed to the public under the Apache License 2.0.
++
++'use strict';
++
++import { access, lsdir, mkdir, open, readfile, rmdir, stat, unlink, writefile } from 'fs';
++import { cursor } from 'uci';
++import { parse_args, shellquote, build_script } from 'luci.commands';
++
++// Background jobs of luci-app-commands. A job is a directory under JOBDIR
++// that the runner script fills while the command works; the dashboard
++// polls it for new output, so long and slow commands are not bound to the
++// rpcd and HTTP time limits and keep running when the page is closed.
++
++const JOBDIR = '/tmp/luci-commands';
++const RUNNER = '/usr/libexec/luci-commands-job';
++const CHUNK = 131072;          // bytes of output per poll
++const OUTPUT_LIMIT = 8192;     // KiB of output per job, the rest is cut off
++const KEEP_JOBS = 16;          // finished jobs kept, the newest ones
++const KEEP_AGE = 86400;        // seconds a finished job is kept
++const KILL_DELAY = 3;          // seconds from "stop" (SIGTERM) to SIGKILL
++
++function readint(path) {
++	const v = trim(readfile(path) ?? '');
++
++	return match(v, /^-?[0-9]+$/) ? int(v) : null;
++}
++
++function job_dir(job) {
++	if (type(job) != 'string' || !match(job, /^[A-Za-z0-9_]+-[0-9a-f]{16}$/))
++		return null;
++
++	const dir = `${JOBDIR}/${job}`;
++
++	return access(dir) ? dir : null;
++}
++
++function job_state(job, dir) {
++	const rc = readint(`${dir}/rc`);
++	const start = readint(`${dir}/start`);
++	const runner = readint(`${dir}/jpid`);
++	const size = stat(`${dir}/out`)?.size ?? 0;
++	const limit = readint(`${dir}/limit`) ?? OUTPUT_LIMIT;
++
++	/* the runner writes rc last; without rc and without the runner the job
++	 * was interrupted. A restart of rpcd does not touch running jobs. */
++	const running = (rc === null) && runner > 1 && !!access(`/proc/${runner}`);
++
++	return {
++		job,
++		id:          trim(readfile(`${dir}/id`) ?? ''),
++		args:        readfile(`${dir}/args`) ?? '',
++		start,
++		end:         (rc !== null) ? stat(`${dir}/rc`)?.mtime : null,
++		now:         time(),
++		running,
++		rc,
++		interrupted: (rc === null && !running),
++		stopped:     !!access(`${dir}/stop`),
++		timedout:    !!access(`${dir}/timedout`),
++		timeout:     readint(`${dir}/timeout`) ?? 0,
++		limited:     size >= limit * 1024,
++		size
++	};
++}
++
++function remove_job(dir) {
++	for (let f in (lsdir(dir) ?? []))
++		unlink(`${dir}/${f}`);
++
++	rmdir(dir);
++}
++
++function list_jobs() {
++	let jobs = [];
++
++	for (let job in (lsdir(JOBDIR) ?? [])) {
++		const dir = job_dir(job);
++
++		if (dir)
++			push(jobs, job_state(job, dir));
++	}
++
++	return sort(jobs, (a, b) => (a.start ?? 0) - (b.start ?? 0));
++}
++
++// Before a new run: drop finished jobs of the same command, then the
++// finished ones older than KEEP_AGE and all but the KEEP_JOBS newest.
++function cleanup(id) {
++	let finished = filter(list_jobs(), j => !j.running);
++	const now = time();
++
++	for (let i = 0; i < length(finished); i++) {
++		const j = finished[i];
++
++		if (j.id == id || (now - (j.start ?? 0)) > KEEP_AGE || i < length(finished) - KEEP_JOBS)
++			remove_job(`${JOBDIR}/${j.job}`);
++	}
++}
++
++// Keep a UTF-8 sequence that is cut at the end of the chunk for the next
++// poll, the browser would show it as two broken characters otherwise.
++function utf8_cut(data) {
++	const n = length(data);
++	let i = n - 1;
++
++	while (i >= 0 && i > n - 4 && (ord(data, i) & 0xC0) == 0x80)
++		i--;
++
++	if (i < 0)
++		return data;
++
++	const lead = ord(data, i);
++	const need = (lead >= 0xF0) ? 4 : (lead >= 0xE0) ? 3 : (lead >= 0xC0) ? 2 : 1;
++
++	return (n - i < need) ? substr(data, 0, i) : data;
++}
++
++const methods = {
++	start: {
++		args: { id: 'id', args: 'args' },
++		call: function(request) {
++			const id = request.args.id;
++			const uci = cursor();
++
++			if (type(id) != 'string' || !match(id, /^[A-Za-z0-9_]+$/) || uci.get('luci', id) != 'command')
++				return { error: 'No such command' };
++
++			const cmd = uci.get_all('luci', id);
++			let argv = [];
++
++			if (cmd.param == '1' && length(request.args.args))
++				argv = parse_args(request.args.args) ?? [];
++
++			const timeout = match(cmd.timeout ?? '', /^[0-9]+$/) ? int(cmd.timeout) : 0;
++
++			cleanup(id);
++			mkdir(JOBDIR, 0700);
++
++			const rnd = readfile('/dev/urandom', 8);
++
++			if (length(rnd) != 8)
++				return { error: 'No random data' };
++
++			const job = `${id}-${hexenc(rnd)}`;
++			const dir = `${JOBDIR}/${job}`;
++
++			if (!mkdir(dir, 0700))
++				return { error: 'Cannot create the job directory' };
++
++			const display = join(' ', map(argv, shellquote));
++
++			writefile(`${dir}/id`, id);
++			writefile(`${dir}/args`, display);
++			writefile(`${dir}/script`, build_script(cmd.command, argv) + '\n');
++			writefile(`${dir}/timeout`, `${timeout}\n`);
++			writefile(`${dir}/limit`, `${OUTPUT_LIMIT}\n`);
++			writefile(`${dir}/start`, `${time()}\n`);
++
++			/* -b detaches the runner from rpcd: new session, stdin from
++			 * /dev/null, no inherited file descriptors. -m -p writes its
++			 * PID before start-stop-daemon returns. */
++			const rc = system([
++				'start-stop-daemon', '-S', '-b', '-m', '-p', `${dir}/jpid`,
++				'-x', '/bin/sh', '--', RUNNER, dir
++			]);
++
++			if (rc != 0) {
++				remove_job(dir);
++
++				return { error: 'Cannot start the command' };
++			}
++
++			return { job, args: display };
++		}
++	},
++
++	poll: {
++		args: { job: 'job', offset: 0 },
++		call: function(request) {
++			const job = request.args.job;
++			const dir = job_dir(job);
++
++			if (!dir)
++				return { error: 'No such job' };
++
++			let state = job_state(job, dir);
++			const offset = max(0, request.args.offset ?? 0);
++
++			/* "stop" sent SIGTERM; whatever ignores it gets SIGKILL */
++			if (state.running && state.stopped) {
++				const since = readint(`${dir}/stop`) ?? 0;
++				const pid = readint(`${dir}/pid`);
++
++				if (pid > 1 && time() - since >= KILL_DELAY)
++					system(sprintf('kill -KILL -%d 2>/dev/null', pid));
++			}
++
++			let data = '';
++
++			if (offset < state.size) {
++				const fd = open(`${dir}/out`, 'r');
++
++				if (fd) {
++					fd.seek(offset);
++					data = fd.read(CHUNK) ?? '';
++					fd.close();
++				}
++
++				/* while the output may still grow, a cut character waits */
++				if (state.running || offset + length(data) < state.size)
++					data = utf8_cut(data);
++			}
++
++			state.offset = offset + length(data);
++
++			/* NUL ends a string on the ubus bus, show it as U+FFFD */
++			state.binary = (index(data, chr(0)) >= 0);
++
++			if (state.binary)
++				data = join('�', split(data, chr(0)));
++
++			state.data = data;
++
++			return state;
++		}
++	},
++
++	stop: {
++		args: { job: 'job' },
++		call: function(request) {
++			const job = request.args.job;
++			const dir = job_dir(job);
++
++			if (!dir)
++				return { error: 'No such job' };
++
++			const state = job_state(job, dir);
++			const pid = readint(`${dir}/pid`);
++
++			if (!state.running || !(pid > 1))
++				return { result: false };
++
++			writefile(`${dir}/stop`, `${time()}\n`);
++
++			/* the command is the leader of its own process group */
++			system(sprintf('kill -TERM -%d 2>/dev/null', pid));
++
++			return { result: true };
++		}
++	},
++
++	jobs: {
++		call: function() {
++			return { jobs: list_jobs() };
++		}
++	}
++};
++
++return { 'luci.commands': methods };
+-- 
+2.43.0
+
