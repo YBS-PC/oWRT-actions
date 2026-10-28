@@ -73,7 +73,7 @@
 | `feeds/forkopmod/` | [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) | [`05817dc`](https://github.com/Gavr1024/forkop-mod/commit/05817dcd7079bd12e74c342e400edae960fdb798) | 24.10.2026 |
 | `feeds/luciappxray/` | [yichya/luci-app-xray](https://github.com/yichya/luci-app-xray) | [`4d5a6fd`](https://github.com/yichya/luci-app-xray/commit/4d5a6fd7fc4d2fbbcd7f70f1319da06b91ec1d56) | 22.09.2026 |
 | `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`23d14fb`](https://github.com/yandexru45/netshift/commit/23d14fbae049dbf40a1f125e33e1957f07261d65) | 25.10.2026 |
-| `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`22e37d4`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/22e37d49b18ef6bf1c2a942be9c3a066095931b1) | 25.10.2026 |
+| `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`b6e75a3`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/b6e75a3e154c393875a2868fab9f508b4b77a214) | 28.10.2026 |
 | `feeds/podkop/` | [itdoginfo/podkop](https://github.com/itdoginfo/podkop) | [`c654bf5`](https://github.com/itdoginfo/podkop/commit/c654bf5da75309754e3fb63b9441981db65fff68) | 24.10.2026 |
 | `feeds/trafira/` | [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) | [`ce5e4f3`](https://github.com/petrouspetr-pixel/trafira/commit/ce5e4f33253c74664f6d4a7727918a30bb011217) | 21.10.2026 |
 | `packages/luci-app-homeproxy/` | [immortalwrt/homeproxy](https://github.com/immortalwrt/homeproxy) | [`fadaa67`](https://github.com/immortalwrt/homeproxy/commit/fadaa676104f59ff6ace480a780a258d846d0aec) | 02.10.2026 |
@@ -206,7 +206,7 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
 
 Вариант `passwall`, фид [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2).
 
-Патчи сняты с коммита [`22e37d4`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/22e37d49b18ef6bf1c2a942be9c3a066095931b1) от 25.10.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`b6e75a3`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/b6e75a3e154c393875a2868fab9f508b4b77a214) от 28.10.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Соединения после перезапуска.** Пока passwall2 перезапускается,
   правил нет, и новые соединения из сети уходят напрямую. После запуска
