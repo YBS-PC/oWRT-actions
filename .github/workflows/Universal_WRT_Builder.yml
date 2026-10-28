@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: 'Устройство (combo — 3 готовые сборки, поля с * не учитывает)'
+        description: 'Устройство (в combo поля с * не учитываются)'
         required: true
         default: 'combo'
         type: choice
@@ -362,7 +362,7 @@ jobs:
             #   $(entry nanopi-r6s podkop latest podkop-engine-full true true true true),
             # homeproxy с sing-box-extended: только в этой связке применяются
             # патчи XHTTP и ключ X25519MLKEM768 для REALITY (Build-If).
-            json="{\"include\":[$(entry nanopi-r6s homeproxy latest extended true true true true),$(entry rb5009 clear no no false true false true),$(entry rb5009 switch no no false true false true)]}"
+            json="{\"include\":[$(entry nanopi-r6s homeproxy latest extended true true true true),$(entry nanopi-r6s podkop latest podkop-engine true true true true),$(entry nanopi-r6s netshift latest extended true true true true),$(entry nanopi-r6s forkop latest forkop-base true true true true),$(entry nanopi-r6s trafira latest extended false true true true),$(entry rb5009 clear no no false true false true),$(entry rb5009 switch no no false true false true)]}"
           else
             # Все устройства из config/conf/ — при добавлении нового дописать сюда.
             targets="nanopi-r6s nanopi-r5s rb5009 slateax ax59u brume2"
