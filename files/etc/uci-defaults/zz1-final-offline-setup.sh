@@ -1,1093 +1,1430 @@
-<!doctype html>
-<html lang="ru">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light dark">
-<title>Universal WRT Builder</title>
-<meta name="description" content="Справочник сборщика прошивок OpenWrt/ImmortalWrt: варианты и их устройство, возможности с учётом патчей, параметры запуска, конвейер сборки и первый старт.">
-<style>
-  :root{
-    --bg:#f4f6fa; --surface:#ffffff; --surface2:#f0f2f7; --surface3:#e7eaf2;
-    --line:#e2e6ee; --line2:#d2d8e4;
-    --text:#232a38; --head:#0e1322; --muted:#5d6677; --muted2:#7c8495;
-    --accent:#4a54d6; --accent-bg:rgba(74,84,214,.09); --accent-line:rgba(74,84,214,.35);
-    --ok:#137a44; --ok-bg:rgba(19,122,68,.10);
-    --bad:#c03a46; --bad-bg:rgba(192,58,70,.08);
-    --warn:#9a6208; --warn-bg:rgba(201,138,20,.14);
-    --patch:#7041cf; --patch-bg:rgba(112,65,207,.11);
-    --na:#9aa1af;
-    --code:#3b45c0; --code-bg:rgba(74,84,214,.08);
-    --shadow:0 1px 2px rgba(16,24,40,.05),0 1px 3px rgba(16,24,40,.06);
-    --mono:ui-monospace,"JetBrains Mono","SFMono-Regular",Menlo,Consolas,"Liberation Mono",monospace;
-    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-    --navh:52px;
-  }
-  @media (prefers-color-scheme:dark){
-    :root:not([data-theme="light"]){
-      --bg:#0a0d15; --surface:#10141e; --surface2:#141926; --surface3:#1a2030;
-      --line:#1e2536; --line2:#2a3247;
-      --text:#c5ccda; --head:#f1f4fa; --muted:#8c95a8; --muted2:#6c7588;
-      --accent:#7d87ff; --accent-bg:rgba(125,135,255,.12); --accent-line:rgba(125,135,255,.42);
-      --ok:#4ade80; --ok-bg:rgba(74,222,128,.10);
-      --bad:#f2646f; --bad-bg:rgba(242,100,111,.10);
-      --warn:#f0bf4c; --warn-bg:rgba(240,191,76,.12);
-      --patch:#b892ff; --patch-bg:rgba(184,146,255,.14);
-      --na:#5b6477;
-      --code:#b4bbff; --code-bg:rgba(125,135,255,.10);
-      --shadow:none;
-    }
-  }
-  :root[data-theme="dark"]{
-    --bg:#0a0d15; --surface:#10141e; --surface2:#141926; --surface3:#1a2030;
-    --line:#1e2536; --line2:#2a3247;
-    --text:#c5ccda; --head:#f1f4fa; --muted:#8c95a8; --muted2:#6c7588;
-    --accent:#7d87ff; --accent-bg:rgba(125,135,255,.12); --accent-line:rgba(125,135,255,.42);
-    --ok:#4ade80; --ok-bg:rgba(74,222,128,.10);
-    --bad:#f2646f; --bad-bg:rgba(242,100,111,.10);
-    --warn:#f0bf4c; --warn-bg:rgba(240,191,76,.12);
-    --patch:#b892ff; --patch-bg:rgba(184,146,255,.14);
-    --na:#5b6477;
-    --code:#b4bbff; --code-bg:rgba(125,135,255,.10);
-    --shadow:none;
-  }
-
-  *{box-sizing:border-box}
-  html{scroll-behavior:smooth; -webkit-text-size-adjust:100%}
-  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
-  [id]{scroll-margin-top:calc(var(--navh) + 14px)}
-  body{margin:0; background:var(--bg); color:var(--text); font-family:var(--sans); font-size:15px; line-height:1.6; -webkit-font-smoothing:antialiased}
-  a{color:var(--accent)}
-  ::selection{background:var(--accent-bg)}
-  code{font-family:var(--mono); font-size:.86em; color:var(--code); background:var(--code-bg); padding:1px 5px; border-radius:5px; overflow-wrap:anywhere}
-  b,strong{color:var(--head); font-weight:600}
-  p{margin:0 0 10px}
-  ul,ol{margin:0 0 10px; padding-left:20px}
-  li{margin:3px 0}
-
-  /* ---------- навигация ---------- */
-  .nav{position:sticky; top:0; z-index:30; display:flex; align-items:center; gap:14px; min-height:var(--navh);
-       padding:0 clamp(14px,4vw,40px); background:color-mix(in srgb,var(--bg) 86%,transparent);
-       backdrop-filter:saturate(1.4) blur(10px); -webkit-backdrop-filter:saturate(1.4) blur(10px); border-bottom:1px solid var(--line)}
-  .brand{font-family:var(--mono); font-weight:700; font-size:13px; color:var(--head); white-space:nowrap; text-decoration:none}
-  .brand b{color:var(--accent)}
-  .links{display:flex; gap:4px; overflow-x:auto; scrollbar-width:none; flex:1 1 auto; min-width:0; margin-left:auto; justify-content:flex-end}
-  .links::-webkit-scrollbar{display:none}
-  .links a{font-size:13px; color:var(--muted); text-decoration:none; padding:6px 10px; border-radius:8px; white-space:nowrap}
-  .links a:hover{color:var(--head); background:var(--surface2)}
-  .links a[aria-current="true"]{color:var(--accent); background:var(--accent-bg)}
-  .theme{flex:0 0 auto; border:1px solid var(--line2); background:var(--surface); color:var(--muted); border-radius:8px; width:34px; height:30px; cursor:pointer; font-size:14px; line-height:1}
-  .theme:hover{color:var(--head)}
-
-  .wrap{max-width:1180px; margin:0 auto; padding:0 clamp(16px,4vw,40px)}
-
-  /* ---------- шапка ---------- */
-  .hero{padding:44px 0 8px}
-  .eyebrow{font-family:var(--mono); font-size:11.5px; letter-spacing:.28em; text-transform:uppercase; color:var(--accent); margin:0 0 12px}
-  h1{font-size:clamp(28px,5vw,46px); line-height:1.08; margin:0; color:var(--head); font-weight:800; letter-spacing:-.02em}
-  .lede{max-width:780px; margin:16px 0 0; color:var(--muted); font-size:16px}
-  .stats{display:flex; flex-wrap:wrap; gap:8px; margin-top:20px}
-  .stat{font-size:12.5px; color:var(--muted); background:var(--surface); border:1px solid var(--line); border-radius:999px; padding:4px 11px}
-  .stat b{color:var(--accent)}
-  .repos{display:flex; flex-wrap:wrap; gap:8px; margin-top:14px}
-  .repo{display:inline-flex; align-items:baseline; gap:7px; font-family:var(--mono); font-size:12.5px; color:var(--head); text-decoration:none; background:var(--surface); border:1px solid var(--line); border-radius:9px; padding:6px 11px; box-shadow:var(--shadow); max-width:100%; overflow-wrap:anywhere}
-  .repo span{font-family:var(--sans); font-size:11px; color:var(--muted)}
-  .repo::after{content:"↗"; color:var(--accent); font-size:11px}
-  .repo:hover{border-color:var(--accent-line)}
-  a.ext{color:inherit; text-decoration:underline dotted color-mix(in srgb,var(--accent) 60%,transparent); text-underline-offset:3px}
-  a.ext:hover{color:var(--accent); text-decoration-style:solid}
-  .toc{display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr)); gap:10px; margin-top:26px}
-  .toc a{display:block; text-decoration:none; color:var(--text); background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:12px 14px; box-shadow:var(--shadow)}
-  .toc a:hover{border-color:var(--accent-line)}
-  .toc .n{font-family:var(--mono); font-size:11.5px; color:var(--accent); font-weight:700}
-  .toc .t{display:block; color:var(--head); font-weight:600; margin:2px 0}
-  .toc .d{display:block; font-size:12.5px; color:var(--muted); line-height:1.45}
-
-  /* ---------- разделы ---------- */
-  section{padding:40px 0 6px; margin-top:28px; border-top:1px solid var(--line)}
-  .sec-head{display:flex; align-items:baseline; gap:12px; margin-bottom:6px}
-  .sec-num{font-family:var(--mono); color:var(--accent); font-weight:700; font-size:14px}
-  h2{font-size:clamp(21px,3vw,28px); margin:0; color:var(--head); font-weight:750; letter-spacing:-.01em}
-  .sec-sub{color:var(--muted); max-width:860px; margin:6px 0 22px; font-size:15px}
-  h3{color:var(--head); font-size:17.5px; margin:34px 0 10px; font-weight:650}
-  h4{color:var(--head); margin:0 0 4px; font-size:14.5px}
-  .muted{color:var(--muted)}
-  .small{font-size:13.5px}
-
-  /* ---------- карточки ---------- */
-  .card{background:var(--surface); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); overflow:hidden}
-  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr)); gap:12px}
-  .tile{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:14px 15px; box-shadow:var(--shadow)}
-  .tile p{margin:0; font-size:13.5px; color:var(--muted)}
-  .tile .port{display:block; font-family:var(--mono); font-size:12px; color:var(--accent); margin-bottom:6px}
-
-  /* обзор вариантов */
-  .vgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,270px),1fr)); gap:12px}
-  .vcard{position:relative; display:flex; flex-direction:column; gap:8px; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px 15px 12px; box-shadow:var(--shadow)}
-  .vcard.mine{border-color:var(--accent-line); box-shadow:0 0 0 1px var(--accent-line) inset, var(--shadow)}
-  .vcard h4{font-family:var(--mono); font-size:15px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:0}
-  .vcard h4 small{font-family:var(--sans); font-weight:500; font-size:12px; color:var(--muted)}
-  .vcard p{margin:0; font-size:13.5px}
-  .tags{display:flex; flex-wrap:wrap; gap:5px; margin-top:auto}
-  .tag{font-size:11.5px; color:var(--muted); background:var(--surface2); border:1px solid var(--line); border-radius:6px; padding:1px 7px}
-  .tag.acc{color:var(--accent); border-color:var(--accent-line); background:var(--accent-bg)}
-  .tag.pt{color:var(--patch); border-color:color-mix(in srgb,var(--patch) 40%,transparent); background:var(--patch-bg)}
-  .vcard .go{position:absolute; top:11px; right:11px; font-size:12px; border:1px solid var(--line2); background:var(--surface); color:var(--muted); border-radius:7px; padding:2px 8px; cursor:pointer}
-  .vcard .go:hover{color:var(--accent); border-color:var(--accent-line)}
-  .badge{font-family:var(--sans); font-size:11px; font-weight:600; color:var(--accent); background:var(--accent-bg); border-radius:999px; padding:1px 8px}
-  .group-label{font-size:12px; font-family:var(--mono); letter-spacing:.14em; text-transform:uppercase; color:var(--muted2); margin:20px 0 10px}
-
-  /* выноски */
-  .note{display:flex; gap:12px; padding:14px 16px; border-radius:12px; border:1px solid var(--line); background:var(--surface); margin:16px 0 0; font-size:14px}
-  .note > div{min-width:0}
-  .note .ic{flex:0 0 auto; width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; color:var(--accent); background:var(--accent-bg)}
-  .note.warn{border-color:color-mix(in srgb,var(--warn) 35%,transparent); background:color-mix(in srgb,var(--warn-bg) 55%,var(--surface))}
-  .note.warn .ic{color:var(--warn); background:var(--warn-bg)}
-  .note p:last-child{margin-bottom:0}
-
-  /* раскрывающиеся блоки */
-  details.more{margin-top:8px}
-  details.more > summary{cursor:pointer; color:var(--accent); font-size:13px; list-style:none; display:inline-flex; align-items:center; gap:6px}
-  details.more > summary::-webkit-details-marker{display:none}
-  details.more > summary::before{content:"▸"; font-size:11px; transition:transform .15s}
-  details.more[open] > summary::before{transform:rotate(90deg)}
-  details.more > div{margin-top:8px}
-  .fold{border:1px solid var(--line); border-radius:12px; background:var(--surface); margin-top:10px; box-shadow:var(--shadow)}
-  .fold > summary{cursor:pointer; list-style:none; padding:13px 16px; display:flex; align-items:center; gap:10px; color:var(--head); font-weight:600}
-  .fold > summary::-webkit-details-marker{display:none}
-  .fold > summary::after{content:"+"; margin-left:auto; color:var(--muted); font-family:var(--mono); font-size:16px}
-  .fold[open] > summary::after{content:"−"}
-  .fold > summary code{font-weight:500}
-  .fold > summary .s{font-weight:400; color:var(--muted); font-size:13px}
-  .fold > .body{padding:0 16px 14px; font-size:14px}
-
-  /* ---------- обычные таблицы (на телефоне — карточки) ---------- */
-  .tscroll{overflow-x:auto}
-  table{border-collapse:collapse; width:100%; font-size:14px}
-  .pt thead th{font-weight:600; text-align:left; color:var(--muted); font-size:12px; letter-spacing:.02em; padding:12px 14px; border-bottom:1px solid var(--line); background:var(--surface2); white-space:nowrap}
-  .pt tbody td,.pt tbody th{padding:12px 14px; border-bottom:1px solid var(--line); vertical-align:top; text-align:left; font-weight:400}
-  .pt tbody tr:last-child td,.pt tbody tr:last-child th{border-bottom:none}
-  .pt .key{font-family:var(--mono); color:var(--head); font-size:13.5px; font-weight:600}
-  .pt .key small{display:block; color:var(--muted); font-weight:400; font-size:11.5px; margin-top:2px}
-  .pt td p{margin:0 0 6px}
-  .pt td p:last-child{margin:0}
-  .opts{display:flex; flex-wrap:wrap; gap:4px}
-  .opt{font-family:var(--mono); font-size:11.5px; padding:1px 7px; border-radius:6px; background:var(--surface2); border:1px solid var(--line); color:var(--text); white-space:nowrap}
-  .opt.def{border-color:var(--accent-line); color:var(--accent); background:var(--accent-bg)}
-  .yes{color:var(--ok)} .no{color:var(--bad)} .cond{color:var(--warn)}
-
-  @media (max-width:720px){
-    .pt.stack thead{display:none}
-    .pt.stack,.pt.stack tbody,.pt.stack tr,.pt.stack td,.pt.stack th{display:block; width:100%}
-    .pt.stack tr{padding:12px 14px; border-bottom:1px solid var(--line)}
-    .pt.stack tbody tr:last-child{border-bottom:none}
-    .pt.stack tbody td,.pt.stack tbody th{padding:3px 0; border:none}
-    .pt.stack td[data-l]::before{content:attr(data-l); display:block; font-size:11.5px; color:var(--muted2); margin-bottom:1px}
-  }
-</style>
-<style>
-  /* ---------- матрицы сравнения ---------- */
-  .picker{position:sticky; top:var(--navh); z-index:20; background:color-mix(in srgb,var(--bg) 92%,transparent); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
-          margin:0 calc(-1 * clamp(16px,4vw,40px)); padding:10px clamp(16px,4vw,40px); border-bottom:1px solid var(--line)}
-  .picker .row{display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; padding-bottom:2px}
-  .picker .row::-webkit-scrollbar{display:none}
-  .picker .row + .row{margin-top:7px}
-  .picker .lbl{flex:0 0 auto; font-size:12px; color:var(--muted2); align-self:center; margin-right:2px}
-  .chip-v,.preset,.mine-btn{flex:0 0 auto; font-family:var(--mono); font-size:12.5px; border:1px solid var(--line2); background:var(--surface); color:var(--muted); border-radius:999px; padding:4px 11px; cursor:pointer; white-space:nowrap}
-  .chip-v[aria-pressed="true"]{color:var(--accent); border-color:var(--accent-line); background:var(--accent-bg); font-weight:600}
-  .preset{font-family:var(--sans); font-size:12.5px}
-  .preset:hover,.chip-v:hover{border-color:var(--accent-line)}
-  .mine-btn{font-family:var(--sans)}
-  .mine-btn[aria-pressed="true"]{color:var(--warn); border-color:color-mix(in srgb,var(--warn) 45%,transparent); background:var(--warn-bg); font-weight:600}
-  .picker .count{flex:0 0 auto; font-size:12px; color:var(--muted2); align-self:center; margin-left:auto; padding-left:8px}
-
-  .legend{display:flex; flex-wrap:wrap; gap:6px 16px; margin:14px 0 10px; font-size:13px; color:var(--muted)}
-  .legend span{display:inline-flex; align-items:center; gap:6px}
-
-  .mx-scroll{overflow-x:auto; border:1px solid var(--line); border-radius:14px; background:var(--surface); box-shadow:var(--shadow);
-             background-image:linear-gradient(to right,var(--surface),var(--surface)),linear-gradient(to left,var(--surface),var(--surface)),linear-gradient(to right,rgba(0,0,0,.10),transparent),linear-gradient(to left,rgba(0,0,0,.10),transparent);
-             background-position:left center,right center,left center,right center; background-repeat:no-repeat; background-size:24px 100%,24px 100%,12px 100%,12px 100%; background-attachment:local,local,scroll,scroll}
-  table.mx{border-collapse:separate; border-spacing:0; width:100%; font-size:13px; table-layout:fixed}
-  .mx th,.mx td{border-bottom:1px solid var(--line); padding:9px 6px; vertical-align:middle}
-  .mx thead th{background:var(--surface2); font-weight:600; font-size:12px; color:var(--muted); text-align:center; vertical-align:bottom; padding:11px 6px}
-  .mx thead th .vh{display:block; font-family:var(--mono); color:var(--head); font-size:11.5px; line-height:1.3}
-  .mx thead th small{display:block; font-weight:400; font-size:10.5px; color:var(--muted2); overflow-wrap:anywhere}
-  .mx td{text-align:center}
-  .mx td small,.mx .tx{overflow-wrap:anywhere}
-  .mx .rh{position:sticky; left:0; z-index:2; background:var(--surface); text-align:left; font-weight:500; color:var(--head); font-size:13.5px;
-          width:clamp(112px,30vw,250px); min-width:clamp(112px,30vw,250px); max-width:250px; padding-left:14px; padding-right:10px; box-shadow:1px 0 0 var(--line)}
-  .mx thead .rh{background:var(--surface2); z-index:3; color:var(--muted); font-size:12px}
-  .mx .rh small{display:block; font-weight:400; color:var(--muted); font-size:11.5px; margin-top:1px}
-  .mx tr.grp th,.mx tr.grp td{background:var(--surface2); padding-top:7px; padding-bottom:7px}
-  .mx tr.grp .rh{background:var(--surface2); color:var(--accent); font-family:var(--mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase; font-weight:700}
-  .mx .gl{font-family:var(--mono); font-size:10px; color:var(--muted2)}
-  .mx tbody tr:not(.grp):hover td,.mx tbody tr:not(.grp):hover .rh{background:color-mix(in srgb,var(--accent-bg) 45%,var(--surface))}
-  .mx tbody tr:last-child th,.mx tbody tr:last-child td{border-bottom:none}
-  .v{display:inline-flex; align-items:center; justify-content:center; width:24px; height:22px; border-radius:6px; font-weight:700; font-size:13px; line-height:1}
-  .v.y{color:var(--ok); background:var(--ok-bg)}
-  .v.n{color:var(--bad); background:var(--bad-bg)}
-  .v.w,.v.c{color:var(--warn); background:var(--warn-bg); font-size:11px}
-  .v.p{color:var(--patch); background:var(--patch-bg)}
-  .v.na{color:var(--na)}
-  .mx td small{display:block; font-size:11px; line-height:1.3; color:var(--muted); margin-top:4px}
-  .mx td small.pn,.ptag{color:var(--patch)}
-  .ptag{display:block; width:max-content; margin:4px auto 0; font-family:var(--mono); font-size:10.5px; border:1px solid color-mix(in srgb,var(--patch) 45%,transparent); border-radius:4px; padding:0 4px; line-height:1.5}
-  .legend .ptag{display:inline-block; margin:0}
-  .mx .tx{font-family:var(--mono); font-size:11.5px; color:var(--text); line-height:1.35; display:inline-block}
-  .mx .star{color:var(--warn); font-size:11px; margin-left:5px}
-  .mx a.fn{display:inline-flex; align-items:center; justify-content:center; min-width:16px; height:16px; margin-left:5px; border-radius:50%; font-size:10px; font-weight:700; text-decoration:none; color:var(--accent); background:var(--accent-bg); vertical-align:1px}
-  table.mx tr[hidden]{display:none}
-  .fns{margin:14px 0 0; padding:0; list-style:none; counter-reset:fn; display:grid; gap:8px}
-  .fns li{position:relative; padding:10px 14px 10px 42px; background:var(--surface); border:1px solid var(--line); border-radius:10px; font-size:13.5px; counter-increment:fn; margin:0}
-  .fns li::before{content:counter(fn); position:absolute; left:12px; top:10px; width:20px; height:20px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:var(--accent); background:var(--accent-bg)}
-  .fns li:target{border-color:var(--accent-line); box-shadow:0 0 0 3px var(--accent-bg)}
-  .hint-mobile{display:none; font-size:12.5px; color:var(--muted); margin:8px 0 0}
-  @media (max-width:720px){
-    .hint-mobile{display:block}
-    .mx th,.mx td{padding:8px 3px}
-    .mx td small,.mx .tx{font-size:10.5px}
-    .mx thead th .vh{font-size:11px}
-    .mx .rh{font-size:12.5px; padding-left:10px}
-  }
-
-  /* ---------- рейтинг ---------- */
-  .crit{display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr)); gap:8px; margin:10px 0 0; padding:0; list-style:none}
-  .crit li{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:9px 12px; font-size:13.5px; margin:0}
-  .crit .w{float:right; font-family:var(--mono); font-size:12px; color:var(--accent); font-weight:700}
-  .rank{display:grid; gap:8px; margin-top:12px}
-  .rk{display:grid; grid-template-columns:34px minmax(150px,1.1fr) minmax(0,2.6fr) minmax(170px,1.3fr); gap:12px; align-items:center; background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:12px 14px; box-shadow:var(--shadow)}
-  .rk.top{border-color:var(--accent-line)}
-  .rk .pos{font-family:var(--mono); font-size:18px; font-weight:800; color:var(--accent); text-align:center}
-  .rk .nm code{font-size:13.5px; font-weight:600}
-  .rk .nm small{display:block; color:var(--muted); font-size:12px; margin-top:2px}
-  .rk .total{font-family:var(--mono); font-weight:800; color:var(--head); font-size:17px; margin-left:6px}
-  .bars{display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:6px 10px}
-  .bar{font-size:11px; color:var(--muted)}
-  .bar i{display:block; height:6px; border-radius:3px; margin-top:3px; background:linear-gradient(90deg,var(--accent) calc(var(--v)*20%),var(--surface3) 0)}
-  .bar b{font-family:var(--mono); font-size:11px; color:var(--head); float:right}
-  .rk .why{font-size:12.5px; color:var(--muted)}
-  .rk .why b{display:block; font-size:11px; color:var(--muted2); font-weight:500}
-  @media (max-width:860px){
-    .rk{grid-template-columns:30px 1fr; gap:8px 10px}
-    .rk .bars,.rk .why{grid-column:1 / -1}
-    .bars{grid-template-columns:repeat(3,minmax(0,1fr))}
-  }
-  .fam{display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr)); gap:16px; margin-top:8px; align-items:start}
-  .tree,.tree ul{list-style:none; margin:0; padding:0}
-  .tree ul{margin-left:10px; padding-left:16px; border-left:2px dashed var(--line2)}
-  .tree li{margin:10px 0 0}
-  .tree > li{margin:0}
-  .tn{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:12px 14px; box-shadow:var(--shadow)}
-  .tn h4{font-family:var(--mono); display:flex; flex-wrap:wrap; gap:8px; align-items:center}
-  .tn .meta{font-size:12px; color:var(--muted); margin-bottom:6px}
-  .tn p{margin:0; font-size:13.5px}
-  .sw{display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr)); gap:10px}
-  .sw .tile h4{font-family:var(--mono)}
-  .pl{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:8px}
-  .pl div{font-size:13px}
-  .pl b{display:block; font-size:12px; margin-bottom:2px}
-  .pl .plus b{color:var(--ok)} .pl .minus b{color:var(--bad)}
-  @media (max-width:600px){.pl{grid-template-columns:1fr}}
-
-  /* ---------- шаги ---------- */
-  .steps{counter-reset:step; list-style:none; margin:0; padding:0; display:grid; gap:10px}
-  .steps > li{position:relative; counter-increment:step; padding:13px 16px 13px 56px; background:var(--surface); border:1px solid var(--line); border-radius:12px; margin:0; font-size:14px; box-shadow:var(--shadow)}
-  .steps > li::before{content:counter(step,decimal-leading-zero); position:absolute; left:14px; top:12px; font-family:var(--mono); font-size:12px; font-weight:700; color:var(--accent); background:var(--accent-bg); border-radius:7px; width:30px; height:24px; display:flex; align-items:center; justify-content:center}
-  .steps.plain > li::before{content:"="}
-  .steps .badge{margin-right:6px}
-  .steps .badge.hp{color:var(--ok); background:var(--ok-bg)}
-  .steps .badge.sw{color:var(--patch); background:var(--patch-bg)}
-  .steps .badge.p2{color:var(--warn); background:var(--warn-bg)}
-  @media (max-width:600px){.steps > li{padding-left:50px}}
-
-  .flow{display:flex; flex-wrap:wrap; align-items:center; gap:8px; font-family:var(--mono); font-size:12px}
-  .flow .node{background:var(--surface); border:1px solid var(--line); border-radius:9px; padding:6px 10px; color:var(--head)}
-  .flow .node small{display:block; color:var(--accent); font-size:11px}
-  .flow .arr{color:var(--muted)}
-  @media (max-width:600px){.flow{flex-direction:column; align-items:flex-start; gap:4px}.flow .arr{transform:rotate(90deg); margin-left:14px}}
-
-  footer{padding:36px 0 60px; color:var(--muted); font-size:13px; border-top:1px solid var(--line); margin-top:40px}
-  @media print{.nav,.picker,.theme,.vcard .go{display:none}.mx-scroll{overflow:visible}}
-</style>
-</head>
-<body>
-
-<nav class="nav" aria-label="Разделы">
-  <a class="brand" href="#top"><b>WRT</b> Builder</a>
-  <span class="links">
-    <a href="#overview">варианты</a>
-    <a href="#variants">сравнение</a>
-    <a href="#lineage">устройство</a>
-    <a href="#sbcores">ядра sing-box</a>
-    <a href="#params">параметры</a>
-    <a href="#pipeline">сборка</a>
-    <a href="#patches">патчи</a>
-    <a href="#firstboot">первый старт</a>
-  </span>
-  <button class="theme" type="button" id="theme" title="Тема: авто" aria-label="Переключить тему">◐</button>
-</nav>
-
-<div class="wrap" id="top">
-
-  <header class="hero">
-    <p class="eyebrow">Справочник прошивки</p>
-    <h1>Universal WRT Builder</h1>
-    <p class="lede">Конвейер GitHub Actions собирает прошивку OpenWrt или ImmortalWrt под несколько устройств в выбранном «варианте» начинки. Скрипт <code>zz1-final-offline-setup.sh</code> доводит роутер до рабочего состояния при первом старте. Здесь — из чего собирается прошивка, как устроены варианты (с учётом наших патчей), что задаётся при запуске, что происходит при сборке и что делает первый старт.</p>
-    <p class="lede small">Это технический справочник к личному репозиторию автора, а не инструкция и не предложение использовать сборки. Описано только устройство компонентов и конвейера сборки; настройки и сценарии использования здесь не приводятся.</p>
-    <div class="stats">
-      <span class="stat"><b>13</b> вариантов</span>
-      <span class="stat"><b>6</b> устройств</span>
-      <span class="stat"><b>2</b> исходника · openwrt / immortalwrt</span>
-      <span class="stat">apk · 25.12 / master · opkg · 24.10</span>
-      <span class="stat"><b>71</b> патч к 10 пакетам</span>
-    </div>
-    <div class="repos" aria-label="Репозитории">
-      <a class="repo" href="https://github.com/YBS-PC/oWRT-actions" target="_blank" rel="noopener"><span>Сборщик</span>YBS-PC/oWRT-actions</a>
-      <a class="repo" href="https://github.com/openwrt/openwrt" target="_blank" rel="noopener"><span>Исходники</span>openwrt/openwrt</a>
-      <a class="repo" href="https://github.com/immortalwrt/immortalwrt" target="_blank" rel="noopener"><span>Исходники</span>immortalwrt/immortalwrt</a>
-    </div>
-    <nav class="toc" aria-label="Содержание">
-      <a href="#overview"><span class="n">01</span><span class="t">Варианты коротко</span><span class="d">13 вариантов карточками: ядро, генератор, патчи, назначение</span></a>
-      <a href="#variants"><span class="n">02</span><span class="t">Сравнение вариантов</span><span class="d">Возможности с учётом патчей и состав прошивки, выбор столбцов</span></a>
-      <a href="#lineage"><span class="n">03</span><span class="t">Родословная и устройство</span><span class="d">Кто от кого произошёл и как устроен каждый вариант</span></a>
-      <a href="#sbcores"><span class="n">04</span><span class="t">Ядра sing-box</span><span class="d">sing-box-extended и podkop-engine: что дают и кому подходят</span></a>
-      <a href="#params"><span class="n">05</span><span class="t">Параметры запуска</span><span class="d">Поля формы, combo, устройства</span></a>
-      <a href="#pipeline"><span class="n">06</span><span class="t">Конвейер сборки</span><span class="d">Шаги workflow от матрицы до уведомления</span></a>
-      <a href="#patches"><span class="n">07</span><span class="t">Патчи</span><span class="d">Что и где исправлено, как применяются и проверяются</span></a>
-      <a href="#firstboot"><span class="n">08</span><span class="t">Первый старт</span><span class="d">Что делает zz1, режимы firstboot и maintenance</span></a>
-    </nav>
-  </header>
-
-  <!-- 01 ОБЗОР -->
-  <section id="overview">
-    <div class="sec-head"><span class="sec-num">01</span><h2>Варианты коротко</h2></div>
-    <p class="sec-sub">Вариант задаётся полем <code>variant</code> и определяет прокси-стек и состав прошивки. Кнопка «сравнить» добавляет вариант в таблицы раздела <a href="#variants">02</a>.</p>
-
-    <div class="group-label">sing-box · семейство homeproxy</div>
-    <div class="vgrid">
-      <article class="vcard mine"><button class="go" type="button" data-add="homeproxy">сравнить</button>
-        <h4>homeproxy <span class="badge">по умолчанию</span></h4>
-        <p>Официальный интерфейс ImmortalWrt к sing-box. Правила почти один к одному повторяют понятия sing-box. В режиме custom через ядро идёт весь трафик LAN.</p>
-        <div class="tags"><span class="tag">ucode</span><span class="tag">весь трафик в ядре</span><span class="tag pt">16 патчей</span></div>
-      </article>
-      <article class="vcard"><button class="go" type="button" data-add="rehomeproxy">сравнить</button>
-        <h4>rehomeproxy <small>Re:HomeProxy</small></h4>
-        <p>Форк homeproxy: ядра sing-box-extended и hiddify-core, страница установки ядер и компонентов. Настройки там же — <code>/etc/config/homeproxy</code>.</p>
-        <div class="tags"><span class="tag">ucode</span><span class="tag">extended</span><span class="tag pt">4 патча</span></div>
-      </article>
-    </div>
-
-    <div class="group-label">sing-box · семейство podkop</div>
-    <div class="vgrid">
-      <article class="vcard"><button class="go" type="button" data-add="podkop">сравнить</button>
-        <h4>podkop</h4>
-        <p>Самый простой: вставил ссылку, отметил готовые списки — они идут в туннель, остальное напрямую. FakeIP, только IPv4.</p>
-        <div class="tags"><span class="tag">shell + jq</span><span class="tag">только списки</span><span class="tag pt">10 патчей</span></div>
-      </article>
-      <article class="vcard"><button class="go" type="button" data-add="netshift">сравнить</button>
-        <h4>netshift</h4>
-        <p>Активно развиваемый форк podkop (бета): подписки, вкладка «Устройства», DNS-секции, пул DNS, IPv6, самообновление.</p>
-        <div class="tags"><span class="tag">shell + jq</span><span class="tag">только списки</span><span class="tag pt">2 патча</span></div>
-      </article>
-      <article class="vcard"><button class="go" type="button" data-add="forkop">сравнить</button>
-        <h4>forkop</h4>
-        <p>podkop, переписанный на ucode; с 2.0 — на своём ядре sing-box-forkop: секции с действиями, DNS-секции, URLTest и Fallback, туннели (WireGuard, AmneziaWG, WARP, OpenVPN, Tailscale), VPN-сервер на роутере.</p>
-        <div class="tags"><span class="tag">ucode</span><span class="tag">только списки</span><span class="tag pt">2 патча</span></div>
-      </article>
-      <article class="vcard"><button class="go" type="button" data-add="forkop-mod">сравнить</button>
-        <h4>forkop-mod</h4>
-        <p>Форк forkop от Gavr1024: второе ядро Xray и «слоты» конфигурации. Наших доработок forkop в нём нет.</p>
-        <div class="tags"><span class="tag">ucode</span><span class="tag">sing-box + Xray</span><span class="tag pt">1 патч</span></div>
-      </article>
-      <article class="vcard"><button class="go" type="button" data-add="trafira">сравнить</button>
-        <h4>trafira</h4>
-        <p>Самое развитое продолжение forkop: Alice Mode (кто идёт мимо — по IP, MAC, интерфейсу), DoH с mTLS, порог отказов DNS, тесты.</p>
-        <div class="tags"><span class="tag">ucode</span><span class="tag">только списки</span><span class="tag pt">6 патчей</span></div>
-      </article>
-    </div>
-
-    <div class="group-label">Xray</div>
-    <div class="vgrid">
-      <article class="vcard"><button class="go" type="button" data-add="passwall">сравнить</button>
-        <h4>passwall <small>passwall2</small></h4>
-        <p>ACL по устройствам, шунты на разные узлы, раздельный DNS для прокси и прямых доменов. В нашей сборке — только Xray.</p>
-        <div class="tags"><span class="tag">Lua</span><span class="tag pt">1 патч</span></div>
-      </article>
-      <article class="vcard"><button class="go" type="button" data-add="xray">сравнить</button>
-        <h4>xray <small>luci-app-xray</small></h4>
-        <p>Лёгкий генератор на ucode: исключение устройств по MAC и процессов роутера по uid/gid.</p>
-        <div class="tags"><span class="tag">ucode</span><span class="tag pt">1 патч</span></div>
-      </article>
-      <article class="vcard"><button class="go" type="button" data-add="v2raya">сравнить</button>
-        <h4>v2raya <small>v2rayA</small></h4>
-        <p>Отдельная веб-панель вне LuCI, правила RoutingA. Метка ставится только на первый пакет соединения.</p>
-        <div class="tags"><span class="tag">Go</span><span class="tag">своя панель</span></div>
-      </article>
-    </div>
-
-    <div class="group-label">Без прокси</div>
-    <div class="vgrid">
-      <article class="vcard"><button class="go" type="button" data-add="clear">сравнить</button>
-        <h4>clear</h4>
-        <p>Обычный роутер без прокси, с SQM (CAKE) и первичной настройкой zz1.</p>
-        <div class="tags"><span class="tag">SQM</span><span class="tag">zz1</span></div>
-      </article>
-      <article class="vcard"><button class="go" type="button" data-add="crystal_clear">сравнить</button>
-        <h4>crystal_clear</h4>
-        <p>Голая прошивка: без лишних пакетов и без zz1, роутер стартует с настройками по умолчанию.</p>
-        <div class="tags"><span class="tag">без zz1</span></div>
-      </article>
-      <article class="vcard"><button class="go" type="button" data-add="switch">сравнить</button>
-        <h4>switch</h4>
-        <p>L2-коммутатор: тот же минимальный набор, что у crystal_clear, но zz1 собирает все порты в мост <code>br-lan</code>.</p>
-        <div class="tags"><span class="tag">L2-мост</span><span class="tag">zz1</span></div>
-      </article>
-    </div>
-  </section>
-
-  <!-- 02 СРАВНЕНИЕ -->
-  <section id="variants">
-    <div class="sec-head"><span class="sec-num">02</span><h2>Сравнение вариантов</h2></div>
-    <p class="sec-sub">Две таблицы: что умеет каждый прокси-вариант с учётом наших патчей и что попадает в прошивку. Выберите варианты вверху — показываются только они. На телефоне сначала выбраны три, их можно поменять. Выбор запоминается в браузере.</p>
-
-    <div class="picker" id="picker">
-      <div class="row" role="group" aria-label="Варианты в таблицах"><button type="button" class="chip-v" data-pick="homeproxy" aria-pressed="true">homeproxy</button><button type="button" class="chip-v" data-pick="rehomeproxy" aria-pressed="true">rehomeproxy</button><button type="button" class="chip-v" data-pick="podkop" aria-pressed="true">podkop</button><button type="button" class="chip-v" data-pick="netshift" aria-pressed="true">netshift</button><button type="button" class="chip-v" data-pick="forkop" aria-pressed="true">forkop</button><button type="button" class="chip-v" data-pick="forkop-mod" aria-pressed="true">forkop-mod</button><button type="button" class="chip-v" data-pick="trafira" aria-pressed="true">trafira</button><button type="button" class="chip-v" data-pick="passwall" aria-pressed="true">passwall</button><button type="button" class="chip-v" data-pick="xray" aria-pressed="true">xray</button><button type="button" class="chip-v" data-pick="v2raya" aria-pressed="true">v2raya</button><button type="button" class="chip-v" data-pick="clear" aria-pressed="true">clear</button><button type="button" class="chip-v" data-pick="crystal_clear" aria-pressed="true">crystal_clear</button><button type="button" class="chip-v" data-pick="switch" aria-pressed="true">switch</button></div>
-      <div class="row" role="group" aria-label="Быстрый выбор">
-        <span class="lbl">Быстро:</span>
-        <button type="button" class="preset" data-preset="all">все</button>
-        <button type="button" class="preset" data-preset="homeproxy,trafira,podkop">homeproxy · trafira · podkop</button>
-        <button type="button" class="preset" data-preset="homeproxy,rehomeproxy">семейство homeproxy</button>
-        <button type="button" class="preset" data-preset="podkop,netshift,forkop,forkop-mod,trafira">семейство podkop</button>
-        <button type="button" class="preset" data-preset="passwall,xray,v2raya">на Xray</button>
-        <span class="count" id="count"></span>
-      </div>
-    </div>
-
-    <h3 id="features">Возможности прокси-вариантов</h3>
-    <p class="small muted" style="margin:0">Отмечено состояние после наших патчей; где без патча этого нет, указан номер патча. Цифра в кружке — примечание под таблицей.</p>
-    <div class="legend">
-      <span><span class="v y">✓</span> есть</span>
-      <span><span class="v p">✓</span><span class="ptag">патч 009</span> есть только с нашим патчем</span>
-      <span><span class="v w">◆</span> частично или по-другому</span>
-      <span><span class="v n">✗</span> нет</span>
-      <span><span class="v na">—</span> не применимо</span>
-    </div>
-    <div class="mx-scroll"><table class="mx" id="mx-features"><thead><tr><th class="rh" scope="col">Возможность</th><th scope="col" data-v="homeproxy"><a class="ext vh-link" href="https://github.com/immortalwrt/homeproxy" target="_blank" rel="noopener" title="https://github.com/immortalwrt/homeproxy"><span class="vh">homeproxy</span></a></th><th scope="col" data-v="rehomeproxy"><a class="ext vh-link" href="https://github.com/1andrevich/homeproxy-hiddify" target="_blank" rel="noopener" title="https://github.com/1andrevich/homeproxy-hiddify"><span class="vh">re<wbr>homeproxy</span></a><small>Re:HomeProxy</small></th><th scope="col" data-v="podkop"><a class="ext vh-link" href="https://github.com/itdoginfo/podkop" target="_blank" rel="noopener" title="https://github.com/itdoginfo/podkop"><span class="vh">podkop</span></a></th><th scope="col" data-v="netshift"><a class="ext vh-link" href="https://github.com/yandexru45/netshift" target="_blank" rel="noopener" title="https://github.com/yandexru45/netshift"><span class="vh">netshift</span></a></th><th scope="col" data-v="forkop"><a class="ext vh-link" href="https://github.com/ushan0v/forkop" target="_blank" rel="noopener" title="https://github.com/ushan0v/forkop"><span class="vh">forkop</span></a></th><th scope="col" data-v="forkop-mod"><a class="ext vh-link" href="https://github.com/Gavr1024/forkop-mod" target="_blank" rel="noopener" title="https://github.com/Gavr1024/forkop-mod"><span class="vh">forkop-<wbr>mod</span></a></th><th scope="col" data-v="trafira"><a class="ext vh-link" href="https://github.com/petrouspetr-pixel/trafira" target="_blank" rel="noopener" title="https://github.com/petrouspetr-pixel/trafira"><span class="vh">trafira</span></a></th><th scope="col" data-v="passwall"><a class="ext vh-link" href="https://github.com/Openwrt-Passwall/openwrt-passwall2" target="_blank" rel="noopener" title="https://github.com/Openwrt-Passwall/openwrt-passwall2"><span class="vh">passwall</span></a><small>passwall2</small></th><th scope="col" data-v="xray"><a class="ext vh-link" href="https://github.com/yichya/luci-app-xray" target="_blank" rel="noopener" title="https://github.com/yichya/luci-app-xray"><span class="vh">xray</span></a></th><th scope="col" data-v="v2raya"><a class="ext vh-link" href="https://github.com/v2rayA/v2rayA" target="_blank" rel="noopener" title="https://github.com/v2rayA/v2rayA"><span class="vh">v2raya</span></a><small>v2rayA</small></th></tr></thead><tbody><tr class="grp"><th scope="rowgroup" class="rh">Основа</th><td data-v="homeproxy"><span class="gl">homeproxy</span></td><td data-v="rehomeproxy"><span class="gl">rehome</span></td><td data-v="podkop"><span class="gl">podkop</span></td><td data-v="netshift"><span class="gl">netshift</span></td><td data-v="forkop"><span class="gl">forkop</span></td><td data-v="forkop-mod"><span class="gl">f-mod</span></td><td data-v="trafira"><span class="gl">trafira</span></td><td data-v="passwall"><span class="gl">passwall</span></td><td data-v="xray"><span class="gl">xray</span></td><td data-v="v2raya"><span class="gl">v2raya</span></td></tr><tr><th scope="row" class="rh">Прокси-ядро</th><td data-v="homeproxy"><span class="tx">sing-<wbr>box</span></td><td data-v="rehomeproxy"><span class="tx">sing-<wbr>box, extended, hiddify</span></td><td data-v="podkop"><span class="tx">sing-<wbr>box или podkop-<wbr>engine</span></td><td data-v="netshift"><span class="tx">sing-<wbr>box или extended</span></td><td data-v="forkop"><span class="tx">sing-<wbr>box-<wbr>forkop</span></td><td data-v="forkop-mod"><span class="tx">sing-<wbr>box + Xray</span></td><td data-v="trafira"><span class="tx">sing-<wbr>box</span></td><td data-v="passwall"><span class="tx">Xray</span></td><td data-v="xray"><span class="tx">Xray</span></td><td data-v="v2raya"><span class="tx">Xray</span></td></tr><tr><th scope="row" class="rh">Генератор конфига</th><td data-v="homeproxy"><span class="tx">ucode</span></td><td data-v="rehomeproxy"><span class="tx">ucode</span></td><td data-v="podkop"><span class="tx">shell + jq</span></td><td data-v="netshift"><span class="tx">shell + jq</span></td><td data-v="forkop"><span class="tx">ucode</span></td><td data-v="forkop-mod"><span class="tx">ucode</span></td><td data-v="trafira"><span class="tx">ucode + тесты</span></td><td data-v="passwall"><span class="tx">Lua</span></td><td data-v="xray"><span class="tx">ucode</span></td><td data-v="v2raya"><span class="tx">Go, своя панель</span></td></tr><tr><th scope="row" class="rh">Наших патчей</th><td data-v="homeproxy"><span class="tx">16</span></td><td data-v="rehomeproxy"><span class="tx">4</span></td><td data-v="podkop"><span class="tx">10</span></td><td data-v="netshift"><span class="tx">2</span></td><td data-v="forkop"><span class="tx">2</span></td><td data-v="forkop-mod"><span class="tx">1</span></td><td data-v="trafira"><span class="tx">6</span></td><td data-v="passwall"><span class="tx">1</span></td><td data-v="xray"><span class="tx">1</span></td><td data-v="v2raya"><span class="tx">—</span></td></tr><tr><th scope="row" class="rh">IPv6</th><td data-v="homeproxy"><span class="v y" title="есть">✓</span></td><td data-v="rehomeproxy"><span class="v y" title="есть">✓</span></td><td data-v="podkop"><span class="v n" title="нет">✗</span><small>только IPv4</small></td><td data-v="netshift"><span class="v y" title="есть">✓</span></td><td data-v="forkop"><span class="v y" title="есть">✓</span></td><td data-v="forkop-mod"><span class="v y" title="есть">✓</span></td><td data-v="trafira"><span class="v y" title="есть">✓</span></td><td data-v="passwall"><span class="v y" title="есть">✓</span></td><td data-v="xray"><span class="v y" title="есть">✓</span></td><td data-v="v2raya"><span class="v y" title="есть">✓</span></td></tr><tr class="grp"><th scope="rowgroup" class="rh">Маршрутизация</th><td data-v="homeproxy"><span class="gl">homeproxy</span></td><td data-v="rehomeproxy"><span class="gl">rehome</span></td><td data-v="podkop"><span class="gl">podkop</span></td><td data-v="netshift"><span class="gl">netshift</span></td><td data-v="forkop"><span class="gl">forkop</span></td><td data-v="forkop-mod"><span class="gl">f-mod</span></td><td data-v="trafira"><span class="gl">trafira</span></td><td data-v="passwall"><span class="gl">passwall</span></td><td data-v="xray"><span class="gl">xray</span></td><td data-v="v2raya"><span class="gl">v2raya</span></td></tr><tr><th scope="row" class="rh">Что идёт через прокси-ядро<a class="fn" href="#fn-1" aria-label="примечание 1">1</a></th><td data-v="homeproxy"><span class="v w" title="частично или по-другому">◆</span><small>весь TCP/UDP из LAN</small></td><td data-v="rehomeproxy"><span class="v w" title="частично или по-другому">◆</span><small>весь TCP/UDP из LAN</small></td><td data-v="podkop"><span class="v y" title="есть">✓</span><small>только списки</small></td><td data-v="netshift"><span class="v y" title="есть">✓</span><small>только списки</small></td><td data-v="forkop"><span class="v y" title="есть">✓</span><small>только списки</small></td><td data-v="forkop-mod"><span class="v y" title="есть">✓</span><small>только списки</small></td><td data-v="trafira"><span class="v y" title="есть">✓</span><small>только списки</small></td><td data-v="passwall"><span class="v w" title="частично или по-другому">◆</span><small>по правилам nft</small></td><td data-v="xray"><span class="v w" title="частично или по-другому">◆</span><small>по правилам nft</small></td><td data-v="v2raya"><span class="v w" title="частично или по-другому">◆</span><small>по правилам nft</small></td></tr><tr><th scope="row" class="rh">Разные серверы для групп сайтов</th><td data-v="homeproxy"><span class="v y" title="есть">✓</span></td><td data-v="rehomeproxy"><span class="v y" title="есть">✓</span></td><td data-v="podkop"><span class="v y" title="есть">✓</span></td><td data-v="netshift"><span class="v y" title="есть">✓</span></td><td data-v="forkop"><span class="v y" title="есть">✓</span></td><td data-v="forkop-mod"><span class="v y" title="есть">✓</span></td><td data-v="trafira"><span class="v y" title="есть">✓</span></td><td data-v="passwall"><span class="v y" title="есть">✓</span></td><td data-v="xray"><span class="v w" title="частично или по-другому">◆</span><small>один основной выход</small></td><td data-v="v2raya"><span class="v w" title="частично или по-другому">◆</span><small>RoutingA</small></td></tr><tr><th scope="row" class="rh">Локальные наборы <small><code>.srs</code></small><a class="fn" href="#fn-2" aria-label="примечание 2">2</a></th><td data-v="homeproxy"><span class="v y" title="есть">✓</span></td><td data-v="rehomeproxy"><span class="v y" title="есть">✓</span></td><td data-v="podkop"><span class="v w" title="частично или по-другому">◆</span><small>только по ссылке</small></td><td data-v="netshift"><span class="v w" title="частично или по-другому">◆</span><small>только по ссылке</small></td><td data-v="forkop"><span class="v y" title="есть">✓</span></td><td data-v="forkop-mod"><span class="v y" title="есть">✓</span></td><td data-v="trafira"><span class="v y" title="есть">✓</span></td><td data-v="passwall"><span class="v n" title="нет">✗</span></td><td data-v="xray"><span class="v n" title="нет">✗</span><small>geosite</small></td><td data-v="v2raya"><span class="v n" title="нет">✗</span><small>geosite</small></td></tr><tr><th scope="row" class="rh">BitTorrent напрямую</th><td data-v="homeproxy"><span class="v y" title="есть">✓</span></td><td data-v="rehomeproxy"><span class="v y" title="есть">✓</span></td><td data-v="podkop"><span class="v p" title="только с нашим патчем">✓</span><span class="ptag">патч 005</span></td><td data-v="netshift"><span class="v y" title="есть">✓</span></td><td data-v="forkop"><span class="v y" title="есть">✓</span><small>bittorrent_direct</small></td><td data-v="forkop-mod"><span class="v y" title="есть">✓</span></td><td data-v="trafira"><span class="v y" title="есть">✓</span></td><td data-v="passwall"><span class="v y" title="есть">✓</span></td><td data-v="xray"><span class="v y" title="есть">✓</span></td><td data-v="v2raya"><span class="v w" title="частично или по-другому">◆</span><small>правилом RoutingA</small></td></tr><tr><th scope="row" class="rh">Подписки</th><td data-v="homeproxy"><span class="v y" title="есть">✓</span></td><td data-v="rehomeproxy"><span class="v y" title="есть">✓</span></td><td data-v="podkop"><span class="v n" title="нет">✗</span></td><td data-v="netshift"><span class="v y" title="есть">✓</span></td><td data-v="forkop"><span class="v y" title="есть">✓</span></td><td data-v="forkop-mod"><span class="v y" title="есть">✓</span></td><td data-v="trafira"><span class="v y" title="есть">✓</span></td><td data-v="passwall"><span class="v y" title="есть">✓</span></td><td data-v="xray"><span class="v n" title="нет">✗</span></td><td data-v="v2raya"><span class="v y" title="есть">✓</span></td></tr><tr><th scope="row" class="rh">Автовыбор и резерв сервера</th><td data-v="homeproxy"><span class="v y" title="есть">✓</span><small>URLTest</small></td><td data-v="rehomeproxy"><span class="v y" title="есть">✓</span><small>URLTest</small></td><td data-v="podkop"><span class="v y" title="есть">✓</span><small>URLTest</small></td><td data-v="netshift"><span class="v y" title="есть">✓</span><small>URLTest, приоритет</small></td><td data-v="forkop"><span class="v y" title="есть">✓</span><small>URLTest, Fallback</small></td><td data-v="forkop-mod"><span class="v y" title="есть">✓</span><small>уровни, failover</small></td><td data-v="trafira"><span class="v y" title="есть">✓</span><small>уровни, failover</small></td><td data-v="passwall"><span class="v y" title="есть">✓</span><small>балансировка</small></td><td data-v="xray"><span class="v y" title="есть">✓</span><small>балансировщик</small></td><td data-v="v2raya"><span class="v w" title="частично или по-другому">◆</span><small>балансировка</small></td></tr><tr><th scope="row" class="rh">Hysteria2 и VLESS Reality <small>протоколы</small><a class="fn" href="#fn-8" aria-label="примечание 8">8</a></th><td data-v="homeproxy"><span class="v y" title="есть">✓</span></td><td data-v="rehomeproxy"><span class="v y" title="есть">✓</span></td><td data-v="podkop"><span class="v y" title="есть">✓</span></td><td data-v="netshift"><span class="v y" title="есть">✓</span></td><td data-v="forkop"><span class="v y" title="есть">✓</span></td><td data-v="forkop-mod"><span class="v y" title="есть">✓</span></td><td data-v="trafira"><span class="v y" title="есть">✓</span></td><td data-v="passwall"><span class="v w" title="частично или по-другому">◆</span><small>зависит от Xray</small></td><td data-v="xray"><span class="v w" title="частично или по-другому">◆</span><small>зависит от Xray</small></td><td data-v="v2raya"><span class="v w" title="частично или по-другому">◆</span><small>зависит от Xray</small></td></tr><tr><th scope="row" class="rh">Трафик самого роутера напрямую <small>службы роутера</small></th><td data-v="homeproxy"><span class="v y" title="есть">✓</span><small>правила по процессам</small></td><td data-v="rehomeproxy"><span class="v y" title="есть">✓</span><small>правила по процессам</small></td><td data-v="podkop"><span class="v y" title="есть">✓</span><small>не перехватывается</small></td><td data-v="netshift"><span class="v y" title="есть">✓</span></td><td data-v="forkop"><span class="v y" title="есть">✓</span></td><td data-v="forkop-mod"><span class="v y" title="есть">✓</span></td><td data-v="trafira"><span class="v y" title="есть">✓</span></td><td data-v="passwall"><span class="v w" title="частично или по-другому">◆</span></td><td data-v="xray"><span class="v y" title="есть">✓</span><small>по uid/gid</small></td><td data-v="v2raya"><span class="v w" title="частично или по-другому">◆</span></td></tr><tr class="grp"><th scope="rowgroup" class="rh">Устройства</th><td data-v="homeproxy"><span class="gl">homeproxy</span></td><td data-v="rehomeproxy"><span class="gl">rehome</span></td><td data-v="podkop"><span class="gl">podkop</span></td><td data-v="netshift"><span class="gl">netshift</span></td><td data-v="forkop"><span class="gl">forkop</span></td><td data-v="forkop-mod"><span class="gl">f-mod</span></td><td data-v="trafira"><span class="gl">trafira</span></td><td data-v="passwall"><span class="gl">passwall</span></td><td data-v="xray"><span class="gl">xray</span></td><td data-v="v2raya"><span class="gl">v2raya</span></td></tr><tr><th scope="row" class="rh">Исключить устройство — по чему<a class="fn" href="#fn-3" aria-label="примечание 3">3</a></th><td data-v="homeproxy"><span class="v y" title="есть">✓</span><small>MAC, IP</small></td><td data-v="rehomeproxy"><span class="v y" title="есть">✓</span><small>MAC, IP</small></td><td data-v="podkop"><span class="v w" title="частично или по-другому">◆</span><small>только IP</small></td><td data-v="netshift"><span class="v w" title="частично или по-другому">◆</span><small>IP, вкладка «Устройства»</small></td><td data-v="forkop"><span class="v y" title="есть">✓</span><small>IP, подсеть, роутер</small></td><td data-v="forkop-mod"><span class="v p" title="только с нашим патчем">✓</span><span class="ptag">патч 001</span><small>IP, подсеть</small></td><td data-v="trafira"><span class="v y" title="есть">✓</span><small>IP, MAC, интерфейс (Alice)</small></td><td data-v="passwall"><span class="v y" title="есть">✓</span><small>IP, MAC (ACL)</small></td><td data-v="xray"><span class="v y" title="есть">✓</span><small>MAC</small></td><td data-v="v2raya"><span class="v w" title="частично или по-другому">◆</span><small>IP, правилом RoutingA</small></td></tr><tr><th scope="row" class="rh">Как идёт трафик исключённых устройств<a class="fn" href="#fn-3" aria-label="примечание 3">3</a></th><td data-v="homeproxy"><span class="v y" title="есть">✓</span><small>ядро Linux, мимо sing-box</small></td><td data-v="rehomeproxy"><span class="v y" title="есть">✓</span><small>ядро Linux, мимо sing-box</small></td><td data-v="podkop"><span class="v w" title="частично или по-другому">◆</span><small>через sing-box напрямую</small><small class="pn">010: мимо sing-box, кроме FakeIP</small></td><td data-v="netshift"><span class="v w" title="частично или по-другому">◆</span><small>через sing-box напрямую</small><small>флаг: мимо, кроме FakeIP</small></td><td data-v="forkop"><span class="v y" title="есть">✓</span><small>ядро Linux; FakeIP — sing-box напрямую (патч 002)</small></td><td data-v="forkop-mod"><span class="v p" title="только с нашим патчем">✓</span><span class="ptag">патч 001</span><small>ядро Linux</small></td><td data-v="trafira"><span class="v y" title="есть">✓</span><small>ядро Linux, свой DNS</small></td><td data-v="passwall"><span class="v y" title="есть">✓</span><small>ядро Linux</small></td><td data-v="xray"><span class="v y" title="есть">✓</span><small>ядро Linux</small></td><td data-v="v2raya"><span class="v w" title="частично или по-другому">◆</span><small>через Xray напрямую</small></td></tr><tr><th scope="row" class="rh">Свои правила для одного устройства <small>например, блок соцсетей только на детском планшете</small><a class="fn" href="#fn-4" aria-label="примечание 4">4</a></th><td data-v="homeproxy"><span class="v y" title="есть">✓</span><small>правило с источником</small></td><td data-v="rehomeproxy"><span class="v y" title="есть">✓</span><small>правило с источником</small></td><td data-v="podkop"><span class="v w" title="частично или по-другому">◆</span><small>только всё устройство в одну секцию</small></td><td data-v="netshift"><span class="v w" title="частично или по-другому">◆</span><small>только режим устройства целиком</small></td><td data-v="forkop"><span class="v y" title="есть">✓</span><small>фильтр устройств в секции</small></td><td data-v="forkop-mod"><span class="v y" title="есть">✓</span><small>фильтр устройств в секции</small></td><td data-v="trafira"><span class="v y" title="есть">✓</span><small>фильтр устройств в секции</small></td><td data-v="passwall"><span class="v y" title="есть">✓</span><small>ACL</small></td><td data-v="xray"><span class="v w" title="частично или по-другому">◆</span><small>только по IP в ядре</small></td><td data-v="v2raya"><span class="v w" title="частично или по-другому">◆</span><small>только по IP в ядре</small></td></tr><tr class="grp"><th scope="rowgroup" class="rh">DNS</th><td data-v="homeproxy"><span class="gl">homeproxy</span></td><td data-v="rehomeproxy"><span class="gl">rehome</span></td><td data-v="podkop"><span class="gl">podkop</span></td><td data-v="netshift"><span class="gl">netshift</span></td><td data-v="forkop"><span class="gl">forkop</span></td><td data-v="forkop-mod"><span class="gl">f-mod</span></td><td data-v="trafira"><span class="gl">trafira</span></td><td data-v="passwall"><span class="gl">passwall</span></td><td data-v="xray"><span class="gl">xray</span></td><td data-v="v2raya"><span class="gl">v2raya</span></td></tr><tr><th scope="row" class="rh">Куда AGH шлёт запросы <small>после zz1</small></th><td data-v="homeproxy"><span class="tx">127.0.0.1<wbr>:5333</span></td><td data-v="rehomeproxy"><span class="tx">127.0.0.1<wbr>:5333</span></td><td data-v="podkop"><span class="tx">127.0.0.42<wbr>:53</span></td><td data-v="netshift"><span class="tx">127.0.0.42<wbr>:53</span></td><td data-v="forkop"><span class="tx">127.0.0.42<wbr>:53</span></td><td data-v="forkop-mod"><span class="tx">127.0.0.42<wbr>:53</span></td><td data-v="trafira"><span class="tx">127.0.0.42<wbr>:53</span></td><td data-v="passwall"><span class="tx">dnsmasq <wbr>:54</span></td><td data-v="xray"><span class="tx">127.0.0.1<wbr>:5300</span></td><td data-v="v2raya"><span class="tx">dnsmasq <wbr>:54</span></td></tr><tr><th scope="row" class="rh">AdGuard Home видит каждого клиента<a class="fn" href="#fn-6" aria-label="примечание 6">6</a></th><td data-v="homeproxy"><span class="v y" title="есть">✓</span></td><td data-v="rehomeproxy"><span class="v y" title="есть">✓</span></td><td data-v="podkop"><span class="v y" title="есть">✓</span></td><td data-v="netshift"><span class="v y" title="есть">✓</span></td><td data-v="forkop"><span class="v p" title="только с нашим патчем">✓</span><span class="ptag">патч 002</span><small>кроме устройств из фильтров секций</small></td><td data-v="forkop-mod"><span class="v y" title="есть">✓</span></td><td data-v="trafira"><span class="v w" title="частично или по-другому">◆</span><small>кроме Alice «в обход»</small></td><td data-v="passwall"><span class="v y" title="есть">✓</span></td><td data-v="xray"><span class="v y" title="есть">✓</span></td><td data-v="v2raya"><span class="v y" title="есть">✓</span></td></tr><tr><th scope="row" class="rh">Свой DNS-сервер для групп доменов<a class="fn" href="#fn-5" aria-label="примечание 5">5</a></th><td data-v="homeproxy"><span class="v y" title="есть">✓</span><small>DNS-правила</small></td><td data-v="rehomeproxy"><span class="v y" title="есть">✓</span><small>DNS-правила</small></td><td data-v="podkop"><span class="v n" title="нет">✗</span></td><td data-v="netshift"><span class="v y" title="есть">✓</span><small>DNS-секции</small></td><td data-v="forkop"><span class="v y" title="есть">✓</span><small>DNS у секции</small></td><td data-v="forkop-mod"><span class="v y" title="есть">✓</span><small>DNS у секции</small></td><td data-v="trafira"><span class="v y" title="есть">✓</span><small>DNS у секции</small></td><td data-v="passwall"><span class="v w" title="частично или по-другому">◆</span><small>прокси / прямые</small></td><td data-v="xray"><span class="v w" title="частично или по-другому">◆</span><small>прокси / прямые</small></td><td data-v="v2raya"><span class="v w" title="частично или по-другому">◆</span><small>прокси / прямые</small></td></tr><tr><th scope="row" class="rh">Резервные DNS-серверы<a class="fn" href="#fn-5" aria-label="примечание 5">5</a></th><td data-v="homeproxy"><span class="v n" title="нет">✗</span></td><td data-v="rehomeproxy"><span class="v n" title="нет">✗</span></td><td data-v="podkop"><span class="v p" title="только с нашим патчем">✓</span><span class="ptag">патч 009</span><small>по очереди или все сразу</small></td><td data-v="netshift"><span class="v y" title="есть">✓</span><small>пул</small></td><td data-v="forkop"><span class="v y" title="есть">✓</span><small>DNS Fallback</small></td><td data-v="forkop-mod"><span class="v y" title="есть">✓</span><small>с проверкой</small></td><td data-v="trafira"><span class="v y" title="есть">✓</span><small>с порогом отказов</small></td><td data-v="passwall"><span class="v n" title="нет">✗</span></td><td data-v="xray"><span class="v n" title="нет">✗</span></td><td data-v="v2raya"><span class="v n" title="нет">✗</span></td></tr><tr class="grp"><th scope="rowgroup" class="rh">Надёжность и обслуживание</th><td data-v="homeproxy"><span class="gl">homeproxy</span></td><td data-v="rehomeproxy"><span class="gl">rehome</span></td><td data-v="podkop"><span class="gl">podkop</span></td><td data-v="netshift"><span class="gl">netshift</span></td><td data-v="forkop"><span class="gl">forkop</span></td><td data-v="forkop-mod"><span class="gl">f-mod</span></td><td data-v="trafira"><span class="gl">trafira</span></td><td data-v="passwall"><span class="gl">passwall</span></td><td data-v="xray"><span class="gl">xray</span></td><td data-v="v2raya"><span class="gl">v2raya</span></td></tr><tr><th scope="row" class="rh">Нет утечек после перезапуска<a class="fn" href="#fn-7" aria-label="примечание 7">7</a></th><td data-v="homeproxy"><span class="v p" title="только с нашим патчем">✓</span><span class="ptag">патч 007</span></td><td data-v="rehomeproxy"><span class="v p" title="только с нашим патчем">✓</span><span class="ptag">патч 006</span></td><td data-v="podkop"><span class="v y" title="есть">✓</span><small>TPROXY</small></td><td data-v="netshift"><span class="v y" title="есть">✓</span><small>TPROXY</small></td><td data-v="forkop"><span class="v y" title="есть">✓</span><small>TPROXY</small></td><td data-v="forkop-mod"><span class="v y" title="есть">✓</span><small>TPROXY</small></td><td data-v="trafira"><span class="v y" title="есть">✓</span><small>TPROXY</small></td><td data-v="passwall"><span class="v p" title="только с нашим патчем">✓</span><span class="ptag">патч 001</span></td><td data-v="xray"><span class="v y" title="есть">✓</span><small>TPROXY</small></td><td data-v="v2raya"><span class="v w" title="частично или по-другому">◆</span><small>команда вручную</small></td></tr><tr><th scope="row" class="rh">sing-box 1.13–1.14 <small>в т.ч. latest, extended</small><a class="fn" href="#fn-9" aria-label="примечание 9">9</a></th><td data-v="homeproxy"><span class="v p" title="только с нашим патчем">✓</span><span class="ptag">патч 006</span></td><td data-v="rehomeproxy"><span class="v p" title="только с нашим патчем">✓</span><span class="ptag">патч 001</span></td><td data-v="podkop"><span class="v y" title="есть">✓</span></td><td data-v="netshift"><span class="v y" title="есть">✓</span></td><td data-v="forkop"><span class="v n" title="нет">✗</span><small>только sing-box-forkop</small></td><td data-v="forkop-mod"><span class="v y" title="есть">✓</span></td><td data-v="trafira"><span class="v y" title="есть">✓</span></td><td data-v="passwall"><span class="v na" title="не применимо">—</span></td><td data-v="xray"><span class="v na" title="не применимо">—</span></td><td data-v="v2raya"><span class="v na" title="не применимо">—</span></td></tr><tr><th scope="row" class="rh">Диагностика в LuCI</th><td data-v="homeproxy"><span class="v y" title="есть">✓</span></td><td data-v="rehomeproxy"><span class="v y" title="есть">✓</span></td><td data-v="podkop"><span class="v y" title="есть">✓</span><small class="pn">006: + «Окружение»</small></td><td data-v="netshift"><span class="v y" title="есть">✓</span></td><td data-v="forkop"><span class="v y" title="есть">✓</span></td><td data-v="forkop-mod"><span class="v y" title="есть">✓</span></td><td data-v="trafira"><span class="v y" title="есть">✓</span><small class="pn">006: + «Окружение»</small></td><td data-v="passwall"><span class="v w" title="частично или по-другому">◆</span><small>журнал</small></td><td data-v="xray"><span class="v w" title="частично или по-другому">◆</span><small>статус</small></td><td data-v="v2raya"><span class="v w" title="частично или по-другому">◆</span><small>журнал панели</small></td></tr><tr><th scope="row" class="rh">Панель YACD / Clash API</th><td data-v="homeproxy"><span class="v y" title="есть">✓</span></td><td data-v="rehomeproxy"><span class="v y" title="есть">✓</span></td><td data-v="podkop"><span class="v y" title="есть">✓</span></td><td data-v="netshift"><span class="v y" title="есть">✓</span></td><td data-v="forkop"><span class="v y" title="есть">✓</span></td><td data-v="forkop-mod"><span class="v y" title="есть">✓</span></td><td data-v="trafira"><span class="v y" title="есть">✓</span></td><td data-v="passwall"><span class="v n" title="нет">✗</span></td><td data-v="xray"><span class="v n" title="нет">✗</span></td><td data-v="v2raya"><span class="v w" title="частично или по-другому">◆</span><small>своя панель</small></td></tr><tr><th scope="row" class="rh">Ядро и компоненты из LuCI</th><td data-v="homeproxy"><span class="v n" title="нет">✗</span></td><td data-v="rehomeproxy"><span class="v y" title="есть">✓</span><small>Core &amp; Tools</small></td><td data-v="podkop"><span class="v n" title="нет">✗</span></td><td data-v="netshift"><span class="v y" title="есть">✓</span><small>sing-box ↔ extended</small></td><td data-v="forkop"><span class="v y" title="есть">✓</span><small>Компоненты: forkop и ядро</small></td><td data-v="forkop-mod"><span class="v y" title="есть">✓</span><small>Компоненты</small></td><td data-v="trafira"><span class="v y" title="есть">✓</span><small>Компоненты</small></td><td data-v="passwall"><span class="v y" title="есть">✓</span><small>обновление Xray</small></td><td data-v="xray"><span class="v n" title="нет">✗</span></td><td data-v="v2raya"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh">Роутер как прокси-сервер <small>входящие VLESS и др.</small></th><td data-v="homeproxy"><span class="v y" title="есть">✓</span></td><td data-v="rehomeproxy"><span class="v y" title="есть">✓</span></td><td data-v="podkop"><span class="v n" title="нет">✗</span></td><td data-v="netshift"><span class="v n" title="нет">✗</span></td><td data-v="forkop"><span class="v y" title="есть">✓</span><small>вкладка «Серверы»</small></td><td data-v="forkop-mod"><span class="v y" title="есть">✓</span><small>VLESS, MTProto, Tailscale</small></td><td data-v="trafira"><span class="v y" title="есть">✓</span><small>VLESS, MTProto, Tailscale</small></td><td data-v="passwall"><span class="v y" title="есть">✓</span></td><td data-v="xray"><span class="v w" title="частично или по-другому">◆</span><small>доп. inbound</small></td><td data-v="v2raya"><span class="v n" title="нет">✗</span></td></tr><tr class="grp"><th scope="rowgroup" class="rh">Модули обработки трафика</th><td data-v="homeproxy"><span class="gl">homeproxy</span></td><td data-v="rehomeproxy"><span class="gl">rehome</span></td><td data-v="podkop"><span class="gl">podkop</span></td><td data-v="netshift"><span class="gl">netshift</span></td><td data-v="forkop"><span class="gl">forkop</span></td><td data-v="forkop-mod"><span class="gl">f-mod</span></td><td data-v="trafira"><span class="gl">trafira</span></td><td data-v="passwall"><span class="gl">passwall</span></td><td data-v="xray"><span class="gl">xray</span></td><td data-v="v2raya"><span class="gl">v2raya</span></td></tr><tr><th scope="row" class="rh">youtubeUnblock <small>сторонний пакет, nfqueue</small><a class="fn" href="#fn-10" aria-label="примечание 10">10</a></th><td data-v="homeproxy"><span class="v y" title="есть">✓</span><small>в прошивке (ytb)</small></td><td data-v="rehomeproxy"><span class="v y" title="есть">✓</span><small>в прошивке (ytb)</small></td><td data-v="podkop"><span class="v y" title="есть">✓</span><small>в прошивке (ytb)</small></td><td data-v="netshift"><span class="v y" title="есть">✓</span><small>в прошивке (ytb)</small></td><td data-v="forkop"><span class="v c" title="по полю формы">◆</span><small>в 2.0 можно</small></td><td data-v="forkop-mod"><span class="v n" title="нет">✗</span></td><td data-v="trafira"><span class="v n" title="нет">✗</span></td><td data-v="passwall"><span class="v y" title="есть">✓</span><small>в прошивке (ytb)</small></td><td data-v="xray"><span class="v y" title="есть">✓</span><small>в прошивке (ytb)</small></td><td data-v="v2raya"><span class="v y" title="есть">✓</span><small>в прошивке (ytb)</small></td></tr><tr><th scope="row" class="rh">Zapret <small>сторонний модуль nfqws</small><a class="fn" href="#fn-10" aria-label="примечание 10">10</a></th><td data-v="homeproxy"><span class="v n" title="нет">✗</span></td><td data-v="rehomeproxy"><span class="v n" title="нет">✗</span></td><td data-v="podkop"><span class="v n" title="нет">✗</span></td><td data-v="netshift"><span class="v n" title="нет">✗</span></td><td data-v="forkop"><span class="v n" title="нет">✗</span><small>убран в 2.0</small></td><td data-v="forkop-mod"><span class="v y" title="есть">✓</span><small>встроено, модуль отдельно</small></td><td data-v="trafira"><span class="v y" title="есть">✓</span><small>встроено, модуль отдельно</small></td><td data-v="passwall"><span class="v n" title="нет">✗</span></td><td data-v="xray"><span class="v n" title="нет">✗</span></td><td data-v="v2raya"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh">Zapret2 <small>сторонний модуль nfqws2</small><a class="fn" href="#fn-10" aria-label="примечание 10">10</a></th><td data-v="homeproxy"><span class="v n" title="нет">✗</span></td><td data-v="rehomeproxy"><span class="v y" title="есть">✓</span><small>модуль из Core &amp; Tools</small></td><td data-v="podkop"><span class="v n" title="нет">✗</span></td><td data-v="netshift"><span class="v n" title="нет">✗</span></td><td data-v="forkop"><span class="v n" title="нет">✗</span><small>убран в 2.0</small></td><td data-v="forkop-mod"><span class="v y" title="есть">✓</span><small>встроено, модуль отдельно</small></td><td data-v="trafira"><span class="v y" title="есть">✓</span><small>встроено, модуль отдельно</small></td><td data-v="passwall"><span class="v n" title="нет">✗</span></td><td data-v="xray"><span class="v n" title="нет">✗</span></td><td data-v="v2raya"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh">ByeDPI <small>сторонний модуль</small><a class="fn" href="#fn-10" aria-label="примечание 10">10</a></th><td data-v="homeproxy"><span class="v n" title="нет">✗</span></td><td data-v="rehomeproxy"><span class="v y" title="есть">✓</span><small>модуль из Core &amp; Tools</small></td><td data-v="podkop"><span class="v n" title="нет">✗</span></td><td data-v="netshift"><span class="v n" title="нет">✗</span></td><td data-v="forkop"><span class="v n" title="нет">✗</span><small>убран в 2.0</small></td><td data-v="forkop-mod"><span class="v y" title="есть">✓</span><small>встроено, модуль отдельно</small></td><td data-v="trafira"><span class="v y" title="есть">✓</span><small>встроено, модуль отдельно</small></td><td data-v="passwall"><span class="v n" title="нет">✗</span></td><td data-v="xray"><span class="v n" title="нет">✗</span></td><td data-v="v2raya"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh">Фрагментация TLS <small>встроена в прокси-ядро</small><a class="fn" href="#fn-10" aria-label="примечание 10">10</a></th><td data-v="homeproxy"><span class="v y" title="есть">✓</span><small>sing-box, в правилах</small></td><td data-v="rehomeproxy"><span class="v y" title="есть">✓</span><small>sing-box, в правилах и у узла</small></td><td data-v="podkop"><span class="v n" title="нет">✗</span></td><td data-v="netshift"><span class="v n" title="нет">✗</span></td><td data-v="forkop"><span class="v n" title="нет">✗</span></td><td data-v="forkop-mod"><span class="v y" title="есть">✓</span><small>Xray, прямые соединения</small></td><td data-v="trafira"><span class="v n" title="нет">✗</span></td><td data-v="passwall"><span class="v y" title="есть">✓</span><small>Xray, прямые соединения</small></td><td data-v="xray"><span class="v n" title="нет">✗</span></td><td data-v="v2raya"><span class="v n" title="нет">✗</span></td></tr></tbody></table></div>
-    <p class="hint-mobile">Таблица шире экрана? Оставьте два-три варианта кнопками вверху или прокрутите её вбок.</p>
-
-    <ol class="fns" aria-label="Примечания к таблице возможностей">
-      <li id="fn-1"><b>Что идёт через ядро.</b> homeproxy и Re:HomeProxy в режиме custom пропускают через sing-box весь TCP и UDP из LAN, кроме исключённых устройств и адресов из <code>wan_direct_ipv4_ips</code>. Семейства podkop и forkop пускают в ядро только нужное: домены из списков получают адреса FakeIP, подсети попадают в наборы nftables, остальное идёт напрямую через ядро Linux. passwall2, Xray и v2rayA отсекают часть прямого трафика ещё в nftables (по GeoIP или спискам), но не так избирательно, как FakeIP. На R6S запас мощности большой, разница заметна на торрентах и гигабитных загрузках.</li>
-      <li id="fn-2"><b>Наборы .srs.</b> podkop и netshift подключают <code>.srs</code> только по ссылке, а локальные списки у них текстовые. passwall в нашей сборке собирается без sing-box, а Xray и v2rayA понимают только geosite и geoip.</li>
-      <li id="fn-3"><b>Исключённые устройства.</b> «Ядро Linux» — правило nftables срабатывает до перехвата, и прокси-ядро такого трафика не видит (homeproxy, Re:HomeProxy, passwall2, xray). podkop без патча добавляет правило маршрута в sing-box: трафик устройства по спискам заходит в sing-box и уходит напрямую. Патч 010 (флаг «Исключённые IP мимо sing-box», по умолчанию выключен) пропускает мимо sing-box всё, кроме соединений на адреса FakeIP: превратить FakeIP обратно в домен умеет только sing-box. netshift делает то же своим флагом <code>bypass_excluded_ips</code> и вкладкой «Устройства» (правило пишется по IP, нужны статические аренды DHCP). forkop 2.x исключает по IP и подсети (и сам роутер) правилом nftables: и трафик, и DNS устройства идут мимо forkop, DNS — сразу в AGH; если AGH (через <code>127.0.0.42</code>) вернёт адрес FakeIP, такое соединение патч 002 отправляет через sing-box напрямую. forkop-mod исключает по IP и подсети правилом nftables, но без нашего патча 001 правило не срабатывает из-за ошибки ucode, и устройства идут через прокси. trafira (Alice Mode) пропускает устройства «в обход» ядром Linux, а их DNS перенаправляет в свой резолвер с настоящими адресами — мимо AGH. v2rayA — только правилом RoutingA внутри Xray.</li>
-      <li id="fn-4"><b>Свои правила для одного устройства</b> — правила, которые действуют только для выбранного устройства, а остальным не мешают: например, заблокировать соцсети на детском планшете или пустить один телевизор через другой сервер. В homeproxy и Re:HomeProxy это условие «источник» (IP или MAC) в правиле маршрута, в семействе forkop — фильтр устройств в секции, в passwall2 — ACL. В podkop можно только отправить устройство целиком в одну секцию (например, «Блокировка» или «через прокси»), в netshift — выбрать для него режим целиком (по спискам, напрямую или всё через секцию); отдельное правило для части сайтов не задать. В Xray и v2rayA — только правилом по IP источника внутри ядра.</li>
-      <li id="fn-5"><b>DNS.</b> В podkop один DNS-сервер; патч 009 добавляет резервные (по очереди или все сразу, нужен sing-box 1.14+; в podkop-engine нет DoH3 и DoQ, такие серверы пропускаются), но не выбор сервера по доменам. В netshift это делают DNS-секции, есть и пул серверов. В семействе forkop DNS-серверы проверяются и переключаются при отказе (в forkop 2.x — DNS Fallback), а у каждой секции может быть свой DNS. passwall2, Xray и v2rayA делят DNS только на «для прокси» и «для прямых».</li>
-      <li id="fn-6"><b>AGH в trafira и forkop 2.x.</b> По умолчанию trafira DNS клиентов не перехватывает, и AGH видит каждое устройство. Если включить Alice Mode, DNS устройств «в обход» пойдёт в DNS trafira мимо AGH. forkop 2.x у автора перехватывает DNS клиентов всегда, и AGH видит их как <code>127.0.0.1</code>. Наш патч 002 и zz1 (<code>intercept_device_dns=0</code>) возвращают DNS клиентов в AGH; в forkop идут только устройства из фильтров секций.</li>
-      <li id="fn-7"><b>Утечки после перезапуска.</b> Там, где TCP перехватывается через redirect (homeproxy, Re:HomeProxy, passwall2), соединение, открытое во время перезапуска, уходит мимо прокси и висит минутами. Патчи HomeProxy 007, Re:HomeProxy 004 и passwall2 001 сбрасывают такие соединения. В TPROXY-вариантах метка ставится на каждый пакет, и такие соединения сбрасываются сами. В v2rayA метка ставится только на первый пакет — после переключения выполните команду вручную (раздел <a href="#patches">07</a>).</li>
-      <li id="fn-8"><b>Hysteria2 в Xray-вариантах</b> зависит от версии Xray. <b>REALITY к серверу на Xray 26.7.11 и новее</b> обычный sing-box (фид, <code>1.12.x</code>…<code>latest</code>, tiny) не проходит: такой сервер по умолчанию требует <code>minClientVer</code> 26.3.27, а с 26.9.8 ещё и ключ X25519MLKEM768. Подключаются sing-box-extended (к 26.9.8+ — только с опцией ML-KEM, у homeproxy это патч x02) и podkop-engine. Подробно — в разделе <a href="#sbcores">04</a>.</li>
-      <li id="fn-9"><b>Новые sing-box.</b> homeproxy без патча 006 на sing-box 1.14 пишет устаревший <code>store_rdrc</code> (проверка совместимости пропускает его с предупреждением), а в режиме bypass_mainland_china со списком прокси-доменов sing-box 1.14 не запускается. Re:HomeProxy без патча 001 не запускается на обычном sing-box ни в одном режиме. forkop 2.x работает только на своём ядре sing-box-forkop (поле <code>sb</code>: <code>forkop-base</code>, <code>forkop-full</code>, <code>forkop-tiny</code>), другой sing-box он не запускает. Версия ядра выбирается полем <code>sb</code> (раздел <a href="#params">05</a>).</li>
-      <li id="fn-10"><b>Модули обработки трафика.</b> Отмечено только, есть ли поддержка в варианте и откуда берётся модуль: «в прошивке» — пакет попадает в образ при сборке (поле <code>ytb</code>); «встроено, модуль отдельно» — приложение умеет работать с модулем, а сам модуль в прошивку не входит и ставится отдельно; «встроена в прокси-ядро» — функция самого sing-box или Xray. Назначение и настройки модулей здесь не описываются. Отдельный пакет <code>zapret</code> в любом варианте можно включить строкой <code>CONFIG_PACKAGE_zapret=y</code> в <code>WRT.config</code> (по умолчанию закомментирована).</li>
-    </ol>
-
-    <h3 id="packages">Состав прошивки</h3>
-    <p class="small muted" style="margin:0">Какие пакеты включаются в каждом варианте. Логика — в <code>WRT-part3.sh</code> и в YML на шаге <em>Update Feeds &amp; Config</em>.</p>
-    <div class="legend">
-      <span><span class="v y">✓</span> включено</span>
-      <span><span class="v n">✗</span> исключено или удалено</span>
-      <span><span class="v c">◆</span> по полю формы</span>
-    </div>
-    <div class="mx-scroll"><table class="mx" id="mx-packages"><thead><tr><th class="rh" scope="col">Пакет или поведение</th><th scope="col" data-v="homeproxy"><span class="vh">homeproxy</span></th><th scope="col" data-v="rehomeproxy"><span class="vh">re<wbr>homeproxy</span><small>Re:HomeProxy</small></th><th scope="col" data-v="podkop"><span class="vh">podkop</span></th><th scope="col" data-v="netshift"><span class="vh">netshift</span></th><th scope="col" data-v="forkop"><span class="vh">forkop</span></th><th scope="col" data-v="forkop-mod"><span class="vh">forkop-<wbr>mod</span></th><th scope="col" data-v="trafira"><span class="vh">trafira</span></th><th scope="col" data-v="passwall"><span class="vh">passwall</span><small>passwall2</small></th><th scope="col" data-v="xray"><span class="vh">xray</span></th><th scope="col" data-v="v2raya"><span class="vh">v2raya</span><small>v2rayA</small></th><th scope="col" data-v="clear"><span class="vh">clear</span></th><th scope="col" data-v="crystal_clear"><span class="vh">crystal_<wbr>clear</span></th><th scope="col" data-v="switch"><span class="vh">switch</span></th></tr></thead><tbody><tr class="grp"><th scope="rowgroup" class="rh">Прокси-ядро и DNS</th><td data-v="homeproxy"><span class="gl">homeproxy</span></td><td data-v="rehomeproxy"><span class="gl">rehome</span></td><td data-v="podkop"><span class="gl">podkop</span></td><td data-v="netshift"><span class="gl">netshift</span></td><td data-v="forkop"><span class="gl">forkop</span></td><td data-v="forkop-mod"><span class="gl">f-mod</span></td><td data-v="trafira"><span class="gl">trafira</span></td><td data-v="passwall"><span class="gl">passwall</span></td><td data-v="xray"><span class="gl">xray</span></td><td data-v="v2raya"><span class="gl">v2raya</span></td><td data-v="clear"><span class="gl">clear</span></td><td data-v="crystal_clear"><span class="gl">crystal</span></td><td data-v="switch"><span class="gl">switch</span></td></tr><tr><th scope="row" class="rh"><a class="ext" href="https://github.com/AdguardTeam/AdGuardHome" target="_blank" rel="noopener" title="https://github.com/AdguardTeam/AdGuardHome">AdGuard Home</a> <small>поле agh</small></th><td data-v="homeproxy"><span class="v c" title="по полю формы">◆</span></td><td data-v="rehomeproxy"><span class="v c" title="по полю формы">◆</span></td><td data-v="podkop"><span class="v c" title="по полю формы">◆</span></td><td data-v="netshift"><span class="v c" title="по полю формы">◆</span></td><td data-v="forkop"><span class="v c" title="по полю формы">◆</span></td><td data-v="forkop-mod"><span class="v c" title="по полю формы">◆</span></td><td data-v="trafira"><span class="v c" title="по полю формы">◆</span></td><td data-v="passwall"><span class="v c" title="по полю формы">◆</span></td><td data-v="xray"><span class="v c" title="по полю формы">◆</span></td><td data-v="v2raya"><span class="v c" title="по полю формы">◆</span></td><td data-v="clear"><span class="v n" title="нет">✗</span></td><td data-v="crystal_clear"><span class="v n" title="нет">✗</span></td><td data-v="switch"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh"><a class="ext" href="https://github.com/SagerNet/sing-box" target="_blank" rel="noopener" title="https://github.com/SagerNet/sing-box">sing-box</a> <small>пакет</small></th><td data-v="homeproxy"><span class="v y" title="есть">✓</span></td><td data-v="rehomeproxy"><span class="v y" title="есть">✓</span></td><td data-v="podkop"><span class="v y" title="есть">✓</span></td><td data-v="netshift"><span class="v y" title="есть">✓</span></td><td data-v="forkop"><span class="v n" title="нет">✗</span><small>вместо него sing-box-forkop</small></td><td data-v="forkop-mod"><span class="v c" title="по полю формы">◆</span></td><td data-v="trafira"><span class="v c" title="по полю формы">◆</span></td><td data-v="passwall"><span class="v n" title="нет">✗</span></td><td data-v="xray"><span class="v n" title="нет">✗</span></td><td data-v="v2raya"><span class="v n" title="нет">✗</span></td><td data-v="clear"><span class="v n" title="нет">✗</span></td><td data-v="crystal_clear"><span class="v n" title="нет">✗</span></td><td data-v="switch"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh"><a class="ext" href="https://github.com/SagerNet/sing-box" target="_blank" rel="noopener" title="https://github.com/SagerNet/sing-box">sing-box-tiny</a> <small>только slateax / ax59u</small></th><td data-v="homeproxy"><span class="v c" title="по полю формы">◆</span></td><td data-v="rehomeproxy"><span class="v c" title="по полю формы">◆</span></td><td data-v="podkop"><span class="v c" title="по полю формы">◆</span></td><td data-v="netshift"><span class="v c" title="по полю формы">◆</span></td><td data-v="forkop"><span class="v n" title="нет">✗</span><small>вместо него сборка tiny ядра</small></td><td data-v="forkop-mod"><span class="v c" title="по полю формы">◆</span></td><td data-v="trafira"><span class="v c" title="по полю формы">◆</span></td><td data-v="passwall"><span class="v n" title="нет">✗</span></td><td data-v="xray"><span class="v n" title="нет">✗</span></td><td data-v="v2raya"><span class="v n" title="нет">✗</span></td><td data-v="clear"><span class="v n" title="нет">✗</span></td><td data-v="crystal_clear"><span class="v n" title="нет">✗</span></td><td data-v="switch"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh"><a class="ext" href="https://github.com/XTLS/Xray-core" target="_blank" rel="noopener" title="https://github.com/XTLS/Xray-core">xray-core</a></th><td data-v="homeproxy"><span class="v n" title="нет">✗</span></td><td data-v="rehomeproxy"><span class="v n" title="нет">✗</span></td><td data-v="podkop"><span class="v n" title="нет">✗</span></td><td data-v="netshift"><span class="v n" title="нет">✗</span></td><td data-v="forkop"><span class="v n" title="нет">✗</span></td><td data-v="forkop-mod"><span class="v n" title="нет">✗</span></td><td data-v="trafira"><span class="v n" title="нет">✗</span></td><td data-v="passwall"><span class="v y" title="есть">✓</span></td><td data-v="xray"><span class="v y" title="есть">✓</span></td><td data-v="v2raya"><span class="v y" title="есть">✓</span></td><td data-v="clear"><span class="v n" title="нет">✗</span></td><td data-v="crystal_clear"><span class="v n" title="нет">✗</span></td><td data-v="switch"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh">youtubeUnblock <small>поле ytb</small></th><td data-v="homeproxy"><span class="v c" title="по полю формы">◆</span></td><td data-v="rehomeproxy"><span class="v c" title="по полю формы">◆</span></td><td data-v="podkop"><span class="v c" title="по полю формы">◆</span></td><td data-v="netshift"><span class="v c" title="по полю формы">◆</span></td><td data-v="forkop"><span class="v c" title="по полю формы">◆</span></td><td data-v="forkop-mod"><span class="v n" title="нет">✗</span></td><td data-v="trafira"><span class="v n" title="нет">✗</span></td><td data-v="passwall"><span class="v c" title="по полю формы">◆</span></td><td data-v="xray"><span class="v c" title="по полю формы">◆</span></td><td data-v="v2raya"><span class="v c" title="по полю формы">◆</span></td><td data-v="clear"><span class="v n" title="нет">✗</span></td><td data-v="crystal_clear"><span class="v n" title="нет">✗</span></td><td data-v="switch"><span class="v n" title="нет">✗</span></td></tr><tr class="grp"><th scope="rowgroup" class="rh">Прокси-приложение</th><td data-v="homeproxy"><span class="gl">homeproxy</span></td><td data-v="rehomeproxy"><span class="gl">rehome</span></td><td data-v="podkop"><span class="gl">podkop</span></td><td data-v="netshift"><span class="gl">netshift</span></td><td data-v="forkop"><span class="gl">forkop</span></td><td data-v="forkop-mod"><span class="gl">f-mod</span></td><td data-v="trafira"><span class="gl">trafira</span></td><td data-v="passwall"><span class="gl">passwall</span></td><td data-v="xray"><span class="gl">xray</span></td><td data-v="v2raya"><span class="gl">v2raya</span></td><td data-v="clear"><span class="gl">clear</span></td><td data-v="crystal_clear"><span class="gl">crystal</span></td><td data-v="switch"><span class="gl">switch</span></td></tr><tr><th scope="row" class="rh">luci-app-homeproxy</th><td data-v="homeproxy"><span class="v y" title="есть">✓</span></td><td data-v="rehomeproxy"><span class="v n" title="нет">✗</span></td><td data-v="podkop"><span class="v n" title="нет">✗</span></td><td data-v="netshift"><span class="v n" title="нет">✗</span></td><td data-v="forkop"><span class="v n" title="нет">✗</span></td><td data-v="forkop-mod"><span class="v n" title="нет">✗</span></td><td data-v="trafira"><span class="v n" title="нет">✗</span></td><td data-v="passwall"><span class="v n" title="нет">✗</span></td><td data-v="xray"><span class="v n" title="нет">✗</span></td><td data-v="v2raya"><span class="v n" title="нет">✗</span></td><td data-v="clear"><span class="v n" title="нет">✗</span></td><td data-v="crystal_clear"><span class="v n" title="нет">✗</span></td><td data-v="switch"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh">luci-app-re-homeproxy</th><td data-v="homeproxy"><span class="v n" title="нет">✗</span></td><td data-v="rehomeproxy"><span class="v y" title="есть">✓</span></td><td data-v="podkop"><span class="v n" title="нет">✗</span></td><td data-v="netshift"><span class="v n" title="нет">✗</span></td><td data-v="forkop"><span class="v n" title="нет">✗</span></td><td data-v="forkop-mod"><span class="v n" title="нет">✗</span></td><td data-v="trafira"><span class="v n" title="нет">✗</span></td><td data-v="passwall"><span class="v n" title="нет">✗</span></td><td data-v="xray"><span class="v n" title="нет">✗</span></td><td data-v="v2raya"><span class="v n" title="нет">✗</span></td><td data-v="clear"><span class="v n" title="нет">✗</span></td><td data-v="crystal_clear"><span class="v n" title="нет">✗</span></td><td data-v="switch"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh">podkop + luci-app-podkop</th><td data-v="homeproxy"><span class="v n" title="нет">✗</span></td><td data-v="rehomeproxy"><span class="v n" title="нет">✗</span></td><td data-v="podkop"><span class="v y" title="есть">✓</span></td><td data-v="netshift"><span class="v n" title="нет">✗</span></td><td data-v="forkop"><span class="v n" title="нет">✗</span></td><td data-v="forkop-mod"><span class="v n" title="нет">✗</span></td><td data-v="trafira"><span class="v n" title="нет">✗</span></td><td data-v="passwall"><span class="v n" title="нет">✗</span></td><td data-v="xray"><span class="v n" title="нет">✗</span></td><td data-v="v2raya"><span class="v n" title="нет">✗</span></td><td data-v="clear"><span class="v n" title="нет">✗</span></td><td data-v="crystal_clear"><span class="v n" title="нет">✗</span></td><td data-v="switch"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh">netshift + luci-app-netshift</th><td data-v="homeproxy"><span class="v n" title="нет">✗</span></td><td data-v="rehomeproxy"><span class="v n" title="нет">✗</span></td><td data-v="podkop"><span class="v n" title="нет">✗</span></td><td data-v="netshift"><span class="v y" title="есть">✓</span></td><td data-v="forkop"><span class="v n" title="нет">✗</span></td><td data-v="forkop-mod"><span class="v n" title="нет">✗</span></td><td data-v="trafira"><span class="v n" title="нет">✗</span></td><td data-v="passwall"><span class="v n" title="нет">✗</span></td><td data-v="xray"><span class="v n" title="нет">✗</span></td><td data-v="v2raya"><span class="v n" title="нет">✗</span></td><td data-v="clear"><span class="v n" title="нет">✗</span></td><td data-v="crystal_clear"><span class="v n" title="нет">✗</span></td><td data-v="switch"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh">forkop + luci-app-forkop <small>оригинал или forkop-mod</small></th><td data-v="homeproxy"><span class="v n" title="нет">✗</span></td><td data-v="rehomeproxy"><span class="v n" title="нет">✗</span></td><td data-v="podkop"><span class="v n" title="нет">✗</span></td><td data-v="netshift"><span class="v n" title="нет">✗</span></td><td data-v="forkop"><span class="v y" title="есть">✓</span></td><td data-v="forkop-mod"><span class="v y" title="есть">✓</span></td><td data-v="trafira"><span class="v n" title="нет">✗</span></td><td data-v="passwall"><span class="v n" title="нет">✗</span></td><td data-v="xray"><span class="v n" title="нет">✗</span></td><td data-v="v2raya"><span class="v n" title="нет">✗</span></td><td data-v="clear"><span class="v n" title="нет">✗</span></td><td data-v="crystal_clear"><span class="v n" title="нет">✗</span></td><td data-v="switch"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh">trafira + luci-app-trafira</th><td data-v="homeproxy"><span class="v n" title="нет">✗</span></td><td data-v="rehomeproxy"><span class="v n" title="нет">✗</span></td><td data-v="podkop"><span class="v n" title="нет">✗</span></td><td data-v="netshift"><span class="v n" title="нет">✗</span></td><td data-v="forkop"><span class="v n" title="нет">✗</span></td><td data-v="forkop-mod"><span class="v n" title="нет">✗</span></td><td data-v="trafira"><span class="v y" title="есть">✓</span></td><td data-v="passwall"><span class="v n" title="нет">✗</span></td><td data-v="xray"><span class="v n" title="нет">✗</span></td><td data-v="v2raya"><span class="v n" title="нет">✗</span></td><td data-v="clear"><span class="v n" title="нет">✗</span></td><td data-v="crystal_clear"><span class="v n" title="нет">✗</span></td><td data-v="switch"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh">luci-app-passwall2</th><td data-v="homeproxy"><span class="v n" title="нет">✗</span></td><td data-v="rehomeproxy"><span class="v n" title="нет">✗</span></td><td data-v="podkop"><span class="v n" title="нет">✗</span></td><td data-v="netshift"><span class="v n" title="нет">✗</span></td><td data-v="forkop"><span class="v n" title="нет">✗</span></td><td data-v="forkop-mod"><span class="v n" title="нет">✗</span></td><td data-v="trafira"><span class="v n" title="нет">✗</span></td><td data-v="passwall"><span class="v y" title="есть">✓</span></td><td data-v="xray"><span class="v n" title="нет">✗</span></td><td data-v="v2raya"><span class="v n" title="нет">✗</span></td><td data-v="clear"><span class="v n" title="нет">✗</span></td><td data-v="crystal_clear"><span class="v n" title="нет">✗</span></td><td data-v="switch"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh">luci-app-xray</th><td data-v="homeproxy"><span class="v n" title="нет">✗</span></td><td data-v="rehomeproxy"><span class="v n" title="нет">✗</span></td><td data-v="podkop"><span class="v n" title="нет">✗</span></td><td data-v="netshift"><span class="v n" title="нет">✗</span></td><td data-v="forkop"><span class="v n" title="нет">✗</span></td><td data-v="forkop-mod"><span class="v n" title="нет">✗</span></td><td data-v="trafira"><span class="v n" title="нет">✗</span></td><td data-v="passwall"><span class="v n" title="нет">✗</span></td><td data-v="xray"><span class="v y" title="есть">✓</span></td><td data-v="v2raya"><span class="v n" title="нет">✗</span></td><td data-v="clear"><span class="v n" title="нет">✗</span></td><td data-v="crystal_clear"><span class="v n" title="нет">✗</span></td><td data-v="switch"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh">v2rayA + luci-app-v2raya</th><td data-v="homeproxy"><span class="v n" title="нет">✗</span></td><td data-v="rehomeproxy"><span class="v n" title="нет">✗</span></td><td data-v="podkop"><span class="v n" title="нет">✗</span></td><td data-v="netshift"><span class="v n" title="нет">✗</span></td><td data-v="forkop"><span class="v n" title="нет">✗</span></td><td data-v="forkop-mod"><span class="v n" title="нет">✗</span></td><td data-v="trafira"><span class="v n" title="нет">✗</span></td><td data-v="passwall"><span class="v n" title="нет">✗</span></td><td data-v="xray"><span class="v n" title="нет">✗</span></td><td data-v="v2raya"><span class="v y" title="есть">✓</span></td><td data-v="clear"><span class="v n" title="нет">✗</span></td><td data-v="crystal_clear"><span class="v n" title="нет">✗</span></td><td data-v="switch"><span class="v n" title="нет">✗</span></td></tr><tr class="grp"><th scope="rowgroup" class="rh">Сеть и оптимизации</th><td data-v="homeproxy"><span class="gl">homeproxy</span></td><td data-v="rehomeproxy"><span class="gl">rehome</span></td><td data-v="podkop"><span class="gl">podkop</span></td><td data-v="netshift"><span class="gl">netshift</span></td><td data-v="forkop"><span class="gl">forkop</span></td><td data-v="forkop-mod"><span class="gl">f-mod</span></td><td data-v="trafira"><span class="gl">trafira</span></td><td data-v="passwall"><span class="gl">passwall</span></td><td data-v="xray"><span class="gl">xray</span></td><td data-v="v2raya"><span class="gl">v2raya</span></td><td data-v="clear"><span class="gl">clear</span></td><td data-v="crystal_clear"><span class="gl">crystal</span></td><td data-v="switch"><span class="gl">switch</span></td></tr><tr><th scope="row" class="rh">SQM <small>luci-app-sqm, sqm-scripts, kmod-sched-ctinfo, cake_ctinfo.qos</small></th><td data-v="homeproxy"><span class="v n" title="нет">✗</span></td><td data-v="rehomeproxy"><span class="v n" title="нет">✗</span></td><td data-v="podkop"><span class="v n" title="нет">✗</span></td><td data-v="netshift"><span class="v n" title="нет">✗</span></td><td data-v="forkop"><span class="v n" title="нет">✗</span></td><td data-v="forkop-mod"><span class="v n" title="нет">✗</span></td><td data-v="trafira"><span class="v n" title="нет">✗</span></td><td data-v="passwall"><span class="v n" title="нет">✗</span></td><td data-v="xray"><span class="v n" title="нет">✗</span></td><td data-v="v2raya"><span class="v n" title="нет">✗</span></td><td data-v="clear"><span class="v y" title="есть">✓</span></td><td data-v="crystal_clear"><span class="v n" title="нет">✗</span></td><td data-v="switch"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh">TCP BBR <small>kmod-tcp-bbr</small></th><td data-v="homeproxy"><span class="v y" title="есть">✓</span></td><td data-v="rehomeproxy"><span class="v y" title="есть">✓</span></td><td data-v="podkop"><span class="v y" title="есть">✓</span></td><td data-v="netshift"><span class="v y" title="есть">✓</span></td><td data-v="forkop"><span class="v y" title="есть">✓</span></td><td data-v="forkop-mod"><span class="v y" title="есть">✓</span></td><td data-v="trafira"><span class="v y" title="есть">✓</span></td><td data-v="passwall"><span class="v y" title="есть">✓</span></td><td data-v="xray"><span class="v y" title="есть">✓</span></td><td data-v="v2raya"><span class="v y" title="есть">✓</span></td><td data-v="clear"><span class="v n" title="нет">✗</span></td><td data-v="crystal_clear"><span class="v n" title="нет">✗</span></td><td data-v="switch"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh">internet-detector</th><td data-v="homeproxy"><span class="v y" title="есть">✓</span></td><td data-v="rehomeproxy"><span class="v y" title="есть">✓</span></td><td data-v="podkop"><span class="v y" title="есть">✓</span></td><td data-v="netshift"><span class="v y" title="есть">✓</span></td><td data-v="forkop"><span class="v y" title="есть">✓</span></td><td data-v="forkop-mod"><span class="v y" title="есть">✓</span></td><td data-v="trafira"><span class="v y" title="есть">✓</span></td><td data-v="passwall"><span class="v y" title="есть">✓</span></td><td data-v="xray"><span class="v y" title="есть">✓</span></td><td data-v="v2raya"><span class="v y" title="есть">✓</span></td><td data-v="clear"><span class="v y" title="есть">✓</span></td><td data-v="crystal_clear"><span class="v n" title="нет">✗</span></td><td data-v="switch"><span class="v n" title="нет">✗</span></td></tr><tr class="grp"><th scope="rowgroup" class="rh">Базовые пакеты</th><td data-v="homeproxy"><span class="gl">homeproxy</span></td><td data-v="rehomeproxy"><span class="gl">rehome</span></td><td data-v="podkop"><span class="gl">podkop</span></td><td data-v="netshift"><span class="gl">netshift</span></td><td data-v="forkop"><span class="gl">forkop</span></td><td data-v="forkop-mod"><span class="gl">f-mod</span></td><td data-v="trafira"><span class="gl">trafira</span></td><td data-v="passwall"><span class="gl">passwall</span></td><td data-v="xray"><span class="gl">xray</span></td><td data-v="v2raya"><span class="gl">v2raya</span></td><td data-v="clear"><span class="gl">clear</span></td><td data-v="crystal_clear"><span class="gl">crystal</span></td><td data-v="switch"><span class="gl">switch</span></td></tr><tr><th scope="row" class="rh">coreutils <small>все</small></th><td data-v="homeproxy"><span class="v y" title="есть">✓</span></td><td data-v="rehomeproxy"><span class="v y" title="есть">✓</span></td><td data-v="podkop"><span class="v y" title="есть">✓</span></td><td data-v="netshift"><span class="v y" title="есть">✓</span></td><td data-v="forkop"><span class="v y" title="есть">✓</span></td><td data-v="forkop-mod"><span class="v y" title="есть">✓</span></td><td data-v="trafira"><span class="v y" title="есть">✓</span></td><td data-v="passwall"><span class="v y" title="есть">✓</span></td><td data-v="xray"><span class="v y" title="есть">✓</span></td><td data-v="v2raya"><span class="v y" title="есть">✓</span></td><td data-v="clear"><span class="v y" title="есть">✓</span></td><td data-v="crystal_clear"><span class="v n" title="нет">✗</span></td><td data-v="switch"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh">findutils <small>GNU find, xargs</small></th><td data-v="homeproxy"><span class="v y" title="есть">✓</span></td><td data-v="rehomeproxy"><span class="v y" title="есть">✓</span></td><td data-v="podkop"><span class="v y" title="есть">✓</span></td><td data-v="netshift"><span class="v y" title="есть">✓</span></td><td data-v="forkop"><span class="v y" title="есть">✓</span></td><td data-v="forkop-mod"><span class="v y" title="есть">✓</span></td><td data-v="trafira"><span class="v y" title="есть">✓</span></td><td data-v="passwall"><span class="v y" title="есть">✓</span></td><td data-v="xray"><span class="v y" title="есть">✓</span></td><td data-v="v2raya"><span class="v y" title="есть">✓</span></td><td data-v="clear"><span class="v y" title="есть">✓</span></td><td data-v="crystal_clear"><span class="v n" title="нет">✗</span></td><td data-v="switch"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh">USB-накопители <small>kmod-usb-storage*</small></th><td data-v="homeproxy"><span class="v y" title="есть">✓</span></td><td data-v="rehomeproxy"><span class="v y" title="есть">✓</span></td><td data-v="podkop"><span class="v y" title="есть">✓</span></td><td data-v="netshift"><span class="v y" title="есть">✓</span></td><td data-v="forkop"><span class="v y" title="есть">✓</span></td><td data-v="forkop-mod"><span class="v y" title="есть">✓</span></td><td data-v="trafira"><span class="v y" title="есть">✓</span></td><td data-v="passwall"><span class="v y" title="есть">✓</span></td><td data-v="xray"><span class="v y" title="есть">✓</span></td><td data-v="v2raya"><span class="v y" title="есть">✓</span></td><td data-v="clear"><span class="v y" title="есть">✓</span></td><td data-v="crystal_clear"><span class="v n" title="нет">✗</span></td><td data-v="switch"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh">Crypto kmod <small>aead, gcm, hmac…</small></th><td data-v="homeproxy"><span class="v y" title="есть">✓</span></td><td data-v="rehomeproxy"><span class="v y" title="есть">✓</span></td><td data-v="podkop"><span class="v y" title="есть">✓</span></td><td data-v="netshift"><span class="v y" title="есть">✓</span></td><td data-v="forkop"><span class="v y" title="есть">✓</span></td><td data-v="forkop-mod"><span class="v y" title="есть">✓</span></td><td data-v="trafira"><span class="v y" title="есть">✓</span></td><td data-v="passwall"><span class="v y" title="есть">✓</span></td><td data-v="xray"><span class="v y" title="есть">✓</span></td><td data-v="v2raya"><span class="v y" title="есть">✓</span></td><td data-v="clear"><span class="v y" title="есть">✓</span></td><td data-v="crystal_clear"><span class="v n" title="нет">✗</span></td><td data-v="switch"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh">zz1-final-offline-setup.sh <small>поле zz</small></th><td data-v="homeproxy"><span class="v c" title="по полю формы">◆</span></td><td data-v="rehomeproxy"><span class="v c" title="по полю формы">◆</span></td><td data-v="podkop"><span class="v c" title="по полю формы">◆</span></td><td data-v="netshift"><span class="v c" title="по полю формы">◆</span></td><td data-v="forkop"><span class="v c" title="по полю формы">◆</span></td><td data-v="forkop-mod"><span class="v c" title="по полю формы">◆</span></td><td data-v="trafira"><span class="v c" title="по полю формы">◆</span></td><td data-v="passwall"><span class="v c" title="по полю формы">◆</span></td><td data-v="xray"><span class="v c" title="по полю формы">◆</span></td><td data-v="v2raya"><span class="v c" title="по полю формы">◆</span></td><td data-v="clear"><span class="v c" title="по полю формы">◆</span></td><td data-v="crystal_clear"><span class="v n" title="нет">✗</span></td><td data-v="switch"><span class="v c" title="по полю формы">◆</span></td></tr><tr class="grp"><th scope="rowgroup" class="rh">Поведение сборки</th><td data-v="homeproxy"><span class="gl">homeproxy</span></td><td data-v="rehomeproxy"><span class="gl">rehome</span></td><td data-v="podkop"><span class="gl">podkop</span></td><td data-v="netshift"><span class="gl">netshift</span></td><td data-v="forkop"><span class="gl">forkop</span></td><td data-v="forkop-mod"><span class="gl">f-mod</span></td><td data-v="trafira"><span class="gl">trafira</span></td><td data-v="passwall"><span class="gl">passwall</span></td><td data-v="xray"><span class="gl">xray</span></td><td data-v="v2raya"><span class="gl">v2raya</span></td><td data-v="clear"><span class="gl">clear</span></td><td data-v="crystal_clear"><span class="gl">crystal</span></td><td data-v="switch"><span class="gl">switch</span></td></tr><tr><th scope="row" class="rh">Режим L2-коммутатора <small>first boot</small></th><td data-v="homeproxy"><span class="v n" title="нет">✗</span></td><td data-v="rehomeproxy"><span class="v n" title="нет">✗</span></td><td data-v="podkop"><span class="v n" title="нет">✗</span></td><td data-v="netshift"><span class="v n" title="нет">✗</span></td><td data-v="forkop"><span class="v n" title="нет">✗</span></td><td data-v="forkop-mod"><span class="v n" title="нет">✗</span></td><td data-v="trafira"><span class="v n" title="нет">✗</span></td><td data-v="passwall"><span class="v n" title="нет">✗</span></td><td data-v="xray"><span class="v n" title="нет">✗</span></td><td data-v="v2raya"><span class="v n" title="нет">✗</span></td><td data-v="clear"><span class="v n" title="нет">✗</span></td><td data-v="crystal_clear"><span class="v n" title="нет">✗</span></td><td data-v="switch"><span class="v y" title="есть">✓</span></td></tr><tr><th scope="row" class="rh">youtubeUnblock обновляется в part2</th><td data-v="homeproxy"><span class="v c" title="по полю формы">◆</span></td><td data-v="rehomeproxy"><span class="v c" title="по полю формы">◆</span></td><td data-v="podkop"><span class="v c" title="по полю формы">◆</span></td><td data-v="netshift"><span class="v c" title="по полю формы">◆</span></td><td data-v="forkop"><span class="v c" title="по полю формы">◆</span></td><td data-v="forkop-mod"><span class="v n" title="нет">✗</span></td><td data-v="trafira"><span class="v n" title="нет">✗</span></td><td data-v="passwall"><span class="v c" title="по полю формы">◆</span></td><td data-v="xray"><span class="v c" title="по полю формы">◆</span></td><td data-v="v2raya"><span class="v c" title="по полю формы">◆</span></td><td data-v="clear"><span class="v n" title="нет">✗</span></td><td data-v="crystal_clear"><span class="v n" title="нет">✗</span></td><td data-v="switch"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh">Бинарник AGH скачивается <small>agh = latest</small></th><td data-v="homeproxy"><span class="v c" title="по полю формы">◆</span></td><td data-v="rehomeproxy"><span class="v c" title="по полю формы">◆</span></td><td data-v="podkop"><span class="v c" title="по полю формы">◆</span></td><td data-v="netshift"><span class="v c" title="по полю формы">◆</span></td><td data-v="forkop"><span class="v c" title="по полю формы">◆</span></td><td data-v="forkop-mod"><span class="v c" title="по полю формы">◆</span></td><td data-v="trafira"><span class="v c" title="по полю формы">◆</span></td><td data-v="passwall"><span class="v c" title="по полю формы">◆</span></td><td data-v="xray"><span class="v c" title="по полю формы">◆</span></td><td data-v="v2raya"><span class="v c" title="по полю формы">◆</span></td><td data-v="clear"><span class="v n" title="нет">✗</span></td><td data-v="crystal_clear"><span class="v n" title="нет">✗</span></td><td data-v="switch"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh">Бинарник sing-box скачивается <small>версия в поле sb</small></th><td data-v="homeproxy"><span class="v c" title="по полю формы">◆</span></td><td data-v="rehomeproxy"><span class="v c" title="по полю формы">◆</span></td><td data-v="podkop"><span class="v c" title="по полю формы">◆</span></td><td data-v="netshift"><span class="v c" title="по полю формы">◆</span></td><td data-v="forkop"><span class="v y" title="есть">✓</span><small>пакет sing-box-forkop</small></td><td data-v="forkop-mod"><span class="v c" title="по полю формы">◆</span></td><td data-v="trafira"><span class="v c" title="по полю формы">◆</span></td><td data-v="passwall"><span class="v n" title="нет">✗</span></td><td data-v="xray"><span class="v n" title="нет">✗</span></td><td data-v="v2raya"><span class="v n" title="нет">✗</span></td><td data-v="clear"><span class="v n" title="нет">✗</span></td><td data-v="crystal_clear"><span class="v n" title="нет">✗</span></td><td data-v="switch"><span class="v n" title="нет">✗</span></td></tr></tbody></table></div>
-
-    <h3>Что важно знать о вариантах</h3>
-    <details class="fold">
-      <summary><code>homeproxy</code> <span class="s">«стоковая» прошивка с VPN-клиентом</span></summary>
-      <div class="body">
-        <p>Раньше это был отдельный вариант <code>homeproxy_default</code>. Теперь он собирается вариантом <code>homeproxy</code> с полями <code>agh</code> = <code>no</code>, <code>ytb</code> = нет, <code>zz</code> = нет. Тогда в прошивке нет AdGuard Home, youtubeUnblock и первичной настройки, а homeproxy работает со своими настройками по умолчанию (DNS через dnsmasq, без Clash API/YACD и без bypass-метки <code>0x64</code>).</p>
-        <p>Для кода homeproxy без изменений добавьте <code>apply_patches</code> = нет. Генератор автора (immortalwrt/homeproxy master) работает с sing-box 1.12 и 1.13; на 1.14 он пишет устаревший <code>store_rdrc</code> (только предупреждение), а в режиме bypass_mainland_china со списком прокси-доменов sing-box 1.14 не запускается — тогда выберите <code>sb</code> = <code>1.12.x</code> или <code>1.13.x</code>. В фиде OpenWrt 25.12: с тега 25.12.6 и с <code>feeds_latest</code> — 1.13.x (в теге 25.12.5 был 1.12.x). У стока одна известная ошибка (её исправляет патч 002): в режиме custom sing-box не стартует, пока настройки DNS ни разу не сохранены в LuCI.</p>
-      </div>
-    </details>
-    <details class="fold">
-      <summary><code>rehomeproxy</code> <span class="s">Re:HomeProxy</span></summary>
-      <div class="body">
-        <p>Форк homeproxy от 1andrevich (<code>1andrevich/homeproxy-hiddify</code>, пакет <code>luci-app-re-homeproxy</code>): ядро hiddify-core или sing-box-extended, страница «Core &amp; Tools» для установки ядер и компонентов.</p>
-        <p><code>WRT-part3.sh</code> клонирует ветку master в <code>package/luci-app-re-homeproxy</code> и ставит версию пакета как у сборок автора: <code>&lt;дата коммита&gt;-r&lt;число коммитов&gt;</code>. Пакет ставит файлы по тем же путям, что luci-app-homeproxy (<code>/etc/config/homeproxy</code>, <code>/etc/init.d/homeproxy</code>), поэтому homeproxy в этом варианте вырезается. Ядро — <code>/usr/bin/sing-box</code> из сборки (поле <code>sb</code>); hiddify-core и другие компоненты приложение может доставить само на роутере. Модули <code>kmod-nft-tproxy</code>, <code>kmod-tun</code>, <code>kmod-nft-queue</code> уже в образе.</p>
-        <p>zz1 настраивает его как homeproxy (dns_hijacked при AGH, DNS-порт 5333, обход по метке <code>0x64</code>, YACD), а Clash API включает в существующем блоке форка. Без патча 001 форк на обычном sing-box (фид, <code>1.12.x</code>…<code>latest</code>, tiny) не запускается ни в одном режиме — job <code>setup</code> предупреждает. Проверки совместимости sing-box, как у homeproxy, для него нет: генератор форка сам выбирает поля под ядро.</p>
-      </div>
-    </details>
-    <details class="fold">
-      <summary><code>podkop</code> <span class="s">10 патчей, ядро podkop-engine</span></summary>
-      <div class="body">
-        <p>Пакеты из <code>itdoginfo/podkop</code> с 10 патчами: 001–005 исправляют ошибки (разбор ссылок, DNS, гонка при старте, домены с заглавными, «Торренты мимо прокси»), 006–010 переносят полезное из netshift (блок «Окружение», «Отключить секцию», устойчивость к битой ссылке, несколько DNS-серверов, «Исключённые IP мимо sing-box»). Новые опции по умолчанию выключены. Подробно — в разделе <a href="#patches">07</a>.</p>
-        <p>Ядро podkop-engine (поле <code>sb</code>) даёт podkop ссылки xhttp, резервные выходы и проверку загрузки в URLTest, резервный DNS и failsafe — см. раздел <a href="#sbcores">04</a>. zz1: AGH upstream <code>127.0.0.42:53</code>, <code>dont_touch_dhcp=1</code>, <code>exclude_ntp=1</code>, при youtubeUnblock — <code>disable_quic=1</code>.</p>
-      </div>
-    </details>
-    <details class="fold">
-      <summary><code>netshift</code> <span class="s">форк podkop, бета</span></summary>
-      <div class="body">
-        <p>Пакеты <code>netshift</code>, <code>luci-app-netshift</code>, <code>luci-i18n-netshift-ru</code> собираются из <code>yandexru45/netshift</code> — активно развиваемого форка podkop (бета). Устроен как podkop: shell + jq, DNS sing-box на <code>127.0.0.42:53</code>, youtubeUnblock совместим.</p>
-        <p>Сверх podkop: несколько подписок в секции с фильтрами и группами по странам и автовыбором самого быстрого сервера, переключение ядра sing-box ↔ sing-box-extended (транспорт xhttp) прямо из LuCI, IPv6, блокировка DoH, «Торренты мимо прокси», EDNS Client Subnet, самообновление из LuCI. В 0.9.10 добавились вкладка «Устройства» (для каждого устройства: по спискам, напрямую или всё через секцию — без перехвата DNS, AGH по-прежнему видит всех), DNS-секции (свой DNS-сервер для доменов выбранных списков), пул DNS-серверов (резерв или параллельный опрос), каскад секций, приоритетный выбор сервера, фильтры подписки по стране, опция <code>reality_mlkem</code>, а 09.10.2026 — единый список DNS-серверов, DNS по зонам, перехват DNS клиентов (<code>dns_hijack</code>, по умолчанию выключен), проверка «Куда пойдёт запрос», вкладка «Соединения», kill switch <code>block_leaks</code>, снимки настроек и тест скорости DNS; есть и обход sing-box для исключённых адресов (<code>bypass_excluded_ips</code>, по умолчанию выключен; трафик на FakeIP-адреса всё равно идёт через sing-box). В 0.9.11 (18.10.2026) автор исправил падение sing-box при интервале URLTest больше 30 минут (1h, 6h, 24h, «off»), нехватку памяти на больших подписках (теперь обрабатываются через файлы) и выбор DNS-сервера в проверке «Куда пойдёт запрос»; флажок «UDP over TCP» теперь действует и на socks и ss из подписок. Конфиг — <code>/etc/config/netshift</code> (старый <code>/etc/config/podkop</code> переносится автоматически).</p>
-        <p>Патчи <code>patches/feeds/netshift</code>: 001 — ссылки socks5 с <code>:</code> в логине или пароле давали нерабочий узел, ссылки VLESS/Trojan с транспортом http пропускались; на OpenWrt 24.10 (jq 1.7) не строились узлы с TLS/Reality и не работали подписки (на 25.12 с jq 1.8.1 этой проблемы нет); 002 — запросы SRV/PTR/TXT к доменам из списков оставались без ответа (FakeIP отвечает только на A/AAAA), диагностика считала недоступным DNS-сервер, заданный с портом.</p>
-        <p>zz1 делает то же, что для podkop: AGH upstream <code>127.0.0.42:53</code>, <code>dont_touch_dhcp=1</code>, <code>exclude_ntp=1</code> и, раз youtubeUnblock в варианте есть, <code>disable_quic=1</code>. Самообновление netshift из LuCI ставит релиз автора поверх пакета из прошивки — патчи при этом теряются до следующей прошивки.</p>
-      </div>
-    </details>
-    <details class="fold">
-      <summary><code>forkop</code> и <code>forkop-mod</code> <span class="s">два фида, один вариант внутри сборки</span></summary>
-      <div class="body">
-        <p>Пакеты <code>forkop</code>, <code>luci-app-forkop</code>, <code>luci-i18n-forkop-ru</code> в варианте <code>forkop</code> собираются из оригинала <code>ushan0v/forkop</code> 2.x с патчами 001 (скрипт удаления на sh) и 002 (настройка «Перехватывать DNS устройств», только в <code>/etc/config/forkop</code>: с ней выключенной AdGuard Home видит каждого клиента; заодно FakeIP-соединения исключённых устройств идут напрямую). forkop 2.0 переписан почти целиком: Zapret, ByeDPI и загрузка компонентов убраны, а исключённые устройства, «Торренты напрямую», правило fw4 для TPROXY, работа в образе прошивки и sing-box 1.14 есть у автора — 25 патчей для 1.x больше не нужны. youtubeUnblock в этом варианте теперь можно (поле <code>ytb</code>).</p>
-        <p>Ядро — только <code>sing-box-forkop</code> (<code>ushan0v/sing-box-forkop</code>): пакет forkop зависит от него, служба проверяет <code>sing-box version</code>. Сборщик ставит его настоящим пакетом из релиза (поле <code>sb</code>: <code>forkop-base</code> по умолчанию, <code>forkop-full</code>, на slateax/ax59u — <code>forkop-tiny</code>) вместо <code>sing-box</code> из фида, поэтому закреплять в zz1 нечего, а ядро обновляется во вкладке «Компоненты» forkop. Пакет forkop 2.x зависит от <code>ip-tiny</code>, а в <code>WRT.config</code> включён <code>ip-full</code>: в apk они конфликтуют (оба дают <code>ip</code>), и образ не собирался. part3 меняет в Makefile forkop <code>+ip-tiny</code> на <code>+ip-full</code>, а workflow после <code>make defconfig</code> останавливает сборку, если включены оба.</p>
-        <p>В варианте <code>forkop-mod</code> пакеты собираются из форка <code>Gavr1024/forkop-mod</code> (ветка 1.x) с патчем 001: есть Xray, Zapret, ByeDPI и другие функции форка, ядро — sing-box из фида (скачанный бинарь кладётся поверх него). Внутри сборки оба — вариант <code>forkop</code>; zz1 различает их по опции <code>unmatched_dns_mode</code> в <code>/usr/share/forkop/default-config</code>.</p>
-        <p>zz1 для forkop 2.x ставит <code>intercept_device_dns=0</code> (патч 002) и «DNS вне правил» = Роутер (<code>unmatched_dns_mode=router</code>): DNS клиентов идёт через AdGuard Home, и он видит каждого. Для forkop-mod — <code>dont_touch_dhcp=1</code> и <code>exclude_ntp=1</code>. Цепочка DNS forkop — в разделе <a href="#firstboot">08</a>.</p>
-      </div>
-    </details>
-    <details class="fold">
-      <summary><code>trafira</code> <span class="s">продолжение forkop</span></summary>
-      <div class="body">
-        <p>Пакеты <code>trafira</code>, <code>luci-app-trafira</code>, <code>luci-i18n-trafira-ru</code> собираются из <code>petrouspetr-pixel/trafira</code> — активно развиваемого продолжения forkop со своими тестами. В нём уже есть почти все исправления, которые для forkop дают наши патчи. От forkop он унаследовал секции с действиями, подписки, серверные входы (VLESS Reality, MTProto, Tailscale) и вкладку «Компоненты», а сверх них добавил Alice Mode (какие устройства идут через trafira, а какие мимо: по IP, MAC, интерфейсу, с настоящим DNS для обходящих), DoH с mTLS, порог отказов DNS и сторож для приоритетных групп серверов, плюс собственные тесты. Xray, как в forkop-mod, нет. Конфиг — <code>/etc/config/trafira</code>, пакет конфликтует с forkop и podkop.</p>
-        <p>Патчи <code>patches/feeds/trafira</code> (001 удалён: вызовы ucode до объявления в установщике sing-box автор исправил в 3.1.11): 002 — правило fw4, пропускающее TPROXY-трафик во <code>input</code>, ставится и в образе прошивки (<code>/etc/uci-defaults/60_trafira-firewall</code>, как патч 016 forkop), иначе гостевые зоны с <code>input=REJECT</code> режут проксируемый трафик; 004 — пароли с <code>%40</code>/<code>%23</code>/<code>+</code> в ручных ссылках (раньше trojan-ссылка с <code>%40</code> не давала trafira запуститься, а <code>+</code> в пароле ss/hysteria2 становился пробелом); 005 — битая ссылка пропускается, а секция без рабочих выходов становится «блоком», вместо остановки всего trafira; 006 — блок «Окружение» в диагностике (Flow Offloading, часы, IPv6). 007 — сборка пакета с ucode OpenWrt 24.10 и 25.12: сжатие исходников при сборке падало на заголовке байткода новых версий ucode. «Исключить BitTorrent» (наш бывший 003) автор внёс сам 09.10.2026, вместе с опцией «Исключить Wi-Fi Calling». Настройки «Исключённые устройства» и «Перехватывать DNS устройств» из наших патчей forkop здесь заменяет Alice Mode.</p>
-        <p>zz1 делает для trafira то же, что для forkop: AGH upstream <code>127.0.0.42:53</code>, <code>dont_touch_dhcp=1</code>, <code>exclude_ntp=1</code>. youtubeUnblock в варианте нет. sing-box — как у forkop: пакет из фида плюс скачанный бинарник при выборе версии в <code>sb</code>; обновлять его лучше со вкладки «Компоненты».</p>
-      </div>
-    </details>
-    <details class="fold">
-      <summary><code>clear</code>, <code>crystal_clear</code>, <code>switch</code> <span class="s">чем отличаются</span></summary>
-      <div class="body">
-        <p><code>crystal_clear</code> в отличие от <code>clear</code> удаляет сам <code>zz1</code> — это «чистая болванка» без первичной настройки. <code>switch</code> делит список удаляемых пакетов с <code>crystal_clear</code>, но оставляет <code>zz1</code>, который переводит устройство в L2-мост. SQM есть только в <code>clear</code>.</p>
-      </div>
-    </details>
-  </section>
-
-  <!-- 03 УСТРОЙСТВО ВАРИАНТОВ -->
-  <section id="lineage">
-    <div class="sec-head"><span class="sec-num">03</span><h2>Родословная и устройство вариантов</h2></div>
-    <p class="sec-sub">Откуда взялись прокси-приложения, которые собирает сборщик, как они устроены и что в них меняют патчи этого репозитория. Описание техническое; это не рекомендации и не инструкция по настройке.</p>
-
-    <h3>Родословная: кто от кого и чем отличается</h3>
-    <div class="fam">
-      <ul class="tree">
-        <li><div class="tn"><h4>podkop <span class="opt">shell + jq</span></h4><div class="meta">itdoginfo · 0.7.24 (11.10.2026) · ~5,4 тыс. строк бэкенда · у нас 10 патчей</div><p>Основа семейства. Секции с действиями «прокси / VPN / блокировка / исключение», списки доменов и подсетей по ссылке, разбор ссылок <code>vless://</code> и других, FakeIP. Патчи: 001–005 исправляют ошибки, 006–010 переносят функции из netshift.</p></div>
-          <ul>
-            <li><div class="tn"><h4>netshift <span class="opt">shell + jq</span></h4><div class="meta">yandexru45 · отделился 01.06.2026 · ~17 тыс. строк · тесты в Docker · у нас 2 патча</div><p>Тот же podkop, но с подписками и группами серверов, вкладкой «Устройства», DNS-секциями, пулом DNS и своим DNS у секции, каскадом секций, аварийным переходом секции напрямую, port hopping для Hysteria2, IPv6 и самообновлением. Развивается быстро, формат настроек ещё меняется (бета).</p></div></li>
-            <li><div class="tn"><h4>forkop <span class="opt">ucode</span></h4><div class="meta">ushan0v · 2.0.0 (27.10.2026) · ~19 тыс. строк ucode + LuCI ~30 тыс. строк JS, тесты, документация · ядро sing-box-forkop · у нас 2 патча</div><p>podkop, переписанный с нуля на ucode; в 2.0 переписан ещё раз и получил своё ядро sing-box-forkop (sing-box 1.14 с AmneziaWG, WARP, TrustTunnel, mieru, XHTTP, шифрованием VLESS, Fallback). Секции с действиями и DNS-секции, условия по портам и устройствам, подписки всех основных форматов, URLTest и Fallback, туннели, VPN-сервер на роутере, мониторинг, страница «Компоненты». Zapret и ByeDPI из 2.0 убраны.</p></div>
-              <ul>
-                <li><div class="tn"><h4>forkop-mod <span class="opt">ucode</span></h4><div class="meta">Gavr1024 · 1.0.13 · ~66 тыс. строк ucode · последний коммит 24.10.2026 · у нас 1 патч</div><p>forkop плюс второе ядро Xray и «слоты» конфигурации, клиенты OpenConnect/OpenVPN, WARP (WireGuard и MASQUE), WireGuard/AmneziaWG. Ведёт один человек.</p></div></li>
-                <li><div class="tn"><h4>trafira <span class="opt">ucode</span></h4><div class="meta">petrouspetr-pixel · 3.1.14 (21.10.2026) · ~51 тыс. строк ucode + тесты · у нас 5 патчей</div><p>Продолжение forkop: Alice Mode (какие устройства идут через trafira, а какие мимо — по IP, MAC или интерфейсу), DoH с mTLS, порог отказов DNS, собственные тесты. Большинство исправлений, которые для forkop дают патчи, здесь уже есть у автора.</p></div></li>
-              </ul>
-            </li>
-          </ul>
-        </li>
-      </ul>
-      <ul class="tree">
-        <li><div class="tn"><h4>homeproxy <span class="opt">ucode</span></h4><div class="meta">ImmortalWrt · официальный пакет · ~2,4 тыс. строк ucode + LuCI ~4,5 тыс. · последний коммит 02.10.2026 · у нас 22 патча</div><p>Компактный интерфейс к sing-box: узлы, правила маршрутизации, DNS-серверы и DNS-правила, наборы правил — почти один к одному понятиям sing-box. Патчи нужны для DNS-опций sing-box 1.14, прав rpcd в 25.12, DNS по умолчанию и соединений после перезапуска; ещё два делают перезапуск безопаснее: новый конфиг проверяется до остановки службы, а dnsmasq перезапускается, только если его настройки изменились. Ещё два: Clash API включается опциями UCI, а файлы include-секций fw4 существуют всегда. Удалённый узел или выключенный набор правил, на которые ещё ссылаются настройки, и настройки из другой сборки (XHTTP с extended, значения Re:HomeProxy) больше не мешают запуску, обновление подписки с неподходящими узлами откатывается, можно задать резервные DNS-серверы, а интерфейс переведён на русский.</p></div>
-          <ul>
-            <li><div class="tn"><h4>Re:HomeProxy <span class="opt">ucode</span></h4><div class="meta">1andrevich/homeproxy-hiddify · ~5 тыс. строк ucode · последний коммит 04.07.2026 · у нас 4 патча</div><p>homeproxy с ядрами hiddify-core и sing-box-extended и страницей «Core &amp; Tools» для установки ядер и компонентов. Настройки хранит там же (<code>/etc/config/homeproxy</code>). Без патча 001 не запускается на обычном sing-box.</p></div></li>
-          </ul>
-        </li>
-      </ul>
-    </div>
-    <p class="small" style="margin-top:12px">Не родственники: <b>passwall2</b> (интерфейс на Lua, в этой сборке только с Xray), <b>luci-app-xray</b> (генератор на ucode, серверы и правила вводятся по полям), <b>v2rayA</b> (отдельная веб-панель на своём порту, вне LuCI).</p>
-
-    <h3>Особенности архитектуры</h3>
-    <div class="sw">
-      <div class="tile"><h4>homeproxy</h4><div class="pl">
-        <div class="plus"><b>+ устройство</b>Официальный пакет, генератор на ucode, сопровождает команда ImmortalWrt. Связка с AdGuard Home через <code>dns_hijacked</code> и <code>127.0.0.1:5333</code>. Правила по процессам, MAC, портам и протоколам.</div>
-        <div class="minus"><b>− ограничения</b>В режиме custom через sing-box идёт почти весь трафик LAN. Интерфейс повторяет понятия sing-box и требует их знать. Генератор отстаёт от новых версий sing-box (на 1.14 без патча 006 режим bypass_mainland_china со списком прокси-доменов не запускается). Обычный sing-box не подключается к REALITY на Xray 26.7.11+ — для таких серверов нужен <code>sb=extended</code> с патчем 018.</div></div></div>
-      <div class="tile"><h4>trafira</h4><div class="pl">
-        <div class="plus"><b>+ устройство</b>Выход, DNS, условия по устройствам и портам задаются в каждой секции; локальные <code>.srs</code>; в ядро идёт только трафик по спискам. Мониторинг, тесты, активная разработка.</div>
-        <div class="minus"><b>− ограничения</b>Самый сложный интерфейс. Большой, быстро меняющийся код на ucode: часть ошибок видна только при запуске (одну, в установщике компонентов, исправляет патч 001; разбор ссылок — патчи 004 и 005).</div></div></div>
-      <div class="tile"><h4>netshift</h4><div class="pl">
-        <div class="plus"><b>+ устройство</b>Модель podkop плюс DNS-секции, вкладка «Устройства», подписки, пул DNS. Очень активная разработка, тесты.</div>
-        <div class="minus"><b>− ограничения</b>Бета: настройки и поведение меняются от версии к версии. <code>.srs</code> только по ссылке. Устройства только по IP. Конфиг собирается на shell + jq, это медленнее ucode.</div></div></div>
-      <div class="tile"><h4>podkop</h4><div class="pl">
-        <div class="plus"><b>+ устройство</b>Самый простой интерфейс, большое сообщество, автор выпускает версии (0.7.24 — 11.10.2026). Патчи исправляют разбор ссылок, DNS и гонку при старте и добавляют выключение секций, резервные DNS и исключение устройств мимо sing-box.</div>
-        <div class="minus"><b>− ограничения</b>Нет отдельного DNS-сервера для групп доменов и правил для отдельного устройства. Устройства только по IP, <code>.srs</code> только по ссылке, только IPv4. Старт медленнее (shell + jq, синхронизация времени).</div></div></div>
-      <div class="tile"><h4>rehomeproxy</h4><div class="pl">
-        <div class="plus"><b>+ устройство</b>Тот же формат настроек, что у homeproxy. Ядра sing-box-extended и hiddify-core.</div>
-        <div class="minus"><b>− ограничения</b>Автор не обновлял проект с июля. Без патча 001 не запускается на обычном sing-box. Путь трафика как у homeproxy. Ставится вместо homeproxy, вместе их не поставить.</div></div></div>
-      <div class="tile"><h4>forkop-mod</h4><div class="pl">
-        <div class="plus"><b>+ устройство</b>Возможности семейства forkop плюс второе ядро Xray. Автор активен.</div>
-        <div class="minus"><b>− ограничения</b>Проект одного человека, часть его тестов падает. Устройства — по IP и подсети. Без патча 001 правило исключения устройств не срабатывает, проверка стратегий ByeDPI и восстановление входа OpenConnect падают.</div></div></div>
-      <div class="tile"><h4>forkop</h4><div class="pl">
-        <div class="plus"><b>+ устройство</b>forkop 2.0: автор снова развивает проект, почти всё нужное есть без патчей — исключение устройств, «Торренты напрямую», DNS Fallback, туннели и своё ядро с XHTTP и AmneziaWG. youtubeUnblock совместим.</div>
-        <div class="minus"><b>− ограничения</b>Только ядро sing-box-forkop, версии 2.0 всего несколько дней. Без нашего патча 002 DNS клиентов forkop перехватывает всегда, и AdGuard Home видит их как 127.0.0.1. Исключение устройств — только по IP.</div></div></div>
-      <div class="tile"><h4>xray</h4><div class="pl">
-        <div class="plus"><b>+ устройство</b>Лёгкий генератор на ucode, исключение устройств по MAC и процессов роутера по uid/gid.</div>
-        <div class="minus"><b>− ограничения</b>Серверы и правила вводятся по полям. Один основной выход. Нет <code>.srs</code>, подписок и панели YACD.</div></div></div>
-      <div class="tile"><h4>passwall</h4><div class="pl">
-        <div class="plus"><b>+ устройство</b>ACL по IP и MAC, шунты на разные узлы, раздельный DNS для прокси- и прямых доменов.</div>
-        <div class="minus"><b>− ограничения</b>Тяжёлый, интерфейс на Lua. В этой сборке без sing-box, поэтому <code>.srs</code> не подключить. AdGuard Home работает через dnsmasq (<code>127.0.0.1:54</code>).</div></div></div>
-      <div class="tile"><h4>v2raya</h4><div class="pl">
-        <div class="plus"><b>+ устройство</b>Отдельная веб-панель, правила RoutingA.</div>
-        <div class="minus"><b>− ограничения</b>Вне LuCI. Нет <code>.srs</code>. Метка ставится только на первый пакет соединения. AdGuard Home работает через dnsmasq.</div></div></div>
-    </div>
-  </section>
-
-  <!-- 04 ЯДРА -->
-  <section id="sbcores">
-    <div class="sec-head"><span class="sec-num">04</span><h2>Ядра sing-box: extended и podkop-engine</h2></div>
-    <p class="sec-sub">Ядро ставится в <code>/usr/bin/sing-box</code> и выбирается полем <code>sb</code>. Кроме обычного sing-box (SagerNet) есть два форка под лицензией GPL-3.0 с противоположными задачами: <b>sing-box-extended</b> (<code>shtorm-7</code>) добавляет десятки протоколов и служб, <b>podkop-engine</b> (<code>FiyeroT</code>) убирает всё, что не нужно podkop, и исправляет то, что ломается на роутере; <code>podkop-engine-full</code> возвращает выходы для «Outbound Config». Данные на 16.10.2026.</p>
-
-    <div class="legend">
-      <span><span class="v y">✓</span> есть</span>
-      <span><span class="v w">◆</span> частично или с оговоркой</span>
-      <span><span class="v n">✗</span> нет</span>
-    </div>
-    <div class="mx-scroll"><table class="mx mx-cores" id="mx-cores"><thead><tr><th class="rh" scope="col">Возможность</th><th scope="col" data-c="sb"><span class="vh">sing-<wbr>box</span><small>1.14.3</small></th><th scope="col" data-c="ext"><span class="vh">sing-<wbr>box-<wbr>extended</span><small>1.14.3-ext-2.7.3</small></th><th scope="col" data-c="pe"><span class="vh">podkop-<wbr>engine</span><small>1.14.3-r15</small></th><th scope="col" data-c="pef"><span class="vh">podkop-<wbr>engine-<wbr>full</span><small>1.14.3-r15</small></th></tr></thead><tbody><tr class="grp"><th scope="rowgroup" class="rh">Основа</th><td data-c="sb"><span class="gl">sing-box</span></td><td data-c="ext"><span class="gl">extended</span></td><td data-c="pe"><span class="gl">engine</span></td><td data-c="pef"><span class="gl">engine-full</span></td></tr><tr><th scope="row" class="rh">Значение поля sb</th><td data-c="sb"><span class="tx">1.12.x … latest</span></td><td data-c="ext"><span class="tx">extended</span></td><td data-c="pe"><span class="tx">podkop-<wbr>engine</span></td><td data-c="pef"><span class="tx">podkop-<wbr>engine-<wbr>full</span></td></tr><tr><th scope="row" class="rh">Что это</th><td data-c="sb"><span class="tx">оригинал</span></td><td data-c="ext"><span class="tx">+ протоколы</span></td><td data-c="pe"><span class="tx">под podkop</span></td><td data-c="pef"><span class="tx">+ выходы</span></td></tr><tr><th scope="row" class="rh">Как поставляется <small>пакет engine — с init и failsafe</small></th><td data-c="sb"><span class="tx">пакет или архив</span></td><td data-c="ext"><span class="tx">архив</span></td><td data-c="pe"><span class="tx">пакет</span></td><td data-c="pef"><span class="tx">пакет</span></td></tr><tr><th scope="row" class="rh">Размер скачивания <small>arm64; 1.14.3, extended 2.7.3, podkop-engine r15</small></th><td data-c="sb"><span class="tx">27,8 МБ</span></td><td data-c="ext"><span class="tx">32,8 МБ</span></td><td data-c="pe"><span class="tx">8,3 МБ</span></td><td data-c="pef"><span class="tx">13,5 МБ</span></td></tr><tr><th scope="row" class="rh">Размер бинаря <small>amd64, для сравнения; те же версии</small></th><td data-c="sb"><span class="tx">77,6 МБ</span></td><td data-c="ext"><span class="tx">102,3 МБ</span></td><td data-c="pe"><span class="tx">24,0 МБ</span></td><td data-c="pef"><span class="tx">36,0 МБ</span></td></tr><tr><th scope="row" class="rh">Как его узнают приложения <small>по строке sing-box version</small></th><td data-c="sb"><span class="tx">—</span></td><td data-c="ext"><span class="tx">-<wbr>extended-<wbr></span></td><td data-c="pe"><span class="tx">-<wbr>pdk-<wbr>rN, Features<wbr>:</span></td><td data-c="pef"><span class="tx">-<wbr>pdk-<wbr>rN, Features<wbr>:</span></td></tr><tr class="grp"><th scope="rowgroup" class="rh">Входы</th><td data-c="sb"><span class="gl">sing-box</span></td><td data-c="ext"><span class="gl">extended</span></td><td data-c="pe"><span class="gl">engine</span></td><td data-c="pef"><span class="gl">engine-full</span></td></tr><tr><th scope="row" class="rh">TUN, redirect <small>нужны homeproxy и Re:HomeProxy</small></th><td data-c="sb"><span class="v y" title="есть">✓</span></td><td data-c="ext"><span class="v y" title="есть">✓</span></td><td data-c="pe"><span class="v n" title="нет">✗</span></td><td data-c="pef"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh">tproxy, mixed, direct</th><td data-c="sb"><span class="v y" title="есть">✓</span></td><td data-c="ext"><span class="v y" title="есть">✓</span></td><td data-c="pe"><span class="v y" title="есть">✓</span></td><td data-c="pef"><span class="v y" title="есть">✓</span></td></tr><tr><th scope="row" class="rh">Серверные входы <small>vless, trojan, shadowsocks, hysteria2…</small></th><td data-c="sb"><span class="v y" title="есть">✓</span></td><td data-c="ext"><span class="v y" title="есть">✓</span></td><td data-c="pe"><span class="v n" title="нет">✗</span></td><td data-c="pef"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh">Сервер MTProxy</th><td data-c="sb"><span class="v n" title="нет">✗</span></td><td data-c="ext"><span class="v y" title="есть">✓</span></td><td data-c="pe"><span class="v n" title="нет">✗</span></td><td data-c="pef"><span class="v n" title="нет">✗</span></td></tr><tr class="grp"><th scope="rowgroup" class="rh">Выходы</th><td data-c="sb"><span class="gl">sing-box</span></td><td data-c="ext"><span class="gl">extended</span></td><td data-c="pe"><span class="gl">engine</span></td><td data-c="pef"><span class="gl">engine-full</span></td></tr><tr><th scope="row" class="rh">vless, trojan, shadowsocks, socks</th><td data-c="sb"><span class="v y" title="есть">✓</span></td><td data-c="ext"><span class="v y" title="есть">✓</span></td><td data-c="pe"><span class="v y" title="есть">✓</span></td><td data-c="pef"><span class="v y" title="есть">✓</span></td></tr><tr><th scope="row" class="rh">hysteria2, tuic</th><td data-c="sb"><span class="v y" title="есть">✓</span></td><td data-c="ext"><span class="v y" title="есть">✓</span></td><td data-c="pe"><span class="v y" title="есть">✓</span></td><td data-c="pef"><span class="v y" title="есть">✓</span></td></tr><tr><th scope="row" class="rh">vmess, http</th><td data-c="sb"><span class="v y" title="есть">✓</span></td><td data-c="ext"><span class="v y" title="есть">✓</span></td><td data-c="pe"><span class="v n" title="нет">✗</span></td><td data-c="pef"><span class="v y" title="есть">✓</span></td></tr><tr><th scope="row" class="rh">anytls, shadowtls, hysteria v1, ssh, tor, snell</th><td data-c="sb"><span class="v y" title="есть">✓</span></td><td data-c="ext"><span class="v y" title="есть">✓</span></td><td data-c="pe"><span class="v n" title="нет">✗</span></td><td data-c="pef"><span class="v y" title="есть">✓</span></td></tr><tr><th scope="row" class="rh">NaiveProxy</th><td data-c="sb"><span class="v y" title="есть">✓</span></td><td data-c="ext"><span class="v n" title="нет">✗</span></td><td data-c="pe"><span class="v n" title="нет">✗</span></td><td data-c="pef"><span class="v y" title="есть">✓</span></td></tr><tr><th scope="row" class="rh">WireGuard, Tailscale</th><td data-c="sb"><span class="v y" title="есть">✓</span></td><td data-c="ext"><span class="v y" title="есть">✓</span></td><td data-c="pe"><span class="v n" title="нет">✗</span></td><td data-c="pef"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh">OpenVPN, OpenConnect</th><td data-c="sb"><span class="v y" title="есть">✓</span></td><td data-c="ext"><span class="v y" title="есть">✓</span></td><td data-c="pe"><span class="v n" title="нет">✗</span></td><td data-c="pef"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh">AmneziaWG</th><td data-c="sb"><span class="v n" title="нет">✗</span></td><td data-c="ext"><span class="v y" title="есть">✓</span></td><td data-c="pe"><span class="v n" title="нет">✗</span></td><td data-c="pef"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh">WARP, MASQUE</th><td data-c="sb"><span class="v n" title="нет">✗</span></td><td data-c="ext"><span class="v y" title="есть">✓</span></td><td data-c="pe"><span class="v n" title="нет">✗</span></td><td data-c="pef"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh">mieru, sudoku, TrustTunnel</th><td data-c="sb"><span class="v n" title="нет">✗</span></td><td data-c="ext"><span class="v y" title="есть">✓</span></td><td data-c="pe"><span class="v n" title="нет">✗</span></td><td data-c="pef"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh">Туннель через видеозвонки, Bond</th><td data-c="sb"><span class="v n" title="нет">✗</span></td><td data-c="ext"><span class="v y" title="есть">✓</span></td><td data-c="pe"><span class="v n" title="нет">✗</span></td><td data-c="pef"><span class="v n" title="нет">✗</span></td></tr><tr class="grp"><th scope="rowgroup" class="rh">Транспорты</th><td data-c="sb"><span class="gl">sing-box</span></td><td data-c="ext"><span class="gl">extended</span></td><td data-c="pe"><span class="gl">engine</span></td><td data-c="pef"><span class="gl">engine-full</span></td></tr><tr><th scope="row" class="rh">ws, grpc, httpupgrade, http, quic</th><td data-c="sb"><span class="v y" title="есть">✓</span></td><td data-c="ext"><span class="v y" title="есть">✓</span></td><td data-c="pe"><span class="v y" title="есть">✓</span></td><td data-c="pef"><span class="v y" title="есть">✓</span></td></tr><tr><th scope="row" class="rh">XHTTP</th><td data-c="sb"><span class="v n" title="нет">✗</span></td><td data-c="ext"><span class="v y" title="есть">✓</span></td><td data-c="pe"><span class="v y" title="есть">✓</span></td><td data-c="pef"><span class="v y" title="есть">✓</span></td></tr><tr><th scope="row" class="rh">mKCP</th><td data-c="sb"><span class="v n" title="нет">✗</span></td><td data-c="ext"><span class="v y" title="есть">✓</span></td><td data-c="pe"><span class="v n" title="нет">✗</span></td><td data-c="pef"><span class="v n" title="нет">✗</span></td></tr><tr class="grp"><th scope="rowgroup" class="rh">TLS и REALITY</th><td data-c="sb"><span class="gl">sing-box</span></td><td data-c="ext"><span class="gl">extended</span></td><td data-c="pe"><span class="gl">engine</span></td><td data-c="pef"><span class="gl">engine-full</span></td></tr><tr><th scope="row" class="rh">REALITY, uTLS, ECH, фрагментация TLS</th><td data-c="sb"><span class="v y" title="есть">✓</span></td><td data-c="ext"><span class="v y" title="есть">✓</span></td><td data-c="pe"><span class="v y" title="есть">✓</span></td><td data-c="pef"><span class="v y" title="есть">✓</span></td></tr><tr><th scope="row" class="rh">REALITY к Xray 26.7.11+ <small>minClientVer 26.3.27 по умолчанию</small></th><td data-c="sb"><span class="v n" title="нет">✗</span></td><td data-c="ext"><span class="v y" title="есть">✓</span></td><td data-c="pe"><span class="v y" title="есть">✓</span></td><td data-c="pef"><span class="v y" title="есть">✓</span></td></tr><tr><th scope="row" class="rh">REALITY к Xray 26.9.8+ <small>гибридный ключ X25519MLKEM768</small></th><td data-c="sb"><span class="v n" title="нет">✗</span></td><td data-c="ext"><span class="v w" title="частично или по-другому">◆</span><small>опцией у REALITY</small></td><td data-c="pe"><span class="v y" title="есть">✓</span><small>всегда</small></td><td data-c="pef"><span class="v y" title="есть">✓</span><small>всегда</small></td></tr><tr><th scope="row" class="rh">Шифрование VLESS <small>VLESS Encryption из Xray, клиент</small></th><td data-c="sb"><span class="v n" title="нет">✗</span></td><td data-c="ext"><span class="v y" title="есть">✓</span></td><td data-c="pe"><span class="v y" title="есть">✓</span><small>с r14</small></td><td data-c="pef"><span class="v y" title="есть">✓</span><small>с r14</small></td></tr><tr><th scope="row" class="rh">Поддельный ClientHello <small>tls.spoof</small></th><td data-c="sb"><span class="v w" title="частично или по-другому">◆</span><small>без REALITY</small></td><td data-c="ext"><span class="v w" title="частично или по-другому">◆</span><small>без REALITY</small></td><td data-c="pe"><span class="v y" title="есть">✓</span><small>и с REALITY</small></td><td data-c="pef"><span class="v y" title="есть">✓</span><small>и с REALITY</small></td></tr><tr><th scope="row" class="rh">Запасной отпечаток uTLS</th><td data-c="sb"><span class="v n" title="нет">✗</span></td><td data-c="ext"><span class="v n" title="нет">✗</span></td><td data-c="pe"><span class="v y" title="есть">✓</span></td><td data-c="pef"><span class="v y" title="есть">✓</span></td></tr><tr class="grp"><th scope="rowgroup" class="rh">DNS</th><td data-c="sb"><span class="gl">sing-box</span></td><td data-c="ext"><span class="gl">extended</span></td><td data-c="pe"><span class="gl">engine</span></td><td data-c="pef"><span class="gl">engine-full</span></td></tr><tr><th scope="row" class="rh">udp, tcp, DoT, DoH, FakeIP</th><td data-c="sb"><span class="v y" title="есть">✓</span></td><td data-c="ext"><span class="v y" title="есть">✓</span></td><td data-c="pe"><span class="v y" title="есть">✓</span></td><td data-c="pef"><span class="v y" title="есть">✓</span></td></tr><tr><th scope="row" class="rh">Правила evaluate / respond <small>пул DNS podkop 009</small></th><td data-c="sb"><span class="v y" title="есть">✓</span></td><td data-c="ext"><span class="v y" title="есть">✓</span></td><td data-c="pe"><span class="v y" title="есть">✓</span></td><td data-c="pef"><span class="v y" title="есть">✓</span></td></tr><tr><th scope="row" class="rh">DoH3, DoQ</th><td data-c="sb"><span class="v y" title="есть">✓</span></td><td data-c="ext"><span class="v y" title="есть">✓</span></td><td data-c="pe"><span class="v n" title="нет">✗</span></td><td data-c="pef"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh">DHCP</th><td data-c="sb"><span class="v y" title="есть">✓</span></td><td data-c="ext"><span class="v y" title="есть">✓</span></td><td data-c="pe"><span class="v n" title="нет">✗</span></td><td data-c="pef"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh">DNSCrypt</th><td data-c="sb"><span class="v n" title="нет">✗</span></td><td data-c="ext"><span class="v y" title="есть">✓</span></td><td data-c="pe"><span class="v n" title="нет">✗</span></td><td data-c="pef"><span class="v n" title="нет">✗</span></td></tr><tr class="grp"><th scope="rowgroup" class="rh">Группы выходов</th><td data-c="sb"><span class="gl">sing-box</span></td><td data-c="ext"><span class="gl">extended</span></td><td data-c="pe"><span class="gl">engine</span></td><td data-c="pef"><span class="gl">engine-full</span></td></tr><tr><th scope="row" class="rh">urltest, selector</th><td data-c="sb"><span class="v y" title="есть">✓</span></td><td data-c="ext"><span class="v y" title="есть">✓</span></td><td data-c="pe"><span class="v y" title="есть">✓</span></td><td data-c="pef"><span class="v y" title="есть">✓</span></td></tr><tr><th scope="row" class="rh">Резервные выходы URLTest <small>fallbacks</small></th><td data-c="sb"><span class="v n" title="нет">✗</span></td><td data-c="ext"><span class="v n" title="нет">✗</span></td><td data-c="pe"><span class="v y" title="есть">✓</span></td><td data-c="pef"><span class="v y" title="есть">✓</span></td></tr><tr><th scope="row" class="rh">Проверка загрузки URLTest <small>download_url</small></th><td data-c="sb"><span class="v n" title="нет">✗</span></td><td data-c="ext"><span class="v n" title="нет">✗</span></td><td data-c="pe"><span class="v y" title="есть">✓</span></td><td data-c="pef"><span class="v y" title="есть">✓</span></td></tr><tr><th scope="row" class="rh">Группа fallback / failover</th><td data-c="sb"><span class="v n" title="нет">✗</span></td><td data-c="ext"><span class="v y" title="есть">✓</span></td><td data-c="pe"><span class="v n" title="нет">✗</span></td><td data-c="pef"><span class="v n" title="нет">✗</span></td></tr><tr class="grp"><th scope="rowgroup" class="rh">Службы и инструменты</th><td data-c="sb"><span class="gl">sing-box</span></td><td data-c="ext"><span class="gl">extended</span></td><td data-c="pe"><span class="gl">engine</span></td><td data-c="pef"><span class="gl">engine-full</span></td></tr><tr><th scope="row" class="rh">Clash API <small>YACD</small></th><td data-c="sb"><span class="v y" title="есть">✓</span></td><td data-c="ext"><span class="v y" title="есть">✓</span></td><td data-c="pe"><span class="v y" title="есть">✓</span></td><td data-c="pef"><span class="v y" title="есть">✓</span></td></tr><tr><th scope="row" class="rh">ACME (сертификаты)</th><td data-c="sb"><span class="v y" title="есть">✓</span></td><td data-c="ext"><span class="v y" title="есть">✓</span></td><td data-c="pe"><span class="v n" title="нет">✗</span></td><td data-c="pef"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh">Веб-панель и API управления</th><td data-c="sb"><span class="v n" title="нет">✗</span></td><td data-c="ext"><span class="v y" title="есть">✓</span></td><td data-c="pe"><span class="v n" title="нет">✗</span></td><td data-c="pef"><span class="v n" title="нет">✗</span></td></tr><tr><th scope="row" class="rh">sing-box tools decode-link <small>разбор ссылок</small></th><td data-c="sb"><span class="v n" title="нет">✗</span></td><td data-c="ext"><span class="v n" title="нет">✗</span></td><td data-c="pe"><span class="v y" title="есть">✓</span></td><td data-c="pef"><span class="v y" title="есть">✓</span></td></tr><tr><th scope="row" class="rh">Служба failsafe <small>по документации</small></th><td data-c="sb"><span class="v n" title="нет">✗</span></td><td data-c="ext"><span class="v n" title="нет">✗</span></td><td data-c="pe"><span class="v y" title="есть">✓</span></td><td data-c="pef"><span class="v y" title="есть">✓</span></td></tr><tr><th scope="row" class="rh">Исправления для роутера <small>по документации</small></th><td data-c="sb"><span class="v n" title="нет">✗</span></td><td data-c="ext"><span class="v n" title="нет">✗</span></td><td data-c="pe"><span class="v y" title="есть">✓</span><small>35 исправлений</small></td><td data-c="pef"><span class="v y" title="есть">✓</span><small>35 исправлений</small></td></tr></tbody></table></div>
-    <p class="small muted" style="margin-top:8px">Строки с ✓ и ✗ проверены на релизных бинарниках: для каждой возможности собирался минимальный конфиг и прогонялся <code>sing-box check</code> на всех четырёх ядрах. Ошибка «unknown type» или «not included in this build» — ✗. Последние две строки — по документации автора podkop-engine. Размеры — у файлов релизов.</p>
-
-    <h3>Совместимость с приложениями</h3>
-    <div class="card tscroll">
-      <table class="pt stack">
-        <thead><tr><th style="width:16%">Приложение</th><th style="width:30%">sing-box-extended</th><th style="width:30%">podkop-engine</th><th style="width:24%">Что выбрать</th></tr></thead>
-        <tbody>
-          <tr><th class="key" scope="row">podkop</th><td data-l="extended"><p>Работает как обычный sing-box 1.14. Ссылки XHTTP podkop отклоняет (нужен <code>decode-link</code>), резервных выходов и проверки загрузки в LuCI нет. XHTTP возможен только JSON-ом в «Outbound Config».</p></td><td data-l="podkop-engine"><p>Всё работает: XHTTP по ссылке, резервные выходы, failsafe, резервный DNS, запасной отпечаток uTLS (настройка «uTLS fallback» с podkop 0.7.24 видна только с этим ядром). DNS по HTTP/3 и QUIC нет: такие серверы пула (<code>doh3://</code>, <code>doq://</code>, патч 009) пропускаются с предупреждением.</p></td><td data-l="Что выбрать"><p><code>podkop-engine</code> (<code>-full</code> — если в «Outbound Config» нужны vmess, http, anytls, naive).</p></td></tr>
-          <tr><th class="key" scope="row">netshift</th><td data-l="extended"><p>Всё работает: XHTTP, <code>reality_mlkem</code>, шифрование VLESS, переключение ядра из LuCI.</p></td><td data-l="podkop-engine"><p>Только <code>-full</code> (netshift пишет выходы vmess и http). netshift считает его обычным sing-box и прячет XHTTP. REALITY к Xray 26.9.8+ при этом работает, а исправления DNS и памяти сохраняются.</p></td><td data-l="Что выбрать"><p><code>extended</code>, если нужен XHTTP. Иначе <code>podkop-engine-full</code>.</p></td></tr>
-          <tr><th class="key" scope="row">homeproxy</th><td data-l="extended"><p>Работает как sing-box 1.14.3. С патчами x01–x02 (только в этой связке) у homeproxy появляется транспорт XHTTP (в узлах, подписках и импорте ссылок; режим <code>auto</code> и <code>xmux</code> по умолчанию — как в Xray) и ключ X25519MLKEM768 для REALITY: без него серверы на Xray-core 26.9.8+ отвергают подключение.</p></td><td data-l="podkop-engine"><p>Не работает: нет TUN и входа redirect. Сборщик заменяет на <code>feed</code>.</p></td><td data-l="Что выбрать"><p><code>extended</code>, если нужны узлы XHTTP или REALITY-серверы на Xray 26.7.11+; иначе <code>feed</code> или <code>latest</code>.</p></td></tr>
-          <tr><th class="key" scope="row">rehomeproxy</th><td data-l="extended"><p>Рекомендуемое ядро: форк сам включает поля extended.</p></td><td data-l="podkop-engine"><p>Не работает (как у homeproxy). Сборщик заменяет на <code>feed</code>.</p></td><td data-l="Что выбрать"><p><code>extended</code>.</p></td></tr>
-          <tr><th class="key" scope="row">forkop (2.x)</th><td data-l="extended"><p>Не работает: forkop 2.x запускается только на своём ядре <code>sing-box-forkop</code> (сам sing-box-forkop основан на sing-box 1.14 и уже содержит XHTTP, шифрование VLESS, AmneziaWG и др.).</p></td><td data-l="podkop-engine"><p>Не работает. Сборщик заменяет любой выбор на <code>forkop-base</code>.</p></td><td data-l="Что выбрать"><p><code>forkop-base</code> (рекомендует автор); <code>forkop-full</code> — если нужны Tailscale, OpenConnect, NaiveProxy, mieru; <code>forkop-tiny</code> ставится на slateax/ax59u сам. Дальше ядро обновляется во вкладке «Компоненты».</p></td></tr>
-          <tr><th class="key" scope="row">forkop-mod, trafira</th><td data-l="extended"><p>Поддерживается: ядро (stable, extended, tiny) ставится и меняется во вкладке «Компоненты».</p></td><td data-l="podkop-engine"><p>Не предусмотрен. Сборщик заменяет на <code>feed</code>.</p></td><td data-l="Что выбрать"><p>Вкладка «Компоненты» приложения; для REALITY-серверов на Xray 26.7.11+ — extended (stable не подключится).</p></td></tr>
-          <tr><th class="key" scope="row">xray, passwall, v2raya</th><td colspan="3" data-l="Оба"><p>Ядро — Xray, sing-box не нужен (<code>sb</code> всегда <code>no</code>).</p></td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="grid" style="margin-top:14px">
-      <div class="tile"><h4>Можно ли менять одно на другое</h4><p>Путь (<code>/usr/bin/sing-box</code>) и базовый формат конфига у них общие, поэтому обычный конфиг sing-box 1.14 запустится на обоих. На podkop-engine не пройдёт <code>sing-box check</code> конфиг с TUN, redirect, WireGuard, серверными входами или протоколами только из extended (ошибка понятная: «… is not included in this build»). На extended не пройдёт конфиг с <code>fallbacks</code> или <code>download_url</code> в URLTest.</p></div>
-      <div class="tile"><h4>Замена без перенастройки</h4><p>podkop, netshift и trafira пересобирают конфиг при каждом перезапуске и смотрят на строку версии. Поэтому ядро можно заменить и перезапустить службу: опции под новое ядро выставятся сами. Конфиги homeproxy и Re:HomeProxy на podkop-engine не запустятся.</p></div>
-      <div class="tile"><h4>Развитие</h4><p><b>sing-box-extended:</b> с июня 2025, 58 стабильных релизов, новый раз в 1–3 недели; большое сообщество (Telegram-чат), есть урезанные «lite»-сборки (например <code>yandexru45/sing-box-extended-lite</code> для netshift). <b>podkop-engine:</b> с 26.09.2026, 14 ревизий за 15 дней, один автор; у каждого исправления есть замеры на стенде. Темп высокий, бывают регрессии: в r11 XHTTP переставал работать после переподключения WAN, исправлено в r12. В r13 — <code>decode-link</code> для всех протоколов, <code>tls.spoof</code> с REALITY, запасной отпечаток uTLS, проверка живости соединения. В r14 — шифрование VLESS (VLESS Encryption) на стороне клиента, в том числе в ссылках через <code>decode-link</code>, и повтор DoH-запроса, если сервер закрыл соединение HTTP/2.</p></div>
-      <div class="tile"><h4>REALITY к новым Xray</h4><p>Сервер Xray 26.7.11+ по умолчанию отвергает клиентов REALITY старше 26.3.27 (<code>minClientVer</code>): обычный sing-box 1.12–1.14 не подключается ни с одним отпечатком uTLS, а extended и podkop-engine проходят. Xray 26.9.8+ вдобавок отвергает ClientHello без ключа X25519MLKEM768 — это не настраивается на сервере. Проверено на стенде с Xray 26.6.27, 26.7.11, 26.7.28, 26.9.8 и 26.10.10 (16.10.2026). В podkop-engine гибридный ключ включён всегда. В extended это опция <code>support_x25519mlkem768</code> у REALITY: работает, только если приложение её пишет (netshift — опция <code>reality_mlkem</code>). Обычный sing-box её не знает. Исключение для podkop-engine: Xray-сервер ≤ 25.4.30 с сайтом-прикрытием на X25519MLKEM768 — там нужно обновить Xray на сервере; с r13 при неудаче клиент сам пробует отпечаток без гибридного ключа.</p></div>
-      <div class="tile"><h4>Итог</h4><p><b>Возможности:</b> extended далеко впереди. <b>Свежесть базы:</b> обычный sing-box, extended 2.7.3 (19.10.2026) и podkop-engine r15 (19.10.2026) — все на 1.14.3. <b>Для podkop</b> podkop-engine надёжнее: в 4 раза меньше, исправлены сбои DNS, URLTest, FakeIP и памяти, есть failsafe; проект молодой, сборщик берёт последнюю ревизию. <b>Для netshift с XHTTP, Re:HomeProxy и протоколов вроде WARP, MASQUE, AmneziaWG</b> — extended: история с 2025 года и большое сообщество.</p></div>
-    </div>
-  </section>
-
-  <!-- 05 ПАРАМЕТРЫ -->
-  <section id="params">
-    <div class="sec-head"><span class="sec-num">05</span><h2>Параметры запуска</h2></div>
-    <p class="sec-sub">Поля формы <code>workflow_dispatch</code> при ручном запуске сборки. Они определяют, что и как собирать; дальше значения проходят через все шаги и попадают в скрипт первого старта.</p>
-
-    <div class="card tscroll">
-      <table class="pt stack">
-        <thead><tr><th style="width:20%">Поле</th><th style="width:26%">Значения</th><th>Что делает</th></tr></thead>
-        <tbody>
-          <tr>
-            <th class="key" scope="row">Устройство <small>target</small></th>
-            <td data-l="Значения"><div class="opts"><span class="opt def">combo</span><span class="opt">rb5009</span><span class="opt">nanopi-r6s</span><span class="opt">nanopi-r5s</span><span class="opt">slateax</span><span class="opt">ax59u</span><span class="opt">brume2</span><span class="opt">all</span></div></td>
-            <td data-l="Что делает"><p>Какое устройство (или набор) собирать. <code>combo</code> — три фиксированные сборки сразу, у каждой свои настройки (таблица ниже); <code>all</code> — все шесть устройств с выбранным вариантом; одиночное значение — одно устройство. Из него же берётся архитектура пакетов.</p></td>
-          </tr>
-          <tr>
-            <th class="key" scope="row">Исходники <small>source</small></th>
-            <td data-l="Значения"><div class="opts"><span class="opt def">openwrt</span><span class="opt">immortalwrt</span></div></td>
-            <td data-l="Что делает"><p>Из какого дерева исходников собирать. От выбора зависят драйверы (например, вариант <code>r8125</code> для NanoPi) и доступность FullCone NAT — он есть только в ImmortalWrt.</p></td>
-          </tr>
-          <tr>
-            <th class="key" scope="row">Ветка <small>branch</small></th>
-            <td data-l="Значения"><div class="opts"><span class="opt def">openwrt-25.12</span><span class="opt">openwrt-24.10</span><span class="opt">master</span></div></td>
-            <td data-l="Что делает"><p>Ветка или релиз. <code>25.12</code> и <code>master</code> — пакетный менеджер <b>apk</b>; <code>24.10</code> — <b>opkg/ipk</b>. На стабильных ветках сборка чекаутится на коммит последнего релизного тега ветки (например, <code>v25.12.5</code>); теги-кандидаты <code>-rc</code> не рассматриваются.</p></td>
-          </tr>
-          <tr>
-            <th class="key" scope="row">Вариант <small>variant</small></th>
-            <td data-l="Значения"><div class="opts"><span class="opt def">homeproxy</span><span class="opt">rehomeproxy</span><span class="opt">clear</span><span class="opt">switch</span><span class="opt">crystal_clear</span><span class="opt">podkop</span><span class="opt">netshift</span><span class="opt">forkop</span><span class="opt">forkop-mod</span><span class="opt">trafira</span><span class="opt">passwall</span><span class="opt">v2raya</span><span class="opt">xray</span></div></td>
-            <td data-l="Что делает"><p>Что включается в прошивку и какой прокси-стек используется. В режиме <code>combo</code> игнорируется. Сравнение — в разделе <a href="#variants">02</a>.</p></td>
-          </tr>
-          <tr>
-            <th class="key" scope="row">Раннер <small>runner_os</small></th>
-            <td data-l="Значения"><div class="opts"><span class="opt def">ubuntu-24.04</span><span class="opt">ubuntu-22.04</span></div></td>
-            <td data-l="Что делает"><p>Образ раннера GitHub Actions для всех джобов. Под него выбирается список пакетов тулчейна: <code>depends-ubuntu-2404</code> или <code>depends-ubuntu-2204</code> в корне репозитория (в 24.04 нет <code>libncurses5-dev</code>, <code>python2.7</code>, <code>mkisofs</code> и др.). 22.04 оставлен как запасной и постепенно устаревает.</p></td>
-          </tr>
-          <tr>
-            <th class="key" scope="row">AdGuard Home <small>agh</small></th>
-            <td data-l="Значения"><div class="opts"><span class="opt">no</span><span class="opt">feed</span><span class="opt def">latest</span></div></td>
-            <td data-l="Что делает"><p><code>no</code> — AdGuard Home убирается из прошивки вместе с пакетами LuCI; <code>feed</code> — пакет из фида как есть; <code>latest</code> — пакет из фида плюс бинарь последнего стабильного релиза (arm64) поверх него, перед использованием сверяется SHA-256. Для <code>clear</code>, <code>crystal_clear</code>, <code>switch</code> всегда <code>no</code>; в <code>combo</code> задаётся матрицей.</p></td>
-          </tr>
-          <tr>
-            <th class="key" scope="row">sing-box <small>sb</small></th>
-            <td data-l="Значения"><div class="opts"><span class="opt">no</span><span class="opt def">feed</span><span class="opt">1.12.x</span><span class="opt">1.13.x</span><span class="opt">1.14.x</span><span class="opt">latest</span><span class="opt">extended</span><span class="opt">podkop-engine</span><span class="opt">podkop-engine-full</span><span class="opt">forkop-base</span><span class="opt">forkop-full</span><span class="opt">forkop-tiny</span></div></td>
-            <td data-l="Что делает">
-              <p><code>no</code> — sing-box убирается; <code>feed</code> — пакет из фида; остальное — пакет из фида плюс скачанный бинарь: <code>X.Y.x</code> — последний стабильный релиз ветки, <code>latest</code> — последний стабильный вообще (сейчас 1.14.3), <code>extended</code> — последний стабильный <code>shtorm-7/sing-box-extended</code>. Качается сборка <code>-musl</code>, сверяется SHA-256, бинарь под glibc в прошивку не кладётся. В sing-box из фида ImmortalWrt master (1.14.3) part3 выключает NaiveProxy: иначе пакет тянет libcronet — сборку сетевого стека Chromium на часы.</p>
-              <details class="more"><summary>podkop-engine, sing-box-forkop и ограничения по вариантам</summary><div>
-                <p><code>podkop-engine</code> / <code>podkop-engine-full</code> — последний релиз <code>FiyeroT/podkop-engine</code> под архитектуру устройства (сверяется по <code>SHA256SUMS</code>): в <code>files/</code> ложится весь пакет — бинарь, <code>/etc/init.d/sing-box</code> (65536 дескрипторов, остановка до 15 с, хуки для podkop), служба failsafe <code>podkop-engine</code> (включается), <code>/etc/config/sing-box</code> с переключателями резервного DNS и проверки загрузки. Только для <code>podkop</code> и <code>netshift</code> (в нём нет TUN и redirect, которые берут homeproxy/rehomeproxy; у forkop своё ядро, trafira ставит ядро сам), для остальных заменяется на <code>feed</code>; <code>netshift</code> всегда получает <code>-full</code> (пишет выходы vmess/http).</p>
-                <p><code>forkop-base</code> / <code>forkop-full</code> / <code>forkop-tiny</code> — сборка ядра <code>ushan0v/sing-box-forkop</code> из последнего релиза (тег <code>vX.Y.Z-rN</code>) под архитектуру устройства, сверяется по <code>SHA256SUMS</code>. forkop 2.x работает только на нём: пакет forkop зависит от <code>sing-box-forkop</code>, а служба проверяет <code>sing-box version</code>. Поэтому ядро ставится настоящим пакетом, а не бинарником поверх: содержимое <code>.ipk</code> из релиза и Makefile без сборки кладутся в <code>package/sing-box-forkop</code>, part3 включает его вместо <code>sing-box</code> и <code>sing-box-tiny</code>, после <code>make defconfig</code> это проверяется. apk видит <code>sing-box-forkop</code> с версией релиза (например <code>1.14.4-r1</code>), и обновление из вкладки «Компоненты» forkop или его <code>install.sh</code> идёт обычной заменой пакета, без закрепления в zz1. Автозапуск службы <code>sing-box</code> в образе снят: forkop запускает ядро сам. Не скачалось или сумма не сошлась — сборка останавливается: без ядра forkop не работает. Только для <code>forkop</code> (оригинал): если выбрано другое, ставится <code>forkop-base</code>, на slateax/ax59u — <code>forkop-tiny</code>; остальным вариантам и <code>forkop-mod</code> вместо <code>forkop-*</code> ставится <code>feed</code>. Сборки: tiny — VLESS, Trojan, Shadowsocks, Hysteria2, TUIC; base (рекомендует автор) — ещё VMess, AnyTLS, TrustTunnel, WireGuard, AmneziaWG, WARP, OpenVPN; full — ещё Tailscale, OpenConnect, NaiveProxy, mieru и др. (пакет ~9,5 / 12 / 23 МБ для ARM64).</p>
-                <p>Для <code>clear</code>/<code>crystal_clear</code>/<code>switch</code> и вариантов с другим ядром (<code>passwall</code>, <code>v2raya</code>, <code>xray</code>) всегда <code>no</code>; <code>homeproxy</code> и <code>podkop</code> без sing-box не работают, для них <code>no</code> заменяется на <code>feed</code>. На slateax/ax59u вместо выбранного ставится <code>sing-box-tiny</code> из фида (в имени артефакта <code>sb-tiny</code>).</p>
-              </div></details>
-            </td>
-          </tr>
-          <tr>
-            <th class="key" scope="row">youtubeUnblock <small>ytb</small></th>
-            <td data-l="Значения"><div class="opts"><span class="opt def">да</span><span class="opt">нет</span></div></td>
-            <td data-l="Что делает"><p>Ставить ли youtubeUnblock с LuCI и русификацией. При «нет» пакеты убираются, а part2 не обновляет его Makefile. При «да» part2 ставит программу со свежего <code>main</code> автора, только если каждая опция init-скрипта ветки <code>openwrt</code> есть в его <code>src/args.c</code> (иначе остаётся коммит, закреплённый в ветке <code>openwrt</code>); версия пакета — <code>&lt;версия&gt;.&lt;дата коммита&gt;</code>, одинаковая для одного кода. zz1 добавляет init-скрипту перезапуск при падении (<code>respawn</code>). Для <code>clear</code>, <code>crystal_clear</code>, <code>switch</code>, <code>forkop</code>, <code>trafira</code> всегда «нет».</p></td>
-          </tr>
-          <tr>
-            <th class="key" scope="row">Скрипт zz1 <small>zz</small></th>
-            <td data-l="Значения"><div class="opts"><span class="opt def">да</span><span class="opt">нет</span></div></td>
-            <td data-l="Что делает"><p>Класть ли в прошивку <code>/etc/uci-defaults/zz1-final-offline-setup.sh</code> (раздел <a href="#firstboot">08</a>). При «нет» роутер загружается с настройками пакетов по умолчанию; вместе со скриптом убирается <code>speedtest</code>, который ставит только он. Для <code>crystal_clear</code> всегда «нет». Для <code>switch</code> без скрипта не будет перевода в L2-коммутатор.</p></td>
-          </tr>
-          <tr>
-            <th class="key" scope="row">Патчи <small>apply_patches</small></th>
-            <td data-l="Значения"><div class="opts"><span class="opt def">да</span><span class="opt">нет</span></div></td>
-            <td data-l="Что делает"><p>Применять ли любые патчи из <code>patches/</code>: к дереву OpenWrt (только корень <code>patches/*.patch</code>), к фидам (<code>patches/feeds/</code>, part2), к пакетам (<code>patches/packages/</code>, part3) и к исходникам youtubeUnblock (<code>patches/src/youtubeUnblock/</code>, part2). При «нет» каталог <code>patches/</code> на время part2/part3 скрывается, а варианты <code>forkop</code> и <code>forkop-mod</code> собираются из голого репозитория своего фида — job <code>setup</code> предупреждает, чем это грозит. В <code>combo</code> задаётся для каждой сборки полем <code>patches</code> матрицы. В имени артефакта — <code>patches</code> или <code>nopatches</code>.</p></td>
-          </tr>
-          <tr>
-            <th class="key" scope="row">Стоп, если патч устарел <small>stop_outdated_patches</small></th>
-            <td data-l="Значения"><div class="opts"><span class="opt def">да</span><span class="opt">нет</span></div></td>
-            <td data-l="Что делает"><p>Останавливать ли сборку, если патч устарел: у автора фида или пакета изменился файл, к которому применяется наш патч (сверка git-хеша со строкой <code>index</code> патча, <code>sh/patch-drift.sh</code>). При «да» такой патч не применяется, сборка останавливается до компиляции, и в Telegram приходит список патчей, которые надо обновить; остальные сборки матрицы продолжаются. При «нет» — прежнее поведение: патч, который не ложится, пропускается с предупреждением. Действует на все сборки запуска, в том числе в <code>combo</code>; без <code>apply_patches</code> сверять нечего.</p></td>
-          </tr>
-          <tr>
-            <th class="key" scope="row">Свежие фиды (не тег) <small>feeds_latest</small></th>
-            <td data-l="Значения"><div class="opts"><span class="opt def">да</span><span class="opt">нет</span></div></td>
-            <td data-l="Что делает">
-              <p>Фиды <code>packages</code>, <code>luci</code>, <code>routing</code>, <code>telephony</code>, <code>video</code> берутся не на коммитах релизного тега, а на тех, из которых собран репозиторий пакетов ветки. Прошивка получается такой же, как релиз после <code>apk upgrade</code>, и обновлений после прошивки почти нет. Ядро, kmods и хеш ядра остаются от релиза. Для <code>master</code> не действует.</p>
-              <details class="more"><summary>Подробнее</summary><div>
-                <p>Коммиты берутся из <code>releases/packages-&lt;ветка&gt;/&lt;arch&gt;/feeds.conf</code> на downloads.openwrt.org или downloads.immortalwrt.org. Коммит заменяется, только если он есть на GitHub и новее закреплённого: если тег новее сборки пакетов (так бывает у ImmortalWrt), фид остаётся как в теге. Свои фиды (part1, podkop, forkop, passwall…) не трогаются. В <code>combo</code> поле формы игнорируется: значение задаётся для каждой сборки полем <code>feeds</code> матрицы (по умолчанию везде «да»).</p>
-                <p>Учтите: sing-box в фиде может стать новее (OpenWrt 25.12.5: 1.12 в теге → 1.13 в репозитории; с 25.12.6 и в теге 1.13). Генератор homeproxy проверяется против той версии, что попадёт в прошивку (раздел <a href="#pipeline">06</a>).</p>
-                <p>В имени артефакта — <code>feeds-repo</code> или <code>feeds-tag</code>, в имени сборки в Actions и в Telegram — <code>feeds:repo</code> / <code>feeds:tag</code>. В прошивке — <code>/etc/build_feeds</code> и пометка <code>feeds: …</code> в баннере. Файл пишется после <code>feeds update</code>: первая строка <code>repo</code>, только если коммит хотя бы одного фида действительно заменён (иначе <code>tag</code>, даже при включённом поле — например, когда тег новее сборки пакетов), дальше строки feeds.conf всех фидов с коммитами, которые реально скачаны (у фидов на ветке — её голова на момент сборки). Файл годится как feeds.conf для повторной сборки на тех же исходниках.</p>
-              </div></details>
-            </td>
-          </tr>
-          <tr>
-            <th class="key" scope="row">Исключить пакеты <small>exclude_keywords</small></th>
-            <td data-l="Значения"><div class="opts"><span class="opt">строка через пробел</span></div></td>
-            <td data-l="Что делает"><p>Грубый фильтр: перед <code>make defconfig</code> каждый включённый пакет (<code>CONFIG_PACKAGE_…=y</code>), в имени которого есть ключевое слово (подстрока, без учёта регистра), переводится в <code>is not set</code>. Спецсимволы в слове трактуются буквально. Способ вручную выкинуть лишние пакеты. По умолчанию пусто.</p></td>
-          </tr>
-          <tr>
-            <th class="key" scope="row">Коммит исходников <small>commit_hash</small></th>
-            <td data-l="Значения"><div class="opts"><span class="opt">хеш коммита</span></div></td>
-            <td data-l="Что делает"><p>Необязательный. Если задан — чекаут на конкретный коммит исходников вместо релизного тега. Принимается только hex (7–40 символов). Если коммит совпадает с релизным тегом — kmods и хеш ядра берутся из этого релиза, иначе из <code>&lt;ветка&gt;-SNAPSHOT</code>. Для воспроизводимых сборок.</p></td>
-          </tr>
-          <tr>
-            <th class="key" scope="row">Приложение с коммита BASE <small>use_base_commit</small></th>
-            <td data-l="Значения"><div class="opts"><span class="opt def">да</span><span class="opt">нет</span></div></td>
-            <td data-l="Что делает"><p>«Да» — приложение варианта собирается с коммита автора, на который сняты его патчи: первая строка <code>patches/&lt;feeds|packages&gt;/&lt;имя&gt;/BASE</code> (столбец «Для коммита автора» в разделе <a href="#patches">07</a>). Для фидов podkop, netshift, forkop, forkop-mod, trafira, passwall2 и luci-app-xray строка <code>feeds.conf</code> становится <code>src-git-full &lt;имя&gt; &lt;URL&gt;^&lt;коммит&gt;</code> (полная история с тегами), клоны homeproxy и Re:HomeProxy переключаются на этот коммит. Патчи тогда ложатся точно, и новые коммиты автора не останавливают сборку, пока серия не перевыпущена. Версия пакета — последний тег x.y.z, который входит в коммит. Действует только в сборках с патчами (в combo — тоже, по полю <code>patches</code> строки); у clear, crystal_clear, switch и v2rayA своего репозитория нет. Нет файла <code>BASE</code> — предупреждение и последний коммит; коммита нет в репозитории — сборка останавливается. В имени артефакта — <code>app-base</code>, в имени сборки — <code>app:base</code>.</p>
-              <p>«Нет» — последний коммит репозитория автора, как раньше. Если у автора изменился файл под нашим патчем, сборка останавливается до компиляции (сверка с исходниками), а журнал и Telegram подсказывают коммит из <code>BASE</code>.</p></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="note warn">
-      <span class="ic">!</span>
-      <div><p><b>combo и all — особый случай.</b> Режим <code>combo</code> игнорирует поля, помеченные в форме звёздочкой <code>*</code>: Вариант, AdGuard Home, sing-box, youtubeUnblock, Скрипт zz1, Патчи, Свежие фиды: три сборки и их настройки жёстко зашиты в job <code>setup</code> (таблица ниже). Режим <code>all</code> собирает все шесть устройств с выбранным вариантом. На slateax и ax59u в вариантах homeproxy, rehomeproxy, podkop, netshift, forkop-mod и trafira всегда ставится <code>sing-box-tiny</code> из фида, в forkop — сборка tiny ядра <code>sing-box-forkop</code> (выбор версии к ним не применяется, в матрице <code>sb=tiny</code>). С патчами homeproxy (006) генератор сам подстраивается под версию ядра. Без патчей (<code>apply_patches</code> = нет) homeproxy на sing-box 1.14 пишет устаревший <code>store_rdrc</code>, а в режиме bypass_mainland_china со списком прокси-доменов не запускается; job <code>setup</code> предупреждает об этом заранее. Если генератор пишет поле, которого ядро не принимает, сборка останавливается на проверке совместимости до компиляции — остальные при этом продолжаются. Выбор, который вариант или устройство не допускают, <code>setup</code> приводит в соответствие и пишет об этом в лог (notice «Выбор скорректирован»).</p></div>
-    </div>
-
-    <h3>Сборки combo</h3>
-    <div class="card tscroll">
-      <table class="pt stack">
-        <thead><tr><th>Устройство</th><th>Вариант</th><th>AGH</th><th>sing-box</th><th>youtubeUnblock</th><th>zz1</th><th>Патчи</th><th>Фиды</th></tr></thead>
-        <tbody>
-          <tr><th class="key" scope="row">nanopi-r6s</th><td data-l="Вариант"><code>homeproxy</code></td><td data-l="AGH"><code>latest</code></td><td data-l="sing-box"><code>extended</code> (с патчами HomeProxy x01–x02 — XHTTP и ключ X25519MLKEM768 для REALITY)</td><td data-l="youtubeUnblock">да</td><td data-l="zz1">да</td><td data-l="Патчи">да</td><td data-l="Фиды">репозиторий</td></tr>
-          <tr><th class="key" scope="row">rb5009</th><td data-l="Вариант"><code>clear</code></td><td data-l="AGH"><code>no</code></td><td data-l="sing-box"><code>no</code></td><td data-l="youtubeUnblock">нет</td><td data-l="zz1">да</td><td data-l="Патчи">нет</td><td data-l="Фиды">репозиторий</td></tr>
-          <tr><th class="key" scope="row">rb5009</th><td data-l="Вариант"><code>switch</code></td><td data-l="AGH"><code>no</code></td><td data-l="sing-box"><code>no</code></td><td data-l="youtubeUnblock">нет</td><td data-l="zz1">да</td><td data-l="Патчи">нет</td><td data-l="Фиды">репозиторий</td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <h3>Устройства</h3>
-    <div class="card tscroll">
-      <table class="pt stack">
-        <thead><tr><th>Устройство</th><th>Арх. пакетов</th><th>Таргет ядра</th><th>Заметки</th></tr></thead>
-        <tbody>
-          <tr><th class="key" scope="row">rb5009</th><td data-l="Арх. пакетов"><code>aarch64_cortex-a72</code></td><td data-l="Таргет ядра"><code>mvebu/cortexa72</code></td><td data-l="Заметки"><p>MikroTik RB5009, rootfs 256 МБ</p></td></tr>
-          <tr><th class="key" scope="row">nanopi-r6s</th><td data-l="Арх. пакетов"><code>aarch64_generic</code></td><td data-l="Таргет ядра"><code>rockchip/armv8</code></td><td data-l="Заметки"><p>FriendlyElec, rootfs 512 МБ; драйвер r8125 (RSS на OpenWrt)</p></td></tr>
-          <tr><th class="key" scope="row">nanopi-r5s</th><td data-l="Арх. пакетов"><code>aarch64_generic</code></td><td data-l="Таргет ядра"><code>rockchip/armv8</code></td><td data-l="Заметки"><p>FriendlyElec, rootfs 512 МБ; драйвер r8125 (RSS на OpenWrt)</p></td></tr>
-          <tr><th class="key" scope="row">slateax</th><td data-l="Арх. пакетов"><code>aarch64_cortex-a53</code></td><td data-l="Таргет ядра"><code>qualcommax/ipq60xx</code></td><td data-l="Заметки"><p>GL.iNet AXT1800, добавляется fancontrol: PWM-выход вентилятора (<code>pwmfan</code>) демон находит сам при <code>fan_file 'auto'</code>, а путь <code>cooling_deviceN/cur_state</code> с версии 30.07.2026 отвергает и с ним не запускается — <code>/etc/uci-defaults/99_fans</code> возвращает такой путь (от старых версий пакета или прежнего 99_fans в сохранённом конфиге) в <code>auto</code>; без <code>/etc/config/fancontrol</code> ничего не делает. sing-box-tiny, без GNU coreutils/findutils</p></td></tr>
-          <tr><th class="key" scope="row">ax59u</th><td data-l="Арх. пакетов"><code>aarch64_cortex-a53</code></td><td data-l="Таргет ядра"><code>mediatek/filogic</code></td><td data-l="Заметки"><p>ASUS RT-AX59U, добавляется facinstall; sing-box-tiny, без GNU coreutils/findutils</p></td></tr>
-          <tr><th class="key" scope="row">brume2</th><td data-l="Арх. пакетов"><code>aarch64_cortex-a53</code></td><td data-l="Таргет ядра"><code>mediatek/filogic</code></td><td data-l="Заметки"><p>GL.iNet MT2500</p></td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-
-  <!-- 06 КОНВЕЙЕР -->
-  <section id="pipeline">
-    <div class="sec-head"><span class="sec-num">06</span><h2>Конвейер сборки</h2></div>
-    <p class="sec-sub">Что делает <code>Universal_WRT_Builder.yml</code> по шагам. Job <code>setup</code> строит матрицу из выбранного target и variant, job <code>build</code> на раннере из поля <code>runner_os</code> прогоняет сборку для каждой пары «устройство × вариант», а job <code>notify</code> подводит итог.</p>
-    <ol class="steps">
-      <li><b>Матрица сборки.</b> Из target и variant формируется список пар: <code>combo</code> → три фиксированные сборки со своими настройками, <code>all</code> → все шесть устройств, одиночный выбор → одна пара.</li>
-      <li><b>Подготовка раннера.</b> Освобождение места на диске — только если на <code>/</code> свободно меньше 50 ГБ (образ ubuntu-24.04 сейчас даёт ~86 ГБ, сборке нужно до ~35 ГБ, а чистка шла 2–3,5 минуты), checkout репозитория со скриптами.</li>
-      <li><b>Права на <code>files/</code>.</b> Делаются исполняемыми скрипты в <code>files/etc/uci-defaults</code> и <code>files/usr/bin</code> (попадут в образ).</li>
-      <li><b>Скачивание AdGuard Home</b> — только при <code>agh = latest</code>. Последний стабильный тег ищется через <code>git ls-remote</code>, архив сверяется по SHA-256 (<code>sh/verify-sha256.sh</code>: digest ассета из GitHub API, иначе <code>checksums.txt</code> релиза). При несовпадении бинарь не кладётся и используется пакет из фида. Пакет <code>adguardhome</code> в прошивке остаётся версии фида; чтобы <code>apk upgrade</code> не вернул его бинарник, zz1 закрепляет пакет (см. «Локальные бинари»).</li>
-      <li><b>Скачивание sing-box</b> — только если в поле <code>sb</code> выбрана версия (не <code>no</code>, <code>feed</code>, <code>tiny</code>). Качается сборка <code>-musl</code>; бинарь под glibc в прошивку не кладётся. Тег выбирается через <code>git ls-remote</code> с сортировкой по версии; архив сверяется по SHA-256. Не скачалось или сумма не совпала — остаётся sing-box из фида. Пакет <code>sing-box</code> в прошивке остаётся версии фида; чтобы <code>apk upgrade</code> не вернул его бинарник (а для podkop-engine — и init-скрипт), zz1 закрепляет пакет (см. «Локальные бинари»).</li>
-      <li><b>Переменные сборки.</b> Вычисляются URL репозитория, ветка и коммит. Последний релизный тег ветки ищется через <code>git ls-remote</code> (сортировка по версии, без <code>-rc</code>); если тега нет или ручной коммит не релизный — используется <code>&lt;ветка&gt;-SNAPSHOT</code>. Подгружается конфиг устройства <code>config/conf/&lt;target&gt;</code>.</li>
-      <li><b>Зависимости (apt).</b> Тулчейн из файла репозитория под выбранный раннер: <code>depends-ubuntu-2404</code> или <code>depends-ubuntu-2204</code>. Сторонние репозитории раннера (PPA, Microsoft, PostgreSQL) на время установки отключаются — все пакеты из архива Ubuntu. Пакеты ставятся без «рекомендуемых» (<code>--no-install-recommends</code>): около 85 МБ вместо 650 МБ, без texlive, шрифтов и dblatex, которые сборке не нужны. Перед установкой 6 секунд замеряется скорость зеркала раннера: если оно медленнее 1 МБ/с, замеряются <code>archive.ubuntu.com</code> и <code>mirrors.edge.kernel.org</code>, и берётся самое быстрое. Ограничения: <code>apt-get update</code> — 5 минут, <code>install</code> — 5 минут, до трёх попыток; вторая идёт через <code>archive.ubuntu.com</code>, третья — через <code>mirrors.edge.kernel.org</code>, если зеркало раннера зависло или медленное (заменяется и адрес, и <code>mirror+file:</code> раннеров GitHub), скачанное раньше докачивается из кэша apt. Вывод apt виден в логе, в предупреждении указано, на какой стадии сорвалась попытка; автообновление man-db выключено.</li>
-      <li><b>Клон исходников</b> и checkout на нужный коммит или тег OpenWrt/ImmortalWrt.</li>
-      <li><b>Патчи дерева.</b> Файлы <code>patches/*.patch</code> (только корень каталога) применяются к исходникам OpenWrt: <code>patch -p1 -d openwrt</code>. Шаг идёт <b>до</b> <code>feeds update</code>; любой непримёнившийся патч останавливает сборку. Патчи фидов и пакетов этим шагом не трогаются.</li>
-      <li><b>Update Feeds &amp; Config.</b> Главный шаг: P1 → фиды варианта → <code>feeds_latest</code> → <code>feeds update</code> → P2 → <code>feeds install</code> → <code>.config</code> → P3 → <code>make defconfig</code>.
-        <details class="more"><summary>Подробнее</summary><div>
-          <p>Порядок: P1 → фиды варианта и замена git.openwrt.org на GitHub → при <code>feeds_latest</code> коммиты фидов из репозитория пакетов (<code>sh/feeds-from-repo.sh</code>) → <code>feeds update</code> → P2 → <code>feeds install</code> → копирование <code>WRT.config</code> в <code>.config</code> (с удалением CRLF) → команды устройства → P3 → правки под вариант → отключение по Exclude-словам → Go для начальной загрузки → <code>make defconfig</code>. При <code>sb</code> = <code>forkop-*</code> перед <code>feeds install</code> в <code>package/</code> кладётся пакет <code>sing-box-forkop</code>, а после <code>make defconfig</code> проверяется, что включены <code>forkop</code> и <code>sing-box-forkop</code> и выключены <code>sing-box</code> и <code>sing-box-tiny</code>.</p>
-          <p><b>Go для начальной загрузки.</b> Пакеты на Go (sing-box, adguardhome, dnslookup) собираются Go из фида. По умолчанию OpenWrt сначала строит для него загрузчик цепочкой 1.4 → 1.17 → 1.20 → 1.22 → 1.24 — в логах ~21 минута на критическом пути фазы пакетов. Если фид это умеет (25.12 и master: опция <code>GOLANG_BUILD_BOOTSTRAP</code>), сборка берёт с go.dev последний стабильный Go ветки фида (<code>GO_DEFAULT_VERSION</code>), сверяет sha256 и ставит <code>GOLANG_BUILD_BOOTSTRAP=n</code> + <code>GOLANG_EXTERNAL_BOOTSTRAP_ROOT</code>: Go фида собирается один раз. Не скачался или не сошёлся — сборка как раньше (notice в Actions). На 24.10 не включается: там внешний Go заменяет лишь первый шаг цепочки.</p>
-          <p>Фид forkop выбирается полем «Вариант»: <code>forkop</code> — оригинал <code>ushan0v/forkop</code> 2.x (<code>FORKOP_FEED_ORIG</code>) с патчем <code>patches/feeds/forkop</code> и ядром <code>sing-box-forkop</code>, <code>forkop-mod</code> — форк <code>Gavr1024/forkop-mod</code> (<code>FORKOP_FEED_MOD</code>) с патчем <code>patches/feeds/forkopmod</code>; адреса фидов — в <code>env:</code> workflow. Внутри сборки оба — вариант <code>forkop</code>. Применяется подпапка только загруженного фида, версия пакета берётся из его тегов. Вариант <code>netshift</code> подключает фид <code>yandexru45/netshift</code> (<code>NETSHIFT_FEED</code>), вариант <code>trafira</code> — <code>petrouspetr-pixel/trafira</code> (<code>TRAFIRA_FEED</code>), каждый со своими патчами.</p>
-        </div></details>
-      </li>
-      <li><span class="badge p2">part2</span><b>Версии и патчи фидов.</b> <code>WRT-part2.sh</code> между <code>feeds update</code> и <code>feeds install</code> ставит версии пакетов из тегов их репозиториев и применяет патчи <code>patches/feeds/&lt;фид&gt;/</code>, затем обновляет youtubeUnblock. Устаревший патч останавливает сборку (сверка с исходниками).
-        <details class="more"><summary>Подробнее</summary><div>
-          <p>Версии: forkop и trafira — из последнего тега <code>x.y.z</code> репозитория (<code>FORKOP_VERSION</code> / <code>TRAFIRA_VERSION</code>, без неё пакет получил бы <code>0.0.0</code>), podkop (<code>PODKOP_VERSION</code>, без неё — <code>0.&lt;дата&gt;</code>), netshift (<code>NETSHIFT_VERSION</code>) и тема Proton2025; версия берётся из репозитория, который подключён в <code>feeds.conf</code>.</p>
-          <p>Патчи применяются к <code>feeds/&lt;фид&gt;</code> по порядку имён: уже есть в исходниках — пропуск; не применён патч из строки <code>Requires:</code> — пропуск; иначе применяется только при точном совпадении контекста (<code>patch -F 0</code>), каждый целиком или никак. Не подошедшие — предупреждение в Actions и итог «применено / уже было / пропущено»; с <code>FEED_PATCH_STRICT=1</code> сборка останавливается.</p>
-          <p>youtubeUnblock обновляется, кроме <code>ytb</code> = нет и вариантов <code>clear</code>, <code>crystal_clear</code>, <code>switch</code>, <code>trafira</code> — там его нет в прошивке (у <code>forkop-mod</code> job setup ставит <code>ytb</code> = нет; forkop 2.x — по полю).</p>
-          <p>Патчи исходников youtubeUnblock (<code>patches/src/youtubeUnblock/</code>) проверяются на файлах коммита, который пойдёт в сборку (уже есть — пропуск; файлы у автора изменились или не скачались — предупреждение, youtubeUnblock собирается как у автора, сборка не останавливается, с <code>FEED_PATCH_STRICT=1</code> — останавливается), и кладутся в <code>patches/</code> пакета — их накладывает сборка OpenWrt. Makefile пакета накладывает <code>patches/</code> дважды (<code>$(Build/Prepare/Default)</code> и ещё раз <code>$(Build/Patch)</code>), второй раз патч не лёг бы, поэтому лишний вызов убирается.</p>
-          <p><b>Сверка с исходниками</b> (<code>sh/patch-drift.sh</code>): если у автора фида или пакета (в <code>package/</code>) изменился файл, к которому применяется наш патч (git-хеш не тот, что в строке <code>index</code> патча), патч не применяется, а после part3 эта сборка останавливается до компиляции, и в Telegram приходит список патчей, которые надо обновить; остальные сборки матрицы продолжаются. Выключается галочкой <code>stop_outdated_patches</code>. При остановке журнал и Telegram подсказывают коммит из <code>BASE</code> серии; с галочкой <code>use_base_commit</code> (по умолчанию включена) сборка сразу берёт приложение с него, и сверка проходит.</p>
-        </div></details>
-      </li>
-      <li><span class="badge hp">homeproxy</span><b>Проверка совместимости sing-box.</b> Генератор homeproxy, который попадёт в прошивку, проверяется против той версии sing-box, которая попадёт в прошивку (скачанной или из фида): пробный конфиг прогоняется через <code>sing-box check</code> той же версии. Несовместимость останавливает сборку до компиляции. Номер версии нигде не зашит: если автор обновит генератор, проверка сама начнёт пропускать.</li>
-      <li><b>Kernel Hash.</b> Хеш ядра подменяется на официальный, чтобы на роутер можно было ставить готовые kmod из репозиториев. Для этого ядро должно совпадать с официальным по раскладке <code>struct module</code>: поэтому в <code>WRT.config</code> выключен <code>KERNEL_KALLSYMS</code>, как в официальных сборках, иначе apk ставит kmod, а ядро отвергает их при загрузке. Хеш берётся из папки <code>kmods/</code> релиза с той же версией ядра, что в исходниках. Порядок: основной сервер (до 4 попыток) → зеркала из <code>OPENWRT_MIRRORS</code> в <code>env</code> workflow (по 2 попытки) → папки релиза нет на основном сервере (404, ещё не выложен) — то же для SNAPSHOT ветки → никто не ответил — хеш этого релиза и платформы, найденный в прошлой сборке (кэш Actions, предупреждение «Хеш ядра из прошлой сборки») → нет и его — локальный хеш с предупреждением «Локальный хеш ядра»: сборка идёт дальше, но официальные kmod на прошивку не встанут, а строку kmods zz1 в <code>distfeeds.list</code> не добавляет (откуда взят хеш, записано в <code>/etc/build_kernel_hash</code>; такой папки на сервере нет). Где бы ни нашёлся хеш, адреса в <code>distfeeds.list</code> остаются на <code>downloads.openwrt.org</code>: на зеркалах те же папки. Те же зеркала использует <code>sh/feeds-from-repo.sh</code> для <code>feeds.conf</code> репозитория пакетов; не скачался ни с одного — фиды остаются на коммитах релизного тега.</li>
-      <li><b>Кэш tools и toolchain.</b> Хост-утилиты (<code>staging_dir/host</code>) и кросс-компилятор (<code>staging_dir/toolchain-*</code>) — около 40 минут сборки, одинаковые для всех вариантов одной платформы. Первая сборка релиза на платформе сохраняет их в кэш Actions, следующие берут оттуда, и <code>make</code> их не пересобирает (штампы <code>.tools_compile_*</code> и <code>.toolchain_compile</code> освежаются). Ключ точный: источник (OpenWrt/ImmortalWrt), платформа, коммит исходников, опции <code>.config</code>, влияющие на toolchain, правки в <code>tools/</code> и <code>toolchain/</code>, ОС раннера и версии его gcc, glibc и python. Что-то из этого изменилось — другой ключ, сборка с нуля. Восстановленный кэш проверяется (gcc запускается, штампы на месте); не прошёл — предупреждение «Кэш toolchain», и tools с toolchain собираются заново. Сохраняется только после успешной компиляции и только если кэша с таким ключом не было. Пакеты, ядро и образ из кэша не берутся никогда. Выключатель — <code>TOOLCHAIN_CACHE: '0'</code> в <code>env</code> workflow.</li>
-      <li><b>Загрузка исходников.</b> <code>make -k download</code> отдельным шагом, до трёх попыток с паузой: после неудачи файлы с неверным хешем удаляются из <code>dl/</code> (сам <code>download.pl</code> их не удаляет и зеркала не пробует). Защищает от сбоев зеркала <code>sources.cdn.openwrt.org</code>: без него OpenWrt собирает архив из git, и хеш часто не совпадает (так падала сборка на <code>luarocks</code>, который нужен <code>luaposix</code> для internet-detector). Если не помогло — ошибка с именами пакетов и <code>bin/download_failure.log</code> в артефакте.</li>
-      <li><b>Компиляция.</b> Многопоточная; при сбое — повтор в один поток с сохранением <code>build.log</code>.</li>
-      <li><b>Bootloader-файлы.</b> Глубокий поиск и сохранение <code>idbloader.img</code>/<code>u-boot.itb</code>/<code>.fip</code> для прошивки загрузчика.</li>
-      <li><b>Артефакт.</b> Содержимое <code>bin/</code> загружается (<code>upload-artifact@v7</code>, хранение 1 день) под именем вида <code>nanopi-r6s_openwrt_openwrt-25.12_homeproxy_patches_agh-latest_sb-latest_ytb_zz_feeds-tag_2026.09.28-1200</code>.
-        <details class="more"><summary>Схема имени</summary><div>
-          <p><code>&lt;устройство&gt;_&lt;source&gt;_&lt;branch&gt;_&lt;вариант&gt;_&lt;patches|nopatches&gt;_agh-&lt;agh&gt;_sb-&lt;sb&gt;_&lt;ytb|noytb&gt;_&lt;zz|nozz&gt;_&lt;feeds-tag|feeds-repo&gt;[_app-base]_&lt;дата&gt;</code> (<code>app-base</code> — приложение с коммита из <code>BASE</code>, галочка <code>use_base_commit</code>). Все параметры в имени различают сборки одного устройства и варианта; при падении компиляции туда же попадает <code>build_failure.log</code>.</p>
-        </div></details>
-      </li>
-      <li><b>Уведомление (job <code>notify</code>).</b> После всей матрицы в Telegram уходит одно сообщение со статусом и длительностью каждой сборки (если заданы секреты <code>TELEGRAM_BOT_TOKEN</code>/<code>TELEGRAM_CHAT_ID</code>); затем удаляются завершённые прогоны workflow старше суток. Отдельный workflow <code>Cleanup.yml</code> делает то же по расписанию каждые 6 часов, чтобы прогоны и их артефакты не задерживались, когда новых сборок нет.</li>
-    </ol>
-  </section>
-
-  <!-- 07 ПАТЧИ -->
-  <section id="patches">
-    <div class="sec-head"><span class="sec-num">07</span><h2>Патчи</h2></div>
-    <p class="sec-sub">49 патчей к 10 пакетам. Все отключаются полем <code>apply_patches</code> (в combo — полем <code>patches</code> матрицы). Патч со строкой <code>Build-If:</code> в заголовке применяется только в указанных сборках (сейчас так только homeproxy x01 и x02; такие патчи ставятся последними в серии, поэтому их номер начинается с буквы: в порядке имён буква идёт после цифр). Имя подпапки должно совпадать с именем фида в <code>feeds.conf</code>. Столбец «Для коммита автора» — коммит репозитория варианта (пакета), на который снята серия (файл <code>BASE</code> в её папке): на нём патчи ложатся точно, и с галочкой <code>use_base_commit</code> (по умолчанию включена) сборка берёт приложение именно с него. Подробности — в заголовках самих патчей.</p>
-
-    <div class="card tscroll">
-      <table class="pt stack">
-        <thead><tr><th style="width:22%">Каталог</th><th style="width:8%">Патчей</th><th style="width:13%">Для коммита автора</th><th>Что исправляют</th></tr></thead>
-        <tbody>
-          <tr><th class="key" scope="row">patches/*.patch <small>дерево OpenWrt</small></th><td data-l="Патчей">0</td><td data-l="Для коммита автора">—</td><td data-l="Что исправляют"><p>Только корень каталога, подпапки не просматриваются. Путь в патче — от корня <code>openwrt/</code>. Применяются до <code>feeds update</code>; непримёнившийся патч останавливает сборку.</p></td></tr>
-          <tr><th class="key" scope="row">feeds/podkop <small>itdoginfo/podkop · podkop</small></th><td data-l="Патчей">10</td><td data-l="Для коммита автора"><a href="https://github.com/itdoginfo/podkop/commit/c654bf5da75309754e3fb63b9441981db65fff68"><code>c654bf5</code></a><br><small>24.10.2026</small></td><td data-l="Что исправляют"><p><b>001–005, исправления:</b> разбор ссылок (пароли с <code>%40</code>/<code>%23</code>/<code>+</code>, IPv6, VLESS без <code>type</code>, httpupgrade, trojan с портом <code>443/</code>; xhttp с 0.7.23 разбирает сам sing-box — нужно ядро podkop-engine), DNS (диагностика с портом, SRV/PTR мимо FakeIP), гонка start/reload, таймаут wget, проброс портов при Fully Routed IPs, настоящие IP для исключений, домены с заглавными и табуляцией, «Торренты мимо прокси».</p><p><b>006–010, перенесено из netshift:</b> блок «Окружение» в диагностике (Flow Offloading, часы, IPv6), «Отключить секцию», секция с пустой или битой ссылкой больше не останавливает podkop (её трафик блокируется, остальные работают), несколько DNS-серверов по очереди или все сразу (sing-box 1.14+), «Исключённые IP мимо sing-box». Новые опции по умолчанию выключены. Убирать можно только с конца серии.</p></td></tr>
-          <tr><th class="key" scope="row">feeds/netshift <small>yandexru45/netshift · netshift</small></th><td data-l="Патчей">2</td><td data-l="Для коммита автора"><a href="https://github.com/yandexru45/netshift/commit/23d14fbae049dbf40a1f125e33e1957f07261d65"><code>23d14fb</code></a><br><small>25.10.2026</small></td><td data-l="Что исправляют"><p>Разбор ссылок (socks5 с <code>:</code> в логине или пароле, транспорт http, совместимость с jq 1.7 на OpenWrt 24.10) и DNS (SRV/PTR/TXT мимо FakeIP, диагностика DNS-сервера с портом).</p></td></tr>
-          <tr><th class="key" scope="row">feeds/forkop <small>ushan0v/forkop · forkop</small></th><td data-l="Патчей">2</td><td data-l="Для коммита автора"><a href="https://github.com/ushan0v/forkop/commit/9544f3de09c62c935e1147147136234594d04f02"><code>9544f3d</code></a><br><small>27.10.2026 (2.0.0)</small></td><td data-l="Что исправляют"><p><code>prerm</code> на sh: сборка OpenWrt выполняет его как shell, и с ucode <code>apk del forkop</code> не чистил за forkop; настройка «Перехватывать DNS устройств» (выключенная — AdGuard Home видит каждого клиента) и FakeIP-соединения исключённых устройств напрямую. Серия для 1.x (25 патчей) к 2.0 не подходит, нужное из неё в 2.0 есть у автора.</p></td></tr>
-          <tr><th class="key" scope="row">feeds/forkopmod <small>Gavr1024/forkop-mod · forkop-mod</small></th><td data-l="Патчей">1</td><td data-l="Для коммита автора"><a href="https://github.com/Gavr1024/forkop-mod/commit/05817dcd7079bd12e74c342e400edae960fdb798"><code>05817dc</code></a><br><small>24.10.2026</small></td><td data-l="Что исправляют"><p>Вызовы ucode до объявления (без патча падают проверка стратегий ByeDPI и проверка обновления списков при старте) и <code>prerm</code> на sh для apk.</p></td></tr>
-          <tr><th class="key" scope="row">feeds/trafira <small>petrouspetr-pixel/trafira · trafira</small></th><td data-l="Патчей">5</td><td data-l="Для коммита автора"><a href="https://github.com/petrouspetr-pixel/trafira/commit/ce5e4f33253c74664f6d4a7727918a30bb011217"><code>ce5e4f3</code></a><br><small>21.10.2026</small></td><td data-l="Что исправляют"><p>Правило fw4 для TPROXY в образе прошивки, пароли в ручных ссылках, битая ссылка блокирует только свою секцию, блок «Окружение» в диагностике, сжатие исходников при сборке с ucode OpenWrt 24.10 и 25.12.</p></td></tr>
-          <tr><th class="key" scope="row">feeds/luciappxray <small>yichya/luci-app-xray · xray</small></th><td data-l="Патчей">1</td><td data-l="Для коммита автора"><a href="https://github.com/yichya/luci-app-xray/commit/4d5a6fd7fc4d2fbbcd7f70f1319da06b91ec1d56"><code>4d5a6fd</code></a><br><small>22.09.2026</small></td><td data-l="Что исправляют"><p>Адрес DNS без порта получает порт 53, а не 0 (иначе правила Fast/Secure DNS не срабатывали, а прямой DNS для имени сервера уходил в tproxy); FakeDNS без доменов не роняет генератор.</p></td></tr>
-          <tr><th class="key" scope="row">feeds/passwall2 <small>Openwrt-Passwall/openwrt-passwall2 · passwall</small></th><td data-l="Патчей">1</td><td data-l="Для коммита автора"><a href="https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/22e37d49b18ef6bf1c2a942be9c3a066095931b1"><code>22e37d4</code></a><br><small>25.10.2026</small></td><td data-l="Что исправляют"><p>Сброс соединений, ушедших мимо прокси во время перезапуска (ниже).</p></td></tr>
-          <tr><th class="key" scope="row">packages/luci-app-homeproxy <small>immortalwrt/homeproxy · homeproxy</small></th><td data-l="Патчей">22</td><td data-l="Для коммита автора"><a href="https://github.com/immortalwrt/homeproxy/commit/fadaa676104f59ff6ace480a780a258d846d0aec"><code>fadaa67</code></a><br><small>02.10.2026</small></td><td data-l="Что исправляют"><p><b>001</b> проверка URLTest в LuCI. <br><b>002</b> несуществующий DNS-сервер по умолчанию. <br><b>003</b> права на логи в 25.12. <br><b>004</b> и <b>005</b> удалены: их исправления (sniff для sing-box 1.13+, опечатки, в том числе <code>socsk5</code> в разборе подписок) уже есть в ImmortalWrt. <br><b>006</b> DNS для sing-box 1.14: <code>store_dns</code> вместо <code>store_rdrc</code>; в режиме <code>bypass_mainland_china</code> правила без устаревшего <code>strategy</code>, <code>geoip-cn</code> — через <code>evaluate</code> и <code>match_response</code> (без этого 1.14 со списком прокси-доменов не запускается). <br><b>007</b> соединения после перезапуска. <br><b>008</b> при <code>reload</code> и <code>restart</code> новый конфиг проверяется до остановки службы (при ошибке продолжает работать прежний). <br><b>009</b> dnsmasq перезапускается один раз и только при изменении его настроек. <br><b>010</b> Clash API включается опциями <code>homeproxy.infra.clash_api_controller</code>, <code>clash_api_ui</code> и <code>clash_api_secret</code> (по умолчанию выключен; zz1 включает его на <code>0.0.0.0:9090</code> с панелью <code>/opt/yacd</code>). <br><b>011</b> init сам создаёт пустые файлы include-секций fw4, поэтому fw4 не пишет предупреждений, а zz1 больше не правит init. <br><b>012</b> ссылки с транспортом, которого нет в sing-box (<code>xhttp</code>, <code>splithttp</code>, <code>kcp</code>), пропускаются в подписках и при импорте: раньше один такой узел не давал homeproxy запуститься; <code>type=raw</code> читается как TCP. <br><b>013</b> узел, удалённый вручную или обновлением подписки, больше не валит генератор конфигурации: из групп URLTest он убирается, а основной узел или узел маршрутизации, который на него ссылается, блокирует свой трафик (напрямую не пускает) с записью в журнале. <br><b>014</b> русский перевод LuCI (из форка Re:HomeProxy, дополнен строками наших патчей; пакет <code>luci-i18n-homeproxy-ru</code> при <code>CONFIG_LUCI_LANG_ru</code>). <br><b>015</b> настройки из другой сборки (их сохраняет sysupgrade) не мешают запуску и не удаляются: узел неизвестного типа или транспорта (<code>amneziawg</code>, <code>mieru</code>, <code>naive</code> из Re:HomeProxy, XHTTP без sing-box-extended) блокирует свой трафик и убирается из групп URLTest, неизвестный выход (<code>main-out</code>) — блокировка, неизвестный DNS-сервер (<code>russia-dns</code>) — <code>default-dns</code>, неизвестный режим маршрутизации — «Глобальный», сервер неизвестного типа (<code>mtproxy</code>) не запускается; каждый случай — строка в журнале. <br><b>016</b> резервные DNS-серверы (sing-box 1.14+, по умолчанию выключены): по очереди или все сразу, для запросов, на которые не ответило ни одно DNS-правило; в обычных режимах — список адресов под полем «DNS-сервер» (через основной узел или напрямую), в Custom routing — выбор из DNS-серверов; в режиме «Обход материкового Китая» не предлагаются, а если sing-box не примет их с DNS-правилами пользователя, они отключаются с записью в журнале. <br><b>017</b> «DNS по умолчанию (от WAN)», пока у WAN нет DNS (загрузка, перезагрузка вышестоящего роутера): берётся последний DNS WAN, затем <code>resolv.conf.auto</code>, публичный 223.5.5.5/8.8.8.8 — только если ничего нет; в конце запуска homeproxy сверяет DNS WAN с конфигом и при расхождении перезапускается ещё раз (procd снимает подписку на события WAN на время перезапуска, и «WAN поднялся» терялся); падение WAN больше не перезапускает homeproxy. <br><b>018</b> кэш удалённых наборов правил переживает перезагрузку и перепрошивку: при остановке sing-box копируется из RAM в <code>/etc/homeproxy/cache.db</code> (только если изменился), при старте без кэша возвращается — sing-box не падает на «initial rule-set», если сеть или сервер списков ещё недоступны; с одними локальными наборами ничего не пишется. <br><b>019</b> DNS-правило или правило маршрутизации со ссылкой на выключенный или удалённый набор правил больше не валит весь конфиг (<code>rule-set not found</code>): набор убирается из правила, а правило без единого включённого набора пропускается, оба случая — строка в журнале; <code>sing-box check</code> запускается с <code>--disable-color</code>, поэтому в журнале нет кодов цвета, из-за которых «Пользовательские команды» LuCI показывали «Binary data not displayed». <br><b>020</b> обновление подписок проверяет новые узлы до запуска службы: если sing-box их не примет, возвращаются прежние узлы (строка в журнале), а не остаётся остановленный homeproxy; для проверки у init появилась команда <code>check_config</code>. <br><b>021</b> журналы homeproxy и sing-box больше 50 КБ не стираются целиком, а сокращаются до последних ~25 КБ целыми строками: последние ошибки остаются на странице журнала. <br><b>022</b> правило маршрутизации передаёт в sing-box метод «Отклонить» (<code>drop</code>, «не отбрасывать») и настройки «Разрешить» (DNS-сервер, стратегия, кэш, TTL, client subnet): форма их предлагала с 2025 года, но в конфиг они не попадали — «Отбрасывать пакеты» отвечало TCP RST / ICMP; каждая настройка — только со своим действием, без них конфиг прежний. <br><b>x01</b> транспорт XHTTP (поля в узле, подписки, импорт, <code>extra</code> из ссылок Xray; режим <code>auto</code> выбирается, как в Xray: с REALITY — <code>stream-one</code>, иначе sing-box-extended взял бы <code>packet-up</code>, который сервер в режиме <code>stream-one</code>/<code>stream-up</code> не принимает; без <code>xmux</code> в ссылке берутся значения Xray — до 3 соединений с их повторным использованием, иначе sing-box-extended открывал бы отдельное соединение на каждый запрос; таблица идентификаторов сессии, которую Xray и extended 2.7.3 не принимают, отбрасывается с записью в журнале, а не роняет весь конфиг) — только в сборке <code>homeproxy</code> с <code>sb=extended</code> (<code>Build-If</code>); homeproxy сам проверяет, есть ли XHTTP в ядре, а без него такой узел блокирует свой трафик, не ломая остальные. <br><b>x02</b> ключ X25519MLKEM768 для REALITY — тоже только с <code>sb=extended</code> (<code>Build-If</code>): серверы на Xray-core 26.9.8+ без него отвергают подключение (<code>reality verification failed</code>); флажок у REALITY-узла, ставится сам из ссылки или подписки с <code>support-x25519mlkem768=true</code>, работает с отпечатком uTLS <code>chrome</code>. Применяются в <code>WRT-part3.sh</code> сразу после клонирования immortalwrt/homeproxy (master). На ImmortalWrt он ставится вместо копии из фида luci: в ветках релизов (25.12, 24.10) там старый генератор, на который патчи не ложатся.</p></td></tr>
-          <tr><th class="key" scope="row">packages/luci-app-re-homeproxy <small>1andrevich/homeproxy-hiddify · rehomeproxy</small></th><td data-l="Патчей">4</td><td data-l="Для коммита автора"><a href="https://github.com/1andrevich/homeproxy-hiddify/commit/a9e359679e08b5642ae66b13dbcf647b382a9edc"><code>a9e3596</code></a><br><small>04.07.2026</small></td><td data-l="Что исправляют"><p>Запуск на обычном sing-box, несуществующий DNS-сервер по умолчанию, uTLS на QUIC-узлах и устаревшие поля подписок (из ветки <code>dev</code>), соединения после перезапуска.</p></td></tr>
-          <tr><th class="key" scope="row">src/youtubeUnblock <small>Waujito/youtubeUnblock · ytb</small></th><td data-l="Патчей">1</td><td data-l="Для коммита автора"><a href="https://github.com/Waujito/youtubeUnblock/commit/4a223b03508e564dace57c1a7f3fc6bc2636b8cd"><code>4a223b0</code></a><br><small>08.04.2026</small></td><td data-l="Что исправляют"><p>Оригинал датаграммы при UDP-фейках (<code>udp_mode fake</code>) больше не теряется: датаграммы больше 1400 байт (<code>tcp_frag: tcp_payload_split: Invalid argument</code>), UDP GSO-пакеты и датаграммы самого роутера с недосчитанной контрольной суммой. Патч проверяет и кладёт в пакет part2, накладывает сборка OpenWrt.</p></td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="grid" style="margin-top:14px">
-      <div class="tile"><h4>Как применяются</h4><p>По порядку имён. Уже есть в исходниках — пропуск. Не применён патч из строки <code>Requires:</code> — пропуск. Иначе только при точном совпадении контекста (<code>patch -F 0</code>), каждый целиком или никак.</p></div>
-      <div class="tile"><h4>Сверка с исходниками</h4><p>В строке <code>index</code> каждого diff — git-хеш файла, на который написан патч. Если у автора файл изменился, патч не применяется, сборка останавливается до компиляции, в Telegram приходит список. Поэтому каждый патч серии снимается с состояния после предыдущих. Файл <code>BASE</code> в папке серии — коммит автора, на который она снята: с галочкой <code>use_base_commit</code> сборка берёт приложение с него, поэтому новые коммиты автора не ломают сборку до перевыпуска серии.</p></div>
-      <div class="tile"><h4>homeproxy master и релизы ImmortalWrt</h4><p>В master автор перевёл генератор на правило <code>sniff</code> и убрал <code>independent_cache</code>, поэтому патчи 004 и 005 удалены. В ветках релизов ImmortalWrt LuCI остался старый код, поэтому сборка ставит master и туда.</p></div>
-    </div>
-
-    <div class="note">
-      <span class="ic">i</span>
-      <div><p><b>Соединения после перезапуска прокси.</b> При перезапуске (сохранение в LuCI, переподключение WAN) правила перехвата снимаются на несколько секунд (homeproxy на R6S — около 6,5 с). TCP-соединение, открытое в это окно, уходит в WAN напрямую через masquerade, а conntrack держит этот NAT до конца соединения: <code>fw4 reload</code> таблицу соединений не очищает. Там, где TCP перехватывается через redirect (homeproxy, rehomeproxy, passwall2), такое соединение до конца живёт мимо прокси. Патчи HomeProxy 007, Re:HomeProxy 004 и passwall2 001 после возврата правил удаляют записи conntrack TCP с SNAT (<code>conntrack -D -p tcp --src-nat</code>): клиент сразу переподключается через прокси, прямые соединения продолжаются. podkop, netshift, forkop, trafira и xray перехватывают TCP через TPROXY с меткой на каждый пакет — у них такие соединения сбрасываются сами, патч не нужен. В v2rayA (и в passwall2 в режиме TPROXY) метка ставится только на SYN; если после переключения в v2rayA сайты не открываются, выполните на роутере ту же команду.</p></div>
-    </div>
-  </section>
-
-  <!-- 08 ПЕРВЫЙ СТАРТ -->
-  <section id="firstboot">
-    <div class="sec-head"><span class="sec-num">08</span><h2>Первый старт после прошивки</h2></div>
-    <p class="sec-sub">Скрипт <code>zz1-final-offline-setup.sh</code> лежит в <code>/etc/uci-defaults/</code> и выполняется при первой загрузке (режим <b>firstboot</b>, лог <code>/root/setup_log.txt</code>). Сохранённую копию можно запустить вручную, например после <code>apk upgrade</code> (режим <b>maintenance</b>, лог <code>/root/setup_log_maintenance.txt</code>). Многие шаги учитывают вариант. Скрипта нет в <code>crystal_clear</code> и в сборках с <code>zz</code> = нет. Полный список изменений — в <code>files/README.md</code>.</p>
-    <ol class="steps">
-      <li><b>Инициализация.</b> Логирование, определение версии ядра, архитектуры, модели роутера и текущего варианта сборки.</li>
-      <li><b>База.</b> Часовой пояс (Europe/Moscow), очистка строки FullCone, сохранение system.</li>
-      <li><b>Пакетный менеджер.</b> Определение apk/opkg, чистка репозиториев, добавление репозитория kmods (по версии ядра), customfeeds; ключи <code>/root/apps/*.pem</code> ставятся в <code>/etc/apk/keys/</code>.</li>
-      <li><b>Локальные бинари.</b> sing-box, AdGuardHome и speedtest из <code>/root/apps/</code> ставятся в <code>/usr/bin</code>. Затем пакеты <code>sing-box</code> и <code>adguardhome</code>, у которых <code>/usr/bin/sing-box version</code> или <code>AdGuardHome --version</code> не совпадает с версией пакета (бинарник скачан при сборке или взят из <code>/root/apps/</code>), закрепляются на установленной версии: apk — строкой <code>имя=версия</code> в <code>/etc/apk/world</code> (так же OpenWrt закрепляет <code>kernel</code>, <code>libc</code>, <code>base-files</code>), opkg — флагом <code>hold</code>. <code>apk upgrade</code> и кнопка «Обновить» в LuCI их не трогают, остальные пакеты обновляются как обычно. Совпадает версия — пакет не закрепляется. Снять: <code>apk add sing-box</code> (opkg: <code>opkg flag user sing-box</code>).</li>
-      <li><b>homeproxy</b> (если установлен): <code>dns_hijacked=1</code>, bypass-цепочка nftables; Clash API включается опциями UCI (патч 010), init создаёт пустые файлы include fw4 (патч 011): если пакет собран без патчей или обновлён из фида, zz1 вписывает в генератор и init тот же код, что и патчи, а если доработки уже есть — файлы не трогает; Clash API на <code>:9090</code> и панель YACD (догружается cron-ом, пункт меню в LuCI). Без homeproxy — удаляются его nft-файл и include-секции firewall.</li>
-      <li><b>Наборы адресов fw4.</b> Всегда создаются <code>dpi_ips</code>, <code>bypass_ips</code>, <code>bypass_local</code> (с <code>loadfile</code> в <code>/etc/luci-uploads/</code>).</li>
-      <li><b>Прокси под вариант.</b> passwall2 — базовые настройки на first boot; xray — на first boot заводские правила luci-app-xray заменяются региональными (GeoIP и geosite для прямых соединений, свой Fast DNS), если их не меняли вручную; forkop-mod, trafira, podkop и netshift — <code>exclude_ntp=1</code> (NTP мимо прокси; в forkop 2.x опции нет), а при youtubeUnblock ещё <code>disable_quic=1</code>. v2rayA не настраивается.</li>
-      <li><b>youtubeUnblock.</b> Правила nftables; метка и номер очереди — из настроек youtubeUnblock (<code>packet_mark</code>, <code>queue_num</code>; пакет ставит правило на <code>0x8000</code>, и с другой меткой оно не срабатывало), собственные пакеты youtubeUnblock не уходят в очередь повторно (фейки всегда перед оригиналом); метка гостевой сети; TCP/443 и QUIC идут в очередь к любым адресам, до исключения <code>bypass_ips</code> (видео YouTube приходит и с кэшей Google в сетях российских операторов), youtubeUnblock сам выбирает соединения по SNI; пакеты с меткой youtubeUnblock принимаются в начале <code>output</code> и <code>mangle_output</code> — иначе homeproxy в режиме tproxy перекрашивал UDP-фейки в свою метку и заворачивал их в sing-box, и до сервера они не доходили; START=99.</li>
-      <li><b>internet-detector и owut.</b> internet-detector выключается (активируется при открытии страницы LuCI: режим «Service» из конфига пакета меняется на «Web UI only», иначе без службы индикатор навсегда «Undefined»), owut настраивается.</li>
-      <li><b>AdGuard Home.</b> dnsmasq переезжает на порт 54, AGH занимает 53; upstream — sing-box homeproxy (<code>127.0.0.1:5333</code>), DNS Xray для xray (<code>127.0.0.1:5300</code>), dnsmasq для passwall и v2raya (<code>127.0.0.1:54</code>: passwall2 вписывает туда свои DNS-правила) или forkop/trafira/podkop/netshift (<code>127.0.0.42:53</code>, плюс <code>dont_touch_dhcp=1</code>; у forkop 2.x вместо него <code>unmatched_dns_mode=router</code>); LuCI-редирект на <code>:8080</code>, служба запускается.</li>
-      <li><b>SQM и BBR.</b> Если SQM установлен — очереди с <code>piece_of_cake.qos</code> переводятся на свой скрипт <code>cake_ctinfo.qos</code> (CAKE diffserv4 в обе стороны, приоритеты на загрузке через <code>ct mark</code> и <code>act_ctinfo</code>), создаётся шаблон <code>/etc/nftables.d/10-priority-mangle.nft</code>; TCP BBR включается, если модуль есть в ядре.</li>
-      <li><b>FullCone NAT</b> — только на ImmortalWrt и только при наличии модуля.</li>
-      <li><b>Время и идентичность.</b> Синхронизация RTC/NTP, исправление mtime из будущего, обновление баннера; hostname и commonname — только на first boot.</li>
-      <li><span class="badge sw">switch</span><b>Режим L2-коммутатора.</b> Только для <code>switch</code>: все порты собираются в <code>br-lan</code>, DHCP-клиент, firewall-зоны и WAN отключаются.</li>
-      <li><b>Перезагрузка.</b> Отложенный ребут через 120 секунд в фоне — чтобы применить sysctl, AGH и остальное.</li>
-    </ol>
-
-    <h3 id="zz1-modes">Режимы firstboot и maintenance</h3>
-    <p>Режим определяется файлом-признаком <code>/etc/zz1_setup_completed</code>: его нет — <b>firstboot</b>, он есть — <b>maintenance</b>. Скрипт создаёт его в самом конце в обоих режимах. Файл лежит в <code>/etc</code>, а не в <code>/root</code>: <code>/root</code> часто целиком вписан в <code>/etc/sysupgrade.conf</code>, исключений этот файл не поддерживает, и признак переживал бы прошивку. В бэкап и при прошивке с сохранением настроек он не попадает. Старый признак <code>/root/.setup_completed</code> скрипт удаляет.</p>
-
-    <div class="card tscroll">
-      <table class="pt stack">
-        <thead><tr><th style="width:32%">Ситуация</th><th style="width:18%">Режим</th><th>Почему</th></tr></thead>
-        <tbody>
-          <tr><th scope="row">Прошивка без сохранения настроек</th><td data-l="Режим"><b>firstboot</b></td><td data-l="Почему"><p>Чистая система, признака нет.</p></td></tr>
-          <tr><th scope="row">Прошивка с сохранением настроек</th><td data-l="Режим"><b>firstboot</b></td><td data-l="Почему"><p>Признак в <code>/etc</code> не сохраняется. Старые конфиги возвращаются <b>до</b> запуска zz1, и он работает поверх них.</p></td></tr>
-          <tr><th scope="row">Чистая прошивка + «Восстановить» из бэкапа</th><td data-l="Режим"><b>firstboot</b>, затем бэкап</td><td data-l="Почему"><p>zz1 отрабатывает на чистых конфигах, потом бэкап их перезаписывает (hostname и customfeeds вернутся свои). После смены варианта так делать нельзя: вернутся настройки AGH и прочее от старого варианта.</p></td></tr>
-          <tr><th scope="row">Ручной запуск копии скрипта (например, после <code>apk upgrade</code>)</th><td data-l="Режим"><b>maintenance</b></td><td data-l="Почему"><p>Признак уже создан прошлым запуском на этой прошивке.</p></td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <h3>Что отличается</h3>
-    <p class="small muted">От режима зависят только эти пять мест — всё остальное выполняется одинаково.</p>
-    <div class="card tscroll">
-      <table class="pt stack">
-        <thead><tr><th style="width:26%">Шаг</th><th style="width:44%">firstboot</th><th>maintenance</th></tr></thead>
-        <tbody>
-          <tr><th scope="row">Лог</th><td data-l="firstboot"><code>/root/setup_log.txt</code></td><td data-l="maintenance"><code>/root/setup_log_maintenance.txt</code></td></tr>
-          <tr><th scope="row"><code>customfeeds.list</code> (свои репозитории apk)</th><td data-l="firstboot"><span class="cond">перезаписывается</span> пустым шаблоном</td><td data-l="maintenance"><span class="yes">не трогается</span>, добавленные фиды сохраняются</td></tr>
-          <tr><th scope="row">hostname и <code>uhttpd.defaults.commonname</code></th><td data-l="firstboot"><span class="cond">ставятся по шаблону</span>: <code>R6S-oWRT</code>, <code>R6S-iWRT</code>; для switch — <code>RB5009-switch</code></td><td data-l="maintenance"><span class="yes">не трогаются</span></td></tr>
-          <tr><th scope="row">passwall2 (вариант <code>passwall</code>)</th><td data-l="firstboot"><span class="cond">настраивается</span> DNS (<code>dns_redirect=0</code>) и включается</td><td data-l="maintenance"><span class="yes">не трогается</span>, кроме исправления старого <code>remote_dns=127.0.0.1:53</code> на <code>1.1.1.1</code> и удаления опций passwall 1</td></tr>
-          <tr><th scope="row">Режим коммутатора (вариант <code>switch</code>)</th><td data-l="firstboot"><span class="cond">перестраивается сеть</span>: удаляются lan/wan/wan6, все порты в мост <code>br-lan</code> (DHCP-клиент), отключаются DHCP и odhcpd, переписывается firewall</td><td data-l="maintenance"><span class="yes">не трогается</span></td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <h3>Что одинаково в обоих режимах</h3>
-    <p class="small muted">Эти шаги можно повторять: они проверяют, сделано ли уже, или приводят состояние к нужному.</p>
-    <ul class="steps plain">
-      <li><b>Система:</b> часовой пояс; строка FullCone удаляется (и <code>fullcone=1</code> возвращается, если модуль есть в ядре); TCP BBR в <code>sysctl.conf</code>.</li>
-      <li><b>Пакетный менеджер:</b> архитектура apk, очистка <code>distfeeds.list</code> от лишних фидов, строка kmods под текущее ядро (копия <code>distfeeds.list.bak</code> делается один раз); ключи <code>/root/apps/*.pem</code>.</li>
-      <li><b>Локальные бинарники:</b> sing-box, AdGuardHome, speedtest из <code>/root/apps</code>; закрепление <code>sing-box</code> и <code>adguardhome</code> с подменённым бинарником (уже закреплён — без изменений).</li>
-      <li><b>homeproxy:</b> <code>dns_hijacked</code> (при AGH), Clash API (опции UCI; без патча 010 код патча вписывается в генератор и init) и YACD (заглушка — только если панели ещё нет), без патча 011 — его код вписывается в init, <code>bypass_homeproxy_ips.nft</code>. Без homeproxy — удаление его хвостов.</li>
-      <li><b>Firewall:</b> наборы <code>dpi_ips</code>, <code>bypass_ips</code>, <code>bypass_local</code> (создаются, если их нет), правка <code>ruleset.uc</code> для flow offload.</li>
-      <li><b>youtubeUnblock:</b> правила nft очереди с меткой и номером из его настроек (или их удаление, если пакета нет).</li>
-      <li><b>AdGuard Home:</b> рабочий каталог, dnsmasq на порт 54, upstream под вариант (<code>127.0.0.1:5333</code>, <code>127.0.0.1:5300</code> у xray, <code>127.0.0.1:54</code> у passwall и v2raya или <code>127.0.0.42:53</code> + <code>dont_touch_dhcp=1</code>, у forkop 2.x — <code>unmatched_dns_mode=router</code>); <code>exclude_ntp=1</code> для forkop-mod, trafira, podkop, netshift (в forkop 2.x опции нет); там же при youtubeUnblock — <code>disable_quic=1</code>.</li>
-      <li><b>SQM:</b> <code>piece_of_cake.qos</code> → <code>cake_ctinfo.qos</code>; загрузчик <code>/opt/sqm_custom.conf</code> прежних версий убирается из <code>run.sh</code>, а сам файл переносится в опции UCI; свой <code>10-priority-mangle.nft</code> не перезаписывается.</li>
-      <li><b>Прочее:</b> internet-detector, owut, phy-leds; свои контроллеры LuCI из <code>/root/apps/luci-controllers</code> (уже существующие не затираются); меню файлового менеджера; время и RTC, mtime из будущего; строки баннера.</li>
-      <li><b>В конце:</b> создаётся <code>/etc/zz1_setup_completed</code>, через 120 секунд перезагрузка.</li>
-    </ul>
-    <div class="note">
-      <span class="ic">i</span>
-      <div><p>Коротко: <b>maintenance</b> = <b>firstboot</b> без перезаписи <code>customfeeds.list</code>, hostname и commonname и без первичной настройки passwall2 и режима коммутатора. После прошивки с сохранением настроек zz1 идёт как <b>firstboot</b>: переименованный роутер снова получит имя по шаблону, а свои фиды в <code>customfeeds.list</code> придётся вписать заново.</p></div>
-    </div>
-
-    <h3>Что получаешь на роутере (вариант homeproxy)</h3>
-    <div class="grid">
-      <div class="tile"><h4>LuCI</h4><span class="port">http://192.168.x.1 · :80</span><p>Веб-интерфейс роутера.</p></div>
-      <div class="tile"><h4>AdGuard Home</h4><span class="port">DNS :53 · web :8080</span><p>Резолвер и фильтрация; доступ через редирект из LuCI.</p></div>
-      <div class="tile"><h4>dnsmasq</h4><span class="port">:54</span><p>Уведён с 53-го порта, работает под AGH.</p></div>
-      <div class="tile"><h4>homeproxy</h4><span class="port">DNS 127.0.0.1:5333</span><p>sing-box; AGH отправляет ему все запросы (<code>dns_hijacked=1</code>).</p></div>
-      <div class="tile"><h4>YACD</h4><span class="port">Clash API :9090 · /ui</span><p>Панель sing-box homeproxy; пункт меню в LuCI.</p></div>
-      <div class="tile"><h4>youtubeUnblock</h4><span class="port">nftables · queue 537</span><p>Обработка трафика через очередь nfqueue, с ipset-исключениями и меткой гостевой сети.</p></div>
-      <div class="tile"><h4>Оптимизации</h4><span class="port">TCP BBR · CAKE (если SQM)</span><p>Включаются на первом старте; применяются после авто-ребута через ~2 мин.</p></div>
-    </div>
-
-    <h3>Вариант forkop: цепочка DNS</h3>
-    <div class="flow" role="img" aria-label="Клиенты LAN, затем AdGuard Home на порту 53, затем sing-box forkop на 127.0.0.42:53, затем FakeIP или DNS-серверы forkop. dnsmasq на порту 54 только DHCP и локальные имена.">
-      <span class="node">Клиенты LAN<small>DNS → роутер :53</small></span><span class="arr">→</span>
-      <span class="node">AdGuard Home<small>:53, видит каждого</small></span><span class="arr">→</span>
-      <span class="node">sing-box forkop<small>127.0.0.42:53</small></span><span class="arr">→</span>
-      <span class="node">FakeIP / DNS forkop<small>по правилам секций</small></span>
-    </div>
-    <div class="grid" style="margin-top:12px">
-      <div class="tile"><h4>forkop 2.x</h4><span class="port">LuCI → Services → Forkop</span><p>Панель, секции, «Компоненты» (forkop и ядро sing-box-forkop). zz1 ставит <code>intercept_device_dns=0</code> (патч 002): DNS клиентов идёт через AdGuard Home; и «DNS вне правил» = Роутер для тех, кого forkop перехватывает. dnsmasq forkop 2.x не трогает.</p></div>
-      <div class="tile"><h4>dnsmasq</h4><span class="port">:54 · dnsmasq-full</span><p>DHCP и локальные имена; <code>-full</code> нужен для <code>nftset</code> в режиме Xray.</p></div>
-      <div class="tile"><h4>NTP</h4><span class="port">forkop 2.x · forkop-mod</span><p>forkop 2.x резолвит NTP-серверы роутера через bootstrap DNS, а трафик роутера в секции не берёт без пункта «Система». forkop-mod: zz1 ставит <code>exclude_ntp=1</code> (правило <code>udp dport 123 return</code>).</p></div>
-      <div class="tile"><h4>Проверка после прошивки</h4><span class="port">ssh</span><p><code>sing-box version</code> (версия вида <code>1.14.4-r1</code>), <code>apk info sing-box-forkop</code> и <code>logread | grep forkop</code>.</p></div>
-    </div>
-    <div class="note">
-      <span class="ic">i</span>
-      <div><p>С патчем 002 и <code>intercept_device_dns=0</code> (ставит zz1) DNS-запросы клиентов идут в AdGuard Home, и он видит каждое устройство: журнал, статистика, правила по клиентам работают. Запросы на чужой DNS (8.8.8.8 и т.п.) тоже перенаправляются в AdGuard Home. Он отправляет их на <code>127.0.0.42:53</code>: домены секций получают FakeIP, остальные отвечают DNS-серверы forkop. Перехватываются только устройства из фильтров секций (<code>source_ip_cidr</code>, <code>fully_routed_ips</code>) и сам роутер: их DNS forkop отвечает сам, вне секций — через AdGuard Home («DNS вне правил» = Роутер; правило на входе 127.0.0.42 не действует, петли нет). Исключённые устройства (<code>routing_excluded_ips</code>) могут получить FakeIP от AdGuard Home: такие соединения патч отправляет через sing-box напрямую, остальной их трафик forkop не трогает. Без патча forkop перехватывает DNS всех клиентов, и в журнале AdGuard Home они видны как <code>127.0.0.1</code>. В <code>forkop-mod</code> (ветка 1.x) цепочка прежняя: клиенты → AdGuard Home → <code>127.0.0.42:53</code>, <code>dont_touch_dhcp=1</code>.</p></div>
-    </div>
-  </section>
-
-  <footer>
-    Справочник составлен по файлам проекта <code>Universal_WRT_Builder.yml</code>, <code>WRT-part1..3.sh</code>, <code>patch-drift.sh</code>, <code>verify-sha256.sh</code> и <code>zz1-final-offline-setup.sh</code>, по исходникам вариантов (состояние на 16.10.2026) и нашим патчам. Подробный список изменений первого старта — в <code>files/README.md</code>. Крайние случаи состава прошивки (например, SQM на <code>clear</code>) стоит сверять с <code>WRT.config</code>, если они критичны.
-  </footer>
-
-</div>
-
-<script>
-(function () {
-  "use strict";
-  var ALL = ["homeproxy","rehomeproxy","podkop","netshift","forkop","forkop-mod","trafira","passwall","xray","v2raya","clear","crystal_clear","switch"];
-  var KEY_COLS = "wrtref.cols", KEY_THEME = "wrtref.theme";
-  var root = document.documentElement;
-
-  function get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
-  function put(k, v) { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {} }
-
-  /* ---- тема: авто → светлая → тёмная ---- */
-  var themeBtn = document.getElementById("theme");
-  var THEMES = ["auto", "light", "dark"], ICON = { auto: "◐", light: "☀", dark: "☾" }, NAME = { auto: "авто", light: "светлая", dark: "тёмная" };
-  function setTheme(t) {
-    if (t === "light" || t === "dark") root.setAttribute("data-theme", t); else { root.removeAttribute("data-theme"); t = "auto"; }
-    themeBtn.textContent = ICON[t];
-    themeBtn.title = "Тема: " + NAME[t];
-    themeBtn.dataset.t = t;
-  }
-  setTheme(get(KEY_THEME) || "auto");
-  themeBtn.addEventListener("click", function () {
-    var next = THEMES[(THEMES.indexOf(themeBtn.dataset.t) + 1) % THEMES.length];
-    setTheme(next);
-    put(KEY_THEME, next === "auto" ? null : next);
-  });
-
-  /* ---- высота навигации для липких элементов ---- */
-  var nav = document.querySelector(".nav");
-  function navh() { root.style.setProperty("--navh", nav.offsetHeight + "px"); }
-  navh();
-  window.addEventListener("resize", navh);
-
-  /* ---- выбор столбцов ---- */
-  var hideStyle = document.createElement("style");
-  document.head.appendChild(hideStyle);
-  var chips = document.querySelectorAll(".chip-v");
-  var countEl = document.getElementById("count");
-
-  function defaults() {
-    return window.matchMedia("(max-width: 720px)").matches ? ["homeproxy", "trafira", "podkop"] : ALL.slice();
-  }
-  function load() {
-    var s = get(KEY_COLS);
-    if (s) {
-      var a = s.split(",").filter(function (v) { return ALL.indexOf(v) >= 0; });
-      if (a.length) return a;
-    }
-    return defaults();
-  }
-  var sel = load();
-
-  function apply() {
-    var hidden = ALL.filter(function (v) { return sel.indexOf(v) < 0; });
-    hideStyle.textContent = hidden.length ? hidden.map(function (v) { return '[data-v="' + v + '"]'; }).join(",") + "{display:none}" : "";
-    for (var i = 0; i < chips.length; i++) chips[i].setAttribute("aria-pressed", sel.indexOf(chips[i].dataset.pick) >= 0 ? "true" : "false");
-    countEl.textContent = sel.length === ALL.length ? "показаны все" : "показано " + sel.length + " из " + ALL.length;
-  }
-  function save() { put(KEY_COLS, sel.join(",")); }
-
-  for (var i = 0; i < chips.length; i++) {
-    chips[i].addEventListener("click", function () {
-      var v = this.dataset.pick, k = sel.indexOf(v);
-      if (k >= 0) { if (sel.length > 1) sel.splice(k, 1); }
-      else sel = ALL.filter(function (x) { return x === v || sel.indexOf(x) >= 0; });
-      apply(); save();
-    });
-  }
-  var presets = document.querySelectorAll(".preset");
-  for (var j = 0; j < presets.length; j++) {
-    presets[j].addEventListener("click", function () {
-      var p = this.dataset.preset;
-      sel = p === "all" ? ALL.slice() : p.split(",");
-      apply(); save();
-    });
-  }
-  /* «сравнить» в карточках обзора */
-  var adds = document.querySelectorAll("[data-add]");
-  for (var k = 0; k < adds.length; k++) {
-    adds[k].addEventListener("click", function () {
-      var v = this.dataset.add;
-      if (sel.indexOf(v) < 0) sel = ALL.filter(function (x) { return x === v || sel.indexOf(x) >= 0; });
-      apply(); save();
-      document.getElementById("features").scrollIntoView();
-    });
-  }
-
-
-  apply();
-
-  /* ---- подсветка текущего раздела в навигации ---- */
-  if ("IntersectionObserver" in window) {
-    var links = {}, as = document.querySelectorAll(".links a");
-    for (var m = 0; m < as.length; m++) links[as[m].getAttribute("href").slice(1)] = as[m];
-    var io = new IntersectionObserver(function (entries) {
-      entries.forEach(function (e) {
-        if (!e.isIntersecting || !links[e.target.id]) return;
-        for (var id in links) links[id].removeAttribute("aria-current");
-        links[e.target.id].setAttribute("aria-current", "true");
-        var a = links[e.target.id], box = a.parentNode;
-        var ar = a.getBoundingClientRect(), br = box.getBoundingClientRect();
-        if (ar.left < br.left || ar.right > br.right)
-          box.scrollBy({ left: ar.left - br.left - 12, behavior: "smooth" });
-      });
-    }, { rootMargin: "-45% 0px -50% 0px" });
-    document.querySelectorAll("section[id]").forEach(function (s) { io.observe(s); });
-  }
-})();
-</script>
-</body>
-</html>
+#!/bin/sh
+
+# ===============================================
+#      UCI-DEFAULTS ОФЛАЙН-СКРИПТ НАСТРОЙКИ
+# ===============================================
+# Имя файла: /etc/uci-defaults/zz1-final-offline-setup.sh
+# ===============================================
+
+# Функции логирования (без local для POSIX-совместимости)
+log_info()  { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] $*"; }
+log_ok()    { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [OK]   $*"; }
+ERROR_COUNT=0
+log_err()   { ERROR_COUNT=$((ERROR_COUNT+1)); echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERR]  $*"; }
+
+# Обёртка выполнения команды
+run_cmd() {
+    desc="$1"; shift
+    log_info "$desc"
+    if "$@"; then
+        log_ok "$desc"
+        return 0
+    else
+        rc=$?
+        log_err "$desc (exit: $rc)"
+        return $rc
+    fi
+}
+
+# Только для команд, где ожидаемый "провал" не является ошибкой (uci -q delete и т.п.)
+run_cmd_ign() {
+    desc="$1"; shift
+    log_info "$desc (ignoring errors)"
+    "$@" 2>/dev/null
+    log_ok "$desc"
+}
+
+# Проверка, что sed-патч по чужому (пакетному) файлу реально лёг.
+# sed возвращает 0 даже когда ничего не совпало, поэтому run_cmd тут слеп.
+patch_check() {   # <файл> <строка-после-правки> <описание>
+    if grep -qF -- "$2" "$1" 2>/dev/null; then
+        log_ok "$3: патч на месте"
+    else
+        log_err "$3: ПАТЧ НЕ ПРИМЕНЁН — якорь изменился в $1"
+    fi
+}
+
+hp_insert() {   # <файл> <якорь-подстрока> <before|after> <файл-вставки>
+    # Вставляет файл-вставку перед/после первой строки с якорем. Права и
+    # владельца файла сохраняет (пишет поверх через cat, а не mv).
+    grep -qF -- "$2" "$1" 2>/dev/null || return 1
+    awk -v a="$2" -v w="$3" -v s="$4" '
+        !done && index($0, a) {
+            if (w == "after") print
+            while ((getline l < s) > 0) print l
+            close(s); done = 1
+            if (w == "after") next
+        }
+        { print }' "$1" > "$1.zz1" && cat "$1.zz1" > "$1"
+    _rc=$?; rm -f "$1.zz1"; return $_rc
+}
+
+# ========== НАЧАЛО СКРИПТА ==========
+
+# Не включаем set -x, чтобы не дублировать структурированный лог
+# set -x   # раскомментировать при отладке
+
+# --- РЕЖИМ РАБОТЫ ---------------------------------------------------------
+# firstboot   — запуск из /etc/uci-defaults на первой загрузке после прошивки
+# maintenance — ручной запуск сохранённой копии после apk upgrade
+# Признак — lock-файл; на первой загрузке после прошивки его нет.
+# Лежит в /etc, а не в /root: /root часто целиком вписан в
+# /etc/sysupgrade.conf, и тогда lock переживал бы прошивку с сохранением
+# настроек — zz1 на новой прошивке шёл бы как maintenance. Синтаксиса
+# исключений в sysupgrade.conf нет, а /etc целиком в бэкап не попадает
+# (только конфиги пакетов и пути из sysupgrade.conf), поэтому lock здесь
+# сбрасывается любой прошивкой и сохраняется при ручных запусках.
+LOCK_FILE="/etc/zz1_setup_completed"
+# Старое место lock-файла: он больше ни на что не влияет, убираем.
+rm -f /root/.setup_completed
+if [ -f "$LOCK_FILE" ]; then
+    MODE="maintenance"
+    SETUP_LOGFILE="/root/setup_log_maintenance.txt"
+else
+    MODE="firstboot"
+    SETUP_LOGFILE="/root/setup_log.txt"
+fi
+: > "$SETUP_LOGFILE"
+exec > >(tee -a "$SETUP_LOGFILE") 2>&1
+log_info "Запуск zz1-final-offline-setup.sh (режим: $MODE)"
+
+# -----------------------------
+#      ПЕРЕМЕННЫЕ СИСТЕМЫ
+# -----------------------------
+
+KERNEL_VERSION=$(cat /proc/version | awk '{print $3}')
+log_ok "KERNEL_VERSION=$KERNEL_VERSION"
+
+ARCH_VERSION=$(grep ARCH /etc/os-release | cut -d'"' -f2)
+log_ok "ARCH_VERSION=$ARCH_VERSION"
+
+NAME_VALUE=$(grep '^NAME=' /etc/os-release | cut -d'=' -f2 | tr -d '"')
+log_ok "NAME_VALUE=$NAME_VALUE"
+
+case "$NAME_VALUE" in
+    "OpenWrt")      ROUTER_NAME="oWRT" ;;
+    "ImmortalWrt")  ROUTER_NAME="iWRT" ;;
+    *)              ROUTER_NAME="WRT"  ;;
+esac
+log_ok "ROUTER_NAME=$ROUTER_NAME"
+
+MY_ROUTER=$(ubus call system board | grep '"board_name"' | cut -d '"' -f 4 | cut -d ',' -f 2)
+log_ok "MY_ROUTER=$MY_ROUTER"
+
+MODEL_FULL=$(ubus call system board | grep '"model"' | cut -d '"' -f 4)
+log_ok "MODEL_FULL=$MODEL_FULL"
+
+ROUTER_MODEL=$(echo $MODEL_FULL | awk '{print $NF}')
+ROUTER_MODEL_NAME=$(case "$ROUTER_MODEL" in
+    "GL-MT2500")    echo "Brume2" ;;
+    "R5S")          echo "R5S" ;;
+    "R6S")          echo "R6S" ;;
+    "GL-AXT1800")   echo "SLATEX" ;;
+    "RB5009")       echo "RB5009" ;;
+    *)              echo "$MY_ROUTER" ;;
+esac)
+log_ok "ROUTER_MODEL_NAME=$ROUTER_MODEL_NAME"
+
+HOSTNAME_PATTERN="${ROUTER_MODEL_NAME}-${ROUTER_NAME}"
+CURRENT_VARIANT=$(cat /etc/build_variant 2>/dev/null | head -n 1)
+log_ok "Build Variant: ${CURRENT_VARIANT:-unknown}"
+
+# forkop 2.x (ushan0v/forkop 2.0+, ядро sing-box-forkop) или ветка 1.x
+# (forkop-mod; внутри сборки оба — вариант forkop). У 2.x другие настройки:
+# dont_touch_dhcp, exclude_ntp и intercept_device_dns убраны, DNS вне секций —
+# unmatched_dns_mode. Признак — эта опция в конфиге по умолчанию из пакета.
+forkop_v2() {
+    grep -qs "option unmatched_dns_mode" /usr/share/forkop/default-config
+}
+
+# --- БЛОК ЗАЩИТЫ ОТ ПОВТОРНОГО ЗАПУСКА ---
+# LOCK_FILE определён выше, вместе с MODE
+#if [ -f "$LOCK_FILE" ]; then
+#if [ -f "$LOCK_FILE" ] && { [ "$CURRENT_VARIANT" = "clear" ] || [ "$CURRENT_VARIANT" = "crystal_clear" ]; }; then
+#    echo "Скрипт уже был выполнен ранее."
+#    exit 0
+#fi
+# --- БЛОК ЗАЩИТЫ ОТ ПОВТОРНОГО ЗАПУСКА ---
+
+# ====================================================================
+#      НАСТРОЙКИ
+# ====================================================================
+
+# Fullcone NAT
+run_cmd "Удаление строки Fullcone NAT" sed -i "/option fullcone '1'/d" /etc/config/firewall
+
+# Часовой пояс
+run_cmd "Установка часового пояса" uci set system.@system[0].zonename='Europe/Moscow'
+run_cmd "Сохранение system" uci commit system
+date
+
+# Пакетный менеджер
+if command -v apk >/dev/null 2>&1; then
+    log_info "Пакетный менеджер APK"
+    if ! grep -qF "${ARCH_VERSION}" /etc/apk/arch; then
+        echo "${ARCH_VERSION}" > /etc/apk/arch
+        log_ok "Архитектура записана"
+    else
+        log_ok "Архитектура уже прописана"
+    fi
+    DISTFEEDS_FILE="/etc/apk/repositories.d/distfeeds.list"
+    CUSTOMFEEDS_FILE="/etc/apk/repositories.d/customfeeds.list"
+    # Ключи подписи сторонних репозиториев: всё, что положено в
+    # files/root/apps/*.pem, ставится в /etc/apk/keys/. Нет файлов — нет шага.
+    for key in /root/apps/*.pem; do
+        [ -f "$key" ] || continue
+        key_name=$(basename "$key")
+        if [ -f "/etc/apk/keys/$key_name" ]; then
+            log_ok "Ключ $key_name уже установлен"
+        else
+            run_cmd "Установка ключа $key_name" cp "$key" /etc/apk/keys/
+        fi
+    done
+elif command -v opkg >/dev/null 2>&1; then
+    log_info "Пакетный менеджер OPKG"
+    DISTFEEDS_FILE="/etc/opkg/distfeeds.conf"
+    CUSTOMFEEDS_FILE="/etc/opkg/customfeeds.conf"
+else
+    log_err "Пакетный менеджер не найден"
+fi
+
+if [ -f "$DISTFEEDS_FILE" ]; then
+    # Бэкап делаем один раз: на повторном прогоне в .bak лёг бы уже
+    # отфильтрованный файл и оригинал был бы потерян навсегда.
+    [ -f "${DISTFEEDS_FILE}.bak" ] || cp "$DISTFEEDS_FILE" "${DISTFEEDS_FILE}.bak"
+    # Имя фида должно кончаться «/» (apk: …/luci/packages.adb) или концом
+    # строки (opkg: …/luci). Без этого «luci» ловил и luciappbandix,
+    # luciappbandixplus — фиды из feeds.conf сборки, которых на сервере нет.
+    FILTERED_CONTENT=$(grep -E "targets|packages/${ARCH_VERSION}/(base|luci|packages|routing|telephony|video)(/|\$)" "$DISTFEEDS_FILE")
+    if [ -n "$FILTERED_CONTENT" ]; then
+        echo "$FILTERED_CONTENT" > "$DISTFEEDS_FILE"
+        log_ok "Репозитории очищены"
+    else
+        log_err "Фильтрация не дала результатов"
+    fi
+
+    if command -v apk >/dev/null 2>&1; then
+        KERNEL_PKG=$(apk list -I kernel 2>/dev/null | head -n1 | awk '{print $1}')
+        # Откуда при сборке взят хеш ядра (шаг Kernel Hash): server, cache,
+        # snapshot или local. С локальным хешем официальной папки kmods нет —
+        # строку не добавляем, иначе apk update падал бы на ней.
+        KHASH_SRC=$(awk 'NR == 1 {print $1}' /etc/build_kernel_hash 2>/dev/null)
+        if [ "$KHASH_SRC" = local ]; then
+            sed -i '\|/kmods/|d' "$DISTFEEDS_FILE"
+            log_info "Прошивка собрана с локальным хешем ядра: репозиторий kmods не добавлен (официальные kmod-пакеты на неё не встанут)"
+            KERNEL_PKG=""
+        fi
+        if [ -n "$KERNEL_PKG" ]; then
+            # kernel-<версия>~<хеш>-r<release> -> <версия>-<release>-<хеш>
+            # (имя папки kmods, как в include/feeds.mk OpenWrt)
+            K_REL=${KERNEL_PKG##*-r}
+            K_VER_TEMP=${KERNEL_PKG#kernel-}
+            K_VER_TEMP=${K_VER_TEMP%-r*}
+            K_MODS_DIR="${K_VER_TEMP%%~*}-${K_REL}-${K_VER_TEMP#*~}"
+            BASE_REPO_URL=$(grep "/targets/.*/packages/packages.adb" "$DISTFEEDS_FILE" | head -n1)
+            if [ -n "$BASE_REPO_URL" ]; then
+                TARGET_BASE=$(echo "$BASE_REPO_URL" | sed 's|/packages/packages\.adb||')
+                KMODS_URL="${TARGET_BASE}/kmods/${K_MODS_DIR}/packages.adb"
+                # Строки kmods содержат /targets/ и переживают фильтр выше,
+                # поэтому после смены ядра старые хеши копятся. Сносим их.
+                sed -i '\|/kmods/|d' "$DISTFEEDS_FILE"
+                if ! grep -q "$KMODS_URL" "$DISTFEEDS_FILE"; then
+                    echo "$KMODS_URL" >> "$DISTFEEDS_FILE"
+                    log_ok "Репозиторий kmods добавлен"
+                fi
+            fi
+        fi
+    fi
+fi
+
+# Создание customfeeds с проверкой (только firstboot — иначе затрёт добавленные фиды)
+if [ "$MODE" = "firstboot" ]; then
+cat << 'EOF' > "$CUSTOMFEEDS_FILE"
+# add your custom package feeds here
+#
+# http://www.example.com/path/to/files/packages.adb
+EOF
+_RC=$?; [ $_RC -eq 0 ] && log_ok "$CUSTOMFEEDS_FILE создан" || log_err "Ошибка создания $CUSTOMFEEDS_FILE (exit: $_RC)"
+else
+    log_info "$CUSTOMFEEDS_FILE не трогаем (maintenance)"
+fi
+
+# Установка локальных пакетов
+# Архив удаляем только после успешной установки: иначе падение tar
+# оставило бы и без бинарника, и без исходного архива.
+# Ядро forkop 2.x (пакет sing-box-forkop) не подменяем: forkop не запускается
+# на другом sing-box. Файлы в /root/apps тогда остаются как есть.
+if [ -f /usr/share/sing-box-forkop/version ] && { [ -f /root/apps/sing-box.tar.gz ] || [ -f /root/apps/sing-box ]; }; then
+    log_info "sing-box из /root/apps не ставим: установлен sing-box-forkop $(cat /usr/share/sing-box-forkop/version), ядро forkop 2.x"
+elif [ -f /root/apps/sing-box.tar.gz ]; then
+    [ -x /etc/init.d/sing-box ] && run_cmd "Остановка sing-box" /etc/init.d/sing-box stop
+    if run_cmd "Распаковка sing-box" tar -xzf /root/apps/sing-box.tar.gz -C /tmp/ \
+       && run_cmd "Копирование sing-box" cp /tmp/sing-box /usr/bin/sing-box; then
+        run_cmd "Права sing-box" chmod +x /usr/bin/sing-box
+        rm -f /root/apps/sing-box.tar.gz /tmp/sing-box
+    else
+        log_err "sing-box не установлен, архив сохранён"
+    fi
+fi
+
+if [ -f /root/apps/speedtest.tar.gz ]; then
+    if run_cmd "Распаковка speedtest" tar -xzf /root/apps/speedtest.tar.gz -C /tmp/ \
+       && run_cmd "Копирование speedtest" cp /tmp/speedtest /usr/bin/speedtest; then
+        run_cmd "Права speedtest" chmod +x /usr/bin/speedtest
+        rm -f /root/apps/speedtest.tar.gz /tmp/speedtest
+    else
+        log_err "speedtest не установлен, архив сохранён"
+    fi
+fi
+
+# Установка неархивированных локальных пакетов
+if [ -f /root/apps/sing-box ] && [ ! -f /usr/share/sing-box-forkop/version ]; then
+    [ -x /etc/init.d/sing-box ] && run_cmd "Остановка sing-box" /etc/init.d/sing-box stop
+    run_cmd "Копирование sing-box" cp /root/apps/sing-box /usr/bin/sing-box
+    run_cmd "Права sing-box" chmod +x /usr/bin/sing-box
+    rm /root/apps/sing-box
+fi
+
+if [ -f /root/apps/AdGuardHome ]; then
+    [ -x /etc/init.d/adguardhome ] && run_cmd "Остановка AdGuardHome" /etc/init.d/adguardhome stop
+    run_cmd "Копирование AdGuardHome" cp /root/apps/AdGuardHome /usr/bin/AdGuardHome
+    run_cmd "Права AdGuardHome" chmod +x /usr/bin/AdGuardHome
+    rm /root/apps/AdGuardHome
+fi
+
+if [ -f /root/apps/speedtest ]; then
+    run_cmd "Копирование speedtest" cp /root/apps/speedtest /usr/bin/speedtest
+    run_cmd "Права speedtest" chmod +x /usr/bin/speedtest
+    rm /root/apps/speedtest
+fi
+
+# Закрепление пакетов с подменённым бинарником
+# Скачанный при сборке sing-box (sb=версия, extended, podkop-engine) и
+# AdGuard Home (agh=latest) лежат поверх пакета из фида: пакет в базе своей
+# версии, а /usr/bin — другой. apk upgrade (opkg upgrade) поставил бы новый
+# пакет из репозитория и вернул бинарник фида: пропали бы extended и патчи
+# podkop-engine (вместе с его init-скриптом), AGH откатился бы. Поэтому пакет,
+# у которого версия бинарника не совпадает с версией пакета, закрепляется на
+# установленной: apk — строкой «имя=версия» в /etc/apk/world (так же OpenWrt
+# закрепляет в образе kernel, libc и base-files), opkg — флагом hold.
+# Остальные пакеты обновляются как обычно. Снять закрепление:
+#   apk add sing-box          (строка в world снова без версии)
+#   opkg flag user sing-box
+pin_replaced() {   # <пакет> <версия бинарника>
+    if command -v apk >/dev/null 2>&1; then
+        _ver=$(apk list --manifest "$1" 2>/dev/null | awk -v n="$1" '$1 == n {print $2; exit}')
+    else
+        _ver=$(opkg status "$1" 2>/dev/null | sed -n 's/^Version: //p')
+    fi
+    if [ -z "$_ver" ]; then
+        log_info "$1: пакет не установлен — закреплять нечего"
+        return 0
+    fi
+    if [ -z "$2" ]; then
+        log_err "$1: версию бинарника получить не удалось — пакет не закреплён"
+        return 1
+    fi
+    # 1.13.21-r1 -> 1.13.21 (opkg до 24.10: 1.13.21-1)
+    if [ "$2" = "$(echo "$_ver" | sed -E 's/-r?[0-9]+$//')" ]; then
+        log_ok "$1 $_ver: бинарник из пакета, закреплять не нужно"
+        return 0
+    fi
+    if ! command -v apk >/dev/null 2>&1; then
+        run_cmd "Закрепление $1 $_ver (бинарник $2)" opkg flag hold "$1"
+        return
+    fi
+    _world=/etc/apk/world
+    if grep -qxF "$1=$_ver" "$_world" 2>/dev/null; then
+        log_ok "$1 уже закреплён на $_ver (бинарник $2)"
+        return 0
+    fi
+    # Прежняя строка пакета (без версии, с другой версией или тегом) уходит
+    awk -v n="$1" '{ d = $0; sub(/[<>=~@].*/, "", d); if (d != n) print }' "$_world" > "$_world.zz1" \
+        && echo "$1=$_ver" >> "$_world.zz1" && cat "$_world.zz1" > "$_world"
+    _rc=$?; rm -f "$_world.zz1"
+    if [ $_rc -eq 0 ]; then
+        log_ok "$1 закреплён на $_ver в $_world (бинарник $2)"
+    else
+        log_err "$1: не удалось закрепить в $_world (exit: $_rc)"
+    fi
+}
+
+[ -x /usr/bin/sing-box ] && pin_replaced sing-box \
+    "$(/usr/bin/sing-box version 2>/dev/null | awk 'NR == 1 {print $3}')"
+# Сборка из фида: «AdGuard Home, version 0.107.79», релиз — «… v0.107.79»
+[ -x /usr/bin/AdGuardHome ] && pin_replaced adguardhome \
+    "$(/usr/bin/AdGuardHome --version 2>/dev/null | awk 'NR == 1 {sub(/^v/, "", $NF); print $NF}')"
+
+# homeproxy
+if [ -f "/etc/init.d/homeproxy" ]; then
+    log_info "Настройка homeproxy"
+    # dns_hijacked='1' — только в связке с AdGuard Home: DNS клиентов принимает
+    # AGH и сам шлёт его в sing-box (127.0.0.1:5333). Без AGH (поле формы
+    # agh=no) оставляем штатную схему homeproxy: иначе DNS шёл бы мимо sing-box.
+    if [ -x /usr/bin/AdGuardHome ]; then
+        run_cmd "Отключение dns_hijacked" sed -i "s/const dns_hijacked = uci\.get('dhcp', '@dnsmasq\[0\]', 'dns_redirect') || '0'/const dns_hijacked = '1'/" /etc/homeproxy/scripts/firewall_post.ut
+        patch_check /etc/homeproxy/scripts/firewall_post.ut "const dns_hijacked = '1'" "firewall_post.ut"
+    else
+        log_info "AdGuard Home нет — dns_hijacked homeproxy не трогаем"
+    fi
+
+    # --- Clash API + панель YACD -----------------------------------------
+    # Clash API включается опциями UCI (патч 010, без него zz1 вписывает
+    # тот же код в генератор сам — см. ниже).
+    # Каталог /opt/yacd НИКОГДА не должен быть пустым: при пустом каталоге
+    # sing-box на каждом старте лезет качать панель с GitHub через дефолтный
+    # outbound. Поэтому кладём заглушку сразу, а настоящую панель догружает
+    # cron, когда появится интернет. Первая загрузка не тормозит.
+    if [ ! -f /opt/yacd/index.html ]; then
+        mkdir -p /opt/yacd
+        cat << 'Y_STUB_EOF' > /opt/yacd/index.html
+<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8">
+<title>YACD</title><meta http-equiv="refresh" content="60"></head>
+<body style="font-family:sans-serif;padding:2em">
+<h2>YACD ещё не установлена</h2>
+<p>Панель догружается автоматически, как только появится интернет.
+Проверка раз в 10 минут, страница обновится сама.</p>
+</body></html>
+Y_STUB_EOF
+        touch /opt/yacd/.stub
+        log_ok "Заглушка /opt/yacd создана"
+    fi
+
+    if [ -f /opt/yacd/.stub ]; then
+    cat << 'Y_INST_EOF' > /usr/bin/yacd-install.sh
+#!/bin/sh
+# Догружает YACD в /opt/yacd, когда появится интернет.
+# Снимает себя из cron после успеха. Вызывается из /etc/crontabs/root.
+CRON_FILE="/etc/crontabs/root"
+URL="https://github.com/MetaCubeX/Yacd-meta/archive/refs/heads/gh-pages.zip"
+TMP_ZIP="/tmp/yacd.zip"
+TMP_DIR="/tmp/yacd-unpack"
+
+unhook() {
+    sed -i '/yacd-install/d' "$CRON_FILE" 2>/dev/null
+    /etc/init.d/cron reload 2>/dev/null
+    rm -f /usr/bin/yacd-install.sh
+}
+cleanup() { rm -rf "$TMP_ZIP" "$TMP_DIR" /opt/yacd.new /opt/yacd.old; }
+trap cleanup EXIT
+
+# Настоящая панель уже стоит (метки заглушки нет) - больше делать нечего
+if [ -f /opt/yacd/index.html ] && [ ! -f /opt/yacd/.stub ]; then
+    unhook
+    exit 0
+fi
+
+curl -fsSL --max-time 120 -o "$TMP_ZIP" "$URL" || exit 1
+mkdir -p "$TMP_DIR"
+unzip -qo "$TMP_ZIP" -d "$TMP_DIR" || exit 1
+
+SRC_DIR=$(find "$TMP_DIR" -mindepth 1 -maxdepth 1 -type d | head -n1)
+[ -n "$SRC_DIR" ] && [ -f "$SRC_DIR/index.html" ] || exit 1
+
+rm -rf /opt/yacd.new
+mkdir -p /opt/yacd.new
+cp -r "$SRC_DIR"/. /opt/yacd.new/
+[ -f /opt/yacd.new/index.html ] || exit 1
+
+mv /opt/yacd /opt/yacd.old 2>/dev/null
+mv /opt/yacd.new /opt/yacd
+rm -rf /opt/yacd.old
+logger -t yacd-install "YACD установлена в /opt/yacd"
+unhook
+exit 0
+Y_INST_EOF
+    chmod +x /usr/bin/yacd-install.sh
+    log_ok "Установщик YACD создан"
+
+    CRON_FILE="/etc/crontabs/root"
+    mkdir -p /etc/crontabs && touch "$CRON_FILE"
+    if ! grep -q 'yacd-install' "$CRON_FILE"; then
+        echo '*/10 * * * * /usr/bin/yacd-install.sh >/dev/null 2>&1' >> "$CRON_FILE"
+        log_ok "Задание cron для догрузки YACD добавлено"
+    fi
+    run_cmd_ign "Включение cron" /etc/init.d/cron enable
+    fi
+
+    grep -q '^/opt/yacd$' /etc/sysupgrade.conf 2>/dev/null || echo '/opt/yacd' >> /etc/sysupgrade.conf
+
+    GEN_UC="/etc/homeproxy/scripts/generate_client.uc"
+    HOMEPROXY_INIT="/etc/init.d/homeproxy"
+    if [ -f "$GEN_UC" ] && grep -q 'hiddify' "$GEN_UC"; then
+        # Re:HomeProxy (вариант rehomeproxy, генератор знает hiddify-core):
+        # у него свой многострочный блок clash_api с 127.0.0.1:9090, им
+        # пользуются его страницы LuCI. Строки clash_api не удаляем (это
+        # сломало бы синтаксис файла), а открываем тот же контроллер в LAN и
+        # подключаем панель YACD. При повторном запуске адрес уже заменён.
+        if grep -q "external_controller: '127.0.0.1:9090'" "$GEN_UC"; then
+            run_cmd "Clash API в generate_client.uc (Re:HomeProxy)" \
+                sed -i "s|external_controller: '127.0.0.1:9090'|external_controller: '0.0.0.0:9090', external_ui: '/opt/yacd'|" "$GEN_UC"
+        fi
+        patch_check "$GEN_UC" "external_ui: '/opt/yacd'" "generate_client.uc (Clash API)"
+    elif [ -f "$GEN_UC" ]; then
+        # luci-app-homeproxy: Clash API включается опциями UCI (патч 010).
+        # zz1 запускают и после обновления пакетов: если пакет собран без
+        # патчей или обновлён из фида, вписываем тот же код, что и патч 010;
+        # если доработка уже есть, файлы не трогаем.
+        if grep -q 'clash_api_controller' "$GEN_UC"; then
+            log_info "generate_client.uc: опция Clash API уже есть"
+        else
+            # Строка clash_api, которую вписывали прежние версии zz1
+            sed -i "/clash_api: { external_controller: '0.0.0.0:9090', external_ui: '\/opt\/yacd' },/d" "$GEN_UC"
+            if grep -qF '/* UCI config end */' "$GEN_UC" && grep -qF '/* Experimental end */' "$GEN_UC"; then
+                cat << 'HP_EOF' > /tmp/zz1-hp.snip
+
+/* Clash API, off unless a controller address is set */
+const clash_api_controller = uci.get(uciconfig, uciinfra, 'clash_api_controller'),
+      clash_api_ui = uci.get(uciconfig, uciinfra, 'clash_api_ui'),
+      clash_api_secret = uci.get(uciconfig, uciinfra, 'clash_api_secret');
+HP_EOF
+                hp_insert "$GEN_UC" '/* UCI config end */' before /tmp/zz1-hp.snip
+                cat << 'HP_EOF' > /tmp/zz1-hp.snip
+
+/* The Clash API serves YACD-like panels and the connection list; it does
+ * not depend on the routing mode. */
+if (clash_api_controller) {
+	config.experimental ||= {};
+	config.experimental.clash_api = {
+		external_controller: clash_api_controller,
+		external_ui: clash_api_ui,
+		secret: clash_api_secret
+	};
+}
+HP_EOF
+                hp_insert "$GEN_UC" '/* Experimental end */' before /tmp/zz1-hp.snip &&
+                    log_ok "Опция Clash API добавлена в generate_client.uc (как патч 010)"
+                rm -f /tmp/zz1-hp.snip
+            fi
+            patch_check "$GEN_UC" "config.experimental.clash_api = {" "generate_client.uc (Clash API)"
+        fi
+        # Каталог панели должен быть виден sing-box внутри ujail
+        if [ -f "$HOMEPROXY_INIT" ] && ! grep -q 'clash_api_ui' "$HOMEPROXY_INIT"; then
+            cat << 'HP_EOF' > /tmp/zz1-hp.snip
+			# The panel files of the Clash API (external_ui) must be seen in the jail.
+			local clash_api_ui
+			config_get clash_api_ui "infra" "clash_api_ui"
+			[ -z "$clash_api_ui" ] || procd_add_jail_mount "$clash_api_ui"
+HP_EOF
+            hp_insert "$HOMEPROXY_INIT" 'procd_add_jail_mount "/etc/TZ"' after /tmp/zz1-hp.snip &&
+                log_ok "Каталог панели Clash API добавлен в jail init homeproxy (как патч 010)"
+            rm -f /tmp/zz1-hp.snip
+            patch_check "$HOMEPROXY_INIT" 'procd_add_jail_mount "$clash_api_ui"' "homeproxy init (Clash API в jail)"
+        fi
+        # Свой адрес или секрет, заданные вручную, не трогаем.
+        if ! grep -q 'clash_api_controller' "$GEN_UC"; then
+            :   # генератор не удалось доработать, ошибка уже в логе
+        elif [ -z "$(uci -q get homeproxy.infra.clash_api_controller)" ]; then
+            uci -q set homeproxy.infra.clash_api_controller='0.0.0.0:9090'
+            uci -q set homeproxy.infra.clash_api_ui='/opt/yacd'
+            run_cmd "Clash API homeproxy (опции UCI)" uci commit homeproxy
+        else
+            log_info "Clash API homeproxy уже задан: $(uci -q get homeproxy.infra.clash_api_controller)"
+        fi
+    fi
+
+    # Пункт меню LuCI -> YACD. Адрес берётся из SERVER_ADDR, то есть из того,
+    # по которому открыт сам LuCI. hostname/port в query-параметрах избавляют
+    # от ручного добавления бэкенда: по умолчанию YACD предлагает 127.0.0.1,
+    # а это адрес браузера, а не роутера.
+    # В 25.12 каталога controller в образе нет: luci-lua-runtime его не
+    # содержит, а ни один включённый пакет не ставит Lua-контроллеры.
+    # Поэтому проверяем сам Lua-рантайм и создаём каталог.
+    if [ -f /usr/lib/lua/luci/dispatcher.lua ]; then
+        mkdir -p /usr/lib/lua/luci/controller
+        cat << 'EOF' > /usr/lib/lua/luci/controller/yacd.lua
+module("luci.controller.yacd", package.seeall)
+function index()
+	entry({"admin", "network", "yacd"}, call("redirectToYACD"), _("YACD"), 41)
+end
+function redirectToYACD()
+	-- Серверный 302, а не window.open: всплывающее окно блокируется
+	-- браузерами (в частности Chrome на iOS), если открывается не по
+	-- касанию пользователя. Фрагмент #/home Location-заголовок сохраняет.
+	local router_ip = luci.http.getenv("SERVER_ADDR")
+	luci.http.redirect("http://" .. router_ip .. ":9090/ui/?hostname=" .. router_ip .. "&port=9090#/home")
+end
+EOF
+        _RC=$?; [ $_RC -eq 0 ] && log_ok "Контроллер LuCI для YACD создан" || log_err "Ошибка создания контроллера YACD (exit: $_RC)"
+        rm -f /tmp/luci-indexcache* /tmp/luci-modulecache/* 2>/dev/null
+    fi
+
+    run_cmd "Отключение homeproxy" /etc/init.d/homeproxy disable
+
+    HOMEPROXY_INIT="/etc/init.d/homeproxy"
+    if [ -f "$HOMEPROXY_INIT" ]; then
+        # Скрипт-помощник update_firewall_rules.sh прежних версий zz1 больше
+        # не нужен: его заменяет правка init ниже (как патч 011).
+        if grep -q 'update_firewall_rules' "$HOMEPROXY_INIT"; then
+            sed -i '/update_firewall_rules\.sh/d' "$HOMEPROXY_INIT"
+            log_ok "Вызовы старого скрипта-помощника убраны из init homeproxy"
+        fi
+        rm -f /etc/homeproxy/scripts/update_firewall_rules.sh
+
+        # uci-defaults пакета всегда добавляет include-секции fw4, а файлы
+        # для них init создаёт, только когда есть правила (TUN, сервер).
+        # Без файлов fw4 на каждом reload пишет «unreachable path». Патч 011
+        # создаёт их пустыми перед генераторами; без патча (сборка без патчей,
+        # обновление из фида, Re:HomeProxy) вписываем те же строки сами.
+        if grep -qF ': > "$RUN_DIR/fw4_forward.nft"' "$HOMEPROXY_INIT"; then
+            log_info "Init homeproxy: пустые файлы include fw4 уже создаются"
+        else
+            cat << 'HP_EOF' > /tmp/zz1-hp.snip
+	# The uci-defaults of the package always add the fw4 includes
+	# homeproxy_forward, homeproxy_input and homeproxy_post. For a file that
+	# does not exist fw4 prints "specifies unreachable path ..., ignoring
+	# section" on every reload, and firewall_pre.uc writes its files only
+	# when there are rules (TUN, server). Start from empty files, the
+	# generators below fill them.
+	: > "$RUN_DIR/fw4_forward.nft"
+	: > "$RUN_DIR/fw4_input.nft"
+	: > "$RUN_DIR/fw4_post.nft"
+HP_EOF
+            hp_insert "$HOMEPROXY_INIT" 'ucode "$HP_DIR/scripts/firewall_pre.uc"' before /tmp/zz1-hp.snip &&
+                log_ok "Init homeproxy: пустые файлы include fw4 (как патч 011)"
+            rm -f /tmp/zz1-hp.snip
+            patch_check "$HOMEPROXY_INIT" ': > "$RUN_DIR/fw4_forward.nft"' "homeproxy init (include fw4)"
+        fi
+
+        # Секции возвращаем, если их удалял помощник прежних прошивок
+        # (как их создаёт uci-defaults пакета).
+        for _inc in forward input; do
+            if [ -z "$(uci -q get firewall.homeproxy_${_inc})" ]; then
+                uci -q batch <<-E_O_F
+					set firewall.homeproxy_${_inc}=include
+					set firewall.homeproxy_${_inc}.type=nftables
+					set firewall.homeproxy_${_inc}.path="/var/run/homeproxy/fw4_${_inc}.nft"
+					set firewall.homeproxy_${_inc}.position="chain-pre"
+					set firewall.homeproxy_${_inc}.chain="${_inc}"
+				E_O_F
+                run_cmd "Include-секция firewall.homeproxy_${_inc}" uci commit firewall
+            fi
+        done
+    fi
+    run_cmd "Включение homeproxy" /etc/init.d/homeproxy enable
+
+    NFT_RULE_FILE="/etc/nftables.d/bypass_homeproxy_ips.nft"
+    if [ ! -f "$NFT_RULE_FILE" ]; then
+        cat > "$NFT_RULE_FILE" << EOF
+chain bypass_homeproxy_mark {
+	type filter hook prerouting priority mangle - 1; policy accept;
+	ip daddr @bypass_ips meta mark set 0x00000064 counter
+}
+EOF
+        _RC=$?; [ $_RC -eq 0 ] && log_ok "Файл bypass_homeproxy_ips.nft создан" || log_err "Ошибка создания $NFT_RULE_FILE (exit: $_RC)"
+    fi
+else
+    # /etc/nftables.d/ — conffiles пакета firewall4: каталог переживает
+    # sysupgrade с сохранением настроек. После перехода на вариант без
+    # homeproxy цепочка обхода работала бы вхолостую на каждом пакете —
+    # метку 0x64 читают только цепочки homeproxy.
+    # Набор @bypass_ips при этом остаётся (см. «Наборы адресов fw4» ниже).
+    if [ -f /etc/nftables.d/bypass_homeproxy_ips.nft ]; then
+        run_cmd "Удаление bypass_homeproxy_ips.nft (homeproxy не установлен)" \
+            rm -f /etc/nftables.d/bypass_homeproxy_ips.nft
+    fi
+
+    # Include-секции homeproxy в /etc/config/firewall тоже переживают
+    # sysupgrade. homeproxy_post создаёт uci-defaults пакета (luci-homeproxy),
+    # homeproxy_forward/_input — скрипт-помощник выше в режимах TUN/сервер.
+    # Без homeproxy их файлы в /var/run/homeproxy/ не появятся, и fw4 на каждом
+    # reload пишет «specifies unreachable path ..., ignoring section».
+    # При возврате на homeproxy его uci-defaults пересоздаст секцию сам.
+    _FW_INC_DEL=0
+    for _inc in homeproxy_post homeproxy_forward homeproxy_input; do
+        if uci -q get "firewall.$_inc" >/dev/null; then
+            uci -q delete "firewall.$_inc" && _FW_INC_DEL=1
+        fi
+    done
+    if [ "$_FW_INC_DEL" = "1" ]; then
+        run_cmd "Удаление include-секций homeproxy из firewall" uci commit firewall
+    fi
+fi
+
+# Passwall
+if [ ! -f "$LOCK_FILE" ] && [ "$CURRENT_VARIANT" = "passwall" ] && [ -f "/etc/init.d/passwall2" ]; then
+    log_info "Настройка Passwall2"
+    run_cmd "Остановка passwall2" /etc/init.d/passwall2 stop
+    run_cmd "Отключение passwall2" /etc/init.d/passwall2 disable
+
+    uci -q batch <<-EOF
+        set passwall2.@global[0].dns_redirect='0'
+        set passwall2.@global[0].enabled='1'
+        commit passwall2
+EOF
+    _RC=$?; [ $_RC -eq 0 ] && log_ok "Конфигурация passwall2 обновлена" || log_err "Ошибка uci batch passwall2 (exit: $_RC)"
+
+    run_cmd "Включение passwall2" /etc/init.d/passwall2 enable
+fi
+# dns_redirect=0: passwall2 не перехватывает DNS клиентов, а вписывает свои
+# правила в dnsmasq (:54), к которому обращается AGH (см. блок AdGuardHome).
+# Удалённый DNS passwall2 ходит через узел (remote_dns_detour=remote), поэтому
+# адрес роутера 127.0.0.1:53, который раньше ставил сюда zz1, через узел
+# недоступен, а с AGH → dnsmasq → Xray дал бы петлю. Возвращаем значение
+# passwall2 по умолчанию; dns_shunt, china_dns и adblock — опции passwall 1,
+# в passwall2 их нет.
+if [ "$CURRENT_VARIANT" = "passwall" ] && [ -f "/etc/config/passwall2" ]; then
+    _PW2_CHANGED=0
+    if [ "$(uci -q get passwall2.@global[0].remote_dns)" = "127.0.0.1:53" ]; then
+        uci -q set passwall2.@global[0].remote_dns='1.1.1.1' && _PW2_CHANGED=1
+    fi
+    for _o in dns_shunt china_dns adblock; do
+        uci -q get "passwall2.@global[0].$_o" >/dev/null && uci -q delete "passwall2.@global[0].$_o" && _PW2_CHANGED=1
+    done
+    if [ "$_PW2_CHANGED" = "1" ]; then
+        uci -q commit passwall2 && log_ok "passwall2: удалённый DNS 1.1.1.1 через узел, лишние опции убраны"
+    fi
+fi
+
+# luci-app-xray: заводские настройки пакета рассчитаны на Китай — напрямую
+# идут только адреса GeoIP «cn», «Fast DNS» по умолчанию 223.5.5.5 (Alibaba),
+# напрямую через него разрешаются geosite:cn. На роутере в России это значит:
+# весь российский трафик — через сервер, DNS имени сервера — через китайский
+# резолвер. Меняем только нетронутые заводские значения и только на первой
+# загрузке: напрямую — GeoIP «ru» и домены geosite:category-ru (их же
+# разрешает Яндекс DNS напрямую), остальное — по правилам пакета.
+# Нужны geoip.dat/geosite.dat (пакеты v2ray-geoip, v2ray-geosite в сборке):
+# без них luci-app-xray молча отбрасывает все geoip:/geosite: правила.
+if [ ! -f "$LOCK_FILE" ] && [ "$CURRENT_VARIANT" = "xray" ] && [ -f /etc/config/xray_core ]; then
+    if [ "$(uci -q get xray_core.@general[0].geoip_direct_code_list)" = "cn" ] \
+        && [ "$(uci -q get xray_core.@general[0].bypassed_domain_rules)" = "geosite:cn" ] \
+        && [ -z "$(uci -q get xray_core.@general[0].fast_dns)" ]; then
+        uci -q batch <<-EOF
+            delete xray_core.@general[0].geoip_direct_code_list
+            add_list xray_core.@general[0].geoip_direct_code_list='ru'
+            delete xray_core.@general[0].geoip_direct_code_list_v6
+            add_list xray_core.@general[0].geoip_direct_code_list_v6='ru'
+            delete xray_core.@general[0].bypassed_domain_rules
+            add_list xray_core.@general[0].bypassed_domain_rules='geosite:category-ru'
+            set xray_core.@general[0].fast_dns='77.88.8.8:53'
+            commit xray_core
+EOF
+        _RC=$?; [ $_RC -eq 0 ] && log_ok "xray_core: напрямую GeoIP ru и geosite:category-ru, Fast DNS 77.88.8.8" || log_err "Ошибка uci batch xray_core (exit: $_RC)"
+    else
+        log_info "xray_core уже настроен вручную — заводские правила не меняем"
+    fi
+    [ -s /usr/share/xray/geosite.dat ] && [ -s /usr/share/xray/geoip.dat ] \
+        || log_err "xray: нет /usr/share/xray/geoip.dat или geosite.dat — правила geoip:/geosite: работать не будут"
+fi
+
+# Версия sing-box — вне вариантных блоков: бинарник ставится и в podkop,
+# netshift, forkop, trafira, passwall, где homeproxy нет.
+if [ -x /usr/bin/sing-box ]; then
+    SB_version=$(/usr/bin/sing-box version 2>/dev/null | grep -oP -m 1 'v?\K[\d.]+')
+    [ -n "$SB_version" ] && log_ok "Версия sing-box: $SB_version" || log_info "sing-box есть, версию определить не удалось"
+else
+    log_info "sing-box не установлен"
+fi
+
+# --- Наборы адресов fw4 -------------------------------------------------------
+# Создаются ВСЕГДА, независимо от варианта сборки. Причина: файлы в
+# /etc/nftables.d/ переживают sysupgrade, и ссылка на несуществующий набор
+# роняет весь fw4 reload. Пустой набор безопаснее отсутствующего.
+#   dpi_ips      — youtubeUnblock: reject UDP/443 и очередь UDP на прочие порты
+#                  (TCP/443 и UDP/443 идут в очередь к любым адресам)
+#                  (наполняет fwlist-dpi.sh)
+#   bypass_ips   — обход homeproxy по метке 0x64 (RU-трафик мимо VPN)
+#                  И обход очереди youtubeUnblock для UDP кроме 443 (наполняет fwlist-bypass.sh)
+#   bypass_local — обход очереди youtubeUnblock по адресу ИСТОЧНИКА, отсюда
+#                  match=src_net, а не dest_net
+# loadfile обязателен: без него набор создаётся пустым и файлы из
+# /etc/luci-uploads/ не читаются никогда — обход молча не работает.
+mkdir -p /etc/luci-uploads
+FIREWALL_CONFIG_CHANGED=0
+
+add_fw_ipset() {   # <имя> <match> <loadfile|-> <комментарий>
+    local _name="$1" _match="$2" _file="$3" _cmt="$4" _sec _h
+    # fw4 читает loadfile при каждом reload; пустой файл безопаснее отсутствующего
+    [ "$_file" != "-" ] && [ ! -f "$_file" ] && : > "$_file"
+    # cut по точкам даёт id секции и для анонимной (@ipset[0]), и для именованной
+    _sec=$(uci show firewall | grep -F ".name='${_name}'" | head -n 1 | cut -d. -f2)
+    if [ -z "$_sec" ]; then
+        _h=$(uci add firewall ipset)
+        uci set firewall."$_h".name="$_name"
+        uci set firewall."$_h".match="$_match"
+        uci set firewall."$_h".family="ipv4"
+        uci set firewall."$_h".comment="$_cmt"
+        [ "$_file" != "-" ] && uci set firewall."$_h".loadfile="$_file"
+        FIREWALL_CONFIG_CHANGED=1
+        log_ok "ipset $_name создан"
+    elif [ "$_file" != "-" ] && [ -z "$(uci -q get "firewall.${_sec}.loadfile")" ]; then
+        # секция осталась от старой версии скрипта — дополняем, не пересоздаём
+        uci set firewall."$_sec".loadfile="$_file"
+        FIREWALL_CONFIG_CHANGED=1
+        log_ok "ipset $_name: добавлен loadfile"
+    fi
+}
+
+add_fw_ipset dpi_ips      dest_net /etc/luci-uploads/dpi_ip_list.txt "youtubeUnblock"
+add_fw_ipset bypass_ips   dest_net /etc/luci-uploads/bypass_ips.txt  "Bypass HomeProxy and youtubeUnblock"
+add_fw_ipset bypass_local src_net  -                                 "Bypass youtubeUnblock"
+
+[ "$FIREWALL_CONFIG_CHANGED" = 1 ] && uci commit firewall && log_ok "Firewall сохранён"
+
+run_cmd "Правка ruleset.uc" sed -i 's/meta l4proto { tcp, udp } flow offload @ft;/meta l4proto { tcp, udp } ct original packets ge 30 flow offload @ft;/' /usr/share/firewall4/templates/ruleset.uc
+patch_check /usr/share/firewall4/templates/ruleset.uc 'ct original packets ge 30 flow offload @ft' "ruleset.uc"
+
+if [ -x "/usr/bin/youtubeUnblock" ]; then
+    run_cmd "Остановка youtubeUnblock" /etc/init.d/youtubeUnblock stop
+    run_cmd "Отключение youtubeUnblock" /etc/init.d/youtubeUnblock disable
+    # Метка и номер очереди — из настроек youtubeUnblock (packet_mark и
+    # queue_num в /etc/config/youtubeUnblock): своей меткой youtubeUnblock
+    # помечает отправленные им пакеты, и правила ниже должны совпадать с
+    # ней. Пакет ставит правило на 0x8000, и с другой меткой (524288 —
+    # обход для GL-iNet из issue #185) оно не срабатывало. Файл пишется
+    # здесь: если метку или очередь потом поменять в LuCI, этот скрипт надо
+    # запустить снова.
+    # Метка в uci десятичная (youtubeUnblock читает её как %ld); ведущие
+    # нули снимаются, иначе printf принял бы число за восьмеричное. Метка
+    # пакета — 32 бита.
+    YTB_MARK_RAW=$(uci -q get youtubeUnblock.youtubeUnblock.packet_mark)
+    YTB_MARK=$(echo "${YTB_MARK_RAW:-32768}" | sed 's/^0*//; s/^$/0/')
+    case "$YTB_MARK" in
+    *[!0-9]*|???????????*) YTB_MARK=0 ;;
+    esac
+    [ "$YTB_MARK" -le 4294967295 ] || YTB_MARK=0
+    YTB_MARK=$(printf '0x%x' "$YTB_MARK")
+    if [ "$YTB_MARK" = 0x0 ]; then
+        log_err "youtubeUnblock: packet_mark '$YTB_MARK_RAW' — не число от 1 до 4294967295, в правилах 0x8000"
+        YTB_MARK=0x8000
+    fi
+    YTB_QUEUE=$(uci -q get youtubeUnblock.youtubeUnblock.queue_num)
+    YTB_QUEUE=${YTB_QUEUE:-537}
+    case "$YTB_QUEUE" in
+    *[!0-9]*) YTB_QUEUE=-1 ;;
+    esac
+    if [ "$YTB_QUEUE" -lt 0 ] || [ "$YTB_QUEUE" -gt 65535 ]; then
+        log_err "youtubeUnblock: queue_num — не число от 0 до 65535, в правилах 537"
+        YTB_QUEUE=537
+    fi
+    log_info "youtubeUnblock: метка $YTB_MARK, очередь $YTB_QUEUE"
+    cat << EOF > /usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft
+#!/usr/sbin/nft -f
+# This file will be applied automatically for nftables <table> <chain> position <number> <condition> <action>
+
+# Drop (reject) UDP to dest port 443 to DPI IPs
+add rule inet fw4 prerouting ip daddr @dpi_ips udp dport 443 reject with icmp port-unreachable
+
+# DPI through youtubeUnblock
+add chain inet fw4 youtubeUnblock { type filter hook postrouting priority mangle - 1; policy accept; }
+
+# Packets of youtubeUnblock itself (its mark $YTB_MARK: fakes and resent
+# originals) go out at once instead of waiting in the queue behind the packet
+# being handled, so the fakes leave before the original
+add rule inet fw4 youtubeUnblock meta mark and $YTB_MARK == $YTB_MARK counter return
+
+# Exclusion of the guest network by tag (traffic will bypass the queue)
+add rule inet fw4 youtubeUnblock meta mark 0x00000042 counter return
+
+# Source IP in the bypass_local list: exit the chain
+add rule inet fw4 youtubeUnblock ip saddr @bypass_local counter return
+
+# TCP/443 and QUIC to any address, before the bypass_ips check: YouTube also
+# serves video from Google caches inside Russian ISP networks (GGC), their
+# addresses are in bypass_ips and not in dpi_ips. youtubeUnblock picks
+# connections by SNI itself (--sni-domains; for QUIC with
+# --udp-filter-quic=parse), the rest pass through unchanged.
+add rule inet fw4 youtubeUnblock tcp dport 443 ct original packets < 20 counter queue num $YTB_QUEUE bypass
+add rule inet fw4 youtubeUnblock udp dport 443 ct original packets < 9 counter queue num $YTB_QUEUE bypass
+
+# Destination IP in the bypass_ips list: exit the chain
+add rule inet fw4 youtubeUnblock ip daddr @bypass_ips counter return
+
+# Other UDP ports only to DPI IPs
+add rule inet fw4 youtubeUnblock ip daddr @dpi_ips meta l4proto udp ct original packets < 9 counter queue num $YTB_QUEUE bypass
+
+# Packets of youtubeUnblock (mark $YTB_MARK) are accepted at the start of
+# output: a fake is out of state for conntrack and must not be dropped
+insert rule inet fw4 output mark and $YTB_MARK == $YTB_MARK counter accept
+
+# ...and at the start of mangle_output, before a proxy that takes the
+# router's own UDP: homeproxy in tproxy mode marks every such packet without
+# its own mark for sing-box (mark 101, route to lo). It would overwrite the
+# mark of a fake or resent original, which then went into sing-box instead
+# of the internet, and youtubeUnblock, no longer seeing its mark, queued and
+# faked its own packets again.
+insert rule inet fw4 mangle_output mark and $YTB_MARK == $YTB_MARK counter accept
+EOF
+    _RC=$?; [ $_RC -eq 0 ] && log_ok "Файл youtubeUnblock.nft записан" || log_err "Ошибка записи правил (exit: $_RC)"
+    chmod 0644 /usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft
+    # Перезапуск при падении: init пакета запускает youtubeUnblock без
+    # respawn, и упавший процесс никто не поднимал — очередь 537 с bypass
+    # пропускала трафик без обработки до перезагрузки или ручного старта.
+    # procd перезапускает до 5 раз подряд (если процесс живёт меньше часа).
+    if ! grep -q 'procd_set_param respawn' /etc/init.d/youtubeUnblock; then
+        run_cmd "youtubeUnblock: перезапуск при падении" \
+            sed -i '/procd_set_param stderr 1/a\	procd_set_param respawn' /etc/init.d/youtubeUnblock
+    fi
+    patch_check /etc/init.d/youtubeUnblock 'procd_set_param respawn' "init youtubeUnblock (respawn)"
+    run_cmd "Включение youtubeUnblock" /etc/init.d/youtubeUnblock enable
+else
+    log_info "youtubeUnblock не установлен"
+    # Файл пишет этот же скрипт; остаётся, если пакет удалили на живой системе.
+    # Очередь 537 без youtubeUnblock никто не слушает.
+    if [ -f /usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft ]; then
+        run_cmd "Удаление 537-youtubeUnblock.nft (youtubeUnblock не установлен)" \
+            rm -f /usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft
+    fi
+fi
+
+# internet-detector
+# Служба выключена: детектор работает в режиме «Web UI only» (mode 2) — rpcd
+# запускает его, пока открыт LuCI, и он сам выходит через 30 с после закрытия
+# страницы. В режиме «Service» (mode 1, так в конфиге пакета) индикатор лишь
+# читает статус работающей службы, и без неё в LuCI навсегда «Undefined», а
+# модули (публичный IP и т.п.) не запускаются. Поэтому mode 1 -> 2; выбранные
+# вручную 0 (выключен) и 2 не трогаем.
+[ -f "/etc/init.d/internet-detector" ] && {
+    run_cmd "Отключение internet-detector" /etc/init.d/internet-detector disable
+    run_cmd "Смена START на 99" sed -i 's/START=[0-9][0-9]/START=99/' /etc/init.d/internet-detector
+    if [ "$(uci -q get internet-detector.config.mode)" = "1" ]; then
+        uci -q set internet-detector.config.mode='2' && uci commit internet-detector \
+            && log_ok "internet-detector: режим Service -> Web UI only (служба выключена)" \
+            || log_err "internet-detector: не удалось переключить режим на Web UI only"
+    fi
+}
+
+# attendedsysupgrade
+if [ "$NAME_VALUE" = "OpenWrt" ]; then
+    run_cmd "Настройка owut (OpenWrt)" sed -i "s|option url 'https://asu-2.kyarucloud.moe'|option url 'https://sysupgrade.openwrt.org'|" /etc/config/attendedsysupgrade
+else
+    run_cmd "Настройка owut (ImmortalWrt)" sed -i "s|option url 'https://sysupgrade.openwrt.org'|option url 'https://asu-2.kyarucloud.moe'|" /etc/config/attendedsysupgrade
+fi
+
+# AdGuardHome
+if [ -x "/usr/bin/AdGuardHome" ] && [ -f "/etc/config/adguardhome" ]; then
+    log_info "Настройка AdGuardHome"
+    run_cmd "Остановка adguardhome" /etc/init.d/adguardhome stop
+    run_cmd "Отключение adguardhome" /etc/init.d/adguardhome disable
+    mkdir -p /opt/AdGuardHome
+    run_cmd "chown /opt/AdGuardHome" chown -R root:root /opt/AdGuardHome
+    run_cmd "chmod /opt/AdGuardHome" chmod 755 /opt/AdGuardHome
+
+    grep -q '^adguardhome:' /etc/group || echo "adguardhome:x:853:" >> /etc/group
+    grep -q '^adguardhome:' /etc/passwd || echo "adguardhome:x:853:853:AdGuard Home:/var/lib/adguardhome:/bin/false" >> /etc/passwd
+
+    uci -q batch <<EOF
+        set adguardhome.config.work_dir='/opt/AdGuardHome'
+        set adguardhome.config.user='root'
+        set adguardhome.config.group='root'
+        commit adguardhome
+EOF
+    _RC=$?; [ $_RC -eq 0 ] && log_ok "UCI adguardhome применён" || log_err "Ошибка uci batch AdGuardHome (exit: $_RC)"
+
+    mkdir -p /usr/lib/lua/luci/controller   # в образе 25.12 каталога нет
+    cat << 'EOF' > /usr/lib/lua/luci/controller/adguardhome_net.lua
+module("luci.controller.adguardhome_net", package.seeall)
+
+function index()
+	entry({"admin", "network", "adguardhome"}, call("redirectToAdGuardHome"), _("AdGuardHome"), 40)
+end
+
+function redirectToAdGuardHome()
+	-- Серверный 302 вместо window.open: всплывающее окно блокируется
+	-- браузером, если открывается не по касанию пользователя.
+	local router_ip = luci.http.getenv("SERVER_ADDR")
+	luci.http.redirect("http://" .. router_ip .. ":8080")
+end
+EOF
+    _RC=$?; [ $_RC -eq 0 ] && log_ok "Контроллер LuCI создан" || log_err "Ошибка создания контроллера (exit: $_RC)"
+
+    run_cmd "Смена порта dnsmasq" uci set dhcp.@dnsmasq[0].port="54"
+    run_cmd_ign "Удаление серверов dnsmasq" uci delete dhcp.@dnsmasq[0].server
+    run_cmd "Сохранение dhcp" uci commit dhcp
+
+    # Журнал AdGuard Home — в файл, а не в syslog (он забивает системный
+    # журнал). Файл лежит в /tmp/log (он же /var/log, создаётся при каждой
+    # загрузке), и этот каталог подключается в песочницу ujail на запись:
+    # прежний /var/AdGuardHome.log из песочницы недоступен. Без ujail
+    # работает так же.
+    run_cmd "Журнал adguardhome → /tmp/log/AdGuardHome.log" \
+        sed -i -e 's|--logfile syslog|--logfile /tmp/log/AdGuardHome.log|' \
+               -e 's|--logfile /var/AdGuardHome.log|--logfile /tmp/log/AdGuardHome.log|' /etc/init.d/adguardhome
+    patch_check /etc/init.d/adguardhome '--logfile /tmp/log/AdGuardHome.log' "adguardhome init (журнал)"
+    uci -q del_list adguardhome.config.jail_mount_rw='/tmp/log'
+    uci -q add_list adguardhome.config.jail_mount_rw='/tmp/log'
+    run_cmd "Каталог журнала в песочнице adguardhome" uci commit adguardhome
+    # --- Upstream DNS в AGH yaml ------------------------------------------
+    # Зависит от варианта сборки:
+    #   forkop, trafira, podkop, netshift → 127.0.0.42:53 (DNS inbound их sing-box)
+    #   xray            → 127.0.0.1:5300 (DNS-вход Xray luci-app-xray: FakeDNS,
+    #                     Fast/Secure DNS и правила доменов работают в нём)
+    #   passwall, v2raya → 127.0.0.1:54 (dnsmasq). passwall2 при
+    #                     dns_redirect=0 вписывает в dnsmasq свои правила:
+    #                     по умолчанию — DNS-вход своего Xray (порт выбирается
+    #                     при каждом запуске), адреса узлов — DNS провайдера.
+    #                     v2rayA свой DNS на :53 при AGH не поднимает (порт
+    #                     занят), а трафик всё равно разводит по сниффингу.
+    #   homeproxy и остальные → 127.0.0.1:5333 (DNS-порт sing-box homeproxy)
+    # Любой из этих адресов, оставшийся от прошлого варианта, заменяется на
+    # нужный. Правим yaml напрямую: AGH хранит upstream только там, не в UCI.
+    # AGH должен быть остановлен в этот момент (выше есть stop).
+    # Меняется только пункт списка upstream_dns целиком: 127.0.0.1:54 стоит
+    # ещё в local_ptr_upstreams и в правиле [/lan/arpa/local/]127.0.0.1:54,
+    # их трогать нельзя. Повтор нужного адреса в списке не оставляется.
+    AGH_YAML="/etc/adguardhome/adguardhome.yaml"
+    if [ -f "$AGH_YAML" ]; then
+        case "$CURRENT_VARIANT" in
+            forkop|trafira|podkop|netshift) _AGH_EXPECTED='127.0.0.42:53' ;;
+            xray)          _AGH_EXPECTED='127.0.0.1:5300' ;;
+            passwall|v2raya) _AGH_EXPECTED='127.0.0.1:54' ;;
+            *)             _AGH_EXPECTED='127.0.0.1:5333' ;;
+        esac
+        # $1: файл; new — адрес для замены (пусто — только проверить наличие)
+        agh_upstream() {
+            awk -v new="$2" -v want="$_AGH_EXPECTED" -v q="'" '
+                function val(s) { sub(/^[[:space:]]*-[[:space:]]*/, "", s); gsub(/[" \t]/, "", s); gsub(q, "", s); return s }
+                /^[[:space:]]*upstream_dns:[[:space:]]*$/ { inb = 1; print; next }
+                inb && /^[[:space:]]*-/ {
+                    v = val($0)
+                    if (new != "" && (v == "127.0.0.1:5333" || v == "127.0.0.42:53" || v == "127.0.0.1:5300" || v == "127.0.0.1:54")) {
+                        if (done) next
+                        sub(/-.*/, "- " new); v = new; done = 1
+                    }
+                    if (new == "" && v == want) found = 1
+                    print; next
+                }
+                inb && !/^[[:space:]]*$/ { inb = 0 }
+                { print }
+                END { if (new == "") exit !found }
+            ' "$1"
+        }
+        if agh_upstream "$AGH_YAML" "$_AGH_EXPECTED" > "$AGH_YAML.zz1" && [ -s "$AGH_YAML.zz1" ]; then
+            cat "$AGH_YAML.zz1" > "$AGH_YAML"   # cat, а не mv: права и владелец файла остаются
+        else
+            log_err "adguardhome.yaml: не удалось заменить upstream DNS"
+        fi
+        rm -f "$AGH_YAML.zz1"
+        if [ "$_AGH_EXPECTED" = '127.0.0.42:53' ] && [ "$CURRENT_VARIANT" = "forkop" ] && forkop_v2; then
+            # forkop 2.x dnsmasq не трогает, а DNS клиентов (порт 53 с
+            # интерфейсов источника) и самого роутера (127.0.0.1:53) забирает
+            # себе nft-перенаправлением. Наш патч 002 (patches/feeds/forkop)
+            # добавляет intercept_device_dns: с '0' запросы клиентов идут в AGH,
+            # и он видит каждого; в forkop — только устройства из фильтров
+            # секций, им нужен свой ответ. AGH отправляет запросы на 127.0.0.42:
+            # там домены секций получают FakeIP, остальные отвечают DNS-серверы
+            # forkop (правила «вне секций → роутер» на этом входе нет, петли
+            # нет). FakeIP-соединения исключённых устройств патч 002 отправляет
+            # напрямую. Без патча опция ни на что не влияет: клиенты в журнале
+            # AGH видны как 127.0.0.1.
+            # unmatched_dns_mode=router — для тех, кого forkop перехватывает
+            # (устройства из фильтров, сам роутер): DNS вне секций — тоже через
+            # AGH (его сокет помечен, повторно не перехватывается).
+            uci -q set forkop.settings.intercept_device_dns='0' 2>/dev/null \
+                && uci -q set forkop.settings.unmatched_dns_mode='router' 2>/dev/null \
+                && uci commit forkop 2>/dev/null \
+                && log_ok "forkop 2.x: intercept_device_dns=0 (AGH видит клиентов), unmatched_dns_mode=router"
+            log_ok "AGH upstream → forkop sing-box ($_AGH_EXPECTED)"
+        elif [ "$_AGH_EXPECTED" = '127.0.0.42:53' ]; then
+            # Все они по умолчанию сами перенастраивают dnsmasq на 127.0.0.42
+            # (dont_touch_dhcp=0). Хозяин :53 — AGH, dnsmasq на :54 — поэтому
+            # выставляем флаг, чтобы они dnsmasq не трогали.
+            uci -q set "$CURRENT_VARIANT".settings.dont_touch_dhcp='1' 2>/dev/null \
+                && uci commit "$CURRENT_VARIANT" 2>/dev/null \
+                && log_ok "$CURRENT_VARIANT: dont_touch_dhcp=1 (AGH остаётся хозяином на :53)"
+            # trafira: такой опции нет. По умолчанию (Alice Mode выключен, без
+            # секций с DNS по устройствам) он DNS клиентов не перехватывает и
+            # AGH видит каждого. С включённым Alice Mode DNS клиентов «в обход»
+            # уходит в DNS trafira мимо AGH (статистика/фильтры AGH для них
+            # не работают) — это его штатное поведение, здесь не меняется.
+            log_ok "AGH upstream → $CURRENT_VARIANT sing-box ($_AGH_EXPECTED)"
+        elif [ "$CURRENT_VARIANT" = "xray" ]; then
+            # luci-app-xray сам кладёт dnsmasq «server=127.0.0.1#5300»; при AGH
+            # dnsmasq живёт на :54 и клиентский DNS не видит, поэтому AGH
+            # обращается к DNS-входу Xray напрямую. Локальные имена (PTR, .lan)
+            # dnsmasq по-прежнему отдаёт сам.
+            log_ok "AGH upstream → Xray DNS ($_AGH_EXPECTED)"
+        elif [ "$_AGH_EXPECTED" = '127.0.0.1:54' ]; then
+            log_ok "AGH upstream → dnsmasq ($_AGH_EXPECTED): DNS-правила $CURRENT_VARIANT"
+        else
+            log_ok "AGH upstream → homeproxy sing-box ($_AGH_EXPECTED)"
+        fi
+        if agh_upstream "$AGH_YAML" "" >/dev/null; then
+            log_ok "adguardhome.yaml upstream DNS: $_AGH_EXPECTED на месте"
+        else
+            log_err "adguardhome.yaml upstream DNS: $_AGH_EXPECTED не найден в upstream_dns"
+        fi
+    else
+        log_info "AGH yaml не найден ($AGH_YAML) — upstream DNS не настроен автоматически"
+    fi
+
+    run_cmd "Включение adguardhome" /etc/init.d/adguardhome enable
+    run_cmd "Запуск adguardhome" /etc/init.d/adguardhome start
+else
+    log_info "AdGuardHome не найден"
+fi
+
+# Свои пункты меню LuCI (Lua-контроллеры) из /root/apps/luci-controllers/.
+# Папка есть только на роутере (в репозитории её нет: там личные ссылки) и
+# переживает sysupgrade через /etc/sysupgrade.conf. Копируются, только если
+# в прошивке есть и AdGuardHome, и sing-box, и только те файлы, которых на
+# роутере ещё нет: правки, сделанные на роутере, не затираются. Нужен
+# Lua-рантайм LuCI (luci-lua-runtime / luci-compat).
+LUCI_CTRL_SRC="/root/apps/luci-controllers"
+LUCI_CTRL_DST="/usr/lib/lua/luci/controller"
+if [ -d "$LUCI_CTRL_SRC" ]; then
+    # Строка каталогом, а не списком файлов: новые файлы в папке попадут в
+    # резервную копию сами. sysupgrade берёт каталог целиком через find.
+    grep -qxE "$LUCI_CTRL_SRC/?" /etc/sysupgrade.conf 2>/dev/null \
+        || { echo "$LUCI_CTRL_SRC" >> /etc/sysupgrade.conf && log_ok "$LUCI_CTRL_SRC добавлен в /etc/sysupgrade.conf"; }
+fi
+if ls "$LUCI_CTRL_SRC"/*.lua >/dev/null 2>&1; then
+    if [ -x /usr/bin/AdGuardHome ] && [ -x /usr/bin/sing-box ] && [ -f /usr/lib/lua/luci/dispatcher.lua ]; then
+        mkdir -p "$LUCI_CTRL_DST"
+        _CTRL_NEW=0
+        for _ctrl in "$LUCI_CTRL_SRC"/*.lua; do
+            _ctrl_name=$(basename "$_ctrl")
+            if [ -f "$LUCI_CTRL_DST/$_ctrl_name" ]; then
+                log_ok "Контроллер LuCI $_ctrl_name уже есть, не трогаем"
+            elif cp "$_ctrl" "$LUCI_CTRL_DST/$_ctrl_name"; then
+                chmod 644 "$LUCI_CTRL_DST/$_ctrl_name"
+                log_ok "Контроллер LuCI $_ctrl_name скопирован"
+                _CTRL_NEW=1
+            else
+                log_err "Не удалось скопировать контроллер LuCI $_ctrl_name"
+            fi
+        done
+        [ "$_CTRL_NEW" = 1 ] && rm -f /tmp/luci-indexcache* /tmp/luci-modulecache/* 2>/dev/null
+    else
+        log_info "Свои контроллеры LuCI пропущены: нет AdGuardHome, sing-box или Lua-рантайма LuCI"
+    fi
+fi
+
+# forkop/trafira/podkop/netshift: NTP мимо прокси. Штатная опция вставляет «udp dport
+# 123 return» в цепочку mangle их nft-таблицы (у forkop и в mangle_output).
+# Иначе NTP к адресам из списков прокси уходил бы в TPROXY — та же проблема,
+# что была с ntpd на homeproxy.
+for _pk in forkop trafira podkop netshift; do
+    [ -f "/etc/config/$_pk" ] || continue
+    # forkop 2.x: опции нет, NTP-серверы роутера он сам резолвит через
+    # bootstrap DNS, а трафик роутера в секции не берёт без пункта «Система»
+    if [ "$_pk" = "forkop" ] && forkop_v2; then
+        log_info "forkop 2.x: exclude_ntp нет — пропуск"
+        continue
+    fi
+    if [ "$(uci -q get "$_pk".settings.exclude_ntp)" = "1" ]; then
+        log_ok "$_pk: exclude_ntp уже включён"
+    elif uci -q set "$_pk".settings.exclude_ntp='1' && uci commit "$_pk"; then
+        log_ok "$_pk: exclude_ntp=1 (NTP мимо прокси)"
+    else
+        log_err "$_pk: не удалось выставить exclude_ntp"
+    fi
+done
+
+# forkop/trafira/podkop/netshift + youtubeUnblock: QUIC мимо sing-box не пускаем.
+# Эти пакеты отдают доменам из своих списков (и из секций «Исключение» — в
+# netshift они тоже идут через FakeIP) адреса FakeIP 198.18.0.0/15. Правило
+# youtubeUnblock «ip daddr @dpi_ips udp dport 443 reject» видит только настоящие
+# адреса, поэтому QUIC клиента к FakeIP проходил бы в sing-box, а оттуда — в
+# очередь 537 как обычный UDP, и видео (googlevideo) могло тормозить. Штатная
+# опция disable_quic ставит в sing-box правило reject для QUIC на входе tproxy:
+# браузер сразу переходит на TCP, который youtubeUnblock обрабатывает. HTTP/3
+# при этом не используется и для сайтов через VPS — для прокси это обычно лучше.
+# Без youtubeUnblock (forkop-mod и trafira — у них свой Zapret; forkop 2.x —
+# если youtubeUnblock не выбран) опцию не трогаем.
+if [ -x /usr/bin/youtubeUnblock ]; then
+    for _pk in forkop trafira podkop netshift; do
+        [ -f "/etc/config/$_pk" ] || continue
+        if [ "$(uci -q get "$_pk".settings.disable_quic)" = "1" ]; then
+            log_ok "$_pk: disable_quic уже включён"
+        elif uci -q set "$_pk".settings.disable_quic='1' && uci commit "$_pk"; then
+            log_ok "$_pk: disable_quic=1 (QUIC через FakeIP отклоняется, браузер идёт по TCP для youtubeUnblock)"
+        else
+            log_err "$_pk: не удалось выставить disable_quic"
+        fi
+    done
+fi
+
+# SQM: diffserv4 и приоритеты на загрузке — скрипт cake_ctinfo.qos.
+# Он лежит в прошивке (/usr/lib/sqm), в пакет sqm-scripts не входит, поэтому
+# run.sh больше не патчится и apk upgrade sqm-scripts ничего не ломает.
+if [ -f "/usr/lib/sqm/run.sh" ]; then
+    log_info "Настройка SQM"
+
+    # Прежние zz1 вставляли в run.sh загрузчик /opt/sqm_custom.conf. После
+    # прошивки run.sh и так новый, а при ручном запуске на старой установке
+    # загрузчик надо убрать: он перекрывал бы опции из LuCI.
+    if grep -q "sqm_custom.conf" /usr/lib/sqm/run.sh; then
+        sed -i '/# --- Load Custom Config (\/opt\/sqm_custom.conf) ---/,/^    fi$/d' /usr/lib/sqm/run.sh
+        if grep -q "sqm_custom.conf" /usr/lib/sqm/run.sh; then
+            log_err "Загрузчик /opt/sqm_custom.conf в run.sh не удалён"
+        else
+            log_ok "Загрузчик /opt/sqm_custom.conf удалён из run.sh"
+        fi
+    fi
+
+    # /opt/sqm_custom.conf прежних zz1 → опции UCI (в LuCI: «Qdisc options»).
+    # Переносим только в очереди, где свои опции ещё не заданы; файл
+    # переименовывается, чтобы перенос не повторялся.
+    if [ -f /opt/sqm_custom.conf ]; then
+        cust_i=$(grep "^option iqdisc_opts" /opt/sqm_custom.conf | cut -d"'" -f2)
+        cust_e=$(grep "^option eqdisc_opts" /opt/sqm_custom.conf | cut -d"'" -f2)
+        for _q in $(uci -q show sqm | sed -n "s/^sqm\.\([^.=]*\)=queue$/\1/p"); do
+            [ -z "$(uci -q get sqm.$_q.iqdisc_opts)$(uci -q get sqm.$_q.eqdisc_opts)" ] || continue
+            [ -n "$cust_i" ] && uci set sqm.$_q.iqdisc_opts="$cust_i"
+            [ -n "$cust_e" ] && uci set sqm.$_q.eqdisc_opts="$cust_e"
+            # без этих флагов LuCI при сохранении формы удаляет опции
+            uci set sqm.$_q.qdisc_advanced='1'
+            uci set sqm.$_q.qdisc_really_really_advanced='1'
+            log_ok "SQM $_q: опции из /opt/sqm_custom.conf перенесены в UCI"
+        done
+        uci commit sqm
+        mv -f /opt/sqm_custom.conf /opt/sqm_custom.conf.migrated
+    fi
+
+    # piece_of_cake.qos у прежних zz1 и так работал как diffserv4 (через
+    # загрузчик), cake_ctinfo.qos — то же самое плюс приоритеты на загрузке.
+    if [ -f /usr/lib/sqm/cake_ctinfo.qos ]; then
+        for _q in $(uci -q show sqm | sed -n "s/^sqm\.\([^.=]*\)=queue$/\1/p"); do
+            if [ "$(uci -q get sqm.$_q.script)" = "piece_of_cake.qos" ]; then
+                uci set sqm.$_q.script='cake_ctinfo.qos'
+                log_ok "SQM $_q: piece_of_cake.qos → cake_ctinfo.qos"
+            fi
+        done
+        uci commit sqm
+    else
+        log_err "Нет /usr/lib/sqm/cake_ctinfo.qos"
+    fi
+
+    if [ ! -d /sys/module/act_ctinfo ] && [ -z "$(find /lib/modules/$(uname -r) -name 'act_ctinfo.ko' 2>/dev/null)" ]; then
+        log_info "kmod-sched-ctinfo не установлен: приоритеты будут только на отдаче"
+    fi
+
+    # Шаблон правил приоритета: все строки закомментированы, файл ничего не
+    # делает, пока правила не включены. Свой файл с тем же именем не
+    # трогается: /etc/nftables.d/ переживает sysupgrade.
+    PRIO_NFT="/etc/nftables.d/10-priority-mangle.nft"
+    if [ ! -f "$PRIO_NFT" ]; then
+        mkdir -p /etc/nftables.d
+        cat > "$PRIO_NFT" <<'NFT'
+# Приоритеты для SQM (скрипт cake_ctinfo.qos, diffserv4). Уровни cake:
+#   EF    → Voice       — высший, без очереди до 25% канала (игры, звонки)
+#   AF21  → Video       — нормальный, преимущество до 50% канала
+#   CS0   → Best Effort — низкий
+#   LE    → Bulk        — наименьший (фоновые загрузки)
+# ct mark = (DSCP << 26) | 0x01000000 сохраняет метку в соединении,
+# cake_ctinfo.qos восстанавливает её для входящих пакетов (нужен
+# kmod-sched-ctinfo). Значения: EF 0xb9000000, AF21 0x49000000,
+# CS0 0x01000000, LE 0x05000000.
+# Раскомментируйте цепочку, впишите свои адреса и выполните
+#   fw4 check && service firewall restart
+#
+#chain priority_mangle_prerouting_dscp {
+#	type filter hook prerouting priority mangle; policy accept;
+#	ip saddr 192.168.1.10 meta l4proto udp counter ip dscp set ef ct mark set 0xb9000000 return comment "Console games: Voice"
+#	ip saddr 192.168.1.0/24 counter ip dscp set af21 ct mark set 0x49000000 return comment "LAN: Video"
+#	ip saddr 192.168.2.0/24 counter ip dscp set cs0 ct mark set 0x01000000 return comment "Guest: Best Effort"
+#	ip saddr 192.168.3.0/24 counter ip dscp set lephb ct mark set 0x05000000 return comment "IoT: Bulk"
+#}
+NFT
+        _RC=$?; [ $_RC -eq 0 ] && log_ok "Шаблон $PRIO_NFT создан" || log_err "Ошибка создания $PRIO_NFT (exit: $_RC)"
+    else
+        log_ok "$PRIO_NFT уже существует, не трогаем"
+    fi
+
+    SQM_ENABLED=$(uci -q get sqm.@queue[0].enabled)
+    if [ "$SQM_ENABLED" = "1" ]; then
+        run_cmd "Перезапуск SQM" /etc/init.d/sqm restart
+    else
+        /etc/init.d/sqm disable 2>/dev/null
+    fi
+else
+    log_info "SQM не установлен"
+fi
+
+# Очистка временных файлов конфигурации
+# -delete есть только в GNU find; в варианте switch findutils вырезан part3
+find /etc/config/ -type f \( -name '*-opkg' -o -name '*apk-new' \) -exec rm -f {} + 2>/dev/null
+log_info "Временные файлы удалены"
+
+# FullCone NAT
+if [ -f "/lib/modules/$(uname -r)/nft_fullcone.ko" ] || lsmod | grep -q nft_fullcone; then
+    run_cmd "Включение FullCone NAT" uci set firewall.@defaults[0].fullcone='1'
+    uci commit firewall
+fi
+
+# MPTCP
+# Сам роутер Multipath TCP не использует (транзитный трафик устройств эта
+# настройка не затрагивает), а мешает он так: Go 1.24+ (sing-box, Xray)
+# по умолчанию слушает с MPTCP. MPTCP-соединение устройства из LAN
+# (так делают, например, iPhone для сервисов Apple) попадает на вход
+# redirect, а исходный адрес (SO_ORIGINAL_DST) ядро для MPTCP-сокета не
+# отдаёт: соединение обрывается с «get redirect destination: operation not
+# supported». Без MPTCP Go слушает обычный TCP, и устройство переходит на
+# него само. Своя строка net.mptcp.enabled в sysctl.conf (например, = 1)
+# не трогается; /etc/sysctl.conf сохраняется при перепрошивке.
+if [ -f /proc/sys/net/mptcp/enabled ]; then
+    if grep -q '^[[:space:]]*net\.mptcp\.enabled' /etc/sysctl.conf 2>/dev/null; then
+        log_info "net.mptcp.enabled уже задан в /etc/sysctl.conf — оставлен как есть"
+    else
+        sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' /etc/sysctl.conf
+        echo -e "\n# MPTCP\nnet.mptcp.enabled = 0" >> /etc/sysctl.conf
+        log_ok "MPTCP выключен"
+    fi
+fi
+
+# TCP BBR
+if [ -f "/lib/modules/$(uname -r)/tcp_bbr.ko" ] || grep -q bbr /proc/sys/net/ipv4/tcp_available_congestion_control; then
+    sed -i '/# TCP BBR/d; /net\.core\.default_qdisc.*fq/d; /net\.ipv4\.tcp_congestion_control.*bbr/d' /etc/sysctl.conf
+    sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' /etc/sysctl.conf
+    echo -e "\n# TCP BBR\nnet.core.default_qdisc = fq_codel\nnet.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.conf
+    log_ok "TCP BBR включён"
+fi
+
+
+[ -x "/etc/init.d/phy-leds" ] && run_cmd "Отключение phy-leds" /etc/init.d/phy-leds disable
+
+# =========================================================
+# SWITCH MODE
+# =========================================================
+if [ ! -f "$LOCK_FILE" ] && [ "$CURRENT_VARIANT" = "switch" ]; then
+    log_info "Активация режима коммутатора"
+    run_cmd_ign "Удаление lan"   uci delete network.lan
+    run_cmd_ign "Удаление wan"   uci delete network.wan
+    run_cmd_ign "Удаление wan6"  uci delete network.wan6
+
+    RAW_PORTS=$(ls /sys/class/net/)
+    EXCLUDE_PATTERN="^lo$|^sit|^tun|^br-|^wlan|^phy|^mon|^bond|^veth|^docker"
+    if echo "$RAW_PORTS" | grep -qE "^p[0-9]+"; then
+        FILTERED_PORTS=$(echo "$RAW_PORTS" | grep -vE "$EXCLUDE_PATTERN|^eth0$" | tr '\n' ' ')
+    else
+        FILTERED_PORTS=$(echo "$RAW_PORTS" | grep -vE "$EXCLUDE_PATTERN" | tr '\n' ' ')
+    fi
+    FILTERED_PORTS=$(echo $FILTERED_PORTS)
+
+    uci set network.@device[0].name='br-lan'
+    uci set network.@device[0].type='bridge'
+    uci set network.@device[0].ports="$FILTERED_PORTS"
+    uci set network.@device[0].stp='1'
+    uci set network.@device[0].igmp_snooping='1'
+    uci set network.@device[0].multicast_querier='1'
+    uci set network.@device[0].ipv6='0'
+    uci set network.lan=interface
+    uci set network.lan.device='br-lan'
+    uci set network.lan.proto='dhcp'
+    uci set network.lan.ip6assign='0'
+    uci set network.globals.packet_steering='2'
+    run_cmd_ign "Удаление ULA" uci delete network.globals.ula_prefix
+
+    uci set dhcp.lan.ignore='1'
+    uci set dhcp.lan.dhcpv6='disabled'
+    uci set dhcp.lan.ra='disabled'
+    uci -q delete dhcp.odhcpd
+    uci set dhcp.odhcpd=odhcpd
+    uci set dhcp.odhcpd.disabled='1'
+    run_cmd "Отключение odhcpd" /etc/init.d/odhcpd disable
+
+    uci -q delete firewall.@zone[1]
+    uci -q delete firewall.@forwarding[0]
+    uci set firewall.@defaults[0].flow_offloading='1'
+    uci set firewall.@defaults[0].flow_offloading_hw='1'
+    uci set firewall.@zone[0].name='lan'
+    uci set firewall.@zone[0].network='lan'
+    uci set firewall.@zone[0].input='ACCEPT'
+    uci set firewall.@zone[0].output='ACCEPT'
+    uci set firewall.@zone[0].forward='ACCEPT'
+    while uci -q delete firewall.@rule[0]; do :; done
+    run_cmd_ign "Удаление dhcp.wan" uci delete dhcp.wan
+    run_cmd "Сохранение switch" uci commit
+fi
+
+[ "$CURRENT_VARIANT" = "switch" ] && HOSTNAME_PATTERN="${ROUTER_MODEL_NAME}-${CURRENT_VARIANT}"
+
+# =========================================================
+# СИНХРОНИЗАЦИЯ ВРЕМЕНИ И БАННЕР
+# =========================================================
+if command -v hwclock >/dev/null 2>&1; then
+    run_cmd "Синхронизация RTC" hwclock -s -u
+fi
+
+if ping -c 1 -W 1 8.8.8.8 >/dev/null 2>&1; then
+    log_info "Интернет есть, принудительная NTP синхронизация"
+    /etc/init.d/sysntpd stop 2>/dev/null
+    # IP-литералы, а не имя: AdGuardHome перезапущен секундой раньше
+    # и ещё не слушает :53, DNS у роутера в этот момент недоступен
+    if ntpd -q -n -p 162.159.200.123 -p 162.159.200.1 -p 216.239.35.0 2>/dev/null; then
+        log_ok "NTP синхронизировано"; NTP_OK=1
+    else
+        log_err "Ошибка ntpd"; NTP_OK=0
+    fi
+    /etc/init.d/sysntpd start 2>/dev/null
+    CUR_YEAR=$(date +%Y)
+    if [ "$NTP_OK" = "1" ] || { [ "$CUR_YEAR" -ge 2025 ] && [ "$CUR_YEAR" -le 2050 ]; }; then
+        hwclock -w -u 2>/dev/null && log_ok "RTC обновлён"
+    else
+        log_info "Часы недостоверны ($CUR_YEAR) — RTC не перезаписываем"
+    fi
+else
+    /etc/init.d/sysntpd restart 2>/dev/null
+    log_info "Пинг 8.8.8.8 пока не доступен"
+fi
+
+sleep 2
+
+[ -f /etc/banner.bak ] || cp /etc/banner /etc/banner.bak
+sed -i 's/W I R E L E S S/N E T W O R K/g' /etc/banner
+sed -i "/Build Variant:/d; /Kernel Version:/d" /etc/banner
+
+if [ -f "/etc/build_date" ]; then
+    DATE_STR=$(cat /etc/build_date)
+else
+    CURRENT_YEAR=$(date +%Y)
+    if [ "$CURRENT_YEAR" -ge 2025 ] && [ "$CURRENT_YEAR" -le 2050 ]; then
+        DATE_STR=$(date +'%Y-%m-%d')
+    else
+        DATE_STR="***"
+    fi
+fi
+echo " Kernel Version: $KERNEL_VERSION" >> /etc/banner
+# Фиды: tag — коммиты релизного тега, repo — репозитория пакетов
+# (поле feeds_latest); первая строка /etc/build_feeds пишется при сборке.
+FEEDS_STR=$(head -n 1 /etc/build_feeds 2>/dev/null)
+echo " Build Variant: $CURRENT_VARIANT ($DATE_STR${FEEDS_STR:+, feeds: $FEEDS_STR})" >> /etc/banner
+log_ok "Баннер обновлён"
+
+# Имя хоста — только на первой загрузке, чтобы ручной прогон не сбрасывал
+# переименованный роутер обратно в шаблон
+if [ "$MODE" = "firstboot" ]; then
+    run_cmd "Установка hostname" uci set system.@system[0].hostname="$HOSTNAME_PATTERN"
+    run_cmd "Сохранение system" uci commit system
+    run_cmd "Установка commonname" uci set uhttpd.defaults.commonname="$HOSTNAME_PATTERN"
+    uci commit uhttpd
+else
+    log_info "hostname/commonname не трогаем (maintenance)"
+fi
+
+FM_MENU="/usr/share/luci/menu.d/luci-app-filemanager.json"
+if [ -f "$FM_MENU" ]; then
+    sed -i "s/File Manager/Файловый менеджер/" "$FM_MENU"
+    patch_check "$FM_MENU" 'Файловый менеджер' "filemanager menu"
+else
+    log_info "luci-app-filemanager не установлен, меню не правим"
+fi
+
+# --- Фикс mtime из будущего (иначе sysfixtime отбросит часы вперёд при загрузке) ---
+# Область /etc выбрана верно: sysfixtime сканирует ровно её.
+CUR_YEAR=$(date +%Y)
+if [ "$CUR_YEAR" -ge 2025 ] && [ "$CUR_YEAR" -le 2050 ]; then
+    MTIME_REF="/tmp/.zz1_mtime_ref"
+    touch "$MTIME_REF"
+    FUTURE=$(find /etc -type f -newer "$MTIME_REF")
+    rm -f "$MTIME_REF"
+    if [ -n "$FUTURE" ]; then
+        echo "$FUTURE" | xargs touch
+        log_ok "Исправлено mtime в будущем: $(echo "$FUTURE" | wc -l) файлов"
+    else
+        log_ok "Файлов с mtime в будущем нет"
+    fi
+else
+    log_info "Часы не синхронизированы ($CUR_YEAR) — фикс mtime пропущен"
+fi
+
+touch "$LOCK_FILE"
+
+# Гарантированная запись лога перед уходом в фон
+sync
+log_info "Отложенная перезагрузка через 120 секунд (процесс в фоне)"
+(sleep 120; sync; reboot) &
+
+log_info "Настройка завершена. Количество ошибок в логе: $ERROR_COUNT"
+exit 0
