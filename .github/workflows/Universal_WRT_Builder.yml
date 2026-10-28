@@ -347,6 +347,9 @@ jobs:
             # прошивки почти нет); поставьте false для сборки на коммитах тега.
             #   R6S homeproxy: AGH latest, sing-box-extended, ytb, zz1, патчи
             #     (XHTTP и ключ X25519MLKEM768 для REALITY)
+            #   R6S podkop: podkop-engine; R6S netshift: extended; R6S forkop:
+            #     sing-box-forkop base; R6S trafira: extended, без ytb (свой
+            #     Zapret) — все с AGH latest, zz1 и патчами
             #   RB5009 clear и RB5009 switch: без AGH/sing-box/ytb, zz1, без патчей
             # $(entry ...) — подстановка: в ней NOTES не сохраняется, для
             # combo это и не нужно (значения ниже уже согласованы с вариантами).
@@ -354,11 +357,8 @@ jobs:
             #   $(entry nanopi-r6s homeproxy latest latest true true false true),
             #   (код immortalwrt/homeproxy как есть, без патчей)
             #   $(entry nanopi-r6s homeproxy latest 1.12.x true true false true),
-            #   $(entry nanopi-r6s forkop latest forkop-base true true true true),
-            #   (forkop 2.x на ядре sing-box-forkop, сборка base)
             #   $(entry nanopi-r6s homeproxy latest latest true true true true),
             #   (с sing-box 1.14 опции DNS — патч 006)
-            #   $(entry nanopi-r6s trafira latest extended false true true true),
             #   $(entry nanopi-r6s podkop latest podkop-engine-full true true true true),
             # homeproxy с sing-box-extended: только в этой связке применяются
             # патчи XHTTP и ключ X25519MLKEM768 для REALITY (Build-If).
