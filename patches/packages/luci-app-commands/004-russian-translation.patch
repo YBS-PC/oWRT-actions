@@ -1,0 +1,192 @@
+From 8f07627b600006e7d9e14fc565783619f8a3a201 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 28 Oct 2026 20:38:28 +0000
+Subject: [PATCH] commands: Russian translation of the new pages
+
+The strings of the new run and settings pages and the tab "Commands",
+in a separate catalog po/ru/commands-ext.po: it is built into the same
+package luci-i18n-commands-ru as commands.ru.lmo, and LuCI loads every
+*.ru.lmo. The translations of commands.po are left as they are. The
+strings luci-base translates already (Cancel, Close, Save, Stop, Name)
+are not repeated.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
+---
+ po/ru/commands-ext.po | 164 ++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 164 insertions(+)
+ create mode 100644 po/ru/commands-ext.po
+
+diff --git a/po/ru/commands-ext.po b/po/ru/commands-ext.po
+new file mode 100644
+index 0000000..116aab4
+--- /dev/null
++++ b/po/ru/commands-ext.po
+@@ -0,0 +1,164 @@
++msgid ""
++msgstr ""
++"Content-Type: text/plain; charset=UTF-8\n"
++"Project-Id-Version: luci-app-commands\n"
++"Language: ru\n"
++"MIME-Version: 1.0\n"
++"Content-Transfer-Encoding: 8bit\n"
++"Plural-Forms: nplurals=3; plural=n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2;\n"
++
++msgid "Commands"
++msgstr "Команды"
++
++msgid "Search by name, description or command"
++msgstr "Поиск по имени, описанию или команде"
++
++msgid "Commands run in the background on the router: the output appears as it comes, a command keeps running when the page is closed and can be stopped."
++msgstr "Команды выполняются на роутере в фоне: вывод появляется по мере работы, команда не прерывается при закрытии страницы, её можно остановить."
++
++msgid "No commands yet."
++msgstr "Команд пока нет."
++
++msgid "Add a command"
++msgstr "Добавить команду"
++
++msgid "Show output"
++msgstr "Показать вывод"
++
++msgid "Arguments"
++msgstr "Аргументы"
++
++msgid "Output"
++msgstr "Вывод"
++
++msgid "Run the command and download its output as a file, also binary data"
++msgstr "Выполнить команду и скачать вывод файлом, в том числе двоичные данные"
++
++msgid "Public link"
++msgstr "Публичная ссылка"
++
++msgid "Tap to show the whole command"
++msgstr "Нажмите, чтобы показать команду целиком"
++
++msgid "interrupted"
++msgstr "прервана"
++
++msgid "time limit"
++msgstr "превышено время"
++
++msgid "output limit"
++msgstr "предел вывода"
++
++msgid "stopped"
++msgstr "остановлена"
++
++msgid "code %d"
++msgstr "код %d"
++
++msgid "Last run: %s"
++msgstr "Последний запуск: %s"
++
++msgid "No response"
++msgstr "Нет ответа"
++
++msgid "Failed to start the command: %s"
++msgstr "Не удалось запустить команду: %s"
++
++msgid "Run the command?"
++msgstr "Выполнить команду?"
++
++msgid "Copy"
++msgstr "Копировать"
++
++msgid "Run again"
++msgstr "Повторить"
++
++msgid "Wrap long lines"
++msgstr "Переносить длинные строки"
++
++msgid "Follow output"
++msgstr "Следить за выводом"
++
++msgid "The output is no longer available."
++msgstr "Вывод больше недоступен."
++
++msgid "running"
++msgstr "выполняется"
++
++msgid "The beginning of the output is hidden to keep the page fast; \"Save\" downloads all of it."
++msgstr "Начало вывода скрыто, чтобы страница не тормозила; «Сохранить» скачивает вывод целиком."
++
++msgid "The output reached the size limit of the router (8 MiB) and was cut off."
++msgstr "Вывод достиг предела на роутере (8 МиБ) и обрезан."
++
++msgid "The output contains binary data; use \"Download\" on the command card to get it unchanged."
++msgstr "В выводе есть двоичные данные; чтобы получить их без изменений, нажмите «Скачать» на карточке команды."
++
++msgid "Connection error, retrying…"
++msgstr "Ошибка связи, повтор…"
++
++msgid "Copied"
++msgstr "Скопировано"
++
++msgid "Copy failed"
++msgstr "Не удалось скопировать"
++
++msgid "Failed to read the output: %s"
++msgstr "Не удалось прочитать вывод: %s"
++
++msgid "These links run the command without logging in, anyone who knows them can use them."
++msgstr "Эти ссылки выполняют команду без входа в систему: ими может воспользоваться любой, кто их знает."
++
++msgid "A link changes when the command is edited or moved: the router names unnamed settings sections by their position and contents."
++msgstr "Ссылка меняется после правки или перемещения команды: роутер называет безымянные секции настроек по их положению и содержимому."
++
++msgid "Download the output:"
++msgstr "Скачать вывод:"
++
++msgid "Show the output in the browser:"
++msgstr "Показать вывод в браузере:"
++
++msgid "Shell commands and scripts to run from the web interface on the \"Commands\" tab. Drag the rows to change their order."
++msgstr "Команды оболочки и скрипты, которые запускаются из веб-интерфейса на вкладке «Команды». Порядок меняется перетаскиванием строк."
++
++msgid "A short name for the configured command"
++msgstr "Короткое имя команды"
++
++msgid "Shown in small type under the name: what the command does, what to enter as arguments."
++msgstr "Показывается мелким шрифтом под именем: что делает команда, что вводить в аргументы."
++
++msgid "Group"
++msgstr "Группа"
++
++msgid "Commands with the same group are shown together under its heading; the groups follow the order of their first command."
++msgstr "Команды одной группы показываются вместе под её заголовком; группы идут в порядке своих первых команд."
++
++msgid "A shell command or a whole script: pipes, redirections, variables and several lines work as in a terminal. Arguments typed on the run page become $1, $2, …; a one-line command gets them at its end as \"$@\" unless it uses $1…$9 or \"$@\" itself."
++msgstr "Команда оболочки или целый скрипт: конвейеры, перенаправления, переменные и несколько строк работают как в терминале. Аргументы со страницы запуска становятся $1, $2, …; к однострочной команде они дописываются в конец как \"$@\", если она сама не использует $1…$9 или \"$@\"."
++
++msgid "Argument hint"
++msgstr "Подсказка к аргументам"
++
++msgid "Shown in the empty argument field, e.g. \"host name or IP address\"."
++msgstr "Видна в пустом поле аргументов, например «имя хоста или IP-адрес»."
++
++msgid "Default arguments"
++msgstr "Аргументы по умолчанию"
++
++msgid "Filled into the argument field, can be changed before the run."
++msgstr "Подставляются в поле аргументов, перед запуском их можно изменить."
++
++msgid "Ask before running"
++msgstr "Спрашивать перед запуском"
++
++msgid "For commands such as a reboot: the run page asks for confirmation."
++msgstr "Для команд вроде перезагрузки: перед запуском страница попросит подтверждения."
++
++msgid "Time limit"
++msgstr "Предел времени"
++
++msgid "Seconds; the command is stopped when it runs longer. Empty: no limit, the command can be stopped by hand."
++msgstr "В секундах; дольше команда не работает, её останавливают. Пусто — без предела, остановить можно вручную."
++
++msgid "no limit"
++msgstr "без предела"
+-- 
+2.43.0
+
