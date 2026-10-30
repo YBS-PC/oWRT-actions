@@ -57,18 +57,18 @@ index 53bb6ff0..0712c3a7 100755
  
  build_app_root() {
 diff --git a/tests/shell_inventory.sh b/tests/shell_inventory.sh
-index c5cd46b7..63be4f0c 100644
+index 0178b745..cf03f5cc 100644
 --- a/tests/shell_inventory.sh
 +++ b/tests/shell_inventory.sh
-@@ -44,6 +44,7 @@ shell_scripts="$(
+@@ -46,6 +46,7 @@ shell_scripts="$(
  expected_shell_scripts="$(
    printf '%s\n' \
      'luci-app-trafira/root/etc/uci-defaults/50_luci-trafira' \
 +    'trafira/files/etc/uci-defaults/60_trafira-firewall' \
+     'trafira/files/usr/lib/service/procd-stop.sh' \
      'trafira/files/etc/init.d/trafira' |
      LC_ALL=C sort
- )"
-@@ -87,4 +88,11 @@ if grep -n -E '(^|[^[:alnum:]_])(uci|rm|logger|rpcd|killall|jsonfilter|config_lo
+@@ -90,4 +91,11 @@ if grep -n -E '(^|[^[:alnum:]_])(uci|rm|logger|rpcd|killall|jsonfilter|config_lo
    fail "LuCI uci-defaults must not own cache, rpcd, logging, or UCI logic"
  fi
  
@@ -136,3 +136,4 @@ index 3046a1aa..bd05c090 100644
          return true;
 -- 
 2.43.0
+
