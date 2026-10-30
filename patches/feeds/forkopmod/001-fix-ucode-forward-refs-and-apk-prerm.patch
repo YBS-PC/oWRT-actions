@@ -41,16 +41,19 @@ status_view» в start_test) вместо {"success": true, "message":
 Функции перенесены без изменения кода (list_update_if_missing —
 ниже list_update_if_due, start_test — ниже status_view). После патча
 вызовов до объявления нет (кроме filter() в routing/list_cache.uc — это
-встроенная функция ucode). На 1.0.13 изменённые модули проверены
-ucode -c; в 1.0.14 к ним добавлены только две перестановки целых функций.
+встроенная функция ucode). Проверено на 1.0.14 с ucode 8592205 (как в
+OpenWrt 25.12): все 72 модуля компилируются (ucode -c); вызовы
+push_dns_route_resolve() из singbox/generator.uc и remember_group_probe()
+из diagnostics/runtime.uc автора падают с «left-hand side is not a
+function», с патчем отрабатывают.
 
 prerm: с apk (OpenWrt 25.12+) тело Package/forkop/prerm встраивается в
 общий /bin/sh-скрипт pre-deinstall, поэтому ucode-код там — синтаксическая
 ошибка, и «apk del forkop» падал. Переписан на POSIX sh, логика прежняя.
 
-Тесты проекта (1.0.13): без патча проходят 56 из 80, с патчем 55; провалы те же
-(тесты автора расходятся с кодом), кроме package_lifecycle — он требует
-ucode в prerm, именно это и исправлено.
+Тесты проекта (1.0.14, ucode 8592205): без патча проходят 59 из 80, с
+патчем 58; провалы те же (тесты автора расходятся с кодом), кроме
+package_lifecycle — он требует ucode в prerm, именно это и исправлено.
 
 Заменяет 001 для 1.0.13: в 1.0.14 автор сам перенёс uci_core в
 config/validator.uc (эта часть из патча убрана), сдвинул строки в
