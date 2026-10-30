@@ -47,18 +47,27 @@ else
 fi
 
 # =========================================================
-# УСЛОВНАЯ УСТАНОВКА ZAPRET
-# Выполняется только если в .config есть строка CONFIG_PACKAGE_zapret=y
+# УСЛОВНАЯ УСТАНОВКА ZAPRET / ZAPRET2
+# remittor/zapret-openwrt держит две программы в разных ветках:
+#   zap1   — zapret  (bol-van/zapret, v72): пакеты zapret, luci-app-zapret;
+#   master — zapret2 (bol-van/zapret2):     пакеты zapret2, luci-app-zapret2.
+# Раньше для zapret клонировался master, а там уже только zapret2 —
+# пакета zapret в дереве не оказывалось. Клонируется ветка того пакета,
+# который включён в .config (=y — в образ, =m — отдельным пакетом); оба
+# сразу — в разные каталоги.
 # =========================================================
-if [ -f ./.config ] && grep -q "^CONFIG_PACKAGE_zapret=y" ./.config; then
-    echo ">>> [Zapret] В конфиге включен 'zapret'. Скачиваем исходники..."
-    mkdir -p ./package/zapret-openwrt
-    # Ветка по умолчанию у remittor/zapret-openwrt теперь zap1; master
-    # остаётся, но новые изменения автор ведёт в zap1 — проверьте, какая
-    # нужна, прежде чем включать zapret в WRT.config.
-    git clone --depth=1 -b master https://github.com/remittor/zapret-openwrt.git ./package/zapret-openwrt/
+ZAPRET_REPO="https://github.com/remittor/zapret-openwrt.git"
+if [ -f ./.config ] && grep -Eq "^CONFIG_PACKAGE_(luci-app-)?zapret=[ym]" ./.config; then
+    echo ">>> [Zapret] В конфиге включен 'zapret'. Скачиваем исходники (ветка zap1)..."
+    git clone --depth=1 -b zap1 "$ZAPRET_REPO" ./package/zapret-openwrt/
 else
     echo ">>> [Zapret] Пакет 'zapret' не выбран в конфиге (или закомментирован). Скачивание пропущено."
+fi
+if [ -f ./.config ] && grep -Eq "^CONFIG_PACKAGE_(luci-app-)?zapret2=[ym]" ./.config; then
+    echo ">>> [Zapret2] В конфиге включен 'zapret2'. Скачиваем исходники (ветка master)..."
+    git clone --depth=1 -b master "$ZAPRET_REPO" ./package/zapret2-openwrt/
+else
+    echo ">>> [Zapret2] Пакет 'zapret2' не выбран в конфиге (или закомментирован). Скачивание пропущено."
 fi
 
 # checkout_variant_commit <каталог клона> <имя для лога>
