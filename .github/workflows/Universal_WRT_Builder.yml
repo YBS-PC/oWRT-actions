@@ -2450,26 +2450,37 @@ jobs:
         # Итог job GitHub записывает не сразу: 23.10.2026 notify стартовал
         # через 5 с после конца сборки, API ещё отдавал её без conclusion и
         # completed_at — в Telegram ушли «❔ … 0ч 0м» и «Успешно: 0 из 1».
-        # Поэтому ждём, пока у всех сборок появится итог (до 60 с).
-        for _try in $(seq 1 12); do
+        # Поэтому ждём, пока у всех сборок появится итог. 30.10.2026 и 60 с
+        # не хватило: сборка кончилась в 17:38:27, notify ждал до 17:40:03,
+        # а API всё отдавал её без итога. Теперь ждём до 3 мин, а если итога
+        # так и нет — подставляем то, что известно точно (ниже).
+        NOTIFY_START=$(date -u +%s)
+        for _try in $(seq 1 18); do
           JOBS=$(gh api "repos/$REPO/actions/runs/$RUN_ID/jobs?per_page=100" 2>/dev/null) || JOBS=""
           PENDING=$(printf '%s' "$JOBS" | jq '[.jobs[]? | select(.name | contains("] - ")) | select(.conclusion == null or .completed_at == null)] | length' 2>/dev/null) || PENDING=""
           [ "$PENDING" = "0" ] && break
-          sleep 5
+          sleep 10
         done
-        LINES=$(printf '%s' "$JOBS" | jq -r '
+        # res — итог сборки. needs.build.result = success значит, что успешна
+        # КАЖДАЯ сборка матрицы: тогда сборка без итога в API — тоже успех.
+        # При failure/cancelled неизвестно, какая упала, — остаётся «❔».
+        # Без completed_at длительность считаем до старта notify (с «≈»:
+        # завышена на время до его запуска, обычно меньше минуты).
+        JQ_RES='def res: .conclusion // (if $br == "success" then "success" else null end);'
+        LINES=$(printf '%s' "$JOBS" | jq -r --arg br "$BUILD_RESULT" --argjson t0 "$NOTIFY_START" "$JQ_RES"'
           .jobs[]? | select(.name | contains("] - ")) |
-          (if   .conclusion == "success"   then "✅"
-           elif .conclusion == "failure"   then "❌"
-           elif .conclusion == "cancelled" then "⏹"
-           elif .conclusion == "skipped"   then "⏭"
+          (if   res == "success"   then "✅"
+           elif res == "failure"   then "❌"
+           elif res == "cancelled" then "⏹"
+           elif res == "skipped"   then "⏭"
            else "❔" end) as $icon |
-          (if .started_at and .completed_at
-             then (((.completed_at | fromdateiso8601) - (.started_at | fromdateiso8601)) / 60 | floor)
+          (if .completed_at then "" else "≈" end) as $approx |
+          (if .started_at
+             then ((((.completed_at | if . then fromdateiso8601 else $t0 end) - (.started_at | fromdateiso8601)) / 60 | floor) | if . < 0 then 0 else . end)
              else 0 end) as $min |
-          "\($icon) \(.name | sub("^[^\\[]*"; "")) — \($min / 60 | floor)ч \($min % 60)м"
+          "\($icon) \(.name | sub("^[^\\[]*"; "")) — \($approx)\($min / 60 | floor)ч \($min % 60)м"
         ' 2>/dev/null) || LINES=""
-        OK=$(printf '%s' "$JOBS" | jq '[.jobs[]? | select(.name | contains("] - ")) | select(.conclusion == "success")] | length' 2>/dev/null) || OK=""
+        OK=$(printf '%s' "$JOBS" | jq --arg br "$BUILD_RESULT" "$JQ_RES"'[.jobs[]? | select(.name | contains("] - ")) | select(res == "success")] | length' 2>/dev/null) || OK=""
         ALL=$(printf '%s' "$JOBS" | jq '[.jobs[]? | select(.name | contains("] - "))] | length' 2>/dev/null) || ALL=""
         # jq на пустом входе ничего не печатает — тогда строку счётчика не выводим
         COUNT_LINE=""
