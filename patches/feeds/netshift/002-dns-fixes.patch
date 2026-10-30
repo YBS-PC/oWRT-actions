@@ -18,7 +18,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
 diff --git a/netshift/files/usr/bin/netshift b/netshift/files/usr/bin/netshift
-index 8b5d7a6..eef3826 100755
+index 88f085dc..92d4fbee 100755
 --- a/netshift/files/usr/bin/netshift
 +++ b/netshift/files/usr/bin/netshift
 @@ -5394,6 +5394,10 @@ sing_box_configure_dns() {
