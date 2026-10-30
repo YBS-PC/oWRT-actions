@@ -70,9 +70,9 @@
 | Папка | Репозиторий | Коммит | Дата коммита |
 |---|---|---|---|
 | `feeds/forkop/` | [ushan0v/forkop](https://github.com/ushan0v/forkop) | [`9544f3d`](https://github.com/ushan0v/forkop/commit/9544f3de09c62c935e1147147136234594d04f02) | 27.10.2026 |
-| `feeds/forkopmod/` | [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) | [`05817dc`](https://github.com/Gavr1024/forkop-mod/commit/05817dcd7079bd12e74c342e400edae960fdb798) | 24.10.2026 |
+| `feeds/forkopmod/` | [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) | [`aa05cf9`](https://github.com/Gavr1024/forkop-mod/commit/aa05cf939f12fc3f30df394c4fa64916895377e0) | 28.10.2026 |
 | `feeds/luciappxray/` | [yichya/luci-app-xray](https://github.com/yichya/luci-app-xray) | [`4d5a6fd`](https://github.com/yichya/luci-app-xray/commit/4d5a6fd7fc4d2fbbcd7f70f1319da06b91ec1d56) | 22.09.2026 |
-| `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`23d14fb`](https://github.com/yandexru45/netshift/commit/23d14fbae049dbf40a1f125e33e1957f07261d65) | 25.10.2026 |
+| `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`f4f5eba`](https://github.com/yandexru45/netshift/commit/f4f5ebaa853cdcf443f21166ce8dbe2d58a4e0d8) | 29.10.2026 |
 | `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`b6e75a3`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/b6e75a3e154c393875a2868fab9f508b4b77a214) | 28.10.2026 |
 | `feeds/podkop/` | [itdoginfo/podkop](https://github.com/itdoginfo/podkop) | [`c654bf5`](https://github.com/itdoginfo/podkop/commit/c654bf5da75309754e3fb63b9441981db65fff68) | 24.10.2026 |
 | `feeds/trafira/` | [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) | [`ce5e4f3`](https://github.com/petrouspetr-pixel/trafira/commit/ce5e4f33253c74664f6d4a7727918a30bb011217) | 21.10.2026 |
@@ -165,15 +165,17 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
 
 ### forkop-mod — `feeds/forkopmod/` (1)
 
-Вариант `forkop-mod`, фид [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) (1.0.13).
+Вариант `forkop-mod`, фид [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) (1.0.14).
 
-Патчи сняты с коммита [`05817dc`](https://github.com/Gavr1024/forkop-mod/commit/05817dcd7079bd12e74c342e400edae960fdb798) от 24.10.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`aa05cf9`](https://github.com/Gavr1024/forkop-mod/commit/aa05cf939f12fc3f30df394c4fa64916895377e0) от 28.10.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Ошибки «left-hand side is not a function» и удаление через
-  apk.** В 13 местах функции перенесены выше места, где их вызывают
-  (ещё три, в генераторе sing-box, автор исправил сам в 1.0.11). Без
-  этого падают проверка стратегий ByeDPI и проверка обновления списков
-  при старте, а также части интерфейса и службы. Скрипт удаления
+  apk.** В 14 местах функции перенесены выше места, где их вызывают
+  (ещё три, в генераторе sing-box, автор исправил сам в 1.0.11, uci_core
+  в проверке конфига — в 1.0.14). Без этого падают проверка стратегий
+  ByeDPI и проверка обновления списков при старте, режим «ответ DNS:
+  route», задержки узлов группы Xray в диагностике, а также части
+  интерфейса и службы. Скрипт удаления
   переписан, чтобы `apk del` работал. *Всегда.*
 
 ### luci-app-xray — `feeds/luciappxray/` (1)
@@ -191,7 +193,7 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
 
 Вариант `netshift`, фид [yandexru45/netshift](https://github.com/yandexru45/netshift).
 
-Патчи сняты с коммита [`23d14fb`](https://github.com/yandexru45/netshift/commit/23d14fbae049dbf40a1f125e33e1957f07261d65) от 25.10.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`f4f5eba`](https://github.com/yandexru45/netshift/commit/f4f5ebaa853cdcf443f21166ce8dbe2d58a4e0d8) от 29.10.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Разбор ссылок.** Правильно читаются логин и пароль socks5 со
   спецсимволами и ссылки VLESS/Trojan с транспортом http (ссылки без
