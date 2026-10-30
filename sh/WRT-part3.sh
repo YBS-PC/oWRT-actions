@@ -28,7 +28,8 @@ mkdir -p ./package/luci-app-log-viewer
 
 # Клонируем общие пакеты
 echo ">>> Клонируем тему luci-app-log-viewer..."
-git clone -b master https://github.com/gSpotx2f/luci-app-log.git ./package/luci-app-log-viewer/
+# --depth=1: история пакета сборке не нужна (как у темы ниже)
+git clone --depth=1 -b master https://github.com/gSpotx2f/luci-app-log.git ./package/luci-app-log-viewer/
 
 echo ">>> Клонируем тему Proton2025..."
 git clone --depth=1 https://github.com/ChesterGoodiny/luci-theme-proton2025.git ./package/luci-theme-proton2025/
@@ -39,7 +40,7 @@ git clone --depth=1 https://github.com/ChesterGoodiny/luci-theme-proton2025.git 
 # =========================================================
 if [ "$CURRENT_MATRIX_TARGET" == "ax59u" ]; then
     mkdir -p ./package/facinstall
-    git clone -b main https://github.com/openwrt-xiaomi/facinstall.git ./package/facinstall/
+    git clone --depth=1 -b main https://github.com/openwrt-xiaomi/facinstall.git ./package/facinstall/
     echo ">>> [Git] Устройство ax59u - исходники facinstall добавлены"
 else
     echo ">>> [Git] Устройство не ax59u - исходники facinstall не добавлены"
@@ -52,7 +53,10 @@ fi
 if [ -f ./.config ] && grep -q "^CONFIG_PACKAGE_zapret=y" ./.config; then
     echo ">>> [Zapret] В конфиге включен 'zapret'. Скачиваем исходники..."
     mkdir -p ./package/zapret-openwrt
-    git clone -b master https://github.com/remittor/zapret-openwrt.git ./package/zapret-openwrt/
+    # Ветка по умолчанию у remittor/zapret-openwrt теперь zap1; master
+    # остаётся, но новые изменения автор ведёт в zap1 — проверьте, какая
+    # нужна, прежде чем включать zapret в WRT.config.
+    git clone --depth=1 -b master https://github.com/remittor/zapret-openwrt.git ./package/zapret-openwrt/
 else
     echo ">>> [Zapret] Пакет 'zapret' не выбран в конфиге (или закомментирован). Скачивание пропущено."
 fi
