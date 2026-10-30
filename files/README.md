@@ -261,7 +261,7 @@ chain priority_mangle_prerouting_dscp {
   `tc -s qdisc show dev ifb4<wan>` — под нагрузкой пакеты во всех четырёх колонках.
 
   **Чтобы откатить:** `uci set sqm.<очередь>.script='piece_of_cake.qos'; uci commit sqm; service sqm restart`.
-- **`/etc/config/attendedsysupgrade`**: на OpenWrt URL → `https://sysupgrade.openwrt.org`, на ImmortalWrt → `https://asu-2.kyarucloud.moe`
+- **`/etc/config/attendedsysupgrade`**: `server.url` через `uci set` — на OpenWrt `https://sysupgrade.openwrt.org`, на ImmortalWrt `https://sysupgrade.kyarucloud.moe` (адрес из пакета ImmortalWrt; прежний `asu-2.kyarucloud.moe` не отвечает)
 
 ## 12. `/etc/sysctl.conf`
 **Если модуль `tcp_bbr` найден в ядре** — старые строки с этими параметрами удаляются, в конец файла добавляется:
