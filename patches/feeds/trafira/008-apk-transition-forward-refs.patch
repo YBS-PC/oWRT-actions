@@ -1,0 +1,392 @@
+From: YBS-PC/oWRT-actions
+Subject: [PATCH] trafira: вызовы функций переходов APK до объявления в
+ components/action.uc
+
+ucode связывает имя функции в момент её объявления: функция, которая
+вызывает другую, объявленную ниже в том же файле, получает null и падает
+с «left-hand side is not a function». Коммит автора 6662289 (3.1.15,
+28.10.2026, #97) добавил переходы между пакетами sing-box на apk, и четыре места
+вызывают функции, объявленные ниже:
+
+  run_logged_pkg_remove_sing_box_conflict -> apply_apk_core_transition
+  restore_rollback_apk_world             -> write_apk_transition_world
+  pkg_install_rollback_files             -> apply_apk_core_transition
+  replace_sing_box_package_variant       -> apply_apk_core_transition
+
+То есть на OpenWrt 25.12 (apk) падали смена варианта ядра (sing-box /
+sing-box-tiny / sing-box-extended) со страницы «Компоненты», откат
+неудачной установки и снятие конфликтующего ядра.
+
+Блок функций переходов (apk_transition_command ... apply_apk_core_transition)
+и две функции, которые нужны ему (rollback_archive_digest,
+rollback_files_valid), перенесены без изменения кода выше первого
+вызова. Предварительное объявление через let здесь не подходит: тест
+автора tests/issue96_apk_transition.cjs вырезает тела функций по тексту
+«function имя(» и выполняет их в JavaScript, где функции всплывают, —
+поэтому тест эту ошибку и не видит. После переноса вызовов до объявления
+в trafira нет; добавленные и удалённые строки патча совпадают (только
+перестановка); tests/issue96_apk_transition.cjs проходит.
+
+Проверено с ucode 8592205 (как в OpenWrt 25.12): вызов
+restore_rollback_apk_world() из action.uc автора падает с «left-hand side
+is not a function», с патчем отрабатывает; все 115 модулей trafira
+компилируются (ucode -c); тесты автора с серией 002-008 — 223 из 227,
+без патчей — 218 из 225. Оставшиеся 4 падают и без патчей из-за
+окружения проверки: ucode собран вне системных путей (тесты кэша
+байткода не находят модуль fs, в том числе в tmpfs-песочнице) и
+сторожевой таймер установщика (installer_owner).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Uo9XQuT7u6ShTYdi2S3Anq
+---
+diff --git a/trafira/files/usr/lib/components/action.uc b/trafira/files/usr/lib/components/action.uc
+index 80c64899..f7010675 100644
+--- a/trafira/files/usr/lib/components/action.uc
++++ b/trafira/files/usr/lib/components/action.uc
+@@ -692,6 +692,164 @@ function pkg_remove_sing_box_conflict(package_name) {
+     return command_success(command_from_args([ "opkg", "remove", "--force-depends", package_name ]) + " </dev/null");
+ }
+ 
++function rollback_archive_digest(path) {
++    let value = split(trim(command_output_from_args([ "sha256sum", path ])), /\s+/)[0];
++    return match(as_string(value), /^[0-9a-f]{64}$/) != null ? value : "";
++}
++
++function rollback_files_valid() {
++    if (length(rollback_packages) == 0)
++        return false;
++    for (let info in rollback_packages)
++        if (!file_nonempty(info.path) || rollback_archive_digest(info.path) != info.digest)
++            return false;
++    return true;
++}
++
++function apk_transition_command(transition, name, file, simulate, reinstall) {
++    let args = [ "apk", "--no-network", "--repositories-file", "/dev/null", "add", "--allow-untrusted" ];
++    if (simulate)
++        push(args, "--simulate");
++    if (reinstall)
++        push(args, "--force-reinstall");
++    else {
++        for (let item in transition.packages)
++            push(args, item.name + "=" + item.version);
++        for (let core in [ "sing-box", "sing-box-tiny", "sing-box-extended" ])
++            // Extended/Tiny may provide virtual sing-box. A world conflict
++            // against that alias would also reject the desired provider.
++            if (core != name && (core != "sing-box" || name == ""))
++                push(args, "!" + core);
++        // Replace a concrete Stable identity pin with the virtual alias when
++        // the selected fork provides sing-box. The solver must purge Stable.
++        if (name != "" && name != "sing-box" && transition.source_name == "sing-box")
++            push(args, "sing-box");
++    }
++    if (file != "")
++        push(args, file);
++    return command_from_args(args) + " </dev/null";
++}
++
++function apk_transition_plan_safe(output, name, allow_unchanged, required_removals) {
++    let changes = 0, installed = 0, complete = 0, total = 0, seen = {}, purged = {};
++    for (let raw in split(output, "\n")) {
++        let line = trim(raw);
++        if (line == "")
++            continue;
++        let operation = match(line, /^\(([1-3])\/([1-3])\) (Installing|Upgrading|Downgrading|Replacing|Reinstalling|Purging) (sing-box|sing-box-tiny|sing-box-extended) \([^()\r\n]+\)$/);
++        if (operation) {
++            if (complete || int(operation[1]) != changes + 1 || (total && total != int(operation[2])) || seen[operation[4]])
++                return false;
++            total = int(operation[2]);
++            seen[operation[4]] = true;
++            if (operation[3] == "Purging") {
++                if (operation[4] == name)
++                    return false;
++                purged[operation[4]] = true;
++            }
++            else {
++                if (name == "" || operation[4] != name)
++                    return false;
++                installed++;
++            }
++            changes++;
++        }
++        else if (match(line, /^OK: [0-9]+([.][0-9]+)? (B|KiB|MiB|GiB) in [0-9]+ packages$/))
++            complete++;
++        else
++            return false;
++    }
++    for (let core in (required_removals || []))
++        if (!purged[core])
++            return false;
++    return complete == 1 && total == changes && (name == "" ? changes > 0 :
++        installed == 1 || (allow_unchanged && installed == 0));
++}
++
++function apk_transition_dependencies_unchanged(transition) {
++    for (let item in transition.packages)
++        if (installed_package_version(item.name) != item.version)
++            return false;
++    return true;
++}
++
++function apk_transition_world(transition, name) {
++    let lines = [];
++    for (let line in split(transition.world, "\n"))
++        if (trim(line) != "" && !match(trim(line), /^!?(sing-box|sing-box-tiny|sing-box-extended)([@<>=~].*)?$/))
++            push(lines, line);
++    if (name != "")
++        push(lines, name);
++    return join("\n", lines) + "\n";
++}
++
++function apk_transition_world_unchanged(transition) {
++    return transition.expected_world != null && fs.readfile("/etc/apk/world") == transition.expected_world;
++}
++
++function write_apk_transition_world(world, transition) {
++    if (!apk_transition_world_unchanged(transition))
++        return false;
++    let staged = "/etc/apk/world.trafira-transition." + owner_pid();
++    if (!write_file(staged, world) || !apk_transition_world_unchanged(transition) || !fs.rename(staged, "/etc/apk/world")) {
++        remove_file(staged);
++        return false;
++    }
++    transition.expected_world = world;
++    return true;
++}
++
++function apk_transition_ready(transition, name, file, allow_unchanged) {
++    if (!apk_transition_world_unchanged(transition))
++        return false;
++    let repositories;
++    try {
++        repositories = json(command_output_from_args([ "apk", "--no-network", "--repositories-file", "/dev/null",
++            "query", "--from", "repositories", "--format", "json", "--fields", "name", "*" ]));
++    } catch (e) { return false; }
++    let required_removals = [];
++    for (let core in [ "sing-box", "sing-box-tiny", "sing-box-extended" ])
++        if (core != name && installed_package_version(core) != "")
++            push(required_removals, core);
++    return type(repositories) == "array" && length(repositories) == 0 &&
++        apk_transition_dependencies_unchanged(transition) &&
++        apk_transition_plan_safe(command_output(apk_transition_command(transition, name, file, true, false) + " 2>/dev/null"), name, allow_unchanged, required_removals) && apk_transition_world_unchanged(transition);
++}
++
++function apply_apk_core_transition(transition, name, file, version) {
++    let restoring = name == rollback_package.name && file == rollback_package.path;
++    if (!rollback_files_valid() || !apk_transition_ready(transition, name, file, name != "") ||
++        (file != "" && rollback_archive_digest(file) != (restoring ? rollback_package.digest : transition.target_digest)))
++        return false;
++    let reinstall = name != "" && installed_package_version(name) == version;
++    if (!apk_transition_world_unchanged(transition))
++        return false;
++    let installed = run_logged_install("Changing only sing-box APK packages without network",
++        apk_transition_command(transition, name, file, false, false));
++    // apk itself rewrites world. Track that committed state separately from
++    // original user intent, so cleanup and rollback can reject later edits.
++    transition.expected_world = fs.readfile("/etc/apk/world");
++    if (transition.expected_world == null)
++        return false;
++    if (installed && reinstall) {
++        // OpenWrt's --force-reinstall applies to every named argument: NEVER
++        // pass the dependency pins here. They are already present in world.
++        installed = apk_transition_plan_safe(command_output(apk_transition_command(transition, name, file, true, true) + " 2>/dev/null"), name, false) && apk_transition_world_unchanged(transition) &&
++            run_logged_install("Reinstalling exact staged sing-box APK", apk_transition_command(transition, name, file, false, true));
++        if (installed)
++            transition.expected_world = fs.readfile("/etc/apk/world");
++    }
++    installed = installed && apk_transition_dependencies_unchanged(transition) &&
++        (name == "" || installed_package_version(name) == version);
++    for (let core in [ "sing-box", "sing-box-tiny", "sing-box-extended" ])
++        if (core != name && installed_package_version(core) != "")
++            installed = false;
++    // On failure the existing rollback path still restores exact core bytes.
++    // Always remove temporary world pins, including after a partial apk failure.
++    let world = restoring || !installed ? transition.world : apk_transition_world(transition, name);
++    return write_apk_transition_world(world, transition) && installed;
++}
++
+ function run_logged_pkg_remove_sing_box_conflict(package_name, description) {
+     if (rollback_package && rollback_package.apk_transition) {
+         let transition = rollback_package.apk_transition;
+@@ -1554,11 +1712,6 @@ function rollback_archive_field(path, field) {
+     return "";
+ }
+ 
+-function rollback_archive_digest(path) {
+-    let value = split(trim(command_output_from_args([ "sha256sum", path ])), /\s+/)[0];
+-    return match(as_string(value), /^[0-9a-f]{64}$/) != null ? value : "";
+-}
+-
+ function rollback_ipk_unpacked_bytes(path) {
+     // OpenWrt producers have used both bytes and KiB for Installed-Size.
+     // Measure the actual archive as a lower bound instead of trusting that unit.
+@@ -1804,15 +1957,6 @@ function stage_previous_sing_box_package(variant, action, verified_core_only) {
+     return rollback_package != null;
+ }
+ 
+-function rollback_files_valid() {
+-    if (length(rollback_packages) == 0)
+-        return false;
+-    for (let info in rollback_packages)
+-        if (!file_nonempty(info.path) || rollback_archive_digest(info.path) != info.digest)
+-            return false;
+-    return true;
+-}
+-
+ function restore_rollback_apk_world() {
+     if (!is_apk() || rollback_apk_world == null)
+         return true;
+@@ -2032,150 +2176,6 @@ function ram_prepare_failure(stage, error) {
+ // Package-core transitions must not expose unchanged dependencies to apk del's
+ // orphan cleanup. Exact installed pins and core conflicts go into ONE offline
+ // add transaction. Keep the pins until any same-version core reinstall finishes.
+-function apk_transition_command(transition, name, file, simulate, reinstall) {
+-    let args = [ "apk", "--no-network", "--repositories-file", "/dev/null", "add", "--allow-untrusted" ];
+-    if (simulate)
+-        push(args, "--simulate");
+-    if (reinstall)
+-        push(args, "--force-reinstall");
+-    else {
+-        for (let item in transition.packages)
+-            push(args, item.name + "=" + item.version);
+-        for (let core in [ "sing-box", "sing-box-tiny", "sing-box-extended" ])
+-            // Extended/Tiny may provide virtual sing-box. A world conflict
+-            // against that alias would also reject the desired provider.
+-            if (core != name && (core != "sing-box" || name == ""))
+-                push(args, "!" + core);
+-        // Replace a concrete Stable identity pin with the virtual alias when
+-        // the selected fork provides sing-box. The solver must purge Stable.
+-        if (name != "" && name != "sing-box" && transition.source_name == "sing-box")
+-            push(args, "sing-box");
+-    }
+-    if (file != "")
+-        push(args, file);
+-    return command_from_args(args) + " </dev/null";
+-}
+-
+-function apk_transition_plan_safe(output, name, allow_unchanged, required_removals) {
+-    let changes = 0, installed = 0, complete = 0, total = 0, seen = {}, purged = {};
+-    for (let raw in split(output, "\n")) {
+-        let line = trim(raw);
+-        if (line == "")
+-            continue;
+-        let operation = match(line, /^\(([1-3])\/([1-3])\) (Installing|Upgrading|Downgrading|Replacing|Reinstalling|Purging) (sing-box|sing-box-tiny|sing-box-extended) \([^()\r\n]+\)$/);
+-        if (operation) {
+-            if (complete || int(operation[1]) != changes + 1 || (total && total != int(operation[2])) || seen[operation[4]])
+-                return false;
+-            total = int(operation[2]);
+-            seen[operation[4]] = true;
+-            if (operation[3] == "Purging") {
+-                if (operation[4] == name)
+-                    return false;
+-                purged[operation[4]] = true;
+-            }
+-            else {
+-                if (name == "" || operation[4] != name)
+-                    return false;
+-                installed++;
+-            }
+-            changes++;
+-        }
+-        else if (match(line, /^OK: [0-9]+([.][0-9]+)? (B|KiB|MiB|GiB) in [0-9]+ packages$/))
+-            complete++;
+-        else
+-            return false;
+-    }
+-    for (let core in (required_removals || []))
+-        if (!purged[core])
+-            return false;
+-    return complete == 1 && total == changes && (name == "" ? changes > 0 :
+-        installed == 1 || (allow_unchanged && installed == 0));
+-}
+-
+-function apk_transition_dependencies_unchanged(transition) {
+-    for (let item in transition.packages)
+-        if (installed_package_version(item.name) != item.version)
+-            return false;
+-    return true;
+-}
+-
+-function apk_transition_world(transition, name) {
+-    let lines = [];
+-    for (let line in split(transition.world, "\n"))
+-        if (trim(line) != "" && !match(trim(line), /^!?(sing-box|sing-box-tiny|sing-box-extended)([@<>=~].*)?$/))
+-            push(lines, line);
+-    if (name != "")
+-        push(lines, name);
+-    return join("\n", lines) + "\n";
+-}
+-
+-function apk_transition_world_unchanged(transition) {
+-    return transition.expected_world != null && fs.readfile("/etc/apk/world") == transition.expected_world;
+-}
+-
+-function write_apk_transition_world(world, transition) {
+-    if (!apk_transition_world_unchanged(transition))
+-        return false;
+-    let staged = "/etc/apk/world.trafira-transition." + owner_pid();
+-    if (!write_file(staged, world) || !apk_transition_world_unchanged(transition) || !fs.rename(staged, "/etc/apk/world")) {
+-        remove_file(staged);
+-        return false;
+-    }
+-    transition.expected_world = world;
+-    return true;
+-}
+-
+-function apk_transition_ready(transition, name, file, allow_unchanged) {
+-    if (!apk_transition_world_unchanged(transition))
+-        return false;
+-    let repositories;
+-    try {
+-        repositories = json(command_output_from_args([ "apk", "--no-network", "--repositories-file", "/dev/null",
+-            "query", "--from", "repositories", "--format", "json", "--fields", "name", "*" ]));
+-    } catch (e) { return false; }
+-    let required_removals = [];
+-    for (let core in [ "sing-box", "sing-box-tiny", "sing-box-extended" ])
+-        if (core != name && installed_package_version(core) != "")
+-            push(required_removals, core);
+-    return type(repositories) == "array" && length(repositories) == 0 &&
+-        apk_transition_dependencies_unchanged(transition) &&
+-        apk_transition_plan_safe(command_output(apk_transition_command(transition, name, file, true, false) + " 2>/dev/null"), name, allow_unchanged, required_removals) && apk_transition_world_unchanged(transition);
+-}
+-
+-function apply_apk_core_transition(transition, name, file, version) {
+-    let restoring = name == rollback_package.name && file == rollback_package.path;
+-    if (!rollback_files_valid() || !apk_transition_ready(transition, name, file, name != "") ||
+-        (file != "" && rollback_archive_digest(file) != (restoring ? rollback_package.digest : transition.target_digest)))
+-        return false;
+-    let reinstall = name != "" && installed_package_version(name) == version;
+-    if (!apk_transition_world_unchanged(transition))
+-        return false;
+-    let installed = run_logged_install("Changing only sing-box APK packages without network",
+-        apk_transition_command(transition, name, file, false, false));
+-    // apk itself rewrites world. Track that committed state separately from
+-    // original user intent, so cleanup and rollback can reject later edits.
+-    transition.expected_world = fs.readfile("/etc/apk/world");
+-    if (transition.expected_world == null)
+-        return false;
+-    if (installed && reinstall) {
+-        // OpenWrt's --force-reinstall applies to every named argument: NEVER
+-        // pass the dependency pins here. They are already present in world.
+-        installed = apk_transition_plan_safe(command_output(apk_transition_command(transition, name, file, true, true) + " 2>/dev/null"), name, false) && apk_transition_world_unchanged(transition) &&
+-            run_logged_install("Reinstalling exact staged sing-box APK", apk_transition_command(transition, name, file, false, true));
+-        if (installed)
+-            transition.expected_world = fs.readfile("/etc/apk/world");
+-    }
+-    installed = installed && apk_transition_dependencies_unchanged(transition) &&
+-        (name == "" || installed_package_version(name) == version);
+-    for (let core in [ "sing-box", "sing-box-tiny", "sing-box-extended" ])
+-        if (core != name && installed_package_version(core) != "")
+-            installed = false;
+-    // On failure the existing rollback path still restores exact core bytes.
+-    // Always remove temporary world pins, including after a partial apk failure.
+-    let world = restoring || !installed ? transition.world : apk_transition_world(transition, name);
+-    return write_apk_transition_world(world, transition) && installed;
+-}
+-
+ function prepare_apk_package_transition(source_name, target_name, target_file, target_version) {
+     let packages;
+     try {
+-- 
+2.43.0
+
