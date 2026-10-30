@@ -1311,7 +1311,11 @@ if [ ! -f "$LOCK_FILE" ] && [ "$CURRENT_VARIANT" = "switch" ]; then
     uci set network.@device[0].name='br-lan'
     uci set network.@device[0].type='bridge'
     uci set network.@device[0].ports="$FILTERED_PORTS"
-    uci set network.@device[0].stp='1'
+    # STP выключен: у коммутатора один uplink, колец нет. С STP мост Linux
+    # держит каждый поднявшийся порт ~17 с в listening/learning (устройство
+    # без сети после включения) и шлёт topology change, сбрасывающий таблицы
+    # MAC. Если появятся два кабеля к одной сети (кольцо), включите stp='1'.
+    uci set network.@device[0].stp='0'
     uci set network.@device[0].igmp_snooping='1'
     uci set network.@device[0].multicast_querier='1'
     uci set network.@device[0].ipv6='0'
