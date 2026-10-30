@@ -463,8 +463,10 @@ jobs:
     needs: setup
     runs-on: ${{ inputs.runner_os }}
     permissions:
-      contents: write
-    
+      # Только чтение: сборка ничего не пушит и релизов не создаёт (артефакты
+      # и кэш Actions идут по своему токену, не через GITHUB_TOKEN).
+      contents: read
+
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
@@ -1356,6 +1358,10 @@ jobs:
         M_FK: ${{ matrix.fk }}
         M_PATCHES: ${{ matrix.patches }}
         M_FEEDS: ${{ matrix.feeds }}
+        # Для запросов к GitHub API из part2 (запасной путь версий пакетов,
+        # последний коммит youtubeUnblock): без токена лимит — 60 запросов в
+        # час на IP раннера, общий с чужими сборками.
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         cd openwrt
 
