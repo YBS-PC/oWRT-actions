@@ -884,11 +884,25 @@ fi
     fi
 }
 
-# attendedsysupgrade
-if [ "$NAME_VALUE" = "OpenWrt" ]; then
-    run_cmd "Настройка owut (OpenWrt)" sed -i "s|option url 'https://asu-2.kyarucloud.moe'|option url 'https://sysupgrade.openwrt.org'|" /etc/config/attendedsysupgrade
+# attendedsysupgrade: сервер сборок (owut, LuCI) — по платформе.
+# ImmortalWrt перенёс ASU на sysupgrade.kyarucloud.moe (так в его пакете
+# attendedsysupgrade-common); прежний asu-2.kyarucloud.moe не отвечает
+# (HTTP 530). Значение ставится через uci, а не заменой одного известного
+# адреса sed'ом: тот молча ничего не делал, если в конфиге стоял третий адрес.
+if [ -f /etc/config/attendedsysupgrade ]; then
+    if [ "$NAME_VALUE" = "OpenWrt" ]; then
+        ASU_URL="https://sysupgrade.openwrt.org"
+    else
+        ASU_URL="https://sysupgrade.kyarucloud.moe"
+    fi
+    if [ "$(uci -q get attendedsysupgrade.server.url)" = "$ASU_URL" ]; then
+        log_ok "owut: сервер $ASU_URL уже задан"
+    else
+        run_cmd "Настройка owut ($NAME_VALUE): $ASU_URL" uci set attendedsysupgrade.server.url="$ASU_URL"
+        uci commit attendedsysupgrade
+    fi
 else
-    run_cmd "Настройка owut (ImmortalWrt)" sed -i "s|option url 'https://sysupgrade.openwrt.org'|option url 'https://asu-2.kyarucloud.moe'|" /etc/config/attendedsysupgrade
+    log_info "attendedsysupgrade не установлен, сервер owut не настраиваем"
 fi
 
 # AdGuardHome
