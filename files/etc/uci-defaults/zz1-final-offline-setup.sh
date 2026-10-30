@@ -1036,11 +1036,13 @@ EOF
             uci -q set "$CURRENT_VARIANT".settings.dont_touch_dhcp='1' 2>/dev/null \
                 && uci commit "$CURRENT_VARIANT" 2>/dev/null \
                 && log_ok "$CURRENT_VARIANT: dont_touch_dhcp=1 (AGH остаётся хозяином на :53)"
-            # trafira: такой опции нет. По умолчанию (Alice Mode выключен, без
-            # секций с DNS по устройствам) он DNS клиентов не перехватывает и
-            # AGH видит каждого. С включённым Alice Mode DNS клиентов «в обход»
-            # уходит в DNS trafira мимо AGH (статистика/фильтры AGH для них
-            # не работают) — это его штатное поведение, здесь не меняется.
+            # trafira: опция есть (dns/apply.uc: dnsmasq не перенастраивается,
+            # прежние правки trafira в нём откатываются). По умолчанию (Alice
+            # Mode выключен, без секций с DNS по устройствам) он DNS клиентов
+            # не перехватывает и AGH видит каждого. С включённым Alice Mode
+            # DNS клиентов «в обход» уходит в DNS trafira мимо AGH
+            # (статистика/фильтры AGH для них не работают) — это его штатное
+            # поведение, здесь не меняется.
             log_ok "AGH upstream → $CURRENT_VARIANT sing-box ($_AGH_EXPECTED)"
         elif [ "$CURRENT_VARIANT" = "xray" ]; then
             # luci-app-xray сам кладёт dnsmasq «server=127.0.0.1#5300»; при AGH
