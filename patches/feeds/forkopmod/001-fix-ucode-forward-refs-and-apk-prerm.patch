@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
-Date: Sat, 24 Oct 2026 12:00:00 +0000
-Subject: [PATCH] forkop-mod 1.0.13: вызовы ucode-функций до объявления и
+Date: Fri, 30 Oct 2026 12:00:00 +0000
+Subject: [PATCH] forkop-mod 1.0.14: вызовы ucode-функций до объявления и
  prerm для apk
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -9,9 +9,11 @@ Content-Transfer-Encoding: 8bit
 
 ucode связывает имя функции в момент её объявления. Если функция A
 вызывает функцию B, объявленную ниже в том же файле, A получает null и
-падает с «left-hand side is not a function». В 1.0.13 таких мест 13.
+падает с «left-hand side is not a function». В 1.0.14 таких мест 14.
 Три места в singbox/generator.uc (исключённые устройства и восстановление
-входа OpenConnect) автор в 1.0.11 исправил сам, остальные на месте:
+входа OpenConnect) автор исправил сам в 1.0.11, uci_core в
+config/validator.uc — в 1.0.14; остальные на месте, и в 1.0.14 добавились
+два новых:
 
   providers/byedpi/strategy_test.uc
                          status_view — проверка стратегий ByeDPI
@@ -22,10 +24,13 @@ ucode связывает имя функции в момент её объявл
   components/updates.uc  mark_pending_reload, list_update_if_due
   components/action.uc   install_sing_box_extended (взаимная рекурсия:
                          предварительное объявление let)
-  config/validator.uc    uci_core
   server/service.uc      safe_filename_string
+  singbox/generator.uc   dns_action_server_tag — новый в 1.0.14 режим
+                         «ответ DNS: route» (push_dns_route_resolve)
+  diagnostics/runtime.uc remember_probe_delay — задержки узлов группы
+                         Xray (remember_group_probe), новое в 1.0.14
 
-Проверено на самих файлах 1.0.13: «strategy_test.uc start» запускает
+Проверено на файлах 1.0.13: «strategy_test.uc start» запускает
 проверку стратегий и падает на ответе («access to undeclared variable
 status_view» в start_test) вместо {"success": true, "message":
 "started"}; с патчем отвечает как задумано. list_update_if_missing,
@@ -33,39 +38,44 @@ status_view» в start_test) вместо {"success": true, "message":
 интервале и кэше списков во флеше вызывает list_update_if_due,
 объявленную ниже.
 
-Функции перенесены без изменения кода (list_update_if_missing 1.0.12 и 1.0.13 —
+Функции перенесены без изменения кода (list_update_if_missing —
 ниже list_update_if_due, start_test — ниже status_view). После патча
 вызовов до объявления нет (кроме filter() в routing/list_cache.uc — это
-встроенная функция ucode), изменённые модули компилируются (ucode -c).
+встроенная функция ucode). На 1.0.13 изменённые модули проверены
+ucode -c; в 1.0.14 к ним добавлены только две перестановки целых функций.
 
 prerm: с apk (OpenWrt 25.12+) тело Package/forkop/prerm встраивается в
 общий /bin/sh-скрипт pre-deinstall, поэтому ucode-код там — синтаксическая
 ошибка, и «apk del forkop» падал. Переписан на POSIX sh, логика прежняя.
 
-Тесты проекта: без патча проходят 56 из 80, с патчем 55; провалы те же
+Тесты проекта (1.0.13): без патча проходят 56 из 80, с патчем 55; провалы те же
 (тесты автора расходятся с кодом), кроме package_lifecycle — он требует
 ucode в prerm, именно это и исправлено.
 
-Заменяет 001 для 1.0.12 (в 1.0.13 автор изменил Makefile, service/initd.uc и
-service/state.uc, к остальным файлам патч тот же).
+Заменяет 001 для 1.0.13: в 1.0.14 автор сам перенёс uci_core в
+config/validator.uc (эта часть из патча убрана), сдвинул строки в
+nft/apply.uc, service/initd.uc и service/state.uc и добавил два новых
+вызова до объявления (generator.uc, diagnostics/runtime.uc) — они
+перенесены так же.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
+Claude-Session: https://claude.ai/code/session_01Uo9XQuT7u6ShTYdi2S3Anq
 ---
- forkop/Makefile                                   | 12 ++--
- forkop/files/usr/lib/components/action.uc         |  8 ++-
- forkop/files/usr/lib/components/updates.uc        | 40 +++++------
- forkop/files/usr/lib/config/validator.uc          | 12 ++--
- forkop/files/usr/lib/nft/apply.uc                 | 10 +--
- .../usr/lib/providers/byedpi/strategy_test.uc     | 80 ++++++++++-----------
- forkop/files/usr/lib/server/service.uc            | 20 +++---
- forkop/files/usr/lib/service/initd.uc             | 28 ++++----
- forkop/files/usr/lib/service/state.uc             | 18 ++---
- forkop/files/usr/lib/service/ui.uc                | 42 +++++------
- 10 files changed, 137 insertions(+), 133 deletions(-)
+ forkop/Makefile                               | 12 +--
+ forkop/files/usr/lib/components/action.uc     |  8 +-
+ forkop/files/usr/lib/components/updates.uc    | 40 +++++-----
+ forkop/files/usr/lib/diagnostics/runtime.uc   | 42 +++++-----
+ forkop/files/usr/lib/nft/apply.uc             | 10 +--
+ .../usr/lib/providers/byedpi/strategy_test.uc | 80 +++++++++----------
+ forkop/files/usr/lib/server/service.uc        | 20 ++---
+ forkop/files/usr/lib/service/initd.uc         | 28 +++----
+ forkop/files/usr/lib/service/state.uc         | 18 ++---
+ forkop/files/usr/lib/service/ui.uc            | 42 +++++-----
+ forkop/files/usr/lib/singbox/generator.uc     |  8 +-
+ 11 files changed, 156 insertions(+), 152 deletions(-)
 
 diff --git a/forkop/Makefile b/forkop/Makefile
-index 50b0185..0e165db 100644
+index 50b01859..0e165db2 100644
 --- a/forkop/Makefile
 +++ b/forkop/Makefile
 @@ -40,12 +40,12 @@ define Build/Compile
@@ -88,7 +98,7 @@ index 50b0185..0e165db 100644
  
  define Package/forkop/postinst
 diff --git a/forkop/files/usr/lib/components/action.uc b/forkop/files/usr/lib/components/action.uc
-index 5210a31..45f91c8 100644
+index 5210a316..45f91c8c 100644
 --- a/forkop/files/usr/lib/components/action.uc
 +++ b/forkop/files/usr/lib/components/action.uc
 @@ -1557,6 +1557,10 @@ function fail_package_sing_box_install(action, tiny, reason, current_version, la
@@ -121,7 +131,7 @@ index 5210a31..45f91c8 100644
  function install_package_sing_box(action, tiny) {
      let package_name = tiny ? "sing-box-tiny" : "sing-box";
 diff --git a/forkop/files/usr/lib/components/updates.uc b/forkop/files/usr/lib/components/updates.uc
-index 2ee5f87..8484493 100644
+index 2ee5f877..84844930 100644
 --- a/forkop/files/usr/lib/components/updates.uc
 +++ b/forkop/files/usr/lib/components/updates.uc
 @@ -2495,6 +2495,10 @@ function finish_list_update(ok) {
@@ -192,41 +202,71 @@ index 2ee5f87..8484493 100644
  function run_pending_reload_if_requested() {
      service_state_success([ "run-pending-reload-if-requested", PENDING_RELOAD_FILE, SERVICE_INIT ]);
  }
-diff --git a/forkop/files/usr/lib/config/validator.uc b/forkop/files/usr/lib/config/validator.uc
-index 4313b5a..4fc0edd 100644
---- a/forkop/files/usr/lib/config/validator.uc
-+++ b/forkop/files/usr/lib/config/validator.uc
-@@ -774,6 +774,12 @@ function mwan3_has_enabled_interface() {
-     return mwan3_has_enabled_interface_text(read_stdin());
+diff --git a/forkop/files/usr/lib/diagnostics/runtime.uc b/forkop/files/usr/lib/diagnostics/runtime.uc
+index b6ae012e..d624e0ef 100644
+--- a/forkop/files/usr/lib/diagnostics/runtime.uc
++++ b/forkop/files/usr/lib/diagnostics/runtime.uc
+@@ -2117,6 +2117,27 @@ function clash_proxy_document(base_url, auth, tag) {
+     }
  }
  
-+function uci_core() {
-+    if (uci_core_module == null)
-+        uci_core_module = require("core.uci");
-+    return uci_core_module;
++function remember_probe_delay(tag, delay, force) {
++    tag = trim(as_string(tag));
++    if (tag == "")
++        return;
++    let path = "/var/run/forkop/xray-latency.json";
++    let delays = {};
++    try {
++        let parsed = json(fs.readfile(path));
++        if (type(parsed) == "object" && parsed != null)
++            delays = parsed;
++    }
++    catch (e) {
++        delays = {};
++    }
++    let next = int(delay || 0);
++    if (!force && next <= 0 && int(delays[tag] || 0) > 0)
++        return;
++    delays[tag] = next;
++    fs.writefile(path, sprintf("%J\n", delays));
 +}
 +
- function mwan3_has_enabled_interface_from_sections() {
-     for (let section in uci_core().section_objects("mwan3", "interface"))
-         if (option(section, "enabled", "0") == "1")
-@@ -850,12 +856,6 @@ function runtime_constants() {
-     return constants_module;
+ function remember_group_probe(base_url, auth, group, body) {
+     let parsed = null;
+     try {
+@@ -2143,27 +2164,6 @@ function remember_group_probe(base_url, auth, group, body) {
+     }
  }
  
--function uci_core() {
--    if (uci_core_module == null)
--        uci_core_module = require("core.uci");
--    return uci_core_module;
+-function remember_probe_delay(tag, delay, force) {
+-    tag = trim(as_string(tag));
+-    if (tag == "")
+-        return;
+-    let path = "/var/run/forkop/xray-latency.json";
+-    let delays = {};
+-    try {
+-        let parsed = json(fs.readfile(path));
+-        if (type(parsed) == "object" && parsed != null)
+-            delays = parsed;
+-    }
+-    catch (e) {
+-        delays = {};
+-    }
+-    let next = int(delay || 0);
+-    if (!force && next <= 0 && int(delays[tag] || 0) > 0)
+-        return;
+-    delays[tag] = next;
+-    fs.writefile(path, sprintf("%J\n", delays));
 -}
 -
- function fixture_section_list(type_name) {
-     let value = object_or_empty(fixture_uci_data)[type_name];
-     if (type(value) == "array")
+ function clash_api(action, arg1, arg2, arg3) {
+     let base_url = clash_api_url();
+     let test_url = latency_test_url();
 diff --git a/forkop/files/usr/lib/nft/apply.uc b/forkop/files/usr/lib/nft/apply.uc
-index b2e235e..93ef3d6 100644
+index 5e13e8e6..565621cb 100644
 --- a/forkop/files/usr/lib/nft/apply.uc
 +++ b/forkop/files/usr/lib/nft/apply.uc
-@@ -2149,11 +2149,6 @@ function apply_hostname_key(value) {
+@@ -2180,11 +2180,6 @@ function apply_hostname_key(value) {
      return value;
  }
  
@@ -238,7 +278,7 @@ index b2e235e..93ef3d6 100644
  function apply_lease_paths() {
      return [
          "/tmp/dhcp.leases",
-@@ -2216,6 +2211,11 @@ function apply_ips_from_lease_name(name) {
+@@ -2247,6 +2242,11 @@ function apply_ips_from_lease_name(name) {
      return index.name_to_ips[wanted];
  }
  
@@ -251,7 +291,7 @@ index b2e235e..93ef3d6 100644
      value = trim(as_string(value));
      let result = [];
 diff --git a/forkop/files/usr/lib/providers/byedpi/strategy_test.uc b/forkop/files/usr/lib/providers/byedpi/strategy_test.uc
-index 0e47736..0b47430 100644
+index 0e47736e..0b47430b 100644
 --- a/forkop/files/usr/lib/providers/byedpi/strategy_test.uc
 +++ b/forkop/files/usr/lib/providers/byedpi/strategy_test.uc
 @@ -946,6 +946,46 @@ function normalize_request(raw) {
@@ -349,7 +389,7 @@ index 0e47736..0b47430 100644
      if (!ensure_state_dir()) {
          write_json(status_view(empty_state()));
 diff --git a/forkop/files/usr/lib/server/service.uc b/forkop/files/usr/lib/server/service.uc
-index a3b9b3e..59ad97b 100644
+index a3b9b3ed..59ad97b2 100644
 --- a/forkop/files/usr/lib/server/service.uc
 +++ b/forkop/files/usr/lib/server/service.uc
 @@ -919,6 +919,16 @@ function server_prepare_legacy_user_defaults(section, protocol) {
@@ -387,7 +427,7 @@ index a3b9b3e..59ad97b 100644
      let protocol = config_get(section, "protocol", "vless");
      if (!(protocol == "shadowsocks" || protocol == "socks" || protocol == "vmess" || protocol == "vless" ||
 diff --git a/forkop/files/usr/lib/service/initd.uc b/forkop/files/usr/lib/service/initd.uc
-index bf9063c..d2cb4e0 100644
+index 16a45d48..fdb1995f 100644
 --- a/forkop/files/usr/lib/service/initd.uc
 +++ b/forkop/files/usr/lib/service/initd.uc
 @@ -188,6 +188,15 @@ function lock_dir_write_owner(lock_dir, owner_pid) {
@@ -447,7 +487,7 @@ index bf9063c..d2cb4e0 100644
      let data = command_output_from_args([ BIN_PATH, "get_status" ]);
      try {
 diff --git a/forkop/files/usr/lib/service/state.uc b/forkop/files/usr/lib/service/state.uc
-index 030d78d..baecdb5 100644
+index 47f15b90..c779f7db 100644
 --- a/forkop/files/usr/lib/service/state.uc
 +++ b/forkop/files/usr/lib/service/state.uc
 @@ -286,6 +286,15 @@ function lock_dir_write_owner(lock_dir, owner_pid) {
@@ -483,7 +523,7 @@ index 030d78d..baecdb5 100644
      if (!ensure_parent_dir(path))
          exit(1);
 diff --git a/forkop/files/usr/lib/service/ui.uc b/forkop/files/usr/lib/service/ui.uc
-index d18a9fa..9f24b79 100644
+index d18a9fa6..9f24b790 100644
 --- a/forkop/files/usr/lib/service/ui.uc
 +++ b/forkop/files/usr/lib/service/ui.uc
 @@ -290,6 +290,22 @@ function print_service_status_text(running, enabled) {
@@ -563,6 +603,32 @@ index d18a9fa..9f24b79 100644
  function forkop_running() {
      return module_success(LIB_DIR + "/service/state.uc", [
          "forkop-stably-running",
+diff --git a/forkop/files/usr/lib/singbox/generator.uc b/forkop/files/usr/lib/singbox/generator.uc
+index 81ab759f..ebc0af5a 100644
+--- a/forkop/files/usr/lib/singbox/generator.uc
++++ b/forkop/files/usr/lib/singbox/generator.uc
+@@ -6366,6 +6366,10 @@ function covering_routed_dns_server(rule) {
+     return found ? server : "";
+ }
+ 
++function dns_action_server_tag(section_name) {
++    return runtime_constants.tag(section_name, "dns-server");
++}
++
+ function push_dns_route_resolve(config, section, dns_rule) {
+     if (!dns_answer_is_route(section) || engine.is_xray_primary())
+         return;
+@@ -6399,10 +6403,6 @@ function push_dns_action_answer(config, section, dns_rule, rewrite_ttl) {
+     push_dns_matcher_rule(config, dns_rule);
+ }
+ 
+-function dns_action_server_tag(section_name) {
+-    return runtime_constants.tag(section_name, "dns-server");
+-}
+-
+ function dns_action_detour_tag(section) {
+     if (!bool_option(section, "dns_detour_enabled", false))
+         return "";
 -- 
 2.43.0
 
