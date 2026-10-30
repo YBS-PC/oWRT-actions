@@ -75,7 +75,7 @@
 | `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`f4f5eba`](https://github.com/yandexru45/netshift/commit/f4f5ebaa853cdcf443f21166ce8dbe2d58a4e0d8) | 29.10.2026 |
 | `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`b6e75a3`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/b6e75a3e154c393875a2868fab9f508b4b77a214) | 28.10.2026 |
 | `feeds/podkop/` | [itdoginfo/podkop](https://github.com/itdoginfo/podkop) | [`c654bf5`](https://github.com/itdoginfo/podkop/commit/c654bf5da75309754e3fb63b9441981db65fff68) | 24.10.2026 |
-| `feeds/trafira/` | [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) | [`ce5e4f3`](https://github.com/petrouspetr-pixel/trafira/commit/ce5e4f33253c74664f6d4a7727918a30bb011217) | 21.10.2026 |
+| `feeds/trafira/` | [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) | [`15ae0f9`](https://github.com/petrouspetr-pixel/trafira/commit/15ae0f909cbcad0f632245cbc13fb6103dd3cce0) | 30.10.2026 |
 | `packages/luci-app-commands/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`75a306d`](https://github.com/openwrt/luci/commit/75a306df84a020c57a631ef5b4c02ace56d93387) | 15.10.2026 |
 | `packages/luci-app-homeproxy/` | [immortalwrt/homeproxy](https://github.com/immortalwrt/homeproxy) | [`fadaa67`](https://github.com/immortalwrt/homeproxy/commit/fadaa676104f59ff6ace480a780a258d846d0aec) | 02.10.2026 |
 | `packages/luci-app-re-homeproxy/` | [1andrevich/homeproxy-hiddify](https://github.com/1andrevich/homeproxy-hiddify) | [`a9e3596`](https://github.com/1andrevich/homeproxy-hiddify/commit/a9e359679e08b5642ae66b13dbcf647b382a9edc) | 04.07.2026 |
@@ -103,7 +103,7 @@
 
 ## Патчи по пакетам
 
-Всего 53 патча для 11 пакетов. Номер — порядок применения. Ссылки
+Всего 54 патча для 11 пакетов. Номер — порядок применения. Ссылки
 вида `#98` / `PR #103` — обсуждение и предложенное исправление в
 репозитории автора.
 
@@ -270,11 +270,11 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
   исключённых должен быть хотя бы один IP, иначе в журнале
   предупреждение.
 
-### trafira — `feeds/trafira/` (5)
+### trafira — `feeds/trafira/` (6)
 
-Вариант `trafira`, фид [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) (3.1.14).
+Вариант `trafira`, фид [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) (3.1.16).
 
-Патчи сняты с коммита [`ce5e4f3`](https://github.com/petrouspetr-pixel/trafira/commit/ce5e4f33253c74664f6d4a7727918a30bb011217) от 21.10.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`15ae0f9`](https://github.com/petrouspetr-pixel/trafira/commit/15ae0f909cbcad0f632245cbc13fb6103dd3cce0) от 30.10.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001 удалён.** Вызовы ucode до объявления в установщике sing-box
   автор исправил сам в 3.1.11 (с тестами).
@@ -297,6 +297,13 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
   (OpenWrt 24.10 и 25.12) пишет туда версию байткода, и сборка пакета
   падала: «Expected a stripped, headerless ucode proof». Теперь версия в
   старшем байте допускается, остальная сверка прежняя. *Всегда.*
+- **008. Смена ядра sing-box на apk.** В 3.1.15 (28.10.2026) автор
+  добавил переходы между пакетами sing-box / sing-box-tiny /
+  sing-box-extended, но четыре функции вызывают функции, объявленные ниже
+  в том же файле: на OpenWrt 25.12 смена ядра со страницы «Компоненты»,
+  откат неудачной установки и снятие конфликтующего ядра падали с
+  «left-hand side is not a function». Функции перенесены выше без
+  изменения кода. *Всегда.*
 
 ### homeproxy — `packages/luci-app-homeproxy/` (22)
 
