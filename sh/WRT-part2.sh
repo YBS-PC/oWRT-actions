@@ -362,7 +362,13 @@ else
         echo "✓ Найден Makefile: $PKG_FILE_YTB"
         # Получаем последний коммит
         echo "Получение последнего коммита из GitHub..."
-        YTB_API=$(curl -sL "https://api.github.com/repos/Waujito/youtubeUnblock/commits/main")
+        # С токеном (workflow передаёт GITHUB_TOKEN): без него лимит API
+        # общий на IP раннера, и при его исчерпании дата коммита терялась —
+        # версия пакета получала дату сборки.
+        YTB_AUTH=()
+        [ -n "$GITHUB_TOKEN" ] && YTB_AUTH=(-H "Authorization: Bearer $GITHUB_TOKEN")
+        YTB_API=$(curl -sL --max-time 20 "${YTB_AUTH[@]}" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/Waujito/youtubeUnblock/commits/main")
         LATEST_COMMIT_YTB=$(printf '%s\n' "$YTB_API" | grep -m 1 '"sha"' | sed 's/.*"sha": "\([^"]*\)".*/\1/')
         # Дата коммита (YYYYMMDD) — для версии пакета, см. ниже
         LATEST_DATE_YTB=$(printf '%s\n' "$YTB_API" | grep -m 1 '"date"' | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | tr -d '-')
