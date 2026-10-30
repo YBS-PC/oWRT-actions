@@ -443,7 +443,7 @@ jobs:
           # (патч 002).
           echo "$json" | jq -r '.include[] | select(.variant == "trafira" and .patches == false) | .target' |
           while read -r t; do
-            echo "::warning title=${t}: trafira без патчей::Без патчей patches/feeds/trafira в прошивке нет правила fw4 для TPROXY — зоны с input=REJECT (гостевые) режут проксируемый трафик (002), ссылка с %40/%23 в пароле trojan или одна битая ссылка не дают trafira запуститься (004, 005). Включите apply_patches."
+            echo "::warning title=${t}: trafira без патчей::Без патчей patches/feeds/trafira в прошивке нет правила fw4 для TPROXY — зоны с input=REJECT (гостевые) режут проксируемый трафик (002), ссылка с %40/%23 в пароле trojan или одна битая ссылка не дают trafira запуститься (004, 005), смена ядра sing-box на apk падает с «left-hand side is not a function» (008). Включите apply_patches."
           done
 
           # netshift без патчей: ссылки socks5 с ':' в логине/пароле дают
@@ -463,8 +463,11 @@ jobs:
     needs: setup
     runs-on: ${{ inputs.runner_os }}
     permissions:
-      # Только чтение: сборка ничего не пушит и релизов не создаёт (артефакты
-      # и кэш Actions идут по своему токену, не через GITHUB_TOKEN).
+      # Только чтение. Токен job build нужен лишь для checkout и чтения
+      # публичного API (суммы релизов, теги); артефакты и кэш Actions идут по
+      # своему служебному токену, старые запуски удаляет job notify (там
+      # actions: write) и Cleanup.yml. Права на запись здесь опасны: сборка
+      # выполняет код тысяч сторонних Makefile и скриптов фидов.
       contents: read
 
     strategy:
@@ -515,6 +518,10 @@ jobs:
 
     - name: Checkout
       uses: actions/checkout@v7
+      with:
+        # Токен не остаётся в .git/config рабочего каталога: git-операций
+        # с этим репозиторием после checkout нет, а сборка запускает чужой код.
+        persist-credentials: false
 
     - name: Set permissions
       run: |
@@ -1360,9 +1367,14 @@ jobs:
         M_FEEDS: ${{ matrix.feeds }}
         # Для запросов к GitHub API из part2 (запасной путь версий пакетов,
         # последний коммит youtubeUnblock): без токена лимит — 60 запросов в
-        # час на IP раннера, общий с чужими сборками.
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # час на IP раннера, общий с чужими сборками. Имя не GITHUB_TOKEN:
+        # в начале скрипта значение переносится в неэкспортируемую переменную,
+        # и его видит только part2, а не feeds update, make defconfig и
+        # скрипты фидов.
+        PART2_GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
+        P2_TOKEN="$PART2_GH_TOKEN"
+        unset PART2_GH_TOKEN
         cd openwrt
 
         echo ">>> Выбран: Variant=$VARIANT, Target=$CURRENT_MATRIX_TARGET, agh=$AGH_MODE, sb=$SB_MODE, ytb=$YTB, zz=$ZZ"
@@ -1523,7 +1535,7 @@ jobs:
         # 2. Запуск Part 2 (Фиксы версий и Python - строго между update и install)
         if [ -f "$GITHUB_WORKSPACE/$DIY_P2_SH" ]; then
             chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
-            $GITHUB_WORKSPACE/$DIY_P2_SH
+            GITHUB_TOKEN="$P2_TOKEN" $GITHUB_WORKSPACE/$DIY_P2_SH
         fi
 
         ./scripts/feeds install -a
