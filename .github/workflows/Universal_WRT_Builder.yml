@@ -350,7 +350,8 @@ jobs:
             #   R6S podkop: podkop-engine; R6S netshift: extended; R6S forkop:
             #     sing-box-forkop base; R6S trafira: extended, без ytb (свой
             #     Zapret) — все с AGH latest, zz1 и патчами
-            #   RB5009 clear и RB5009 switch: без AGH/sing-box/ytb, zz1, без патчей
+            #   RB5009 clear и RB5009 switch: без AGH/sing-box/ytb, zz1, с патчами
+            #     (к ним относятся только patches/packages/luci-app-commands)
             # $(entry ...) — подстановка: в ней NOTES не сохраняется, для
             # combo это и не нужно (значения ниже уже согласованы с вариантами).
             # Запасные сборки (дописать в include через запятую):
@@ -1559,7 +1560,10 @@ jobs:
         # чтобы не было mix CRLF/LF и проблем в kconfig/grep с якорем $.
         [ -f ./.config ] && sed -i 's/\r$//' ./.config
         [ -e $GITHUB_WORKSPACE/files ] && cp -r $GITHUB_WORKSPACE/files ./
-        
+        # Описания для репозитория в образ не кладутся: files/README.md
+        # (справочник zz1, ~34 КБ) иначе оказался бы в /README.md роутера.
+        rm -f ./files/README.md ./files/root/apps/README.md
+
         eval "$DEVICE_CONFIG_COMMANDS"
         
         # 3. Запуск Part 3 (Замена пакетов, очистка, клонирование доп. софта)
