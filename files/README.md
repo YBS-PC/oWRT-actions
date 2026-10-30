@@ -94,7 +94,8 @@ uci commit dhcp
 
 ## 5. `/etc/config/network` — только `switch` (firstboot)
 - Удаляются интерфейсы `lan`, `wan`, `wan6`
-- Все физические порты собираются в мост `br-lan` (STP, IGMP snooping, multicast querier, без IPv6)
+- Все физические порты собираются в мост `br-lan` (IGMP snooping, multicast querier, без IPv6; STP выключен —
+  у коммутатора один uplink, а с STP каждый поднявшийся порт ~17 с не пропускает трафик)
 - `lan` получает адрес по DHCP, `packet_steering='2'`, ULA-префикс удаляется
 
 ## 6. AdGuardHome
