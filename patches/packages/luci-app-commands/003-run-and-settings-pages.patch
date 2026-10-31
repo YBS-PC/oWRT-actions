@@ -40,8 +40,13 @@ scroll on a phone), a 9 MB output (8 MiB kept, the page shows the last
 1.5 million characters, Save gives all 8 MiB), the settings page with
 its edit dialog; no errors in the console.
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
+The new pages are used instead of the run page ucode/template/commands.ut
+and the settings page view/commands.js of the author. They were checked
+against the versions of openwrt-25.12 and of master (description and
+sortable rows), a newer version leaves the pages of the author in place:
+
+Supersedes: ucode/template/commands.ut 5191e4b d3f4344
+Supersedes: htdocs/luci-static/resources/view/commands.js 0161653 44ca5b8
 ---
  .../resources/view/commands/config.js         | 102 ++
  .../resources/view/commands/dashboard.js      | 868 ++++++++++++++++++
