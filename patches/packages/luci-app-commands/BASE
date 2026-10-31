@@ -1,5 +1,5 @@
 75a306df84a020c57a631ef5b4c02ace56d93387
 # openwrt/luci, ветка openwrt-25.12, 15.10.2026: коммит, с которого сняты патчи этой папки.
-# Пакет берётся из фида LuCI выпуска (OpenWrt или ImmortalWrt), галочка
+# Пакет luci-app-commands берётся из фида LuCI выпуска (OpenWrt или ImmortalWrt), галочка
 # use_base_commit на него не действует. Серия проверена и на openwrt/luci master,
 # immortalwrt/luci openwrt-25.12 и master. Обновляется вместе с патчами.
