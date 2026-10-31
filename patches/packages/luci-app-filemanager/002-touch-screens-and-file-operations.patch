@@ -1,0 +1,5307 @@
+From 81cb14a4cae8493ea327f0f49029309830a01dc6 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 31 Oct 2026 10:00:01 +0000
+Subject: [PATCH] filemanager: list and editor for touch screens, file
+ operations
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The list was a table with fixed column widths in pixels (stored in
+/etc/config/filemanager), on a phone it needed horizontal scrolling,
+and the actions were small icons next to each other. Some operations
+did not work as expected:
+
+- names were put into the page as HTML (dom.append() uses innerHTML for
+  a single string), a name with "<" or "&" was shown wrong or ran as
+  markup; a name with "'" broke opening the file;
+- cgi-upload answers 200 with {"failure": ...} when it cannot write,
+  such an upload or save was reported as successful;
+- saving a file opened through a symbolic link replaced the link with a
+  regular file and set it to mode 777 (the mode of the link); saving
+  any file made it owned by root; CRLF line ends and the BOM were lost;
+- uploaded files got mode 0600 (cgi-io default), an existing file was
+  replaced without a question;
+- a FIFO was opened like a file; Duplicate and Delete of a large folder
+  ended after the RPC timeout of the browser;
+- the Save, Apply and Reset buttons were hidden by a rule for the whole
+  page instead of not being created.
+
+List:
+- rows with flexible columns; on a narrow screen the size, date and
+  permissions are shown under the name, the columns are hidden;
+- ⋮ next to every item, a right click or a long press opens its
+  actions: open, edit, hex editor, download, rename, properties,
+  duplicate, copy, cut, copy path, delete;
+- the path as buttons for every parent folder, a path can be typed
+  (also of a file); folders first; sorting by a column or from a list
+  on a phone; filter by name; the folder is in the address of the page,
+  Back returns to the previous folder;
+- several items can be selected to copy, cut, download or delete; Copy
+  and Cut keep the items until Paste here in another folder; existing
+  names are replaced or skipped after a question;
+- uploads by the button or dropped files, with progress and cancel; a
+  replaced file keeps its permissions and owner, new files get 0644;
+- a file is downloaded with progress; a folder or several items as a
+  .tar.gz made in /tmp (free space is checked); files larger than
+  64 MiB are downloaded by the browser itself;
+- properties: permissions as checkboxes or digits, owner and group,
+  optionally for everything inside a folder.
+
+Copy, move, delete of folders, archives and recursive changes run as
+jobs detached from rpcd (setsid) in /tmp/luci-filemanager: the page
+polls for the exit code and can stop the job; finished jobs are removed
+after an hour.
+
+Editor:
+- a link is edited and saved through its target; permissions, owner,
+  line ends and BOM stay as they were; a file changed on the router
+  after it was opened is not overwritten without a question;
+- line wrapping (on by default on narrow screens), line numbers, Tab
+  inserts a tab, Ctrl+S saves; no autocorrection and capitals of the
+  phone keyboard, 16 px font on touch screens; the editor fits the
+  window; unsaved changes are kept when going back to the list and are
+  asked about before they are lost;
+- files that are not UTF-8 text open in the hex editor; files larger
+  than 16 MiB are not loaded, larger than 2 MiB after a question.
+
+Settings: start folder (last opened or fixed), folders first, columns
+on wide screens, wrapping, line numbers, font size and height of the
+editor. They are stored in /etc/config/filemanager as before; the old
+column width and padding options are no longer used. The help is
+translatable text; md.js and md_help.js are no longer loaded.
+
+Checked in Chromium with luci-base 25.12, themes bootstrap and
+proton2025, 1280 and 412 pixels wide, against rpcd file.* and cgi-io
+from OpenWrt 25.12 with busybox: 47 checks each (CRLF, BOM, links,
+owner and mode kept on save and upload, a change on the router before
+saving, hex editor, create, rename, duplicate, copy and move with
+conflicts and into itself, upload error, download of a file and of a
+folder archive, chmod, recursive chown, delete, settings, the old
+settings file, Back in the browser); no errors in the console.
+---
+ .../resources/view/system/filemanager.js      | 4901 +++++++++--------
+ 1 file changed, 2523 insertions(+), 2378 deletions(-)
+
+diff --git a/htdocs/luci-static/resources/view/system/filemanager.js b/htdocs/luci-static/resources/view/system/filemanager.js
+index b9e4d6f..0defc85 100644
+--- a/htdocs/luci-static/resources/view/system/filemanager.js
++++ b/htdocs/luci-static/resources/view/system/filemanager.js
+@@ -4,2691 +4,2836 @@
+ 'require ui';
+ 'require dom';
+ 'require rpc';
+-'require view.system.filemanager.md as md';
+-'require view.system.filemanager.md_help as md_help';
+ 'require view.system.filemanager.HexEditor as HE';
+ 
+-const callFileList = rpc.declare({
+-	object: 'file',
+-	method: 'list',
+-	params: [ 'path' ]
+-});
++/*
++ * File manager: a list of files that works with a mouse and with a finger,
++ * text and hex editor, uploads, downloads, copy and move between folders.
++ *
++ * Text never goes to innerHTML: dom.append() puts a single string child into
++ * innerHTML, so every name and message is passed in an array (a text node).
++ */
++
++const CONFIG_FILE = '/etc/config/filemanager';
++const JOB_BASE = '/tmp/luci-filemanager';
++const EDIT_LIMIT = 16 * 1024 * 1024;	/* larger files are not loaded into the editor */
++const EDIT_WARN = 2 * 1024 * 1024;	/* ask before loading a larger file */
++const BLOB_LIMIT = 64 * 1024 * 1024;	/* larger downloads go straight to the browser */
++const NARROW = '(max-width: 767px)';
+ 
+ const fileTypes = {
+-	'block' : _('Block device'),
+-	'char' : _('Character device'),
+-	'directory' : _('Directory'),
+-	'fifo' : _('FIFO/Pipe'),
+-	'file' : _('File'),
+-	'socket' : _('Socket'),
+-	'symlink' : _('Symlink'),
+-}
+-
+-function pop(a, message, severity) {
+-	ui.addNotification(a, message, severity)
+-}
+-
+-function popTimeout(a, message, timeout, severity) {
+-	ui.addTimeLimitedNotification(a, message, timeout, severity)
+-}
+-
+-// Initialize global variables
+-let currentPath = '/'; // Current path in the filesystem
+-const selectedItems = new Set(); // Set of selected files/directories
+-let sortField = 'name'; // Field to sort files by
+-let sortAscending = true; // Sort direction (ascending/descending)
+-let configFilePath = '/etc/config/filemanager'; // Path to the configuration file
+-
+-// Initialize drag counter
+-let dragCounter = 0;
+-
+-// Configuration object to store interface settings
+-let config = {
+-	// Column widths in the file table
+-	columnWidths: {
+-		'name': 150,
+-		'type': 100,
+-		'size': 100,
+-		'mtime': 150,
+-		'permissions': 70,
+-		'actions': 100,
+-	},
+-
+-	// Minimum column widths
+-	columnMinWidths: {
+-		'name': 100,
+-		'type': 80,
+-		'size': 80,
+-		'mtime': 120,
+-		'permissions': 70,
+-		'actions': 80,
+-	},
+-
+-	// Maximum column widths
+-	columnMaxWidths: {
+-		'name': 300,
+-		'type': 200,
+-		'size': 200,
+-		'mtime': 300,
+-		'permissions': 70,
+-		'actions': 200,
+-	},
+-
+-	// Padding and window sizes
+-	padding: 10,
+-	paddingMin: 5,
+-	paddingMax: 20,
+-	currentDirectory: '/', // Current directory
+-	texteditorHeight: 550,
+-	hexeditorHeight: 550,
+-
+-	// otherSettings: {} // Additional settings
++	'block': _('Block device'),
++	'char': _('Character device'),
++	'directory': _('Directory'),
++	'fifo': _('FIFO/Pipe'),
++	'file': _('File'),
++	'socket': _('Socket'),
++	'symlink': _('Symlink'),
+ };
+ 
+-// Function to upload a file to the server
+-function uploadFile(filename, filedata, onProgress) {
+-	return new Promise(function(resolve, reject) {
+-		let formData = new FormData();
+-		formData.append('sessionid', rpc.getSessionID()); // Add session ID
+-		formData.append('filename', filename); // File name including path
+-		formData.append('filedata', filedata); // File data
+-
+-		let xhr = new XMLHttpRequest();
+-		xhr.open('POST', L.env.cgi_base + '/cgi-upload', true); // Configure the request
+-
+-		// Monitor upload progress
+-		xhr.upload.onprogress = function(event) {
+-			if (event.lengthComputable && onProgress) {
+-				let percent = (event.loaded / event.total) * 100;
+-				onProgress(percent); // Call the progress callback with percentage
+-			}
+-		};
++const columnTitles = {
++	'size': _('Size'),
++	'mtime': _('Last Modified'),
++	'permissions': _('Permissions'),
++	'owner': _('Owner'),
++	'type': _('Type'),
++};
+ 
+-		// Handle request completion
+-		xhr.onload = () => {
+-			if (xhr.status === 200) {
+-				resolve(xhr.responseText); // Upload successful
+-			} else {
+-				reject(new Error(xhr.statusText)); // Upload error
+-			}
+-		};
++const defaults = {
++	startMode: 'last',		/* last | fixed */
++	currentDirectory: '/',		/* start folder for "fixed" (name kept from older versions) */
++	foldersFirst: '1',
++	columns: 'size,mtime,permissions',
++	editorWrap: 'auto',		/* auto | on | off */
++	editorLineNumbers: '1',
++	editorFontSize: 'auto',		/* auto | px */
++	editorHeight: 'auto',		/* auto | px */
++};
+ 
+-		// Handle network errors
+-		xhr.onerror = () => {
+-			reject(new Error('Network error'));
+-		};
++/* Keys written by older versions: read for currentDirectory only, dropped on save */
++let config = Object.assign({}, defaults);
+ 
+-		xhr.send(formData); // Send the request
+-	});
++/* --- helpers ----------------------------------------------------------- */
++
++function txt(s) {
++	return [ String(s ?? '') ];
++}
++
++function esc(s) {
++	return String(s ?? '').replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+ }
+ 
++function notify(msg, severity) {
++	if (severity == 'error' || severity == 'warning')
++		ui.addNotification(null, E('p', txt(msg)), severity);
++	else
++		ui.addTimeLimitedNotification(null, E('p', txt(msg)), 5000, severity || 'info');
++}
+ 
+-// Function to load settings from the configuration file
++function errMsg(err) {
++	return err?.message ?? String(err);
++}
+ 
+-function parseKeyValuePairs(input, delimiter, callback) {
+-	const pairs = input.split(',');
+-	pairs.forEach((pair) => {
+-		const [key, value] = pair.split(delimiter);
+-		if (key && value) callback(key.trim(), value.trim());
+-	});
++function joinPath(dir, name) {
++	return dir.endsWith('/') ? dir + name : `${dir}/${name}`;
+ }
+ 
+-async function loadConfig() {
+-	try {
+-		const content = await fs.read(configFilePath);
+-		const lines = content.trim().split('\n');
++function dirName(path) {
++	const i = path.lastIndexOf('/');
++	return i > 0 ? path.substring(0, i) : '/';
++}
+ 
+-		lines.forEach((line) => {
+-			if (!line.includes('option')) return;
++function baseName(path) {
++	return path.substring(path.lastIndexOf('/') + 1);
++}
+ 
+-			const splitLines = line.split('option').filter(Boolean);
++/* "/a//b/./c/../" -> "/a/b"; relative paths count from "/" */
++function normPath(path) {
++	const out = [];
+ 
+-			splitLines.forEach((subline) => {
+-				const formattedLine = "option " + subline.trim();
+-				const match = formattedLine.match(/^option\s+(\S+)\s+'([^']+)'$/);
++	for (const part of String(path ?? '').split('/')) {
++		if (part == '' || part == '.')
++			continue;
++		else if (part == '..')
++			out.pop();
++		else
++			out.push(part);
++	}
+ 
+-				if (!match) return;
++	return '/' + out.join('/');
++}
+ 
+-				const [, key, value] = match;
++function isInside(path, dir) {
++	return path == dir || path.startsWith(dir.endsWith('/') ? dir : dir + '/');
++}
+ 
+-				switch (key) {
+-					case 'columnWidths':
+-					case 'columnMinWidths':
+-					case 'columnMaxWidths':
+-						parseKeyValuePairs(value, ':', (k, v) => {
+-							config[key] = config[key] || {};
+-							config[key][k] = parseInt(v, 10);
+-						});
+-						break;
+-					default:
+-						config[key] = isNaN(value) ? value : parseInt(value, 10);
+-				}
+-			});
++function validName(name) {
++	if (name == '' || name == '.' || name == '..')
++		return _('The name must not be empty, "." or "..".');
++	if (name.includes('/') || name.includes('\0'))
++		return _('The name must not contain "/".');
++	if (new TextEncoder().encode(name).length > 255)
++		return _('The name is too long.');
++	return null;
++}
++
++function formatSize(n) {
++	return (n < 1024) ? N_(n, '%d byte', '%d bytes').format(n) : '%1024.1mB'.format(n);
++}
++
++function formatDate(ts) {
++	try {
++		return new Date(ts * 1000).toLocaleString(document.documentElement.lang || undefined, {
++			year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+ 		});
+-	} catch (err) {
+-		console.error('Failed to load config: ' + err.message);
++	}
++	catch (e) {
++		return new Date(ts * 1000).toLocaleString();
+ 	}
+ }
+ 
+-// Function to save settings to the configuration file
+-function saveConfig() {
++function modeString(mode, type) {
++	const t = { directory: 'd', symlink: 'l', char: 'c', block: 'b', fifo: 'p', socket: 's' }[type] ?? '-';
++	const bit = (m, c) => (mode & m) ? c : '-';
++	const spec = (x, s, lo, up) => (mode & s) ? ((mode & x) ? lo : up) : bit(x, 'x');
+ 
+-	let configLines = ['config filemanager',
+-		'\toption columnWidths \'' + Object.keys(config.columnWidths).map((field) => {
+-			return field + ':' + config.columnWidths[field];
+-		}).join(',') + '\'',
+-		'\toption columnMinWidths \'' + Object.keys(config.columnMinWidths).map((field) => {
+-			return field + ':' + config.columnMinWidths[field];
+-		}).join(',') + '\'',
+-		'\toption columnMaxWidths \'' + Object.keys(config.columnMaxWidths).map((field) => {
+-			return field + ':' + config.columnMaxWidths[field];
+-		}).join(',') + '\'',
+-		'\toption padding \'' + config.padding + '\'',
+-		'\toption paddingMin \'' + config.paddingMin + '\'',
+-		'\toption paddingMax \'' + config.paddingMax + '\'',
+-		'\toption currentDirectory \'' + config.currentDirectory + '\'',
+-		'\toption texteditorHeight \'' + config.texteditorHeight + '\'',
+-		'\toption hexeditorHeight \'' + config.hexeditorHeight + '\'',
+-	];
+-
+-	const configContent = configLines.join('\n') + '\n';
+-
+-	// Write settings to file
+-	return fs.write(configFilePath, configContent).then(() => {
+-		return Promise.resolve();
+-	}).catch((err) => {
+-		return Promise.reject(new Error('Failed to save configuration: ' + err.message));
+-	});
++	return t +
++		bit(0o400, 'r') + bit(0o200, 'w') + spec(0o100, 0o4000, 's', 'S') +
++		bit(0o040, 'r') + bit(0o020, 'w') + spec(0o010, 0o2000, 's', 'S') +
++		bit(0o004, 'r') + bit(0o002, 'w') + spec(0o001, 0o1000, 't', 'T');
++}
++
++function modeOctal(mode) {
++	return (mode & 0o7777).toString(8).padStart(3, '0');
+ }
+ 
+-// Function to correctly join paths
+-function joinPath(path, name) {
+-	return path.endsWith('/') ? path + name : path + '/' + name;
++/* what the entry is for opening: a link counts as its target */
++function kind(e) {
++	if (e.type == 'symlink')
++		return e.target ? e.target.type : 'symlink';
++	return e.type;
+ }
+ 
+-function modeToRwx(mode) {
+-	const perms = mode & 0o777; // extract permission bits
++function isText(bytes) {
++	const len = bytes.length;
++	let i = 0;
++
++	while (i < len) {
++		const b = bytes[i];
++		let n = 0;
+ 
+-	const toRwx = n => 
+-		((n & 4) ? 'r' : '-') +
+-		((n & 2) ? 'w' : '-') +
+-		((n & 1) ? 'x' : '-');
++		if (b === 0)
++			return false;
++		else if (b < 0x80) {
++			i++;
++			continue;
++		}
++		else if ((b & 0xE0) === 0xC0 && b >= 0xC2)
++			n = 1;
++		else if ((b & 0xF0) === 0xE0)
++			n = 2;
++		else if ((b & 0xF8) === 0xF0 && b <= 0xF4)
++			n = 3;
++		else
++			return false;
++
++		if (i + n >= len)
++			return false;
++
++		for (let k = 1; k <= n; k++)
++			if ((bytes[i + k] & 0xC0) !== 0x80)
++				return false;
+ 
+-	const owner = toRwx((perms >> 6) & 0b111);
+-	const group = toRwx((perms >> 3) & 0b111);
+-	const world = toRwx(perms & 0b111);
++		i += n + 1;
++	}
+ 
+-	return `${owner}${group}${world}`;
++	return true;
+ }
+ 
++/* --- config file ------------------------------------------------------- */
++
++function parseConfig(content) {
++	const res = {};
++
++	for (const line of String(content ?? '').split('\n')) {
++		const m = line.match(/^\s*option\s+(\S+)\s+'((?:[^']|'\\'')*)'\s*$/) ??
++			line.match(/^\s*option\s+(\S+)\s+"([^"]*)"\s*$/) ??
++			line.match(/^\s*option\s+(\S+)\s+(\S+)\s*$/);
++
++		if (m)
++			res[m[1]] = m[2].replace(/'\\''/g, "'");
++	}
+ 
+-function modeToOctal(mode) {
+-	const perms = mode & 0o777;
+-	return perms.toString(8);
++	return res;
+ }
+ 
+-// Function to get a list of files in a directory
+-function getFileList(path) {
+-	return callFileList(path).then((res) => {
+-		const files = [];
+-		res?.entries?.forEach((file) => {
+-			files.push({
+-				...file,
+-				permissions: modeToRwx(file.mode),
+-				numericPermissions: modeToOctal(file.mode),
+-			});
+-		});
++function loadConfig() {
++	return L.resolveDefault(fs.read(CONFIG_FILE), '').then((content) => {
++		const stored = parseConfig(content);
+ 
+-		return files;
++		config = Object.assign({}, defaults);
++
++		for (const k in defaults)
++			if (stored[k] != null && stored[k] !== '')
++				config[k] = stored[k];
++
++		config.currentDirectory = normPath(config.currentDirectory);
+ 	});
+ }
+ 
+-// Function to insert CSS styles into the document
+-function insertCss(cssContent) {
+-	const styleElement = document.createElement('style');
+-	styleElement.type = 'text/css';
+-	styleElement.appendChild(document.createTextNode(cssContent));
+-	document.head.appendChild(styleElement);
+-}
++function saveConfig() {
++	const q = v => `'${String(v).replace(/'/g, "'\\''")}'`;
++	const lines = [ 'config filemanager' ];
+ 
+-// CSS styles for the file manager interface
+-const cssContent = `
+-:root {
+-	color-scheme: light dark;
+-	--light-bg: #EEE;
+-	--light-bg-semi: #FFF;
+-	--light-bg-semi2: #EEE;
+-	--light-color: #111;
+-	--light-border: #CCC;
+-	--dark-bg: #111;
+-	--dark-bg-semi: #222;
+-	--dark-bg-semi2: #333;
+-	--dark-color: #EEE;
+-	--dark-border: #666;
+-}
+-#file-manager-container,
+-#file-manager-container textarea,
+-#file-manager-container textarea:hover,
+-#file-manager-container input,
+-#file-manager-container input:hover {
+-	color: light-dark(var(--light-color),var(--dark-color));
+-	background-color: light-dark(var(--light-bg-semi), var(--dark-bg-semi));
+-}
+-.node-admin-system-filemanager .main-right,
+-.main-right > #maincontent,
+-[data-page=admin-system-filemanager] > #maincontainer > #maincontent {
+-    background-color: light-dark(var(--light-bg-semi), var(--dark-bg-semi));
+-}
+-.cbi-button-apply, 
+-.cbi-button-reset, 
+-.cbi-button-save:not(.custom-save-button) {
+-	display: none !important;
+-}
+-.cbi-page-actions {
+-	background: none !important;
+-	border: none !important;
+-	padding: ${config.padding}px 0 !important;
+-	margin: 0 !important;
+-	display: flex;
+-	justify-content: flex-start;
+-	margin-top: 10px;
++	for (const k in defaults)
++		lines.push(`\toption ${k} ${q(config[k])}`);
++
++	return fs.write(CONFIG_FILE, lines.join('\n') + '\n');
+ }
+-#file-manager-container .cbi-tabmenu {
+-	background: none !important;
+-	border: none !important;
+-	margin: 0 !important;
+-	padding: 0 !important;
++
++/* --- browser storage (may be unavailable) ------------------------------ */
++
++function store(key, value) {
++	try {
++		if (value == null)
++			window.localStorage.removeItem(`luci-filemanager-${key}`);
++		else
++			window.localStorage.setItem(`luci-filemanager-${key}`, JSON.stringify(value));
++	}
++	catch (e) {}
+ }
+-#file-manager-container .cbi-tabmenu > li[class~="cbi-tab"] {
+-	background: none !important;
++
++function stored(key) {
++	try {
++		return JSON.parse(window.localStorage.getItem(`luci-filemanager-${key}`));
++	}
++	catch (e) {
++		return null;
++	}
+ }
+-#file-manager-container .cbi-tabmenu li {
+-	margin: 15px 15px 21px 0;
+-	border: 0;
+-	height: unset;
++
++/* --- transfers through cgi-io ------------------------------------------ */
++
++function cgiPost(applet, body, opts) {
++	return new Promise((resolve, reject) => {
++		const xhr = new XMLHttpRequest();
++
++		xhr.open('POST', `${L.env.cgi_base}/${applet}`, true);
++
++		if (opts.responseType)
++			xhr.responseType = opts.responseType;
++
++		if (opts.onUploadProgress)
++			xhr.upload.onprogress = ev => ev.lengthComputable && opts.onUploadProgress(ev.loaded, ev.total);
++
++		if (opts.onProgress)
++			xhr.onprogress = ev => opts.onProgress(ev.loaded, ev.lengthComputable ? ev.total : 0);
++
++		xhr.onload = () => resolve(xhr);
++		xhr.onerror = () => reject(new Error(_('Network error')));
++		xhr.onabort = () => reject(Object.assign(new Error(_('Cancelled')), { cancelled: true }));
++
++		if (opts.onStart)
++			opts.onStart(xhr);
++
++		xhr.send(body);
++	});
+ }
+-#file-manager-container .cbi-tabmenu > li > a {
+-	background-color: light-dark(var(--light-bg), var(--dark-bg));
+-	color: light-dark(var(--light-color),var(--dark-color));
+-	padding: 3px 13px;
+-	border-radius: 5px;
+-	border: 1px solid;
+-	border-color: light-dark(var(--light-border),var(--dark-border));
++
++/* cgi-io answers 200 with {"failure": [errno, "text"]} when writing failed */
++function uploadBlob(path, blob, mode, opts) {
++	const fd = new FormData();
++
++	fd.append('sessionid', rpc.getSessionID());
++	fd.append('filename', path);
++	fd.append('filemode', modeOctal(mode));
++	fd.append('filedata', blob);
++
++	return cgiPost('cgi-upload', fd, opts ?? {}).then((xhr) => {
++		let res = null;
++
++		try { res = JSON.parse(xhr.responseText); } catch (e) {}
++
++		if (xhr.status != 200 || !res || res.failure) {
++			const why = res?.failure ? res.failure[1] : (xhr.responseText || xhr.statusText).trim();
++			throw new Error(res?.message ? `${res.message}: ${why}` : why);
++		}
++
++		return res;
++	});
+ }
+-#file-manager-container .cbi-tabmenu > li > a:hover {
+-	background-color: light-dark(var(--dark-bg), var(--light-bg));
+-	color: light-dark(var(--dark-color),var(--light-color));
++
++function downloadBlob(path, opts) {
++	const body = new URLSearchParams({ sessionid: rpc.getSessionID(), path: path });
++
++	return cgiPost('cgi-download', body, Object.assign({ responseType: 'blob' }, opts ?? {})).then((xhr) => {
++		if (xhr.status != 200)
++			return xhr.response.text().then((t) => { throw new Error(t.trim() || xhr.statusText); });
++
++		return xhr.response;
++	});
+ }
+-#file-list-container {
+-	overflow: auto;
+-	border-top: 1px solid;
+-	border-bottom: 1px solid;
+-	border-left: 1px solid;
+-	border-color: light-dark(var(--light-border),var(--dark-border));
+-	padding: 0;
+-	min-width: 600px;
+-	position: relative;
+-	resize: both;
++
++function saveBlobAs(blob, name) {
++	const url = URL.createObjectURL(blob);
++	const a = E('a', { 'href': url, 'download': name, 'style': 'display:none' });
++
++	document.body.appendChild(a);
++	a.click();
++	a.remove();
++	window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+ }
+-#file-list {
+-	background-color: light-dark(var(--light-bg-semi), var(--dark-bg-semi));
++
++/*
++ * Large files: the browser downloads them itself, without holding them in
++ * memory. cgi-download accepts only [A-Za-z0-9 ()<>@,;:[]?.=%-] in the name.
++ */
++function browserDownload(path, name) {
++	const safe = name.replace(/[^A-Za-z0-9 ()<>@,;:\[\]?.=%-]/g, '-');
++	let frame = document.getElementById('fm-download-frame');
++
++	if (!frame) {
++		frame = E('iframe', { 'id': 'fm-download-frame', 'name': 'fm-download-frame', 'style': 'display:none' });
++		document.body.appendChild(frame);
++	}
++
++	const form = E('form', { 'method': 'post', 'action': `${L.env.cgi_base}/cgi-download`, 'target': 'fm-download-frame', 'style': 'display:none' }, [
++		E('input', { 'type': 'hidden', 'name': 'sessionid', 'value': rpc.getSessionID() }),
++		E('input', { 'type': 'hidden', 'name': 'path', 'value': path }),
++		E('input', { 'type': 'hidden', 'name': 'filename', 'value': safe }),
++		E('input', { 'type': 'hidden', 'name': 'mimetype', 'value': 'application/octet-stream' })
++	]);
++
++	document.body.appendChild(form);
++	form.submit();
++	form.remove();
++
++	return safe;
++}
++
++/* --- background jobs ---------------------------------------------------- */
++
++/*
++ * Long operations (copy, move, delete of folders, archives, recursive
++ * chmod/chown) run detached from rpcd: a call of file.exec ends after 20 s
++ * in the browser and after 120 s in rpcd, a copy of a large folder takes
++ * longer. The job writes its exit code to <dir>/rc; the page polls for it.
++ * Finished jobs older than an hour and all jobs older than a day are removed
++ * when the next one starts.
++ */
++const JOB_START = `
++base=$1; shift
++now=$(date +%s)
++mkdir -p "$base" || exit 1
++for d in "$base"/job-*; do
++	[ -d "$d" ] || continue
++	t=\${d##*-}
++	case $t in ''|*[!0-9]*) continue ;; esac
++	age=$((now - t))
++	if [ $age -gt 86400 ] || { [ -e "$d/rc" ] && [ $age -gt 3600 ]; }; then rm -rf "$d"; fi
++done
++d=$(mktemp -d "$base/job-XXXXXX") || exit 1
++mv "$d" "$d-$now" || exit 1
++d=$d-$now
++setsid /bin/sh -c 'd=$1; shift; export FM_JOB="$d"; echo $$ >"$d/pid"; "$@" >"$d/out" 2>"$d/err"; echo $? >"$d/rc.tmp"; mv "$d/rc.tmp" "$d/rc"' sh "$d" "$@" </dev/null >/dev/null 2>&1 &
++echo "$d"
++`;
++
++/* triples: replace(0|1) source target */
++const JOB_TRANSFER = `
++op=$1; shift; rc=0
++while [ $# -ge 3 ]; do
++	r=$1 s=$2 t=$3; shift 3
++	[ "$s" -ef "$t" ] && continue
++	if [ -e "$t" ] || [ -L "$t" ]; then
++		if [ "$r" != 1 ]; then echo "$t: File exists" >&2; rc=1; continue; fi
++		rm -rf -- "$t" || { rc=1; continue; }
++	fi
++	if [ "$op" = move ]; then mv -- "$s" "$t" || rc=1; else cp -a -- "$s" "$t" || rc=1; fi
++done
++exit $rc
++`;
++
++/* the archive is written into the job directory */
++const JOB_ARCHIVE = `
++out=$FM_JOB/archive.tar.gz dir=$1; shift
++cd "$dir" || exit 1
++need=$(du -sk "$@" | awk '{ s += $1 } END { print s + 0 }')
++avail=$(df -k "\${out%/*}" | awk 'NR == 2 { print $4 }')
++if [ -n "$avail" ] && [ "$need" -gt "$avail" ]; then echo "NOSPACE $need $avail" >&2; exit 28; fi
++tar -czf "$out" "$@"
++`;
++
++/* --- styles ------------------------------------------------------------ */
++
++const ICONS = {
++	dir: 'M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8z',
++	file: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm-1 1.5L18.5 9H13z',
++	link: 'M10.6 13.4a1 1 0 0 1 0-1.4l3.6-3.6a3 3 0 1 1 4.2 4.2l-2 2a1 1 0 1 1-1.4-1.4l2-2a1 1 0 0 0-1.4-1.4l-3.6 3.6a1 1 0 0 1-1.4 0zm2.8-2.8a1 1 0 0 1 0 1.4l-3.6 3.6a3 3 0 1 1-4.2-4.2l2-2a1 1 0 1 1 1.4 1.4l-2 2a1 1 0 0 0 1.4 1.4l3.6-3.6a1 1 0 0 1 1.4 0z',
++	special: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 4a6 6 0 1 1 0 12 6 6 0 0 1 0-12z',
++	broken: 'M12 2 1 21h22zm-1 7h2v6h-2zm0 8h2v2h-2z',
++};
++
++function iconCss(name) {
++	const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="${ICONS[name]}"/></svg>`;
++	const url = `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
++	return `-webkit-mask-image:${url};mask-image:${url};`;
+ }
+-#file-list > tr:nth-of-type(2n) {
+-	background-color: light-dark(var(--light-bg-semi2), var(--dark-bg-semi2));
++
++const cssContent = `
++#file-manager-container {
++	--fm-border: color-mix(in srgb, currentColor 18%, transparent);
++	--fm-hover: color-mix(in srgb, currentColor 7%, transparent);
++	--fm-muted: color-mix(in srgb, currentColor 62%, transparent);
++	--fm-selected: color-mix(in srgb, #3b82f6 20%, transparent);
++	--fm-accent: #3b82f6;
++	--fm-folder: #d9a521;
++	position: relative;
+ }
+-#file-table > thead > tr > th:last-child {
+-border-right: 1px solid;
+-border-color: light-dark(var(--light-border),var(--dark-border));
++#file-manager-container [hidden] { display: none !important; }
++#file-manager-container .fm-tabs {
++	display: flex;
++	flex-wrap: wrap;
++	gap: .4em;
++	margin: 0 0 .8em;
++	padding: 0;
++	border-bottom: 1px solid var(--fm-border);
+ }
+-#file-list-container .drag-over {
+-	border: 2px dashed #00BFFF;
+-	background-color: light-dark(var(--light-bg), var(--dark-bg));
++#file-manager-container .fm-tab {
++	appearance: none;
++	background: none;
++	border: 0;
++	border-bottom: 3px solid transparent;
++	color: inherit;
++	cursor: pointer;
++	font: inherit;
++	margin: 0;
++	padding: .5em .8em;
++	max-width: 100%;
++	overflow: hidden;
++	text-overflow: ellipsis;
++	white-space: nowrap;
+ }
+-#drag-overlay {
+-	position: absolute;
+-	top: 0;
+-	left: 0;
+-	width: 100%;
+-	height: 100%;
+-	background-color: light-dark(var(--light-bg), var(--dark-bg));
++#file-manager-container .fm-tab:hover { background: var(--fm-hover); }
++#file-manager-container .fm-tab.active { border-bottom-color: var(--fm-accent); font-weight: bold; }
++#file-manager-container .fm-tab[disabled] { opacity: .45; cursor: default; }
++#file-manager-container .fm-panel[hidden] { display: none !important; }
++#file-manager-container .fm-bar {
+ 	display: flex;
++	flex-wrap: wrap;
+ 	align-items: center;
+-	justify-content: center;
+-	font-size: 24px;
+-	color: light-dark(var(--light-color), var(--dark-color));
+-	z-index: 10;
+-	pointer-events: none;
++	gap: .4em;
++	margin-bottom: .5em;
+ }
+-#file-manager-container .editor-container {
++#file-manager-container .fm-bar .btn,
++#file-manager-container .fm-bar .cbi-button { margin: 0; white-space: nowrap; }
++#file-manager-container .fm-grow { flex: 1 1 12em; min-width: 0; }
++#file-manager-container .fm-path {
+ 	display: flex;
+-	flex-direction: column;
+-	resize: both;
+-	overflow: hidden;
++	align-items: center;
++	gap: .4em;
++	margin-bottom: .5em;
+ }
+-#file-manager-container .editor-content {
+-	flex: 1;
++#file-manager-container .fm-crumbs {
+ 	display: flex;
+-	overflow: hidden;
+-	border: 1px solid;
+-	border-color: light-dark(var(--light-border),var(--dark-border));
+-}
+-#file-manager-container .line-numbers {
+-	width: 50px;
+-	background-color: light-dark(var(--light-bg), var(--dark-bg));
+-	text-align: right;
+-	padding-right: 5px;
+-	user-select: none;
+-	border-right: 1px solid;
+-	border-color: light-dark(var(--light-border),var(--dark-border));
+-	overflow: hidden;
+-	flex-shrink: 0;
+-	-ms-overflow-style: none; /* Hide scrollbar in IE и Edge */
+-	scrollbar-width: none; /* Hide scrollbar in Firefox */
+-}
+-#file-manager-container .line-numbers::-webkit-scrollbar {
+-	display: none; /* Hide scrollbar in Chrome, Safari и Opera */
+-}
+-#file-manager-container .line-numbers div {
+-	font-family: monospace;
+-	font-size: 14px;
+-	line-height: 1.2em;
+-	height: 1.2em;
+-}
+-#editor-message {
+-	font-size: 18px;
+-	font-weight: bold;
+-}
+-#editor-textarea {
+ 	flex: 1;
+-	resize: none;
+-	border: none;
+-	font-family: monospace;
+-	font-size: 14px;
+-	line-height: 1.2em;
+-	padding: 0;
++	min-width: 0;
++	align-items: center;
++	overflow-x: auto;
++	white-space: nowrap;
++	border: 1px solid var(--fm-border);
++	border-radius: 4px;
++	padding: .15em .3em;
++	scrollbar-width: thin;
++}
++#file-manager-container .fm-crumbs button {
++	appearance: none;
++	background: none;
++	border: 0;
++	border-radius: 3px;
++	color: inherit;
++	cursor: pointer;
++	font: inherit;
++	padding: .3em .35em;
+ 	margin: 0;
+-	overflow: auto;
+-	box-sizing: border-box;
+ }
+-#editor-textarea, .line-numbers {
+-	overflow-y: scroll;
++#file-manager-container .fm-crumbs button:hover { background: var(--fm-hover); }
++#file-manager-container .fm-crumbs button:last-child { font-weight: bold; }
++#file-manager-container .fm-crumbs .fm-sep { color: var(--fm-muted); padding: 0 .05em; }
++#file-manager-container .fm-path input { flex: 1; min-width: 0; width: auto; margin: 0; }
++#file-manager-container .fm-filter { flex: 1 1 10em; min-width: 6em; width: auto !important; margin: 0; }
++#file-manager-container .fm-banner {
++	display: flex;
++	flex-wrap: wrap;
++	align-items: center;
++	gap: .4em;
++	border: 1px solid var(--fm-border);
++	border-left: 4px solid var(--fm-accent);
++	border-radius: 4px;
++	padding: .4em .6em;
++	margin-bottom: .5em;
++}
++#file-manager-container .fm-banner[hidden] { display: none; }
++#file-manager-container .fm-banner .fm-grow { flex: 1 1 10em; overflow-wrap: anywhere; }
++#file-manager-container .fm-list {
++	border: 1px solid var(--fm-border);
++	border-radius: 4px;
++	position: relative;
++	min-height: 6em;
+ }
+-#file-manager-container .parent-dir {
+-	background-color: light-dark(var(--light-bg), var(--dark-bg));
+-	border-top: 1px solid;
+-	border-bottom: 1px solid;
+-	border-color: light-dark(var(--light-border),var(--dark-border));
++#file-manager-container .fm-row {
++	display: grid;
++	grid-template-columns: 2.4em minmax(0, 1fr) var(--fm-cols, ) 2.8em;
++	align-items: center;
++	border-top: 1px solid var(--fm-border);
++	min-height: 2.6em;
+ }
+-#file-table th {
+-	text-align: left !important;
++#file-manager-container .fm-row:first-child { border-top: 0; }
++#file-manager-container .fm-row:not(.fm-head):hover { background: var(--fm-hover); }
++#file-manager-container .fm-row.selected { background: var(--fm-selected); }
++#file-manager-container .fm-head {
++	font-weight: bold;
+ 	position: sticky;
+ 	top: 0;
+-	border-right: 1px solid;
+-	border-color: light-dark(var(--light-border),var(--dark-border));
+-	box-sizing: border-box;
+-	padding-right: 30px;
+-	white-space: nowrap;
+-	min-width: 100px;
+-	background-color: light-dark(var(--light-bg), var(--dark-bg));
+ 	z-index: 2;
+-	padding: 5px 6px;
+-	color: light-dark(var(--light-color),var(--dark-color));
+-}
+-#file-table td {
+-	text-align: left !important;
+-	border-right: 1px solid;
+-	border-color: light-dark(var(--light-border),var(--dark-border));
+-	box-sizing: border-box;
+-	white-space: nowrap;
+-	min-width: 100px;
++	background: inherit;
++	background: color-mix(in srgb, Canvas 92%, currentColor);
++}
++#file-manager-container .fm-cell {
++	padding: .25em .4em;
++	min-width: 0;
+ 	overflow: hidden;
+ 	text-overflow: ellipsis;
+-	padding: 1px 6px;
+-	color: light-dark(var(--light-color),var(--dark-color));
+-}
+-#file-manager-container th:last-child, td:last-child {
+-	border-right: 0;
+-}
+-#file-manager-container tr:hover {
+-	background-color: light-dark(var(--light-bg), var(--dark-bg)) !important;
+-}
+-#file-manager-container .download-button {
+-	color: green;
+-	cursor: pointer;
+-	margin-left: 5px;
+-}
+-#file-manager-container .delete-button {
+-	color: red;
+-	cursor: pointer;
+-	margin-left: 5px;
+-}
+-#file-manager-container .edit-button {
+-	color: blue;
+-	cursor: pointer;
+-	margin-left: 5px;
+-}
+-#file-manager-container .duplicate-button {
+-	color: orange;
+-	cursor: pointer;
+-	margin-left: 5px;
+-}
+-#file-manager-container .symlink {
+-	color: green;
+-}
+-#file-manager-container .status-link {
+-	color: blue;
+-	text-decoration: underline;
+-	cursor: pointer;
+-}
+-#file-manager-container .action-button {
+-	margin-right: 10px;
+-	cursor: pointer;
+-}
+-#file-manager-container .size-cell {
+-	font-family: monospace;
+-	box-sizing: border-box;
+-	white-space: nowrap;
+-	align-items: center;
+-}
+-#file-manager-container .size-number {
+-	display: inline-block;
+-	width: 8ch;
+-	text-align: right;
+-}
+-#file-manager-container .size-unit {
+-	display: inline-block;
+-	width: 4ch;
+-	text-align: right;
+-	margin-left: 0.5ch;
+-}
+-#file-manager-container .table {
+-	table-layout: fixed;
+-	border-collapse: collapse;
+ 	white-space: nowrap;
+-	width: 100%;
+-	margin: 0 !important;
+ }
+-#file-manager-container .table th:nth-child(3), .table td:nth-child(3) {
+-	width: 100px;
+-	min-width: 100px;
+-	max-width: 500px;
+-}
+-#file-manager-container .resizer {
+-	position: absolute;
+-	right: 0;
+-	top: 0;
+-	width: 5px;
+-	height: 100%;
+-	cursor: col-resize;
+-	user-select: none;
+-	z-index: 3;
+-}
+-#file-manager-container .resizer::after {
+-	content: "";
+-	position: absolute;
+-	right: 2px;
+-	top: 0;
+-	width: 1px;
+-	height: 100%;
+-	background: #aaa;
+-}
+-#file-list-container.resizeable {
+-	resize: both;
+-	overflow: auto;
+-}
+-#file-manager-container .sort-button {
+-	position: absolute;
+-	right: 10px;
+-	top: 50%;
+-	transform: translateY(-50%);
++#file-manager-container .fm-check { display: flex; justify-content: center; padding: 0; }
++#file-manager-container .fm-check input { margin: 0; cursor: pointer; }
++#file-manager-container .fm-sort {
++	appearance: none;
+ 	background: none;
+-	border: 1px solid; /* Add a visible border */
+-	border-color: light-dark(var(--light-border),var(--dark-border));
+-	color: #fff; /* White text color for better contrast on dark backgrounds */
++	border: 0;
++	color: inherit;
+ 	cursor: pointer;
+-	padding: 2px 5px; /* Add padding for better clickability */
+-	font-size: 12px; /* Set font size */
+-	border-radius: 4px; /* Rounded corners for a better appearance */
+-	background-color: rgba(0, 0, 0, 0.5); /* Semi-transparent black background */
+-	transition: background-color 0.3s, color 0.3s; /* Smooth transition effects for hover */
+-}
+-
+-#file-manager-container .sort-button:hover {
+-	background-color: #fff; /* Change background to white on hover */
+-	color: #000; /* Change text color to black on hover */
+-	border-color: #fff; /* White border on hover */
+-}
+-#file-manager-container .sort-button:focus {
+-	outline: none;
++	font: inherit;
++	font-weight: bold;
++	padding: .2em 0;
++	margin: 0;
++	text-align: left;
++	max-width: 100%;
++	overflow: hidden;
++	text-overflow: ellipsis;
+ }
+-#status-bar {
+-	margin-top: 10px;
+-	padding: 10px;
+-	background-color: #f9f9f9;
+-	background-color: light-dark(var(--light-bg), var(--dark-bg));
+-	border: 1px solid;
+-	border-color: light-dark(var(--light-border),var(--dark-border));
+-	min-height: 40px;
++#file-manager-container .fm-sort.sorted::after { content: " ▲"; font-size: .75em; }
++#file-manager-container .fm-sort.sorted.desc::after { content: " ▼"; }
++#file-manager-container .fm-mobile-sort { display: none; }
++#file-manager-container .fm-open {
+ 	display: flex;
+ 	align-items: center;
++	gap: .5em;
++	color: inherit;
++	text-decoration: none;
++	cursor: pointer;
++	min-width: 0;
++	padding: .2em 0;
++}
++#file-manager-container .fm-open:focus-visible { outline: 2px solid var(--fm-accent); outline-offset: 1px; }
++#file-manager-container .fm-label { min-width: 0; flex: 1; }
++#file-manager-container .fm-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
++#file-manager-container .fm-dir .fm-name { font-weight: bold; }
++#file-manager-container .fm-target { color: var(--fm-muted); }
++#file-manager-container .fm-meta { display: none; color: var(--fm-muted); font-size: .85em; }
++#file-manager-container .fm-icon {
++	flex: none;
++	width: 1.35em;
++	height: 1.35em;
++	background-color: currentColor;
++	opacity: .7;
++	-webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
++	-webkit-mask-size: contain; mask-size: contain;
++	-webkit-mask-position: center; mask-position: center;
++	${iconCss('file')}
++}
++#file-manager-container .fm-icon.dir { background-color: var(--fm-folder); opacity: 1; ${iconCss('dir')} }
++#file-manager-container .fm-icon.link { ${iconCss('link')} }
++#file-manager-container .fm-icon.special { ${iconCss('special')} }
++#file-manager-container .fm-icon.broken { background-color: #d9534f; opacity: 1; ${iconCss('broken')} }
++#file-manager-container .fm-num { text-align: right; font-variant-numeric: tabular-nums; }
++#file-manager-container .fm-mono { font-family: monospace; }
++#file-manager-container .fm-more {
++	appearance: none;
++	background: none;
++	border: 1px solid transparent;
++	border-radius: 4px;
++	color: inherit;
++	cursor: pointer;
++	font-size: 1.3em;
++	line-height: 1;
++	margin: 0 auto;
++	padding: .15em .45em;
++	display: block;
++}
++#file-manager-container .fm-more:hover,
++#file-manager-container .fm-more:focus-visible { border-color: var(--fm-border); background: var(--fm-hover); }
++#file-manager-container .fm-empty { padding: 1.5em; text-align: center; color: var(--fm-muted); }
++#file-manager-container .fm-status {
++	display: flex;
++	flex-wrap: wrap;
++	gap: .3em 1em;
+ 	justify-content: space-between;
++	color: var(--fm-muted);
++	font-size: .9em;
++	padding: .4em .1em;
+ }
+-#status-info {
+-	font-weight: bold;
++#file-manager-container .fm-progress {
+ 	display: flex;
++	flex-wrap: wrap;
+ 	align-items: center;
+-}
+-#status-info span {
+-	padding-right: 10px;
+-}
+-#status-progress {
+-	width: 50%;
+-}
+-.cbi-progressbar {
+-	width: 100%;
+-	background-color: light-dark(var(--light-bg), var(--dark-bg));
+-	border-radius: 5px;
++	gap: .5em;
++	border: 1px solid var(--fm-border);
++	border-radius: 4px;
++	padding: .4em .6em;
++	margin-bottom: .5em;
++}
++#file-manager-container .fm-progress[hidden] { display: none; }
++#file-manager-container .fm-progress .fm-grow { overflow-wrap: anywhere; }
++#file-manager-container .fm-meter {
++	flex: 1 1 8em;
++	height: .5em;
++	border-radius: .25em;
++	background: var(--fm-border);
+ 	overflow: hidden;
+-	height: 10px;
+ }
+-.cbi-progressbar div {
+-	height: 100%;
+-	background-color: light-dark(var(--light-bg), var(--dark-bg));
+-	width: 0%;
+-	transition: width 0.2s;
++#file-manager-container .fm-meter > div { height: 100%; width: 0; background: var(--fm-accent); transition: width .2s; }
++#file-manager-container .fm-meter.busy > div { width: 30% !important; animation: fm-busy 1.2s infinite linear; }
++@keyframes fm-busy { from { margin-left: -30%; } to { margin-left: 100%; } }
++#file-manager-container .fm-drop {
++	position: absolute;
++	inset: 0;
++	display: none;
++	align-items: center;
++	justify-content: center;
++	border: 2px dashed var(--fm-accent);
++	border-radius: 4px;
++	background: color-mix(in srgb, Canvas 85%, transparent);
++	font-size: 1.3em;
++	z-index: 5;
++	pointer-events: none;
+ }
+-.file-manager-header {
++#file-manager-container .fm-list.dragover .fm-drop { display: flex; }
++
++#file-manager-container .fm-editor-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .3em 1em; margin-bottom: .4em; }
++#file-manager-container .fm-editor-path { font-family: monospace; font-weight: bold; overflow-wrap: anywhere; }
++#file-manager-container .fm-editor-info { color: var(--fm-muted); font-size: .9em; }
++#file-manager-container .fm-dirty { color: #d9534f; font-weight: bold; }
++#file-manager-container .fm-toggle { display: inline-flex; align-items: center; gap: .3em; white-space: nowrap; cursor: pointer; margin: 0 .3em; }
++#file-manager-container .fm-toggle input { margin: 0; }
++#file-manager-container .fm-editor-body {
+ 	display: flex;
+-	align-items: center;
++	border: 1px solid var(--fm-border);
++	border-radius: 4px;
++	overflow: hidden;
++	height: 30em;
++	min-height: 12em;
+ }
+-.file-manager-header h2 {
++#file-manager-container .fm-gutter {
++	flex: none;
+ 	margin: 0;
+-	min-width: fit-content;
+-}
+-.file-manager-header input {
+-	margin-left: 10px;
+-	width: 100%;
+-	font-size: 18px;
+-}
+-#go-button {
+-	font-size: 18px;
+-	background-color: light-dark(var(--light-bg), var(--dark-bg));
+-	color: light-dark(var(--light-color),var(--dark-color));
+-	border-radius: 5px;
+-	border: 1px solid;
+-	border-color: light-dark(var(--light-border),var(--dark-border));
++	padding: .4em .5em .4em .3em;
++	min-width: 2.5em;
++	text-align: right;
++	color: var(--fm-muted);
++	border-right: 1px solid var(--fm-border);
++	overflow: hidden;
++	user-select: none;
++	white-space: pre;
++	background: var(--fm-hover);
+ }
+-#go-button:hover {
+-	background-color: light-dark(var(--dark-bg), var(--light-bg));
+-	color: light-dark(var(--dark-color),var(--light-color));
++#file-manager-container .fm-gutter,
++#file-manager-container .fm-text {
++	font-family: monospace;
++	font-size: var(--fm-font, 13px);
++	line-height: 1.4;
++	tab-size: 4;
+ }
+-#file-manager-container .directory-link {
++#file-manager-container .fm-text {
++	flex: 1;
++	min-width: 0;
++	height: 100% !important;
++	width: auto !important;
++	max-width: none !important;
++	margin: 0 !important;
++	padding: .4em .5em !important;
++	border: 0 !important;
++	border-radius: 0 !important;
++	box-shadow: none !important;
++	resize: none !important;
++	outline: none;
++	overflow: auto;
++	white-space: pre;
++	overflow-wrap: normal;
++	color: inherit;
++	background: transparent;
++}
++#file-manager-container .fm-text.wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
++#file-manager-container .fm-hex { flex: 1; min-width: 0; overflow: auto; display: flex; flex-direction: column; }
++#file-manager-container .fm-hex > .hexedit { min-width: 40em; flex: 1; min-height: 0; }
++#file-manager-container .fm-section { max-width: 60em; }
++#file-manager-container .fm-section .cbi-value-field input[type=text],
++#file-manager-container .fm-section .cbi-value-field select { max-width: 100%; }
++#file-manager-container .fm-help h4 { margin-top: 1em; }
++#file-manager-container .fm-help li { margin: .2em 0; }
++
++.fm-menu-backdrop { position: fixed; inset: 0; z-index: 2000; }
++.fm-menu {
++	position: fixed;
++	min-width: 13em;
++	max-width: calc(100vw - 16px);
++	max-height: calc(100vh - 16px);
++	overflow-y: auto;
++	padding: .3em 0;
++	border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
++	border-radius: 6px;
++	box-shadow: 0 6px 24px rgba(0, 0, 0, .3);
++	color: CanvasText;
++	background: Canvas;
++}
++[data-darkmode="true"] .fm-menu { color-scheme: dark; }
++.fm-menu .fm-menu-title {
++	padding: .4em 1em .5em;
+ 	font-weight: bold;
++	border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent);
++	margin-bottom: .3em;
++	overflow-wrap: anywhere;
+ }
+-
+-#file-manager-container .file-link {
+-	color: inherit; /* Use the default text color */
+-}
+-#content-settings h3 {
+-  margin-top: 0;
+-  padding-top: 0;
+-  padding-bottom: 25px;
+-  line-height: unset;
++.fm-menu button {
++	appearance: none;
++	display: block;
++	width: 100%;
++	text-align: left;
++	background: none;
++	border: 0;
++	color: inherit;
++	cursor: pointer;
++	font: inherit;
++	margin: 0;
++	padding: .55em 1em;
++}
++.fm-menu button:hover, .fm-menu button:focus-visible { background: color-mix(in srgb, currentColor 10%, transparent); outline: none; }
++.fm-menu button.danger { color: #d9534f; }
++.fm-menu hr { margin: .3em 0; border: 0; border-top: 1px solid color-mix(in srgb, currentColor 15%, transparent); }
++
++.fm-dialog-list { max-height: 12em; overflow: auto; margin: .5em 0; padding-left: 1.2em; overflow-wrap: anywhere; }
++.fm-dialog input[type=text] { width: 100%; box-sizing: border-box; }
++.fm-dialog .fm-error { color: #d9534f; min-height: 1.3em; margin: .3em 0; }
++.fm-perm-grid { display: grid; grid-template-columns: auto repeat(3, auto); justify-content: start; gap: .3em 1em; align-items: center; margin: .5em 0; }
++.fm-perm-grid strong { font-weight: normal; font-size: .9em; text-align: center; }
++.fm-perm-grid label { display: flex; justify-content: center; margin: 0; }
++.fm-props { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .3em 1em; margin: .5em 0 1em; }
++.fm-props > div:nth-child(odd) { font-weight: bold; }
++.fm-props > div:nth-child(even) { overflow-wrap: anywhere; }
++.fm-dialog .fm-field { margin: .6em 0; }
++.fm-dialog .fm-field > label { display: block; font-weight: bold; margin-bottom: .2em; }
++.fm-dialog .right { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .4em; }
++.fm-dialog .right .btn { margin: 0; }
++
++@media ${NARROW} {
++	.fm-props { grid-template-columns: minmax(0, 1fr); gap: 0; }
++	.fm-props > div:nth-child(even) { margin-bottom: .4em; }
++	#file-manager-container .fm-row { grid-template-columns: 2.4em minmax(0, 1fr) 3em; min-height: 3.2em; }
++	#file-manager-container .fm-col { display: none; }
++	#file-manager-container .fm-meta { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
++	#file-manager-container .fm-name { white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
++	#file-manager-container .fm-head .fm-col { display: none; }
++	#file-manager-container .fm-head .fm-name-head { display: none; }
++	#file-manager-container .fm-mobile-sort { display: flex; gap: .4em; align-items: center; }
++	#file-manager-container .fm-mobile-sort select { width: auto; min-width: 0; margin: 0; flex: 1; }
++	#file-manager-container .fm-more { font-size: 1.5em; padding: .2em .5em; }
++	#file-manager-container .fm-filter { flex-basis: 100%; }
++	#file-manager-container .fm-bar .btn,
++	#file-manager-container .fm-bar .cbi-button { flex: 1 1 auto; }
++	#file-manager-container .fm-editor-body { min-height: 10em; }
++	.fm-menu-backdrop { background: rgba(0, 0, 0, .35); }
++	.fm-menu { left: 8px !important; right: 8px !important; bottom: 8px !important; top: auto !important; max-width: none; border-radius: 10px; }
++	.fm-menu button { padding: .8em 1.1em; font-size: 1.05em; }
+ }
+ `;
+ 
++/* height of a header the theme keeps fixed at the top of the window */
++function topInset() {
++	let n = document.elementFromPoint(window.innerWidth / 2, 2);
+ 
+-// Main exported view module
+-return view.extend({
+-	editorMode: 'text',
+-	hexEditorInstance: null,
+-	// Method called when the view is loaded
+-	load() {
+-		const self = this;
+-		return loadConfig().then(() => {
+-			currentPath = config.currentDirectory || '/';
+-			return getFileList(currentPath); // Load the file list for the current directory
+-		});
+-	},
++	for (; n && n != document.body && n != document.documentElement; n = n.parentElement) {
++		const pos = window.getComputedStyle(n).position;
++		if (pos == 'fixed' || pos == 'sticky') {
++			const b = n.getBoundingClientRect().bottom;
++			return (b > 0 && b < window.innerHeight / 3) ? b : 0;
++		}
++	}
+ 
+-	// Method to render the interface
+-	render(data) {
+-		const self = this;
+-		insertCss(cssContent); // Insert CSS styles
+-		const viewContainer = E('div', {
+-			'id': 'file-manager-container'
+-		}, [
+-			// File Manager Header
+-			E('div', {
+-				'class': 'file-manager-header'
+-			}, [
+-				E('h2', {}, _('File Manager: ')),
+-				E('input', {
+-					'type': 'text',
+-					'id': 'path-input',
+-					'value': currentPath,
+-					'style': 'margin-left: 10px;',
+-					'keydown'(event) {
+-						if (event.key === 'Enter') {
+-							self.handleGoButtonClick(); // Trigger directory navigation on Enter
+-						}
+-					}
+-				}),
+-				E('button', {
+-					'id': 'go-button',
+-					'click': this.handleGoButtonClick.bind(this),
+-					'style': 'margin-left: 10px; padding: 3px 12px;'
+-				}, _('&#8594;'))
+-			]),
++	return 0;
++}
+ 
+-			// Tab Panels
+-			E('div', {
+-				'class': 'cbi-tabcontainer',
+-				'id': 'tab-group'
+-			}, [
+-				E('ul', {
+-					'class': 'cbi-tabmenu'
+-				}, [
+-					E('li', {
+-						'class': 'cbi-tab cbi-tab-active',
+-						'id': 'tab-filemanager'
+-					}, [
+-						E('a', {
+-							'href': '#',
+-							'click': this.switchToTab.bind(this, 'filemanager')
+-						}, _('File Manager'))
+-					]),
+-					E('li', {
+-						'class': 'cbi-tab',
+-						'id': 'tab-editor'
+-					}, [
+-						E('a', {
+-							'href': '#',
+-							'click': this.switchToTab.bind(this, 'editor')
+-						}, _('Editor'))
+-					]),
+-					E('li', {
+-						'class': 'cbi-tab',
+-						'id': 'tab-settings'
+-					}, [
+-						E('a', {
+-							'href': '#',
+-							'click': this.switchToTab.bind(this, 'settings')
+-						}, _('Settings'))
+-					]),
+-					// Help Tab
+-					E('li', {
+-						'class': 'cbi-tab',
+-						'id': 'tab-help'
+-					}, [
+-						E('a', {
+-							'href': '#',
+-							'click': this.switchToTab.bind(this, 'help')
+-						}, _('Help'))
+-					])
+-				])
+-			]),
++function insertCss() {
++	if (!document.getElementById('fm-style'))
++		document.head.appendChild(E('style', { 'id': 'fm-style' }, [ cssContent ]));
++}
+ 
+-			// Tab Contents
+-			E('div', {
+-				'class': 'cbi-tabcontainer-content'
+-			}, [
+-				// File Manager Content
+-				E('div', {
+-					'id': 'content-filemanager',
+-					'class': 'cbi-tab',
+-					'style': 'display:block;'
+-				}, [
+-					// File List Container with Drag-and-Drop
+-					(() => {
+-						// Create the container for the file list and drag-and-drop functionality
+-						const fileListContainer = E('div', {
+-							'id': 'file-list-container',
+-							'class': 'resizeable',
+-						}, [
+-							E('table', {
+-								'class': 'table',
+-								'id': 'file-table'
+-							}, [
+-								E('thead', {}, [
+-									E('tr', {}, [
+-										E('th', {
+-											'data-field': 'name'
+-										}, [
+-											_('Name'),
+-											E('button', {
+-												'class': 'sort-button',
+-												'data-field': 'name',
+-												'title': _('Sort by Name')
+-											}, '↕'),
+-											E('div', {
+-												'class': 'resizer'
+-											})
+-										]),
+-										E('th', {
+-											'data-field': 'permissions'
+-										}, [
+-											_('Permissions'),
+-											E('button', {
+-												'class': 'sort-button',
+-												'data-field': 'permissions',
+-												'title': _('Sort by Permissions')
+-											}, '↕'),
+-											E('div', {
+-												'class': 'resizer'
+-											})
+-										]),
+-										E('th', {
+-											'data-field': 'type'
+-										}, [
+-											_('Type'),
+-											E('button', {
+-												'class': 'sort-button',
+-												'data-field': 'type',
+-												'title': _('Sort by Type')
+-											}, '↕'),
+-											E('div', {
+-												'class': 'resizer'
+-											})
+-										]),
+-										E('th', {
+-											'data-field': 'size'
+-										}, [
+-											_('Size'),
+-											E('button', {
+-												'class': 'sort-button',
+-												'data-field': 'size',
+-												'title': _('Sort by Size')
+-											}, '↕'),
+-											E('div', {
+-												'class': 'resizer'
+-											})
+-										]),
+-										E('th', {
+-											'data-field': 'mtime'
+-										}, [
+-											_('Last Modified'),
+-											E('button', {
+-												'class': 'sort-button',
+-												'data-field': 'mtime',
+-												'title': _('Sort by Last Modified')
+-											}, '↕'),
+-											E('div', {
+-												'class': 'resizer'
+-											})
+-										]),
+-										E('th', {'data-field': 'actions'}, [
+-											E('input', {
+-												'type': 'checkbox',
+-												'id': 'select-all-checkbox',
+-												'style': 'margin-right: 5px;',
+-												'change': this.handleSelectAllChange.bind(this),
+-												'click': this.handleSelectAllClick.bind(this)
+-											}),
+-											_('Actions')
+-										])
+-									])
+-								]),
+-								E('tbody', {
+-									'id': 'file-list'
+-								})
+-							]),
+-							E('div', {
+-								'id': 'drag-overlay',
+-								'style': 'display:none;'
+-							}, _('Drop files here to upload'))
+-						]);
+-
+-						// Attach drag-and-drop event listeners
+-						fileListContainer.addEventListener('dragenter', this.handleDragEnter.bind(this));
+-						fileListContainer.addEventListener('dragover', this.handleDragOver.bind(this));
+-						fileListContainer.addEventListener('dragleave', this.handleDragLeave.bind(this));
+-						fileListContainer.addEventListener('drop', this.handleDrop.bind(this));
+-
+-						return fileListContainer;
+-					}).call(this), // Ensure 'this' context is preserved
+-
+-					// Status Bar
+-					E('div', {
+-						'id': 'status-bar'
+-					}, [
+-						E('div', {
+-							'id': 'status-info'
+-						}, _('No file selected.')),
+-						E('div', {
+-							'id': 'status-progress'
+-						})
+-					]),
+-
+-					// Page Actions
+-					E('div', {
+-						'class': 'cbi-page-actions'
+-					}, [
+-						E('button', {
+-							'class': 'btn action-button',
+-							'click': this.handleUploadClick.bind(this)
+-						}, _('Upload File')),
+-						E('button', {
+-							'class': 'btn action-button',
+-							'click': this.handleMakeDirectoryClick.bind(this)
+-						}, _('Create Folder')),
+-						E('button', {
+-							'class': 'btn action-button',
+-							'click': this.handleCreateFileClick.bind(this)
+-						}, _('Create File')),
+-						E('button', {
+-							'id': 'delete-selected-button',
+-							'class': 'btn action-button',
+-							'style': 'display: none;',
+-							'click': this.handleDeleteSelected.bind(this)
+-						}, _('Delete Selected'))
+-					])
+-				]),
++/* --- small dialogs ----------------------------------------------------- */
+ 
+-				// Editor Content
+-				E('div', {
+-					'id': 'content-editor',
+-					'class': 'cbi-tab',
+-					'style': 'display:none;'
+-				}, [
+-					E('p', {
+-						'id': 'editor-message'
+-					}, _('Select a file from the list to edit it here.')),
+-					E('div', {
+-						'id': 'editor-container'
+-					})
+-				]),
+-				// Help Content
+-				E('div', {
+-					'id': 'content-help',
+-					'class': 'cbi-tab',
+-					'style': 'display:none; padding: 10px; overflow:auto; width: 100%; height: 600px; resize: both; border: 1px solid; border-color: light-dark(var(--light-border),var(--dark-border)); box-sizing: border-box;'
+-				}, [
+-					// The content will be dynamically inserted by renderHelp()
+-				]),
++function dialog(title, body, buttons) {
++	return new Promise((resolve) => {
++		let done = false;
++		const finish = (v) => {
++			if (done)
++				return;
++			done = true;
++			ui.hideModal();
++			resolve(v);
++		};
+ 
+-				// Settings Content
+-				E('div', {
+-					'id': 'content-settings',
+-					'class': 'cbi-tab',
+-					'style': 'display:none;'
+-				}, [
+-					E('div', {}, [
+-						E('h3', {}, _('Interface Settings')),
+-						E('div', {
+-							'id': 'settings-container'
+-						}, [
+-							E('form', {
+-								'id': 'settings-form'
+-							}, [
+-								E('div', {}, [
+-									E('label', {}, _('Text Editor Height:')),
+-									E('input', {
+-										'type': 'number',
+-										'id': 'texteditorHeight-input',
+-										'value': config.texteditorHeight,
+-										'style': 'width:100%; margin-bottom:10px;'
+-									})
+-								]),
+-								E('div', {}, [
+-									E('label', {}, _('Hex Editor Height:')),
+-									E('input', {
+-										'type': 'number',
+-										'id': 'hexeditorHeight-input',
+-										'value': config.hexeditorHeight,
+-										'style': 'width:100%; margin-bottom:10px;'
+-									})
+-								]),
+-								E('div', {}, [
+-									E('label', {}, _('Column Widths (format: name:width,type:width,...):')),
+-									E('input', {
+-										'type': 'text',
+-										'id': 'columnWidths-input',
+-										'value': Object.entries(config.columnWidths).map(([k,v]) => k+':'+v).join(','),
+-										'style': 'width:100%; margin-bottom:10px;'
+-									})
+-								]),
+-								E('div', {}, [
+-									E('label', {}, _('Column Min Widths (format: name:minWidth,type:minWidth,...):')),
+-									E('input', {
+-										'type': 'text',
+-										'id': 'columnMinWidths-input',
+-										'value': Object.entries(config.columnMinWidths).map(([k,v]) => k+':'+v).join(','),
+-										'style': 'width:100%; margin-bottom:10px;'
+-									})
+-								]),
+-								E('div', {}, [
+-									E('label', {}, _('Column Max Widths (format: name:maxWidth,type:maxWidth,...):')),
+-									E('input', {
+-										'type': 'text',
+-										'id': 'columnMaxWidths-input',
+-										'value': Object.entries(config.columnMaxWidths).map(([k,v]) => k+':'+v).join(','),
+-										'style': 'width:100%; margin-bottom:10px;'
+-									})
+-								]),
+-								E('div', {}, [
+-									E('label', {}, _('Padding:')),
+-									E('input', {
+-										'type': 'number',
+-										'id': 'padding-input',
+-										'value': config.padding,
+-										'style': 'width:100%; margin-bottom:10px;'
+-									})
+-								]),
+-								E('div', {}, [
+-									E('label', {}, _('Padding Min:')),
+-									E('input', {
+-										'type': 'number',
+-										'id': 'paddingMin-input',
+-										'value': config.paddingMin,
+-										'style': 'width:100%; margin-bottom:10px;'
+-									})
+-								]),
+-								E('div', {}, [
+-									E('label', {}, _('Padding Max:')),
+-									E('input', {
+-										'type': 'number',
+-										'id': 'paddingMax-input',
+-										'value': config.paddingMax,
+-										'style': 'width:100%; margin-bottom:10px;'
+-									})
+-								]),
+-								E('div', {}, [
+-									E('label', {}, _('Current Directory:')),
+-									E('input', {
+-										'type': 'text',
+-										'id': 'currentDirectory-input',
+-										'value': config.currentDirectory,
+-										'style': 'width:100%; margin-bottom:10px;'
+-									})
+-								]),
+-								E('div', {
+-									'class': 'cbi-page-actions'
+-								}, [
+-									E('button', {
+-										'class': 'btn cbi-button-save custom-save-button',
+-										'click': this.handleSaveSettings.bind(this)
+-									}, _('Save'))
+-								])
+-							])
+-						])
+-					])
+-				])
+-			])
+-		]);
+-		// Add event listeners
+-		const sortButtons = viewContainer.querySelectorAll('.sort-button[data-field]');
+-		sortButtons.forEach((button) => {
+-			button.addEventListener('click', (event) => {
+-				event.preventDefault();
+-				const field = button.getAttribute('data-field');
+-				if (field) {
+-					self.sortBy(field); // Sort the file list by the selected field
++		const btns = buttons.map(b => E('button', {
++			'class': `btn cbi-button ${b.cls ?? ''}`,
++			'click': ui.createHandlerFn(this, () => {
++				if (b.check && !b.check())
++					return;
++				finish(b.value);
++			})
++		}, txt(b.label)));
++
++		const root = E('div', {
++			'class': 'fm-dialog',
++			'keydown': (ev) => {
++				if (ev.key == 'Escape') {
++					ev.stopPropagation();
++					finish(null);
+ 				}
+-			});
+-		});
+-		// Load the file list and initialize resizeable columns
+-		this.loadFileList(currentPath).then(() => {
+-			self.initResizeableColumns();
+-			const fileListContainer = document.getElementById('file-list-container');
+-			if (fileListContainer && typeof ResizeObserver !== 'undefined') {
+-				// Initialize ResizeObserver only once
+-				if (!self.fileListResizeObserver) {
+-					self.fileListResizeObserver = new ResizeObserver((entries) => {
+-						for (let entry of entries) {
+-							const newWidth = entry.contentRect.width;
+-							const newHeight = entry.contentRect.height;
+-						}
+-					});
+-					self.fileListResizeObserver.observe(fileListContainer);
++				else if (ev.key == 'Enter' && ev.target.tagName == 'INPUT' && ev.target.type != 'checkbox') {
++					ev.preventDefault();
++					const i = buttons.findIndex(b => b.primary);
++					if (i >= 0)
++						btns[i].click();
+ 				}
+ 			}
+-		});
+-		return viewContainer;
+-	},
++		}, [ ...body, E('div', { 'class': 'right' }, btns) ]);
+ 
+-	// Handler for the "Select All" checkbox click
+-	handleSelectAllClick(ev) {
+-		if (ev.altKey) {
+-			ev.preventDefault(); // Prevent the default checkbox behavior
+-			this.handleInvertSelection();
+-		} else {
+-			// Proceed with normal click handling; the 'change' event will be triggered
+-		}
++		ui.showModal(esc(title), root);
++
++		const focus = root.querySelector('input[type=text]') ?? btns[buttons.findIndex(b => b.primary)] ?? btns[0];
++		window.setTimeout(() => focus?.focus(), 50);
++	});
++}
++
++function promptName(title, label, value, check, okLabel) {
++	const input = E('input', { 'type': 'text', 'class': 'cbi-input-text', 'value': value ?? '',
++		'autocapitalize': 'off', 'autocomplete': 'off', 'spellcheck': 'false' });
++	const error = E('div', { 'class': 'fm-error' });
++	const validate = () => {
++		const msg = check(input.value);
++		dom.content(error, msg ? txt(msg) : null);
++		return !msg;
++	};
++
++	input.addEventListener('input', () => dom.content(error, null));
++
++	const p = dialog(title, [
++		E('div', { 'class': 'fm-field' }, [ E('label', {}, txt(label)), input ]),
++		error
++	], [
++		{ label: _('Cancel'), value: null },
++		{ label: okLabel ?? _('OK'), value: true, cls: 'cbi-button-positive', primary: true, check: validate }
++	]);
++
++	/* preselect the name without the extension */
++	window.setTimeout(() => {
++		const dot = input.value.lastIndexOf('.');
++		input.setSelectionRange(0, dot > 0 ? dot : input.value.length);
++	}, 60);
++
++	return p.then(ok => ok ? input.value : null);
++}
++
++function itemList(names) {
++	const max = 12;
++	const items = names.slice(0, max).map(n => E('li', {}, txt(n)));
++
++	if (names.length > max)
++		items.push(E('li', {}, txt(_('…and %d more').format(names.length - max))));
++
++	return E('ul', { 'class': 'fm-dialog-list' }, items);
++}
++
++function copyText(text) {
++	if (navigator.clipboard && window.isSecureContext)
++		return navigator.clipboard.writeText(text);
++
++	const ta = E('textarea', { 'style': 'position:fixed;top:0;left:0;opacity:0' }, [ text ]);
++	document.body.appendChild(ta);
++	ta.select();
++	const ok = document.execCommand('copy');
++	ta.remove();
++	return ok ? Promise.resolve() : Promise.reject(new Error(_('The browser did not allow copying')));
++}
++
++function copyName(name, taken) {
++	const dot = name.lastIndexOf('.');
++	const ext = (dot > 0 && dot < name.length - 1) ? name.substring(dot) : '';
++	const base = ext ? name.substring(0, dot) : name;
++	let candidate = `${base} (copy)${ext}`;
++
++	for (let n = 2; taken.has(candidate); n++)
++		candidate = `${base} (copy ${n})${ext}`;
++
++	return candidate;
++}
++
++function hashFor(path) {
++	return '#' + path.split('/').map(encodeURIComponent).join('/');
++}
++
++function pathFromHash() {
++	const h = window.location.hash;
++
++	if (!h.startsWith('#/'))
++		return null;
++
++	try {
++		return normPath(h.substring(1).split('/').map(decodeURIComponent).join('/'));
++	}
++	catch (e) {
++		return null;
++	}
++}
++
++/* --- the view ---------------------------------------------------------- */
++
++return view.extend({
++	handleSaveApply: null,
++	handleSave: null,
++	handleReset: null,
++
++	load() {
++		return loadConfig();
+ 	},
+ 
+-	// Function to invert selection
+-	handleInvertSelection() {
+-		const allCheckboxes = document.querySelectorAll('.select-checkbox');
+-		allCheckboxes.forEach((checkbox) => {
+-			checkbox.checked = !checkbox.checked;
+-			const filePath = checkbox.getAttribute('data-file-path');
+-			if (checkbox.checked) {
+-				selectedItems.add(filePath);
+-			} else {
+-				selectedItems.delete(filePath);
++	render() {
++		insertCss();
++
++		this.path = null;
++		this.entries = [];
++		this.selected = new Set();
++		this.sort = stored('sort') ?? { field: 'name', asc: true };
++		this.clip = null;
++		this.busy = null;
++		this.ed = null;
++		this.navToken = 0;
++		this.dragDepth = 0;
++		this.collator = new Intl.Collator(document.documentElement.lang || undefined, { numeric: true, sensitivity: 'base' });
++
++		try { this.clip = JSON.parse(window.sessionStorage.getItem('luci-filemanager-clipboard')); } catch (e) {}
++
++		const d = this.dom = {};
++
++		d.tabs = {
++			files: this.tabButton('files', _('Files')),
++			editor: this.tabButton('editor', _('Editor')),
++			settings: this.tabButton('settings', _('Settings')),
++			help: this.tabButton('help', _('Help'))
++		};
++		d.tabs.editor.disabled = true;
++		d.progress = E('div', { 'class': 'fm-progress', 'hidden': '' });
++
++		d.root = E('div', { 'id': 'file-manager-container' }, [
++			E('h2', {}, txt(_('File Manager'))),
++			E('div', { 'class': 'fm-tabs', 'role': 'tablist' }, Object.values(d.tabs)),
++			d.progress,
++			d.files = this.renderFiles(),
++			d.editor = E('div', { 'class': 'fm-panel', 'hidden': '' }),
++			d.settings = E('div', { 'class': 'fm-panel', 'hidden': '' }),
++			d.help = E('div', { 'class': 'fm-panel fm-help', 'hidden': '' })
++		]);
++
++		window.addEventListener('popstate', ev => this.onPopState(ev));
++		window.addEventListener('beforeunload', (ev) => {
++			if (this.ed?.dirty || this.busy) {
++				ev.preventDefault();
++				ev.returnValue = '';
+ 			}
+ 		});
+-		// Update the "Select All" checkbox state
+-		this.updateSelectAllCheckbox();
+-		// Update the "Delete Selected" button visibility
+-		this.updateDeleteSelectedButton();
+-	},
+-
+-	/**
+-	 * Switches the active tab in the interface and performs necessary actions based on the selected tab.
+-	 *
+-	 * @param {string} tab - The identifier of the tab to switch to ('filemanager', 'editor', 'settings', or 'help').
+-	 */
+-	switchToTab(tab) {
+-		// Retrieve the content containers for each tab
+-		const fileManagerContent = document.getElementById('content-filemanager');
+-		const editorContent = document.getElementById('content-editor');
+-		const settingsContent = document.getElementById('content-settings');
+-		const helpContent = document.getElementById('content-help');
+-
+-		// Retrieve the tab elements
+-		const tabFileManager = document.getElementById('tab-filemanager');
+-		const tabEditor = document.getElementById('tab-editor');
+-		const tabSettings = document.getElementById('tab-settings');
+-		const tabHelp = document.getElementById('tab-help');
+-
+-		// Ensure all necessary elements are present
+-		if (fileManagerContent && editorContent && settingsContent && helpContent && tabFileManager && tabEditor && tabSettings && tabHelp) {
+-			// Display the selected tab's content and hide the others
+-			fileManagerContent.style.display = (tab === 'filemanager') ? 'block' : 'none';
+-			editorContent.style.display = (tab === 'editor') ? 'block' : 'none';
+-			settingsContent.style.display = (tab === 'settings') ? 'block' : 'none';
+-			helpContent.style.display = (tab === 'help') ? 'block' : 'none';
+-
+-			// Update the active tab's styling
+-			tabFileManager.className = (tab === 'filemanager') ? 'cbi-tab cbi-tab-active' : 'cbi-tab';
+-			tabEditor.className = (tab === 'editor') ? 'cbi-tab cbi-tab-active' : 'cbi-tab';
+-			tabSettings.className = (tab === 'settings') ? 'cbi-tab cbi-tab-active' : 'cbi-tab';
+-			tabHelp.className = (tab === 'help') ? 'cbi-tab cbi-tab-active' : 'cbi-tab';
+-
+-			// Perform actions based on the selected tab
+-			if (tab === 'filemanager') {
+-				// Reload and display the updated file list when the File Manager tab is activated
+-				this.loadFileList(currentPath)
+-					.then(() => {
+-						// Initialize resizeable columns after successfully loading the file list
+-						this.initResizeableColumns();
+-					})
+-					.catch((err) => {
+-						// Display an error notification if loading the file list fails
+-						pop(null, E('p', _('Failed to update file list: %s').format(err.message)), 'error');
+-					});
+-			} else if (tab === 'settings') {
+-				// Load and display settings when the Settings tab is activated
+-				this.loadSettings();
+-			} else if (tab === 'help') {
+-				// Render the Help content when the Help tab is activated
+-				this.renderHelp();
++		window.addEventListener('resize', () => {
++			if (this.lastWidth != window.innerWidth) {
++				this.lastWidth = window.innerWidth;
++				this.renderList();
++				if (this.activeTab == 'editor')
++					this.fitEditor();
+ 			}
+-			// No additional actions are required for the Editor tab in this context
++		});
++		document.addEventListener('keydown', ev => this.onKeyDown(ev));
++		this.lastWidth = window.innerWidth;
++
++		let start = pathFromHash();
++		if (!start)
++			start = (config.startMode == 'fixed') ? config.currentDirectory : (stored('lastDir') ?? config.currentDirectory);
++
++		this.activeTab = 'files';
++		this.navigate(start, 'replace').then((ok) => {
++			if (!ok && start != '/')
++				return this.navigate('/', 'replace');
++		});
++
++		return d.root;
++	},
++
++	tabButton(name, label) {
++		return E('button', {
++			'class': 'fm-tab',
++			'type': 'button',
++			'role': 'tab',
++			'click': ev => {
++				ev.preventDefault();
++				this.selectTab(name);
++			}
++		}, txt(label));
++	},
++
++	/* a tab chosen by the user: the editor gets its own history entry, so
++	   "Back" on a phone returns to the list */
++	selectTab(name) {
++		if (name == 'editor' && this.ed && history.state?.fm != 'edit')
++			history.pushState({ fm: 'edit', path: this.path, file: this.ed.path }, '', hashFor(this.path));
++		else if (name != 'editor' && history.state?.fm == 'edit') {
++			this.pendingTab = name;
++			history.back();
++			return;
+ 		}
++
++		this.showTab(name);
+ 	},
+ 
+-	/**
+-	 * Renders the Help content by converting Markdown to HTML and inserting it into the Help container.
+-	 */
+-	renderHelp() {
+-		const self = this;
++	showTab(name) {
++		this.activeTab = name;
+ 
+-		// Convert Markdown to HTML
++		for (const k in this.dom.tabs) {
++			this.dom.tabs[k].classList.toggle('active', k == name);
++			this.dom.tabs[k].setAttribute('aria-selected', k == name ? 'true' : 'false');
++			this.dom[k].hidden = (k != name);
++		}
+ 
+-		const helpContentHTML = md.parseMarkdown(md_help.helpContentMarkdown);
++		if (name == 'settings')
++			this.renderSettings();
++		else if (name == 'help')
++			this.renderHelp();
++		else if (name == 'editor')
++			this.fitEditor();
++	},
+ 
++	onPopState(ev) {
++		const st = ev.state;
++		const tab = this.pendingTab;
+ 
+-		// Get the Help content container
+-		const helpContent = document.getElementById('content-help');
++		this.pendingTab = null;
+ 
+-		if (helpContent) {
+-			// Insert the converted HTML into the Help container
+-			helpContent.innerHTML = helpContentHTML;
++		if (!st?.fm) {
++			const p = pathFromHash();
++			if (p) {
++				this.showTab('files');
++				this.navigate(p, 'replace');
++			}
++			return;
++		}
+ 
+-			// Initialize resizeable functionality for the Help window
+-			self.initResizeableHelp();
+-		} else {
+-			console.error('Help content container not found.');
+-			pop(null, E('p', _('Failed to render Help content: Container not found.')), 'error');
++		if (st.fm == 'edit' && this.ed?.path == st.file) {
++			this.showTab('editor');
++			return;
+ 		}
++
++		this.showTab(tab ?? 'files');
++
++		if (st.path && st.path != this.path)
++			this.navigate(st.path, 'none');
+ 	},
+ 
+-	/**
+-	 * Initializes the resizeable functionality for the Help window.
+-	 */
+-	initResizeableHelp() {
+-		const helpContent = document.getElementById('content-help');
+-
+-		if (helpContent) {
+-			// Set initial dimensions
+-			helpContent.style.width = '100%';
+-			helpContent.style.height = '500px';
+-			helpContent.style.resize = 'both';
+-			helpContent.style.overflow = 'auto';
+-			helpContent.style.border = '1px solid #ccc';
+-			helpContent.style.padding = '10px';
+-			helpContent.style.boxSizing = 'border-box';
+-
+-			// Optional: Add a drag handle for better user experience
+-			/*
+-			var dragHandle = E('div', {
+-				'class': 'resize-handle',
+-				'style': 'width: 10px; height: 10px; background: #ccc; position: absolute; bottom: 0; right: 0; cursor: se-resize;'
+-			});
+-			helpContent.appendChild(dragHandle);
+-			*/
+-		} else {
+-			console.error('Help content container not found for resizing.');
++	onKeyDown(ev) {
++		if (this.activeTab == 'editor' && this.ed && (ev.ctrlKey || ev.metaKey) && !ev.altKey && ev.key.toLowerCase() == 's') {
++			ev.preventDefault();
++			this.saveFile();
++			return;
++		}
++
++		if (this.activeTab != 'files' || document.body.classList.contains('modal-overlay-active') || document.querySelector('.fm-menu'))
++			return;
++
++		const t = ev.target;
++		if (t && (t.tagName == 'INPUT' || t.tagName == 'TEXTAREA' || t.tagName == 'SELECT' || t.isContentEditable))
++			return;
++
++		const sel = [ ...this.selected ];
++		const k = ev.key;
++		const mod = ev.ctrlKey || ev.metaKey;
++
++		if (k == 'Delete' && sel.length)
++			this.deleteNames(sel);
++		else if (k == 'F2' && sel.length == 1)
++			this.renameEntry(this.entry(sel[0]));
++		else if (k == 'Escape' && sel.length)
++			this.setSelection([]);
++		else if (k == 'ArrowUp' && ev.altKey)
++			this.goUp();
++		else if (mod && k.toLowerCase() == 'a') {
++			this.setSelection(this.visibleEntries().map(e => e.name));
++		}
++		else if (mod && k.toLowerCase() == 'c' && sel.length && !String(window.getSelection())) {
++			this.setClipboard('copy', sel);
++		}
++		else if (mod && k.toLowerCase() == 'x' && sel.length) {
++			this.setClipboard('move', sel);
++		}
++		else if (mod && k.toLowerCase() == 'v' && this.clip) {
++			this.paste();
+ 		}
++		else
++			return;
++
++		ev.preventDefault();
+ 	},
+ 
+-	// Handler for the "Go" button click to navigate to a directory
+-	handleGoButtonClick() {
+-		// Logic to navigate to the specified directory and update the file list
+-		const self = this;
+-		const pathInput = document.getElementById('path-input');
+-		if (pathInput) {
+-			const newPath = pathInput.value.trim() || '/';
+-			fs.stat(newPath).then((stat) => {
+-				if (stat.type === 'directory') {
+-					currentPath = newPath;
+-					pathInput.value = currentPath;
+-					self.loadFileList(currentPath).then(() => {
+-						self.initResizeableColumns();
+-					});
+-				} else {
+-					pop(null, E('p', _('The specified path does not appear to be a directory.')), 'error');
++	/* --- file list ----------------------------------------------------- */
++
++	renderFiles() {
++		const d = this.dom;
++
++		d.crumbs = E('div', { 'class': 'fm-crumbs', 'aria-label': _('Path') });
++		d.pathInput = E('input', {
++			'type': 'text', 'class': 'cbi-input-text', 'hidden': '',
++			'autocapitalize': 'off', 'autocomplete': 'off', 'spellcheck': 'false',
++			'aria-label': _('Path'),
++			'keydown': (ev) => {
++				if (ev.key == 'Enter') {
++					ev.preventDefault();
++					this.goToTyped(d.pathInput.value);
+ 				}
+-			}).catch((err) => {
+-				pop(null, E('p', _('Failed to access the specified path: %s').format(err.message)), 'error');
+-			});
+-		}
++				else if (ev.key == 'Escape') {
++					ev.preventDefault();
++					this.editPath(false);
++				}
++			}
++		});
++		d.pathEdit = E('button', { 'class': 'btn cbi-button', 'type': 'button', 'title': _('Type a path'),
++			'click': () => this.editPath(d.pathInput.hidden) }, txt('✎'));
++		d.pathGo = E('button', { 'class': 'btn cbi-button cbi-button-action', 'type': 'button', 'hidden': '',
++			'click': () => this.goToTyped(d.pathInput.value) }, txt(_('Go')));
++
++		d.filter = E('input', {
++			'type': 'search', 'class': 'cbi-input-text fm-filter', 'placeholder': _('Filter by name'),
++			'autocapitalize': 'off', 'autocomplete': 'off', 'spellcheck': 'false',
++			'aria-label': _('Filter by name'),
++			'input': () => this.renderList()
++		});
++
++		d.toolbar = E('div', { 'class': 'fm-bar' }, [
++			E('button', { 'class': 'btn cbi-button', 'type': 'button', 'title': _('Parent folder') + ' (Alt+↑)', 'aria-label': _('Parent folder'), 'click': () => this.goUp() }, txt('↑')),
++			E('button', { 'class': 'btn cbi-button', 'type': 'button', 'title': _('Refresh'), 'aria-label': _('Refresh'), 'click': () => this.refresh() }, txt('⟳')),
++			E('button', { 'class': 'btn cbi-button', 'type': 'button', 'click': () => this.createEntry('directory') }, txt(_('New folder'))),
++			E('button', { 'class': 'btn cbi-button', 'type': 'button', 'click': () => this.createEntry('file') }, txt(_('New file'))),
++			E('button', { 'class': 'btn cbi-button cbi-button-action', 'type': 'button', 'click': () => this.pickUpload() }, txt(_('Upload'))),
++			d.filter
++		]);
++
++		d.selBar = E('div', { 'class': 'fm-banner', 'hidden': '' });
++		d.clipBar = E('div', { 'class': 'fm-banner', 'hidden': '' });
++
++		d.list = E('div', {
++			'class': 'fm-list',
++			'dragenter': ev => this.onDrag(ev, 1),
++			'dragover': ev => this.onDrag(ev, 0),
++			'dragleave': ev => this.onDrag(ev, -1),
++			'drop': ev => this.onDrop(ev)
++		});
++		d.status = E('div', { 'class': 'fm-status' });
++
++		return E('div', { 'class': 'fm-panel' }, [
++			E('div', { 'class': 'fm-path' }, [ d.crumbs, d.pathInput, d.pathGo, d.pathEdit ]),
++			d.toolbar,
++			d.clipBar,
++			d.selBar,
++			d.list,
++			d.status
++		]);
+ 	},
+ 
+-	// Handler for dragging files over the drop zone
+-	handleDragEnter(event) {
+-		event.preventDefault();
+-		event.stopPropagation();
+-		dragCounter++;
+-		const fileListContainer = document.getElementById('file-list-container');
+-		const dragOverlay = document.getElementById('drag-overlay');
+-		if (fileListContainer && dragOverlay) {
+-			fileListContainer.classList.add('drag-over');
+-			dragOverlay.style.display = 'flex';
++	editPath(on) {
++		const d = this.dom;
++
++		d.crumbs.hidden = on;
++		d.pathInput.hidden = !on;
++		d.pathGo.hidden = !on;
++		d.pathEdit.textContent = on ? '✕' : '✎';
++		d.pathEdit.title = on ? _('Cancel') : _('Type a path');
++
++		if (on) {
++			d.pathInput.value = this.path;
++			d.pathInput.focus();
++			d.pathInput.select();
+ 		}
+ 	},
+ 
+-	// Handler for when files are over the drop zone
+-	handleDragOver(event) {
+-		event.preventDefault();
+-		event.stopPropagation();
+-		event.dataTransfer.dropEffect = 'copy'; // Indicate copy action
+-	},
+-
+-	// Handler for leaving the drop zone
+-	handleDragLeave(event) {
+-		event.preventDefault();
+-		event.stopPropagation();
+-		dragCounter--;
+-		if (dragCounter === 0) {
+-			const fileListContainer = document.getElementById('file-list-container');
+-			const dragOverlay = document.getElementById('drag-overlay');
+-			if (fileListContainer && dragOverlay) {
+-				fileListContainer.classList.remove('drag-over');
+-				dragOverlay.style.display = 'none';
++	/* a typed path may name a file: open its folder and the file */
++	goToTyped(value) {
++		const path = normPath(value.trim().startsWith('/') ? value.trim() : joinPath(this.path, value.trim()));
++
++		return fs.stat(path).then((st) => {
++			this.editPath(false);
++			if (st.type == 'directory')
++				return this.navigate(path);
++			return this.navigate(dirName(path)).then(ok => ok && this.openFile(path));
++		}).catch((err) => {
++			notify(_('Cannot open "%s": %s').format(path, errMsg(err)), 'error');
++		});
++	},
++
++	goUp() {
++		if (this.path && this.path != '/')
++			this.navigate(dirName(this.path));
++	},
++
++	refresh() {
++		return this.navigate(this.path, 'none');
++	},
++
++	/* how: push | replace | none (history entry) */
++	navigate(path, how) {
++		path = normPath(path);
++		how = how ?? 'push';
++
++		const token = ++this.navToken;
++
++		return fs.list(path).then((entries) => {
++			if (token != this.navToken)
++				return false;
++
++			if (path != this.path) {
++				this.selected.clear();
++				this.dom.filter.value = '';
+ 			}
+-		}
++			else {
++				const names = new Set(entries.map(e => e.name));
++				for (const n of [ ...this.selected ])
++					if (!names.has(n))
++						this.selected.delete(n);
++			}
++
++			const state = { fm: 'list', path: path };
++			if (how == 'push' && (history.state?.fm != 'list' || history.state?.path != path))
++				history.pushState(state, '', hashFor(path));
++			else if (how == 'replace')
++				history.replaceState(state, '', hashFor(path));
++
++			this.path = path;
++			this.entries = entries;
++			store('lastDir', path);
++			this.editPath(false);
++			this.renderCrumbs();
++			this.renderList();
++			this.renderClipboard();
++
++			return true;
++		}).catch((err) => {
++			if (token == this.navToken)
++				notify(_('Cannot open folder "%s": %s').format(path, errMsg(err)), 'error');
++			return false;
++		});
++	},
++
++	renderCrumbs() {
++		const parts = this.path.split('/').filter(Boolean);
++		const items = [ E('button', { 'type': 'button', 'title': '/', 'click': () => this.navigate('/') }, txt('/')) ];
++
++		parts.forEach((p, i) => {
++			const target = '/' + parts.slice(0, i + 1).join('/');
++			if (i > 0)
++				items.push(E('span', { 'class': 'fm-sep' }, txt('/')));
++			items.push(E('button', { 'type': 'button', 'click': () => this.navigate(target) }, txt(p)));
++		});
++
++		dom.content(this.dom.crumbs, items);
++		this.dom.crumbs.scrollLeft = this.dom.crumbs.scrollWidth;
++	},
++
++	entry(name) {
++		return this.entries.find(e => e.name == name);
+ 	},
+ 
+-	// Handler for dropping files into the drop zone
+-	handleDrop(event) {
+-		event.preventDefault();
+-		event.stopPropagation();
+-		dragCounter = 0; // Reset counter
+-		const self = this;
+-		const files = event.dataTransfer.files;
+-		const fileListContainer = document.getElementById('file-list-container');
+-		const dragOverlay = document.getElementById('drag-overlay');
+-		if (fileListContainer && dragOverlay) {
+-			fileListContainer.classList.remove('drag-over');
+-			dragOverlay.style.display = 'none';
++	columns() {
++		return String(config.columns).split(',').filter(c => columnTitles[c]);
++	},
++
++	compare(a, b) {
++		const f = this.sort.field;
++		const dir = this.sort.asc ? 1 : -1;
++
++		if (config.foldersFirst == '1') {
++			const da = kind(a) == 'directory', db = kind(b) == 'directory';
++			if (da != db)
++				return da ? -1 : 1;
+ 		}
+-		if (files.length > 0) {
+-			self.uploadFiles(files);
++
++		let r = 0;
++		switch (f) {
++		case 'size':
++			r = (kind(a) == 'directory' ? -1 : a.size) - (kind(b) == 'directory' ? -1 : b.size);
++			break;
++		case 'mtime':
++			r = a.mtime - b.mtime;
++			break;
++		case 'permissions':
++			r = (a.mode & 0o7777) - (b.mode & 0o7777);
++			break;
++		case 'owner':
++			r = this.collator.compare(String(a.user ?? a.uid), String(b.user ?? b.uid));
++			break;
++		case 'type':
++			r = this.collator.compare(fileTypes[a.type] ?? a.type, fileTypes[b.type] ?? b.type);
++			break;
+ 		}
++
++		return (r || this.collator.compare(a.name, b.name)) * dir;
+ 	},
+ 
+-	// Handler for uploading a file
+-	handleUploadClick(ev) {
+-		const self = this;
+-		const fileInput = document.createElement('input');
+-		fileInput.type = 'file';
+-		fileInput.multiple = true; // Allow selecting multiple files
+-		fileInput.style.display = 'none';
+-		document.body.appendChild(fileInput);
+-		fileInput.onchange = (event) => {
+-			const files = event.target.files;
+-			if (!files || files.length === 0) {
+-				pop(null, E('p', _('No file selected.')), 'error');
+-				return;
++	visibleEntries() {
++		const q = this.dom.filter.value.trim().toLowerCase();
++		const list = q ? this.entries.filter(e => e.name.toLowerCase().includes(q)) : this.entries.slice();
++		return list.sort((a, b) => this.compare(a, b));
++	},
++
++	cellText(e, col) {
++		switch (col) {
++		case 'size':
++			return (kind(e) == 'directory' || e.type == 'symlink') ? '' : formatSize(e.size);
++		case 'mtime':
++			return formatDate(e.mtime);
++		case 'permissions':
++			return modeString(e.mode, e.type);
++		case 'owner':
++			return `${e.user ?? e.uid}:${e.group ?? e.gid}`;
++		case 'type':
++			return (e.type == 'symlink' && e.target) ? `${fileTypes.symlink} → ${fileTypes[e.target.type] ?? e.target.type}` : (fileTypes[e.type] ?? e.type);
++		}
++		return '';
++	},
++
++	renderList() {
++		const d = this.dom;
++		const cols = this.columns();
++		const widths = { size: '7em', mtime: '11.5em', permissions: '7.5em', owner: '8em', type: '9em' };
++		const list = this.visibleEntries();
++		const all = list.length > 0 && list.every(e => this.selected.has(e.name));
++		const some = list.some(e => this.selected.has(e.name));
++
++		d.list.style.setProperty('--fm-cols', cols.map(c => widths[c]).join(' '));
++
++		const sortBtn = (field, label) => E('button', {
++			'type': 'button',
++			'class': `fm-sort${this.sort.field == field ? ' sorted' : ''}${this.sort.field == field && !this.sort.asc ? ' desc' : ''}`,
++			'click': () => this.setSort(field, this.sort.field == field ? !this.sort.asc : true)
++		}, txt(label));
++
++		const selectAll = E('input', { 'type': 'checkbox', 'aria-label': _('Select all'), 'title': _('Select all'),
++			'change': ev => this.setSelection(ev.target.checked ? list.map(e => e.name) : []) });
++		selectAll.checked = all;
++		selectAll.indeterminate = some && !all;
++
++		const mobileSort = E('select', { 'class': 'cbi-input-select', 'aria-label': _('Sort by'),
++			'change': ev => this.setSort(ev.target.value, this.sort.asc) },
++			[ [ 'name', _('Name') ], [ 'size', _('Size') ], [ 'mtime', _('Last Modified') ], [ 'type', _('Type') ] ]
++				.map(([ v, l ]) => E('option', { 'value': v, 'selected': this.sort.field == v ? '' : null }, txt(_('Sort: %s').format(l)))));
++
++		const head = E('div', { 'class': 'fm-row fm-head' }, [
++			E('label', { 'class': 'fm-cell fm-check' }, [ selectAll ]),
++			E('div', { 'class': 'fm-cell' }, [
++				E('span', { 'class': 'fm-name-head' }, [ sortBtn('name', _('Name')) ]),
++				E('span', { 'class': 'fm-mobile-sort' }, [
++					mobileSort,
++					E('button', { 'type': 'button', 'class': 'btn cbi-button', 'title': _('Reverse order'),
++						'click': () => this.setSort(this.sort.field, !this.sort.asc) }, txt(this.sort.asc ? '↑' : '↓'))
++				])
++			]),
++			...cols.map(c => E('div', { 'class': `fm-cell fm-col${c == 'size' ? ' fm-num' : ''}` }, [ sortBtn(c, columnTitles[c]) ])),
++			E('div', { 'class': 'fm-cell' })
++		]);
++
++		const rows = [ head ];
++
++		if (this.path != '/' && !d.filter.value)
++			rows.push(E('div', { 'class': 'fm-row' }, [
++				E('div', { 'class': 'fm-cell' }),
++				E('div', { 'class': 'fm-cell' }, [
++					E('a', { 'class': 'fm-open fm-dir', 'href': hashFor(dirName(this.path)),
++						'click': (ev) => { if (!ev.ctrlKey && !ev.metaKey && !ev.shiftKey && ev.button == 0) { ev.preventDefault(); this.goUp(); } } }, [
++						E('span', { 'class': 'fm-icon dir' }),
++						E('span', { 'class': 'fm-label' }, [ E('span', { 'class': 'fm-name' }, txt('..')) ])
++					])
++				]),
++				...cols.map(() => E('div', { 'class': 'fm-cell fm-col' })),
++				E('div', { 'class': 'fm-cell' })
++			]));
++
++		for (const e of list)
++			rows.push(this.renderRow(e, cols));
++
++		if (!list.length)
++			rows.push(E('div', { 'class': 'fm-empty' }, txt(d.filter.value ? _('Nothing matches the filter.') : _('This folder is empty.'))));
++
++		rows.push(E('div', { 'class': 'fm-drop' }, txt(_('Drop files here to upload'))));
++
++		dom.content(d.list, rows);
++		this.renderSelection();
++		this.renderStatus(list);
++	},
++
++	renderRow(e, cols) {
++		const k = kind(e);
++		const full = joinPath(this.path, e.name);
++		const icon = (e.type == 'symlink') ? (k == 'broken' ? 'broken' : 'link') : (k == 'directory' ? 'dir' : (k == 'file' ? '' : 'special'));
++		const meta = [];
++
++		if (k == 'file' && e.type != 'symlink')
++			meta.push(formatSize(e.size));
++		meta.push(formatDate(e.mtime));
++		meta.push(modeString(e.mode, e.type));
++
++		const check = E('input', { 'type': 'checkbox', 'aria-label': _('Select %s').format(e.name),
++			'change': ev => this.toggleSelect(e.name, ev.target.checked) });
++		check.checked = this.selected.has(e.name);
++
++		const open = E('a', {
++			'class': `fm-open${k == 'directory' ? ' fm-dir' : ''}`,
++			'href': (k == 'directory') ? hashFor(full) : '#',
++			'title': (e.type == 'symlink') ? `${e.name} → ${e.target?.name ?? ''}` : e.name,
++			'click': (ev) => {
++				if (k == 'directory' && (ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.button != 0))
++					return;
++				ev.preventDefault();
++				this.openEntry(e, ev.altKey ? 'hex' : null, ev.currentTarget);
+ 			}
+-			self.uploadFiles(files); // Use the shared upload function
+-		};
+-		fileInput.click();
++		}, [
++			E('span', { 'class': `fm-icon ${icon}` }),
++			E('span', { 'class': 'fm-label' }, [
++				E('span', { 'class': 'fm-name' }, [
++					e.name,
++					(e.type == 'symlink') ? E('span', { 'class': 'fm-target' }, txt(` → ${e.target?.name ?? '?'}`)) : ''
++				]),
++				E('span', { 'class': 'fm-meta' }, txt(meta.join(' · ')))
++			])
++		]);
++
++		const more = E('button', { 'type': 'button', 'class': 'fm-more', 'title': _('Actions'), 'aria-label': _('Actions for %s').format(e.name),
++			'click': ev => this.showMenu(e, ev.currentTarget) }, txt('⋮'));
++
++		const row = E('div', {
++			'class': `fm-row${this.selected.has(e.name) ? ' selected' : ''}`,
++			'data-name': e.name,
++			'contextmenu': (ev) => {
++				ev.preventDefault();
++				this.showMenu(e, null, ev.clientX, ev.clientY);
++			}
++		}, [
++			E('label', { 'class': 'fm-cell fm-check' }, [ check ]),
++			E('div', { 'class': 'fm-cell' }, [ open ]),
++			...cols.map(c => E('div', {
++				'class': `fm-cell fm-col${c == 'size' ? ' fm-num' : ''}${c == 'permissions' ? ' fm-mono' : ''}`,
++				'title': c == 'permissions' ? modeOctal(e.mode) : null
++			}, txt(this.cellText(e, c)))),
++			E('div', { 'class': 'fm-cell' }, [ more ])
++		]);
++
++		return row;
+ 	},
+ 
+-	uploadFiles(files) {
+-		const self = this;
+-		const directoryPath = currentPath;
+-		const statusInfo = document.getElementById('status-info');
+-		const statusProgress = document.getElementById('status-progress');
+-		const totalFiles = files.length;
+-		let uploadedFiles = 0;
+-
+-		function uploadNextFile(index) {
+-			if (index >= totalFiles) {
+-				self.loadFileList(currentPath).then(() => {
+-					self.initResizeableColumns();
+-				});
++	renderStatus(list) {
++		const dirs = list.filter(e => kind(e) == 'directory').length;
++		const files = list.length - dirs;
++		const bytes = list.reduce((s, e) => s + ((e.type == 'file') ? e.size : 0), 0);
++		const left = [ N_(dirs, '%d folder', '%d folders').format(dirs), N_(files, '%d file', '%d files').format(files) ];
++
++		if (bytes)
++			left.push(formatSize(bytes));
++
++		dom.content(this.dom.status, [
++			E('span', {}, txt(left.join(', '))),
++			E('span', {}, txt(this.selected.size ? N_(this.selected.size, '%d selected', '%d selected').format(this.selected.size) : ''))
++		]);
++	},
++
++	setSort(field, asc) {
++		this.sort = { field: field, asc: asc };
++		store('sort', this.sort);
++		this.renderList();
++	},
++
++	toggleSelect(name, on) {
++		if (on)
++			this.selected.add(name);
++		else
++			this.selected.delete(name);
++		this.renderList();
++	},
++
++	setSelection(names) {
++		this.selected = new Set(names);
++		this.renderList();
++	},
++
++	renderSelection() {
++		const d = this.dom;
++		const names = [ ...this.selected ];
++		const n = names.length;
++
++		d.selBar.hidden = (n == 0);
++		if (!n)
++			return;
++
++		const bytes = names.reduce((s, x) => s + ((this.entry(x)?.type == 'file') ? this.entry(x).size : 0), 0);
++
++		dom.content(d.selBar, [
++			E('span', { 'class': 'fm-grow' }, txt(N_(n, '%d selected', '%d selected').format(n) + (bytes ? ` (${formatSize(bytes)})` : ''))),
++			E('button', { 'class': 'btn cbi-button', 'type': 'button', 'click': () => this.setClipboard('copy', names) }, txt(_('Copy'))),
++			E('button', { 'class': 'btn cbi-button', 'type': 'button', 'click': () => this.setClipboard('move', names) }, txt(_('Cut'))),
++			E('button', { 'class': 'btn cbi-button', 'type': 'button', 'click': () => this.downloadNames(names) }, txt(_('Download'))),
++			E('button', { 'class': 'btn cbi-button cbi-button-negative', 'type': 'button', 'click': () => this.deleteNames(names) }, txt(_('Delete'))),
++			E('button', { 'class': 'btn cbi-button', 'type': 'button', 'title': _('Clear selection'), 'click': () => this.setSelection([]) }, txt('✕'))
++		]);
++	},
++
++	/* --- clipboard ------------------------------------------------------ */
++
++	setClipboard(op, names) {
++		this.clip = (op && names.length) ? { op: op, dir: this.path, names: names.slice() } : null;
++
++		try {
++			if (this.clip)
++				window.sessionStorage.setItem('luci-filemanager-clipboard', JSON.stringify(this.clip));
++			else
++				window.sessionStorage.removeItem('luci-filemanager-clipboard');
++		}
++		catch (e) {}
++
++		if (this.clip)
++			this.setSelection([]);
++
++		this.renderClipboard();
++	},
++
++	renderClipboard() {
++		const c = this.clip;
++		const bar = this.dom.clipBar;
++
++		bar.hidden = !c;
++		if (!c)
++			return;
++
++		const what = (c.names.length == 1) ? `"${c.names[0]}"` : N_(c.names.length, '%d item', '%d items').format(c.names.length);
++		const label = (c.op == 'move') ? _('To move: %s from %s').format(what, c.dir) : _('To copy: %s from %s').format(what, c.dir);
++
++		dom.content(bar, [
++			E('span', { 'class': 'fm-grow' }, txt(label)),
++			E('button', { 'class': 'btn cbi-button cbi-button-positive', 'type': 'button', 'click': () => this.paste() },
++				txt(c.op == 'move' ? _('Move here') : _('Paste here'))),
++			E('button', { 'class': 'btn cbi-button', 'type': 'button', 'click': () => this.setClipboard(null) }, txt(_('Cancel')))
++		]);
++	},
++
++	paste() {
++		const c = this.clip;
++		const dest = this.path;
++
++		if (!c || this.isBusy())
++			return;
++
++		if (c.op == 'move' && c.dir == dest) {
++			notify(_('The items are already in this folder.'));
++			return;
++		}
++
++		for (const n of c.names) {
++			if (isInside(dest, joinPath(c.dir, n))) {
++				notify(_('A folder cannot be copied or moved into itself: %s').format(joinPath(c.dir, n)), 'error');
+ 				return;
+ 			}
++		}
++
++		const taken = new Set(this.entries.map(e => e.name));
++		const pairs = [];
++		const conflicts = [];
+ 
+-			const file = files[index];
+-			const fullFilePath = joinPath(directoryPath, file.name);
+-			if (statusInfo) {
+-				statusInfo.textContent = _('Uploading: "%s"...').format(file.name);
++		for (const n of c.names) {
++			let t = n;
++			if (c.op == 'copy' && c.dir == dest) {
++				t = copyName(n, taken);
++				taken.add(t);
+ 			}
+-			if (statusProgress) {
+-				statusProgress.innerHTML = '';
+-				const progressBarContainer = E('div', {
+-					'class': 'cbi-progressbar',
+-					'title': '0%'
+-				}, [E('div', {
+-					'style': 'width:0%'
+-				})]);
+-				statusProgress.appendChild(progressBarContainer);
++			else if (taken.has(n))
++				conflicts.push(n);
++			pairs.push([ joinPath(c.dir, n), joinPath(dest, t), n ]);
++		}
++
++		return this.askConflicts(conflicts).then((policy) => {
++			if (!policy)
++				return;
++
++			const args = [];
++			for (const [ s, t, n ] of pairs) {
++				if (conflicts.includes(n) && policy == 'skip')
++					continue;
++				args.push(conflicts.includes(n) ? '1' : '0', s, t);
+ 			}
+ 
+-			uploadFile(fullFilePath, file, (percent) => {
+-				if (statusProgress) {
+-					const progressBar = statusProgress.querySelector('.cbi-progressbar div');
+-					if (progressBar) {
+-						progressBar.style.width = percent.toFixed(2) + '%';
+-						statusProgress.querySelector('.cbi-progressbar').setAttribute('title', percent.toFixed(2) + '%');
+-					}
+-				}
+-			}).then(() => {
+-				if (statusProgress) {
+-					statusProgress.innerHTML = '';
+-				}
+-				if (statusInfo) {
+-					statusInfo.textContent = _('File "%s" uploaded successfully.').format(file.name);
+-				}
+-				popTimeout(null, E('p', _('File "%s" uploaded successfully.').format(file.name)), 5000, 'info');
+-				uploadedFiles++;
+-				uploadNextFile(index + 1);
+-			}).catch((err) => {
+-				if (statusProgress) {
+-					statusProgress.innerHTML = '';
+-				}
+-				if (statusInfo) {
+-					statusInfo.textContent = _('Upload failed for file "%s": %s').format(file.name, err.message);
+-				}
+-				pop(null, E('p', _('Upload failed for file "%s": %s').format(file.name, err.message)), 'error');
+-				uploadNextFile(index + 1);
++			if (!args.length)
++				return;
++
++			const label = (c.op == 'move') ? _('Moving…') : _('Copying…');
++			return this.runJob(label, [ '/bin/sh', '-c', JOB_TRANSFER, 'sh', c.op, ...args ]).then((ok) => {
++				if (ok && c.op == 'move')
++					this.setClipboard(null);
++				if (ok)
++					notify(c.op == 'move' ? _('Moved.') : _('Copied.'));
++				return this.refresh();
+ 			});
++		});
++	},
++
++	askConflicts(names) {
++		if (!names.length)
++			return Promise.resolve('replace');
++
++		return dialog(_('Items already exist'), [
++			E('p', {}, txt(N_(names.length, 'This folder already has an item with the same name:', 'This folder already has items with the same names:'))),
++			itemList(names),
++			E('p', {}, txt(_('Replace deletes the existing items (whole folders) and puts the new ones in their place.')))
++		], [
++			{ label: _('Cancel'), value: null },
++			{ label: _('Skip'), value: 'skip' },
++			{ label: _('Replace'), value: 'replace', cls: 'cbi-button-negative', primary: true }
++		]);
++	},
++
++	/* --- menu --------------------------------------------------------- */
++
++	menuItems(e) {
++		const k = kind(e);
++		const items = [];
++		const add = (label, fn, cls) => items.push({ label: label, fn: fn, cls: cls });
++
++		if (k == 'directory')
++			add(_('Open'), () => this.openEntry(e));
++		else if (k == 'file') {
++			add(_('Edit'), () => this.openEntry(e, 'text'));
++			add(_('Open in hex editor'), () => this.openEntry(e, 'hex'));
+ 		}
+-		uploadNextFile(0);
+-	},
+-
+-	// Handler for creating a directory
+-	handleMakeDirectoryClick(ev) {
+-		// Logic to create a new directory
+-		const self = this;
+-		const statusInfo = document.getElementById('status-info');
+-		const statusProgress = document.getElementById('status-progress');
+-		if (statusInfo && statusProgress) {
+-			statusInfo.innerHTML = '';
+-			statusProgress.innerHTML = '';
+-			const dirNameInput = E('input', {
+-				'type': 'text',
+-				'placeholder': _('Directory Name'),
+-				'style': 'margin-right: 10px;'
+-			});
+-			const saveButton = E('button', {
+-				'class': 'btn',
+-				'disabled': true,
+-				'click'() {
+-					self.createDirectory(dirNameInput.value);
+-				}
+-			}, _('Save'));
+-			dirNameInput.addEventListener('input', () => {
+-				if (dirNameInput.value.trim()) {
+-					saveButton.disabled = false;
+-				} else {
+-					saveButton.disabled = true;
++
++		if (k == 'file' || k == 'directory')
++			add(k == 'directory' ? _('Download as archive') : _('Download'), () => this.downloadNames([ e.name ]));
++
++		items.push(null);
++		add(_('Rename'), () => this.renameEntry(e));
++		add(_('Properties'), () => this.showProperties(e));
++		add(_('Duplicate'), () => this.duplicate(e));
++		add(_('Copy'), () => this.setClipboard('copy', [ e.name ]));
++		add(_('Cut'), () => this.setClipboard('move', [ e.name ]));
++		add(_('Copy path'), () => copyText(joinPath(this.path, e.name))
++			.then(() => notify(_('Path copied.')))
++			.catch(err => notify(errMsg(err), 'error')));
++		items.push(null);
++		add(_('Delete'), () => this.deleteNames([ e.name ]), 'danger');
++
++		return items;
++	},
++
++	showMenu(e, anchor, x, y) {
++		this.closeMenu();
++
++		const menu = E('div', { 'class': 'fm-menu', 'role': 'menu' }, [
++			E('div', { 'class': 'fm-menu-title' }, txt(e.name)),
++			...this.menuItems(e).map(it => it ? E('button', {
++				'type': 'button', 'role': 'menuitem', 'class': it.cls ?? '',
++				'click': () => {
++					this.closeMenu();
++					it.fn();
+ 				}
+-			});
+-			statusInfo.appendChild(E('span', {}, _('Create Directory: ')));
+-			statusInfo.appendChild(dirNameInput);
+-			statusProgress.appendChild(saveButton);
++			}, txt(it.label)) : E('hr'))
++		]);
++
++		const backdrop = E('div', {
++			'class': 'fm-menu-backdrop',
++			'click': (ev) => { if (ev.target == backdrop) this.closeMenu(); },
++			'contextmenu': (ev) => { ev.preventDefault(); this.closeMenu(); },
++			'keydown': (ev) => {
++				const btns = [ ...menu.querySelectorAll('button') ];
++				const i = btns.indexOf(document.activeElement);
++				if (ev.key == 'Escape')
++					this.closeMenu();
++				else if (ev.key == 'ArrowDown')
++					btns[(i + 1) % btns.length].focus();
++				else if (ev.key == 'ArrowUp')
++					btns[(i - 1 + btns.length) % btns.length].focus();
++				else
++					return;
++				ev.preventDefault();
++			}
++		}, [ menu ]);
++
++		document.body.appendChild(backdrop);
++		this.menuAnchor = anchor;
++
++		if (!window.matchMedia(NARROW).matches) {
++			const r = anchor ? anchor.getBoundingClientRect() : { left: x, right: x, top: y, bottom: y };
++			const w = menu.offsetWidth, h = menu.offsetHeight;
++			let left = anchor ? r.right - w : r.left;
++			let top = r.bottom + 2;
++
++			if (top + h > window.innerHeight - 8)
++				top = Math.max(8, r.top - h - 2);
++			left = Math.min(Math.max(8, left), window.innerWidth - w - 8);
++
++			menu.style.left = `${left}px`;
++			menu.style.top = `${top}px`;
+ 		}
++
++		menu.querySelector('button')?.focus();
+ 	},
+ 
+-	// Function to create a directory
+-	createDirectory(dirName) {
+-		// Execute the 'mkdir' command and update the interface
+-		const self = this;
+-		const trimmedDirName = dirName.trim();
+-		const dirPath = joinPath(currentPath, trimmedDirName);
+-		fs.exec('mkdir', [dirPath]).then((res) => {
+-			if (res.code !== 0) {
+-				return Promise.reject(new Error(res.stderr.trim()));
+-			}
+-			popTimeout(null, E('p', _('Directory "%s" created successfully.').format(trimmedDirName)), 5000, 'info');
+-			self.loadFileList(currentPath).then(() => {
+-				self.initResizeableColumns();
+-			});
+-			const statusInfo = document.getElementById('status-info');
+-			const statusProgress = document.getElementById('status-progress');
+-			if (statusInfo) statusInfo.textContent = _('No directory selected.');
+-			if (statusProgress) statusProgress.innerHTML = '';
+-		}).catch((err) => {
+-			pop(null, E('p', _('Failed to create directory "%s": %s').format(trimmedDirName, err.message)), 'error');
++	closeMenu() {
++		document.querySelectorAll('.fm-menu-backdrop').forEach(n => n.remove());
++
++		if (this.menuAnchor && document.body.contains(this.menuAnchor))
++			this.menuAnchor.focus();
++		this.menuAnchor = null;
++	},
++
++	/* --- busy state, progress, background jobs ------------------------ */
++
++	isBusy() {
++		if (!this.busy)
++			return false;
++		notify(_('Wait until the current operation finishes.'), 'warning');
++		return true;
++	},
++
++	/* frac: 0..1, or null for an operation without a known end */
++	setProgress(label, frac, onCancel) {
++		const p = this.dom.progress;
++
++		if (label == null) {
++			p.hidden = true;
++			dom.content(p, null);
++			return;
++		}
++
++		let meter = p.querySelector('.fm-meter');
++		if (!meter || p.dataset.label != label) {
++			p.dataset.label = label;
++			meter = E('div', { 'class': 'fm-meter' }, [ E('div') ]);
++			dom.content(p, [
++				E('span', { 'class': 'fm-grow' }, txt(label)),
++				meter,
++				E('span', { 'class': 'fm-percent' }),
++				onCancel ? E('button', { 'class': 'btn cbi-button', 'type': 'button', 'click': onCancel }, txt(_('Cancel'))) : ''
++			]);
++		}
++
++		meter.classList.toggle('busy', frac == null);
++		meter.firstChild.style.width = (frac == null) ? '' : `${Math.round(frac * 100)}%`;
++		p.querySelector('.fm-percent').textContent = (frac == null) ? '' : `${Math.round(frac * 100)}%`;
++		p.hidden = false;
++	},
++
++	exec(cmd, args) {
++		return fs.exec(cmd, args).then((res) => {
++			if (res.code != 0)
++				throw new Error((res.stderr || res.stdout || '').trim() || _('Command failed with code %d').format(res.code));
++			return res;
+ 		});
+ 	},
+ 
+-	// Handler for creating a file
+-	handleCreateFileClick(ev) {
+-		// Logic to create a new file
+-		const self = this;
+-		const statusInfo = document.getElementById('status-info');
+-		const statusProgress = document.getElementById('status-progress');
+-		if (statusInfo && statusProgress) {
+-			statusInfo.innerHTML = '';
+-			statusProgress.innerHTML = '';
+-			const fileNameInput = E('input', {
+-				'type': 'text',
+-				'placeholder': _('File Name'),
+-				'style': 'margin-right: 10px;'
++	/* resolves to true on success; with keep the job directory is returned
++	   and removed by the caller */
++	runJob(label, argv, keep) {
++		let dir = null;
++		let cancelled = false;
++
++		this.busy = label;
++		this.setProgress(label, null, () => {
++			cancelled = true;
++			if (dir)
++				fs.exec('/bin/sh', [ '-c', 'p=$(cat "$1/pid" 2>/dev/null) && kill -TERM -"$p"', 'sh', dir ]);
++		});
++
++		const poll = () => new Promise(r => window.setTimeout(r, 700))
++			.then(() => L.resolveDefault(fs.read(`${dir}/rc`), null))
++			.then((rc) => {
++				if (rc == null && !cancelled)
++					return poll();
++				return rc;
+ 			});
+-			const createButton = E('button', {
+-				'class': 'btn',
+-				'disabled': true,
+-				'click'() {
+-					self.createFile(fileNameInput.value);
++
++		return this.exec('/bin/sh', [ '-c', JOB_START, 'sh', JOB_BASE, ...argv ]).then((res) => {
++			dir = res.stdout.trim();
++			if (!dir.startsWith(JOB_BASE + '/job-'))
++				throw new Error(_('The operation could not be started.'));
++			return poll();
++		}).then((rc) => {
++			if (cancelled) {
++				notify(_('Cancelled.'), 'warning');
++				return false;
++			}
++
++			return L.resolveDefault(fs.read(`${dir}/err`), '').then((err) => {
++				const code = parseInt(rc, 10);
++				err = String(err).trim();
++
++				if (code == 28 && err.startsWith('NOSPACE')) {
++					const [ , need, avail ] = err.split(' ');
++					err = _('Not enough free space in /tmp: about %s needed, %s free.').format(formatSize(need * 1024), formatSize(avail * 1024));
+ 				}
+-			}, _('Create'));
+-			fileNameInput.addEventListener('input', () => {
+-				if (fileNameInput.value.trim()) {
+-					createButton.disabled = false;
+-				} else {
+-					createButton.disabled = true;
++
++				if (code != 0) {
++					notify(`${label.replace(/…$/, '')}: ${err.substring(0, 2000) || _('Command failed with code %d').format(code)}`, 'error');
++					return false;
+ 				}
++
++				return keep ? dir : true;
+ 			});
+-			statusInfo.appendChild(E('span', {}, _('Create File: ')));
+-			statusInfo.appendChild(fileNameInput);
+-			statusProgress.appendChild(createButton);
+-		}
++		}).catch((err) => {
++			notify(`${label.replace(/…$/, '')}: ${errMsg(err)}`, 'error');
++			return false;
++		}).finally(() => {
++			if (dir && (!keep || cancelled))
++				L.resolveDefault(fs.remove(dir));
++			this.busy = null;
++			this.setProgress(null);
++		});
+ 	},
+ 
+-	// Function to create a file
+-	createFile(fileName) {
+-		// Execute the 'touch' command and update the interface
+-		const self = this;
+-		const trimmedFileName = fileName.trim();
+-		const filePath = joinPath(currentPath, trimmedFileName);
+-		fs.exec('touch', [filePath]).then((res) => {
+-			if (res.code !== 0) {
+-				return Promise.reject(new Error(res.stderr.trim()));
+-			}
+-			popTimeout(null, E('p', _('File "%s" created successfully.').format(trimmedFileName)), 5000, 'info');
+-			self.loadFileList(currentPath).then(() => {
+-				self.initResizeableColumns();
++	/* --- create, rename, delete, duplicate ------------------------------ */
++
++	checkNewName(name, current) {
++		const msg = validName(name);
++		if (msg)
++			return msg;
++		if (name != current && this.entries.some(e => e.name == name))
++			return _('An item with this name already exists.');
++		return null;
++	},
++
++	createEntry(type) {
++		if (this.isBusy())
++			return;
++
++		const isDir = (type == 'directory');
++
++		return promptName(isDir ? _('New folder') : _('New file'), _('Name'), '', n => this.checkNewName(n), _('Create')).then((name) => {
++			if (name == null)
++				return;
++
++			const path = joinPath(this.path, name);
++
++			return L.resolveDefault(fs.stat(path), null).then((st) => {
++				if (st)
++					throw new Error(_('An item with this name already exists.'));
++				return isDir ? this.exec('mkdir', [ '--', path ]) : this.exec('touch', [ '--', path ]);
++			}).then(() => this.refresh()).then(() => {
++				if (isDir)
++					return this.navigate(path);
++				return this.openFile(path, 'text');
++			}).catch((err) => {
++				notify(_('Failed to create "%s": %s').format(name, errMsg(err)), 'error');
+ 			});
+-			const statusInfo = document.getElementById('status-info');
+-			const statusProgress = document.getElementById('status-progress');
+-			if (statusInfo) statusInfo.textContent = _('No file selected.');
+-			if (statusProgress) statusProgress.innerHTML = '';
+-		}).catch((err) => {
+-			pop(null, E('p', _('Failed to create file "%s": %s').format(trimmedFileName, err.message)), 'error');
+ 		});
+ 	},
+ 
+-	// Handler for checkbox state change on a file
+-	handleCheckboxChange(ev) {
+-		const cb = ev.target;
+-		const filePath = cb.dataset.filePath;
++	renameEntry(e) {
++		if (!e || this.isBusy())
++			return;
++
++		return promptName(_('Rename'), _('New name'), e.name, n => this.checkNewName(n, e.name), _('Rename')).then((name) => {
++			if (name == null || name == e.name)
++				return;
+ 
+-		cb.checked
+-			? selectedItems.add(filePath)
+-			: selectedItems.delete(filePath);
++			const from = joinPath(this.path, e.name);
++			const to = joinPath(this.path, name);
+ 
+-		this.updateDeleteSelectedButton();
+-		this.updateSelectAllCheckbox();
++			return L.resolveDefault(fs.stat(to), null).then((st) => {
++				if (st)
++					throw new Error(_('An item with this name already exists.'));
++				return this.exec('mv', [ '--', from, to ]);
++			}).then(() => {
++				if (this.ed && isInside(this.ed.path, from)) {
++					this.ed.path = to + this.ed.path.substring(from.length);
++					if (this.ed.real == from)
++						this.ed.real = to;
++					this.renderEditorHead();
++				}
++				this.selected.delete(e.name);
++				return this.refresh();
++			}).catch((err) => {
++				notify(_('Failed to rename "%s": %s').format(e.name, errMsg(err)), 'error');
++			});
++		});
+ 	},
+ 
+-	// Update the "Delete Selected" button
+-	updateDeleteSelectedButton() {
+-		const btn = document.getElementById('delete-selected-button');
+-		if (!btn) return;
++	deleteNames(names) {
++		if (!names.length || this.isBusy())
++			return;
++
++		const entries = names.map(n => this.entry(n)).filter(Boolean);
++		const dirs = entries.filter(e => e.type == 'directory').length;
++
++		return dialog(_('Delete'), [
++			E('p', {}, txt(N_(entries.length, 'Delete this item?', 'Delete these %d items?').format(entries.length))),
++			itemList(entries.map(e => e.name + (e.type == 'directory' ? '/' : ''))),
++			E('p', {}, txt(dirs ? _('Folders are deleted with everything in them. This cannot be undone.') : _('This cannot be undone.')))
++		], [
++			{ label: _('Cancel'), value: null },
++			{ label: _('Delete'), value: true, cls: 'cbi-button-negative', primary: true }
++		]).then((ok) => {
++			if (!ok)
++				return;
++
++			const paths = entries.map(e => joinPath(this.path, e.name));
++			let p;
+ 
+-		btn.style.display = selectedItems.size > 0 ? '' : 'none';
++			if (entries.length == 1 && !dirs) {
++				this.busy = _('Deleting…');
++				p = this.exec('rm', [ '-f', '--', paths[0] ]).then(() => true).catch((err) => {
++					notify(_('Failed to delete "%s": %s').format(entries[0].name, errMsg(err)), 'error');
++					return false;
++				}).finally(() => { this.busy = null; });
++			}
++			else
++				p = this.runJob(_('Deleting…'), [ 'rm', '-rf', '--', ...paths ]);
++
++			return p.then((ok) => {
++				if (ok)
++					notify(N_(entries.length, 'Deleted.', 'Deleted %d items.').format(entries.length));
++				if (this.ed && paths.some(x => isInside(this.ed.path, x)))
++					this.ed.deleted = true;
++				for (const e of entries)
++					this.selected.delete(e.name);
++				return this.refresh();
++			});
++		});
+ 	},
+ 
+-	// Update the "Select All" checkbox state
+-	updateSelectAllCheckbox() {
+-		const selectAll = document.getElementById('select-all-checkbox');
+-		if (!selectAll) return;
+-
+-		const checkboxes = [...document.querySelectorAll('.select-checkbox')];
+-		if (checkboxes.length === 0) {
+-			selectAll.checked = false;
+-			selectAll.indeterminate = false;
++	duplicate(e) {
++		if (this.isBusy())
+ 			return;
+-		}
+ 
+-		const total = checkboxes.length;
+-		const checked = checkboxes.filter(cb => cb.checked).length;
++		const name = copyName(e.name, new Set(this.entries.map(x => x.name)));
+ 
+-		selectAll.checked = checked === total;
+-		selectAll.indeterminate = checked > 0 && checked < total;
++		return this.runJob(_('Copying…'), [ '/bin/sh', '-c', JOB_TRANSFER, 'sh', 'copy', '0', joinPath(this.path, e.name), joinPath(this.path, name) ])
++			.then(ok => ok && notify(_('Created "%s".').format(name)))
++			.then(() => this.refresh());
+ 	},
+ 
+-	// Handler for the "Select All" checkbox change
+-	handleSelectAllChange(ev) {
+-		const checked = ev.target.checked;
+-		const checkboxes = [...document.querySelectorAll('.select-checkbox')];
+-
+-		selectedItems.clear();
++	/* --- properties --------------------------------------------------- */
++
++	showProperties(e) {
++		const path = joinPath(this.path, e.name);
++		const isLink = (e.type == 'symlink');
++		const isDir = (e.type == 'directory');
++		const mode = e.mode & 0o7777;
++		const owner = String(e.user ?? e.uid);
++		const group = String(e.group ?? e.gid);
++
++		const sizeCell = E('div', {}, txt(isDir ? '' : formatSize(e.size)));
++		if (isDir)
++			sizeCell.appendChild(E('button', { 'class': 'btn cbi-button', 'type': 'button', 'click': ev => {
++				ev.target.disabled = true;
++				fs.exec('du', [ '-sk', '--', path ]).then((res) => {
++					const kb = parseInt(res.stdout, 10);
++					dom.content(sizeCell, txt(isNaN(kb) ? (res.stderr || '?').trim() : formatSize(kb * 1024)));
++				}).catch(err => dom.content(sizeCell, txt(errMsg(err))));
++			} }, txt(_('Calculate'))));
++
++		const info = [
++			[ _('Path'), path ],
++			[ _('Type'), isLink ? `${fileTypes.symlink} → ${e.target?.name ?? '?'} (${fileTypes[e.target?.type] ?? e.target?.type ?? '?'})` : (fileTypes[e.type] ?? e.type) ],
++			[ _('Size'), sizeCell ],
++			[ _('Last Modified'), formatDate(e.mtime) ],
++			[ _('Owner'), `${owner} (${e.uid}) : ${group} (${e.gid})` ],
++			[ _('Permissions'), `${modeString(e.mode, e.type)} (${modeOctal(e.mode)})` ]
++		];
++
++		const props = E('div', { 'class': 'fm-props' }, info.flatMap(([ k, v ]) => [ E('div', {}, txt(k)), (v instanceof Node) ? v : E('div', {}, txt(v)) ]));
++
++		if (isLink)
++			return dialog(_('Properties'), [
++				props,
++				E('p', {}, txt(_('Permissions of a link are those of its target: open the target to change them.')))
++			], [ { label: _('Close'), value: null, primary: true } ]);
++
++		const octal = E('input', { 'type': 'text', 'class': 'cbi-input-text', 'value': modeOctal(mode), 'maxlength': '4',
++			'inputmode': 'numeric', 'style': 'width:5em' });
++		const boxes = [];
++		const grid = E('div', { 'class': 'fm-perm-grid' }, [
++			E('span'), E('strong', {}, txt(_('Read'))), E('strong', {}, txt(_('Write'))), E('strong', {}, txt(_('Execute')))
++		]);
+ 
+-		checkboxes.forEach(cb => {
+-			cb.checked = checked;
+-			if (checked) selectedItems.add(cb.dataset.filePath);
++		[ [ _('Owner'), 6 ], [ _('Group'), 3 ], [ _('Others'), 0 ] ].forEach(([ label, shift ]) => {
++			grid.appendChild(E('span', {}, txt(label)));
++			for (const bit of [ 4, 2, 1 ]) {
++				const cb = E('input', { 'type': 'checkbox', 'data-bit': (bit << shift) });
++				cb.checked = !!(mode & (bit << shift));
++				cb.addEventListener('change', () => {
++					let m = parseInt(octal.value, 8);
++					if (isNaN(m)) m = mode;
++					m = cb.checked ? (m | (bit << shift)) : (m & ~(bit << shift));
++					octal.value = m.toString(8).padStart(3, '0');
++				});
++				boxes.push(cb);
++				grid.appendChild(E('label', {}, [ cb ]));
++			}
+ 		});
+ 
+-		this.updateDeleteSelectedButton();
+-		this.updateSelectAllCheckbox();
+-	},
+-
+-	// Handler for deleting selected items
+-	handleDeleteSelected() {
+-		// Delete selected files and directories
+-		const self = this;
+-		if (selectedItems.size === 0) {
+-			return;
+-		}
+-		if (!confirm(_('Are you sure you want to delete the selected files and directories?'))) {
+-			return;
+-		}
+-		const promises = [];
+-		selectedItems.forEach((filePath) => {
+-			promises.push(fs.remove(filePath).catch((err) => {
+-				pop(null, E('p', _('Failed to delete %s: %s').format(filePath, err.message)), 'error');
+-			}));
+-		});
+-		Promise.all(promises).then(() => {
+-			popTimeout(null, E('p', _('Selected files and directories deleted successfully.')), 5000, 'info');
+-			selectedItems.clear();
+-			self.updateDeleteSelectedButton();
+-			self.loadFileList(currentPath).then(() => {
+-				self.initResizeableColumns();
+-			});
+-		}).catch((err) => {
+-			pop(null, E('p', _('Failed to delete selected files and directories: %s').format(err.message)), 'error');
++		octal.addEventListener('input', () => {
++			const m = parseInt(octal.value, 8);
++			if (/^[0-7]{3,4}$/.test(octal.value))
++				boxes.forEach(cb => cb.checked = !!(m & +cb.dataset.bit));
+ 		});
+-	},
+ 
+-	// Function to load the file list
+-	loadFileList(path) {
+-		const self = this;
+-		selectedItems.clear();
++		const ownerIn = E('input', { 'type': 'text', 'class': 'cbi-input-text', 'value': owner, 'autocapitalize': 'off', 'spellcheck': 'false' });
++		const groupIn = E('input', { 'type': 'text', 'class': 'cbi-input-text', 'value': group, 'autocapitalize': 'off', 'spellcheck': 'false' });
++		const recursive = E('input', { 'type': 'checkbox' });
++		const error = E('div', { 'class': 'fm-error' });
++		const check = () => {
++			let msg = null;
++			if (!/^[0-7]{3,4}$/.test(octal.value))
++				msg = _('Permissions must be 3 or 4 octal digits, e.g. 644 or 0755.');
++			else if (!/^[A-Za-z0-9_.][A-Za-z0-9_.-]*$/.test(ownerIn.value) || !/^[A-Za-z0-9_.][A-Za-z0-9_.-]*$/.test(groupIn.value))
++				msg = _('Enter the owner and group as names or numbers.');
++			dom.content(error, msg ? txt(msg) : null);
++			return !msg;
++		};
++
++		return dialog(_('Properties'), [
++			props,
++			E('div', { 'class': 'fm-field' }, [ E('label', {}, txt(_('Permissions'))), grid, octal ]),
++			E('div', { 'class': 'fm-field' }, [ E('label', {}, txt(_('Owner'))), ownerIn ]),
++			E('div', { 'class': 'fm-field' }, [ E('label', {}, txt(_('Group'))), groupIn ]),
++			isDir ? E('label', { 'class': 'fm-toggle' }, [ recursive, txt(_('Apply to everything inside')) ]) : '',
++			error
++		], [
++			{ label: _('Cancel'), value: null },
++			{ label: _('Apply'), value: true, cls: 'cbi-button-positive', primary: true, check: check }
++		]).then((ok) => {
++			if (!ok)
++				return;
+ 
+-		return getFileList(path).then(files => {
+-			// 1. Get column order dynamically from table header
+-			const columns = Array.from(
+-				document.querySelectorAll('#file-table thead th[data-field]')
+-			).map(th => th.getAttribute('data-field'));
++			const newMode = parseInt(octal.value, 8);
++			const rec = isDir && recursive.checked;
++			const cmds = [];
+ 
++			if (newMode != mode || rec)
++				cmds.push([ 'chmod', ...(rec ? [ '-R' ] : []), octal.value.padStart(3, '0'), '--', path ]);
++			if (ownerIn.value != owner || groupIn.value != group || rec)
++				cmds.push([ 'chown', ...(rec ? [ '-R' ] : []), `${ownerIn.value}:${groupIn.value}`, '--', path ]);
+ 
+-			const fileList = document.getElementById('file-list');
+-			if (!fileList) {
+-				pop(null, E('p', _('Failed to display the file list.')), 'error');
++			if (!cmds.length || this.isBusy())
+ 				return;
+-			}
+ 
+-			fileList.innerHTML = '';
+-			files.sort(self.compareFiles.bind(self));
++			if (rec)
++				return this.runJob(_('Changing permissions…'), [ '/bin/sh', '-c', '"$@"', 'sh', ...cmds[0] ])
++					.then(ok => (ok && cmds[1]) ? this.runJob(_('Changing owner…'), [ '/bin/sh', '-c', '"$@"', 'sh', ...cmds[1] ]) : ok)
++					.then(() => this.refresh());
+ 
+-			//
+-			// Add ".." parent row
+-			//
+-			if (path !== '/') {
+-				const parentPath = path.substring(0, path.lastIndexOf('/')) || '/';
++			return cmds.reduce((p, c) => p.then(() => this.exec(c[0], c.slice(1))), Promise.resolve())
++				.then(() => notify(_('Changes applied.')))
++				.catch(err => notify(_('Failed to change "%s": %s').format(e.name, errMsg(err)), 'error'))
++				.then(() => this.refresh());
++		});
++	},
+ 
+-				const tr = E('tr', {
+-					'data-file-path': parentPath,
+-					'data-file-type': 'directory'
+-				});
++	/* --- download ----------------------------------------------------- */
+ 
+-				// Create cells for *every* column
+-				for (const col of columns) {
+-					if (col === 'name') {
+-						tr.appendChild(
+-							E('td', { colspan: columns.length, 	class: 'parent-dir' }, [
+-								E('a', {
+-									href: '#',
+-									click: () => self.handleDirectoryClick(parentPath)
+-								}, '.. (Parent Directory)')
+-							])
+-						);
+-						break;
+-					} else {
+-						tr.appendChild(E('td')); // empty cell
+-					}
+-				}
++	downloadNames(names) {
++		const entries = names.map(n => this.entry(n)).filter(Boolean);
++		const usable = entries.filter(e => kind(e) == 'file' || kind(e) == 'directory');
+ 
+-				fileList.appendChild(tr);
+-			}
++		if (usable.length < entries.length)
++			notify(_('Special files and broken links are not downloaded.'), 'warning');
+ 
+-			//
+-			// 2. For each file, create row dynamically
+-			//
+-			for (const file of files) {
+-				const fullPath = joinPath(path, file.name);
+-				const tr = E('tr', {
+-					'data-file-path': fullPath,
+-					'data-file-type': file.type,
+-					'data-permissions': file.permissions,
+-					'data-numeric-permissions': file.numericPermissions,
+-					'data-owner': file?.user || file.uid,
+-					'data-group': file?.group || file.gid,
+-					'data-size': file.size
+-				});
++		if (!usable.length || this.isBusy())
++			return;
+ 
+-				//
+-				// Prebuild common reusable items
+-				//
+-				const nameLink = E('a', {
+-					href: '#',
+-					title: file.permissions,
+-					class: `${file.type}-link`,
+-					click(event) {
+-						if (file.type === 'directory' || file?.target?.type === 'directory') {
+-							self.handleDirectoryClick(fullPath);
+-						} else {
+-							event.preventDefault();
+-							self.handleFileClick(fullPath, event.altKey ? 'hex' : 'text');
+-						}
+-					}
+-				}, file?.target ? `${file.name} → ${file.target?.name}` : file.name);
+-
+-				const actions = [];
+-				const checkbox = E('input', {
+-					type: 'checkbox',
+-					class: 'select-checkbox',
+-					'data-file-path': fullPath,
+-					change: ev => self.handleCheckboxChange(ev)
+-				});
+-				actions.push(checkbox);
+-
+-				actions.push(E('span', {
+-					class: 'edit-button',
+-					title: _('Edit properties'),
+-					click: () => self.handleEditFile(fullPath, file)
+-				}, '✏️'));
+-
+-				actions.push(E('span', {
+-					class: 'duplicate-button',
+-					title: _('Duplicate'),
+-					click: () => self.handleDuplicateFile(fullPath, file)
+-				}, '📑'));
+-
+-				actions.push(E('span', {
+-					class: 'delete-button',
+-					title: _('Delete'),
+-					click: () => self.handleDeleteFile(fullPath, file)
+-				}, '🗑️'));
+-
+-				if (file.type === 'file') {
+-					actions.push(E('span', {
+-						class: 'download-button',
+-						title: _('Download'),
+-						click: () => self.handleDownloadFile(fullPath)
+-					}, '⬇️'));
+-				}
++		const e = usable[0];
+ 
+-				//
+-				// 3. Build `<td>` dynamically based on column definitions
+-				//
+-				for (const col of columns) {
+-					let td;
+-
+-					switch (col) {
+-						case 'name':
+-							td = E('td', {}, [nameLink]);
+-							break;
+-
+-						case 'type':
+-							td = E('td', {}, fileTypes[file.type] || file.type);
+-							break;
+-
+-						case 'size':
+-							if (file.type === 'directory' || (file.type === 'symlink' && file.size === -1)) {
+-								td = E('td', { class: 'size-cell' }, [
+-									E('span', { class: 'size-number' }, '-'),
+-									E('span', { class: 'size-unit' }, ''),
+-								]);
+-							} else {
+-								const formatted = self.getFormattedSize(file.size);
+-								td = E('td', { class: 'size-cell' }, [
+-									E('span', { class: 'size-number' }, formatted.number),
+-									E('span', { class: 'size-unit' }, formatted.unit)
+-								]);
+-							}
+-							break;
+-
+-						case 'mtime':
+-							td = E('td', {}, new Date(file.mtime * 1000).toLocaleString());
+-							break;
+-
+-						case 'actions':
+-							td = E('td', {}, actions);
+-							break;
+-
+-						case 'permissions':
+-							td = E('td', {}, file.permissions);
+-							break;
+-
+-						default:
+-							// Support future dynamically-added columns
+-							td = E('td', {}, file[col] ?? '');
+-							break;
+-					}
+-
+-					tr.appendChild(td);
+-				}
++		if (usable.length == 1 && kind(e) == 'file')
++			return this.downloadFile(joinPath(this.path, e.name), e.name, (e.type == 'symlink') ? e.target.size : e.size);
+ 
+-				fileList.appendChild(tr);
+-			}
++		const archive = `${usable.length == 1 ? e.name : (baseName(this.path) || 'root')}.tar.gz`;
+ 
+-			//
+-			// housekeeping
+-			//
+-			const statusInfo = document.getElementById('status-info');
+-			const statusProgress = document.getElementById('status-progress');
++		return this.runJob(_('Packing into an archive…'), [ '/bin/sh', '-c', JOB_ARCHIVE, 'sh', this.path, ...usable.map(x => `./${x.name}`) ], true).then((dir) => {
++			if (!dir)
++				return;
+ 
+-			if (statusInfo) statusInfo.textContent = _('No file selected.');
+-			if (statusProgress) statusProgress.innerHTML = '';
++			const path = `${dir}/archive.tar.gz`;
++			return fs.stat(path)
++				.then(st => this.downloadFile(path, archive, st.size, true))
++				.finally(() => window.setTimeout(() => L.resolveDefault(fs.remove(dir)), 30000));
++		});
++	},
+ 
+-			self.setInitialColumnWidths();
+-			self.updateSelectAllCheckbox();
+-			self.updateDeleteSelectedButton();
++	downloadFile(path, name, size, quiet) {
++		if (size > BLOB_LIMIT) {
++			const saved = browserDownload(path, name);
++			notify(saved == name ? _('The browser downloads "%s".').format(name)
++				: _('The browser downloads "%s" as "%s" (the router does not allow other characters in this case).').format(name, saved));
+ 			return Promise.resolve();
++		}
++
++		let xhr = null;
++		const label = _('Downloading "%s"…').format(name);
++
++		this.busy = label;
++		this.setProgress(label, size ? 0 : null, () => xhr?.abort());
++
++		return downloadBlob(path, {
++			onStart: x => xhr = x,
++			onProgress: (loaded, total) => this.setProgress(label, (total || size) ? Math.min(1, loaded / (total || size)) : null)
++		}).then((blob) => {
++			saveBlobAs(blob, name);
+ 		}).catch((err) => {
+-			pop(null, E('p', _('Failed to load file list: %s').format(err.message)), 'error');
+-			return Promise.reject(err);
++			if (!err.cancelled)
++				notify(_('Failed to download "%s": %s').format(name, errMsg(err)), 'error');
++		}).finally(() => {
++			this.busy = null;
++			this.setProgress(null);
+ 		});
+ 	},
+ 
+-	// Function to format file size
+-	getFormattedSize(size) {
+-		/* 64 bit systems i.e. rpcd have max size of 128 TB */
+-		const units = [' ', 'K', 'M', 'G', 'T'];
+-		let index = 0;
+-		let value = size;
++	/* --- upload ------------------------------------------------------- */
+ 
+-		if (size > 0) {
+-			// Keep dividing until below 1024 or no more units
+-			while (value >= 1024 && index < units.length - 1) {
+-				value /= 1024;
+-				index++;
+-			}
+-		}
++	pickUpload() {
++		if (this.isBusy())
++			return;
+ 
+-		// Format to 2 decimals, always 6 chars wide
+-		const num = value.toFixed(2).padStart(6, ' ');
++		const input = E('input', { 'type': 'file', 'multiple': '', 'style': 'display:none' });
+ 
+-		return {
+-			number: num,
+-			unit: ' ' + units[index] + 'B'
+-		};
++		input.addEventListener('change', () => {
++			const files = [ ...input.files ];
++			input.remove();
++			this.uploadFiles(files);
++		});
++		document.body.appendChild(input);
++		input.click();
+ 	},
+ 
+-	// Function to sort files
+-	sortBy(field) {
+-		// Change the sort field and direction, and reload the file list
+-		if (sortField === field) {
+-			sortAscending = !sortAscending;
+-		} else {
+-			sortField = field;
+-			sortAscending = true;
+-		}
+-		this.loadFileList(currentPath);
+-	},
+-
+-	// Function to compare files for sorting
+-	compareFiles(a, b) {
+-		// Compare files based on the selected field and direction
+-		const order = sortAscending ? 1 : -1;
+-		let aValue = a[sortField];
+-		let bValue = b[sortField];
+-		if (sortField === 'size') {
+-			aValue = (a.type === 'directory' || (a.type === 'symlink' && a.size === -1)) ? -1 : a.size;
+-			bValue = (b.type === 'directory' || (b.type === 'symlink' && b.size === -1)) ? -1 : b.size;
+-		}
+-		if (aValue < bValue) return -1 * order;
+-		if (aValue > bValue) return 1 * order;
+-		return 0;
++	onDrag(ev, delta) {
++		if (!ev.dataTransfer || ![ ...ev.dataTransfer.types ].includes('Files'))
++			return;
++
++		ev.preventDefault();
++		this.dragDepth = Math.max(0, this.dragDepth + delta);
++		ev.dataTransfer.dropEffect = 'copy';
++		this.dom.list.classList.toggle('dragover', this.dragDepth > 0 || delta == 0);
+ 	},
+ 
+-	// Set initial column widths in the table
+-	setInitialColumnWidths() {
+-		// Apply column width settings to the file table
+-		const table = document.getElementById('file-table');
+-		if (!table) {
++	onDrop(ev) {
++		if (!ev.dataTransfer)
+ 			return;
+-		}
+-		const headers = table.querySelectorAll('th');
+-		headers.forEach((header, index) => {
+-			const field = header.getAttribute('data-field');
+-			if (field && config.columnWidths[field]) {
+-				const width = config.columnWidths[field];
+-				const minWidth = config.columnMinWidths[field] || 50;
+-				const maxWidth = config.columnMaxWidths[field] || 500;
+-				header.style.width = width + 'px';
+-				header.style.minWidth = minWidth + 'px';
+-				header.style.maxWidth = maxWidth + 'px';
+-				const rows = table.querySelectorAll('tr');
+-				rows.forEach((row, rowIndex) => {
+-					const cell = row.children[index];
+-					if (cell) {
+-						cell.style.width = width + 'px';
+-						cell.style.minWidth = minWidth + 'px';
+-						cell.style.maxWidth = maxWidth + 'px';
+-					}
+-				});
+-			}
+-		});
+-	},
+ 
+-	// Handler for clicking on a directory
+-	handleDirectoryClick(newPath) {
+-		// Navigate to the selected directory and update the file list
+-		const self = this;
+-		currentPath = newPath || '/';
+-		const pathInput = document.getElementById('path-input');
+-		if (pathInput) {
+-			pathInput.value = currentPath;
+-		}
+-		this.loadFileList(currentPath).then(() => {
+-			self.initResizeableColumns();
+-		});
+-	},
++		ev.preventDefault();
++		this.dragDepth = 0;
++		this.dom.list.classList.remove('dragover');
+ 
+-	/**
+-	 * Determines whether a given Uint8Array represents UTF-8 text data.
+-	 *
+-	 * @param {Uint8Array} uint8Array - The binary data to check.
+-	 * @returns {boolean} - Returns true if the data is UTF-8 text, false otherwise.
+-	 */
+-	isText(uint8Array) {
+-
+-		const len = uint8Array.length;
+-		let i = 0;
+-
+-		while (i < len) {
+-			const byte = uint8Array[i];
+-
+-			if (byte === 0) return false; // Null byte indicates binary
+-
+-			if (byte <= 0x7F) {
+-				// ASCII character, no action needed
+-				i++;
+-				continue;
+-			} else if ((byte & 0xE0) === 0xC0) {
+-				// 2-byte sequence
+-				if (i + 1 >= len || (uint8Array[i + 1] & 0xC0) !== 0x80) return false;
+-				i += 2;
+-			} else if ((byte & 0xF0) === 0xE0) {
+-				// 3-byte sequence
+-				if (
+-					i + 2 >= len ||
+-					(uint8Array[i + 1] & 0xC0) !== 0x80 ||
+-					(uint8Array[i + 2] & 0xC0) !== 0x80
+-				) {
+-					return false;
+-				}
+-				i += 3;
+-			} else if ((byte & 0xF8) === 0xF0) {
+-				// 4-byte sequence
+-				if (
+-					i + 3 >= len ||
+-					(uint8Array[i + 1] & 0xC0) !== 0x80 ||
+-					(uint8Array[i + 2] & 0xC0) !== 0x80 ||
+-					(uint8Array[i + 3] & 0xC0) !== 0x80
+-				) {
+-					return false;
++		const files = [];
++		let folders = 0;
++
++		if (ev.dataTransfer.items?.length) {
++			for (const it of ev.dataTransfer.items) {
++				if (it.kind != 'file')
++					continue;
++				if (it.webkitGetAsEntry?.()?.isDirectory) {
++					folders++;
++					continue;
+ 				}
+-				i += 4;
+-			} else {
+-				// Invalid UTF-8 byte
+-				return false;
++				const f = it.getAsFile();
++				if (f)
++					files.push(f);
+ 			}
+ 		}
++		else
++			files.push(...ev.dataTransfer.files);
+ 
+-		return true;
+-	},
++		if (folders)
++			notify(_('Folders cannot be uploaded, only files.'), 'warning');
+ 
+-	// Function to handle clicking on a file to open it in the editor
+-	handleFileClick(filePath, mode) {
+-		const self = this;
+-		const fileRow = document.querySelector(`tr[data-file-path='${filePath}']`);
+-		const editorMessage = document.getElementById('editor-message');
+-
+-		// Set original file permissions
+-		self.originalFilePermissions = fileRow ? fileRow.getAttribute('data-numeric-permissions') : '644';
+-		self.editorMode = mode;
+-
+-		// Display loading message
+-		if (editorMessage) editorMessage.textContent = _('Loading file...');
+-
+-		// Read the file as binary data
+-		fs.read_direct(filePath, 'blob')
+-			.then(blob => blob.arrayBuffer())
+-			.then(arrayBuffer => {
+-				const uint8Array = new Uint8Array(arrayBuffer);
+-				self.fileData = uint8Array;
+-				self.fileContent = ''; // Can be used for display or left empty
+-				self.editorMode = 'hex';
+-				self.textType = self.isText(uint8Array) ? 'text' : 'hex';
+-				if (mode === 'text') {
+-					// Determine if the file is text
+-					if (self.textType === 'text') {
+-						// If text, decode the content
+-						self.fileContent = new TextDecoder().decode(uint8Array);
+-						self.editorMode = 'text';
+-					} else {
+-						// If not text, show a warning and set mode to hex
+-						if (editorMessage) {
+-							editorMessage.textContent = _('The file does not contain valid text data. Opening in hex mode...');
+-						}
+-						pop(null, E('p', _('Opening file in hex mode since it is not a text file.')), 'warning');
+-					}
+-				}
+-			})
+-			.then(() => {
+-				// Render the editor and switch to the editor tab
+-				self.renderEditor(filePath);
+-				self.switchToTab('editor');
+-			})
+-			.catch(err => {
+-				// Handle errors during file reading
+-				pop(null, E('p', _('Failed to open file: %s').format(err.message)), 'error');
+-			});
++		this.uploadFiles(files);
+ 	},
+-	// Adjust padding for line numbers in the editor
+-	adjustLineNumbersPadding() {
+-		// Update padding based on scrollbar size
+-		const lineNumbersDiv = document.getElementById('line-numbers');
+-		const editorTextarea = document.getElementById('editor-textarea');
+-		if (!lineNumbersDiv || !editorTextarea) {
++
++	uploadFiles(files) {
++		if (!files.length || this.isBusy())
+ 			return;
+-		}
+-		const scrollbarHeight = editorTextarea.offsetHeight - editorTextarea.clientHeight;
+-		lineNumbersDiv.style.paddingBottom = scrollbarHeight + 'px';
+-	},
+-
+-	// Handler for downloading a file
+-	handleDownloadFile(filePath) {
+-		// Download the file to the user's local machine
+-		const self = this;
+-		const fileName = filePath.split('/').pop();
+-		// Use the read_direct method to download the file
+-		fs.read_direct(filePath, 'blob')
+-			.then((blob) => {
+-				if (!(blob instanceof Blob)) {
+-					throw new Error(_('Response is not a Blob'));
+-				}
+-				const url = window.URL.createObjectURL(blob);
+-				const a = document.createElement('a');
+-				a.href = url;
+-				a.download = fileName;
+-				document.body.appendChild(a);
+-				a.click();
+-				a.remove();
+-				window.URL.revokeObjectURL(url);
+-			}).catch((err) => {
+-				pop(null, E('p', _('Failed to download file "%s": %s').format(fileName, err.message)), 'error');
+-			});
+-	},
+ 
+-	// Handler for deleting a file
+-	handleDeleteFile(filePath, fileInfo) {
+-		// Delete the selected file or directory
+-		const self = this;
+-		const itemName = filePath.split('/').pop();
+-		const itemTypeLabel = fileTypes[fileInfo?.type];
++		const dir = this.path;
++		const existing = new Map(this.entries.map(e => [ e.name, e ]));
++		const onDirs = files.filter(f => existing.get(f.name)?.type == 'directory').map(f => f.name);
++		const conflicts = files.filter(f => existing.has(f.name) && !onDirs.includes(f.name)).map(f => f.name);
++
++		if (onDirs.length)
++			notify(_('Not uploaded, a folder with this name exists: %s').format(onDirs.join(', ')), 'error');
++
++		return this.askConflicts(conflicts).then((policy) => {
++			if (!policy)
++				return;
++
++			const queue = files.filter(f => !onDirs.includes(f.name) && !(policy == 'skip' && conflicts.includes(f.name)));
++			const total = queue.reduce((s, f) => s + f.size, 0) || 1;
++			const failed = [];
++			let done = 0, xhr = null, cancelled = false, ok = 0;
+ 
+-		if (confirm(_('Are you sure you want to delete this %s: "%s"?').format(itemTypeLabel, itemName))) {
+-			fs.remove(filePath).then(() => {
+-				popTimeout(null, E('p', _('Successfully deleted %s: "%s".').format(itemTypeLabel, itemName)), 5000, 'info');
+-				self.loadFileList(currentPath).then(() => {
+-					self.initResizeableColumns();
++			if (!queue.length)
++				return;
++
++			this.busy = _('Uploading…');
++
++			const next = (i) => {
++				if (i >= queue.length || cancelled)
++					return Promise.resolve();
++
++				const f = queue[i];
++				const path = joinPath(dir, f.name);
++				const label = (queue.length > 1) ? _('Uploading "%s" (%d of %d)…').format(f.name, i + 1, queue.length) : _('Uploading "%s"…').format(f.name);
++				let old = null;
++
++				this.setProgress(label, done / total, () => { cancelled = true; xhr?.abort(); });
++
++				/* a replaced file keeps its permissions and owner as they are now */
++				return (existing.has(f.name) ? L.resolveDefault(fs.stat(path), null) : Promise.resolve(null)).then((st) => {
++					old = (st?.type == 'file') ? st : null;
++					if (cancelled)
++						throw Object.assign(new Error(_('Cancelled')), { cancelled: true });
++					return uploadBlob(path, f, old ? (old.mode & 0o7777) : 0o644, {
++						onStart: x => xhr = x,
++						onUploadProgress: loaded => this.setProgress(label, (done + loaded) / total)
++					});
++				}).then(() => {
++					if (old && (old.uid || old.gid))
++						return this.exec('chown', [ `${old.uid}:${old.gid}`, '--', path ]);
++				}).then(() => {
++					ok++;
++				}).catch((err) => {
++					if (!err.cancelled)
++						failed.push(`${f.name}: ${errMsg(err)}`);
++				}).then(() => {
++					done += f.size;
++					return next(i + 1);
+ 				});
+-				const statusInfo = document.getElementById('status-info');
+-				if (statusInfo) {
+-					statusInfo.textContent = _('Deleted %s: "%s".').format(itemTypeLabel, itemName);
+-				}
+-			}).catch((err) => {
+-				pop(null, E('p', _('Failed to delete %s "%s": %s').format(itemTypeLabel, itemName, err.message)), 'error');
++			};
++
++			return next(0).then(() => {
++				if (failed.length)
++					notify(_('Upload failed:') + ' ' + failed.join('; '), 'error');
++				else if (cancelled)
++					notify(_('Cancelled.'), 'warning');
++				else
++					notify(N_(ok, 'Uploaded %d file.', 'Uploaded %d files.').format(ok));
++			}).finally(() => {
++				this.busy = null;
++				this.setProgress(null);
++				if (this.path == dir)
++					this.refresh();
+ 			});
+-		}
++		});
+ 	},
+ 
+-	// Update line numbers in the text editor
+-	updateLineNumbers() {
+-		// Update the line numbers display when the text changes
+-		const lineNumbersDiv = document.getElementById('line-numbers');
+-		const editorTextarea = document.getElementById('editor-textarea');
+-		if (!lineNumbersDiv || !editorTextarea) return;
++	/* --- editor ------------------------------------------------------- */
+ 
+-		// Count lines
+-		const lineCount = editorTextarea.value.split('\n').length;
++	openEntry(e, mode, anchor) {
++		const k = kind(e);
++		const path = joinPath(this.path, e.name);
+ 
+-		// Build HTML using join — much faster than concatenation
+-		lineNumbersDiv.innerHTML = Array.from({ length: lineCount }, (_, i) => `<div>${i + 1}</div>`).join('');
++		if (k == 'directory')
++			return this.navigate(path);
++		else if (k == 'file')
++			return this.openFile(path, mode);
++		else if (k == 'broken')
++			notify(_('The link points to a missing file: %s').format(e.target?.name ?? '?'), 'error');
++		else
++			this.showMenu(e, anchor);
+ 	},
+ 
+-	// Synchronize scrolling between line numbers and text
+-	syncScroll() {
+-		// Sync scrolling of line numbers with the text area
+-		const lineNumbersDiv = document.getElementById('line-numbers');
+-		const editorTextarea = document.getElementById('editor-textarea');
+-		if (!lineNumbersDiv || !editorTextarea) {
+-			return;
+-		}
+-		lineNumbersDiv.scrollTop = editorTextarea.scrollTop;
++	confirmDiscard() {
++		return !this.ed?.dirty || window.confirm(_('The file "%s" has unsaved changes. Discard them?').format(this.ed.path));
+ 	},
+ 
+-	// Toggle line numbers display in the editor
+-	toggleLineNumbers() {
+-		// Ensure the editor is in Text Mode before toggling line numbers
+-		if (this.editorMode !== 'text') {
+-			console.warn('Toggle Line Numbers is only available in Text Mode.');
+-			return;
+-		}
++	openFile(path, mode) {
++		if (this.isBusy())
++			return Promise.resolve();
+ 
+-		// Get the line numbers div and the textarea
+-		const lineNumbersDiv = document.getElementById('line-numbers');
+-		const editorTextarea = document.getElementById('editor-textarea');
+-		if (!lineNumbersDiv || !editorTextarea) {
+-			console.error('Line numbers div or editor textarea not found.');
+-			return;
++		if (this.ed && this.ed.path == path && !mode) {
++			this.selectTab('editor');
++			return Promise.resolve();
+ 		}
+ 
+-		// Toggle the display of line numbers
+-		if (lineNumbersDiv.style.display === 'none' || !lineNumbersDiv.style.display) {
+-			lineNumbersDiv.style.display = 'block';
+-			this.updateLineNumbers();
+-			this.adjustLineNumbersPadding();
+-			this.syncScroll();
+-		} else {
+-			lineNumbersDiv.style.display = 'none';
+-			lineNumbersDiv.innerHTML = '';
+-		}
+-	},
++		if (!this.confirmDiscard())
++			return Promise.resolve();
+ 
+-	// Generate a name for a copy of a file
+-	getCopyName(originalName, existingNames) {
+-		// Split filename into base name + extension
+-		const dotIndex = originalName.lastIndexOf('.');
+-		const hasExt = dotIndex > 0 && dotIndex < originalName.length - 1;
++		let real = path, st = null;
+ 
+-		const base = hasExt ? originalName.slice(0, dotIndex) : originalName;
+-		const ext  = hasExt ? originalName.slice(dotIndex) : '';
++		/* a link is edited through its target: cgi-upload replaces the
++		   path it gets, a link would become a copy of the file */
++		return this.exec('readlink', [ '-f', '--', path ]).then((res) => {
++			real = res.stdout.trim() || path;
++			return fs.stat(real);
++		}).then((s) => {
++			st = s;
+ 
+-		// First attempt: "name (copy).ext"
+-		let candidate = `${base} (copy)${ext}`;
++			if (st.type != 'file')
++				throw new Error(_('This is not a regular file.'));
+ 
+-		// If taken, try: "name (copy 2).ext", "name (copy 3).ext", ...
+-		let counter = 2;
+-		while (existingNames.includes(candidate)) {
+-			candidate = `${base} (copy ${counter++})${ext}`;
+-		}
++			if (st.size > EDIT_LIMIT)
++				throw new Error(_('The file is too large to edit in the browser (%s). Download it instead.').format(formatSize(st.size)));
+ 
+-		return candidate;
+-	},
++			if (st.size > EDIT_WARN && !window.confirm(_('The file is large (%s). Opening it may slow the browser down. Open anyway?').format(formatSize(st.size))))
++				return null;
++
++			let xhr = null;
++			const label = _('Opening "%s"…').format(baseName(path));
+ 
+-	// Handler for duplicating a file
+-	handleDuplicateFile(filePath, fileInfo) {
+-		// Copy the file or directory with a new name
+-		const self = this;
+-		getFileList(currentPath).then((files) => {
+-			const existingNames = files.map((f) => {
+-				return f.name;
++			this.busy = label;
++			this.setProgress(label, st.size ? 0 : null, () => xhr?.abort());
++
++			return downloadBlob(real, {
++				onStart: x => xhr = x,
++				onProgress: (l, t) => (t || st.size) && this.setProgress(label, Math.min(1, l / (t || st.size)))
++			}).then(b => b.arrayBuffer()).finally(() => {
++				this.busy = null;
++				this.setProgress(null);
+ 			});
+-			const newName = self.getCopyName(fileInfo.name, existingNames);
+-			const newPath = joinPath(currentPath, newName);
+-			let command;
+-			let args;
+-			if (fileInfo.type === 'directory') {
+-				command = 'cp';
+-				args = ['-rp', filePath, newPath];
+-			} else if (fileInfo.type === 'symlink') {
+-				command = 'cp';
+-				args = ['-Pp', filePath, newPath];
+-			} else {
+-				command = 'cp';
+-				args = ['-p', filePath, newPath];
++		}).then((buf) => {
++			if (!buf)
++				return;
++
++			const bytes = new Uint8Array(buf);
++			const textual = isText(bytes);
++			let want = mode ?? (textual ? 'text' : 'hex');
++
++			if (want == 'text' && !textual) {
++				notify(_('The file is not UTF-8 text, it is opened in the hex editor.'), 'warning');
++				want = 'hex';
+ 			}
+-			fs.exec(command, args).then((res) => {
+-				if (res.code !== 0) {
+-					return Promise.reject(new Error(res.stderr.trim()));
+-				}
+-				popTimeout(null, E('p', _('Successfully duplicated %s "%s" as "%s".').format(_('item'), fileInfo.name, newName)), 5000, 'info');
+-				self.loadFileList(currentPath).then(() => {
+-					self.initResizeableColumns();
+-				});
+-			}).catch((err) => {
+-				pop(null, E('p', _('Failed to duplicate %s "%s": %s').format(_('item'), fileInfo.name, err.message)), 'error');
+-			});
++
++			this.closeHex();
++			this.ed = { path: path, real: real, stat: st, mode: want, textual: textual, dirty: false, data: bytes };
++
++			if (textual)
++				this.setText(bytes);
++
++			this.renderEditor();
++			this.dom.tabs.editor.disabled = false;
++			this.selectTab('editor');
+ 		}).catch((err) => {
+-			pop(null, E('p', _('Failed to get file list: %s').format(err.message)), 'error');
++			if (!err.cancelled)
++				notify(_('Failed to open "%s": %s').format(path, errMsg(err)), 'error');
+ 		});
+ 	},
+ 
+-	// Handler for saving a file after editing
+-	handleSaveFile(filePath) {
+-		const self = this;
+-		let contentBlob;
++	/* text of the editor from bytes: BOM and line ends are kept for saving */
++	setText(bytes) {
++		const ed = this.ed;
++		let s = new TextDecoder('utf-8', { ignoreBOM: true }).decode(bytes);
+ 
+-		if (self.editorMode === 'text') {
+-			const textarea = document.querySelector('#editor-container textarea');
+-			if (!textarea) {
+-				pop(null, E('p', _('Editor textarea not found.')), 'error');
+-				return;
+-			}
+-			const content = textarea.value;
+-			self.fileContent = content;
+-
+-			// Convert content to Uint8Array in chunks not exceeding 8KB
+-			const CHUNK_SIZE = 8 * 1024; // 8KB
+-			const totalLength = content.length;
+-			let chunks = [];
+-			for (let i = 0; i < totalLength; i += CHUNK_SIZE) {
+-				const chunkStr = content.slice(i, i + CHUNK_SIZE);
+-				const chunkBytes = new TextEncoder().encode(chunkStr);
+-				chunks.push(chunkBytes);
+-			}
+-			// Concatenate chunks into a single Uint8Array
+-			const totalBytes = chunks.reduce((prev, curr) => {
+-				return prev + curr.length;
+-			}, 0);
+-			let dataArray = new Uint8Array(totalBytes);
+-			let offset = 0;
+-			chunks.forEach((chunk) => {
+-				dataArray.set(chunk, offset);
+-				offset += chunk.length;
+-			});
+-			self.fileData = dataArray; // Update binary data
++		ed.bom = s.startsWith('﻿');
++		if (ed.bom)
++			s = s.substring(1);
+ 
+-			contentBlob = new Blob([self.fileData], {
+-				type: 'application/octet-stream'
+-			});
+-		} else if (self.editorMode === 'hex') {
+-			// Get data from hex editor
+-			self.fileData = self.hexEditorInstance.getData(); // Assuming getData method is implemented in HexEditor
+-			contentBlob = new Blob([self.fileData], {
+-				type: 'application/octet-stream'
+-			});
+-		}
++		const crlf = (s.match(/\r\n/g) ?? []).length;
++		const cr = (s.match(/\r/g) ?? []).length;
++		const lf = (s.match(/\n/g) ?? []).length;
++
++		ed.eol = (crlf && crlf == cr && crlf == lf) ? 'crlf' : (cr ? 'mixed' : 'lf');
++		ed.text = s;
++
++		if (ed.eol == 'mixed')
++			notify(_('The file has mixed line ends (CR, LF, CRLF); after saving all of them are LF.'), 'warning');
++	},
++
++	textBytes() {
++		const ed = this.ed;
++		let s = this.dom.ed.ta.value;
++
++		if (ed.eol == 'crlf')
++			s = s.replace(/\n/g, '\r\n');
++
++		const body = new TextEncoder().encode(s);
++		if (!ed.bom)
++			return body;
++
++		const out = new Uint8Array(body.length + 3);
++		out.set([ 0xEF, 0xBB, 0xBF ]);
++		out.set(body, 3);
++		return out;
++	},
++
++	closeHex() {
++		this.ed?.hex?.resizeObserver?.disconnect();
++		if (this.ed)
++			this.ed.hex = null;
++	},
+ 
+-		const statusInfo = document.getElementById('status-info');
+-		const statusProgress = document.getElementById('status-progress');
+-		const fileName = filePath.split('/').pop();
+-		if (statusInfo) {
+-			statusInfo.textContent = _('Saving file: "%s"...').format(fileName);
++	renderEditor() {
++		const ed = this.ed;
++		const narrow = window.matchMedia(NARROW).matches;
++		const r = this.dom.ed = {};
++
++		if (this.wrap == null)
++			this.wrap = (config.editorWrap == 'on') || (config.editorWrap == 'auto' && narrow);
++		if (this.lines == null)
++			this.lines = (config.editorLineNumbers == '1');
++
++		r.path = E('span', { 'class': 'fm-editor-path' });
++		r.info = E('span', { 'class': 'fm-editor-info' });
++		r.wrap = E('input', { 'type': 'checkbox', 'change': ev => { this.wrap = ev.target.checked; this.applyEditorView(); } });
++		r.lines = E('input', { 'type': 'checkbox', 'change': ev => { this.lines = ev.target.checked; this.applyEditorView(); } });
++		r.mode = E('button', { 'class': 'btn cbi-button', 'type': 'button', 'click': () => this.toggleMode() });
++		r.body = E('div', { 'class': 'fm-editor-body' });
++		r.save = E('button', { 'class': 'btn cbi-button cbi-button-positive', 'type': 'button', 'title': 'Ctrl+S', 'click': () => this.saveFile() }, txt(_('Save')));
++
++		dom.content(this.dom.editor, [
++			E('div', { 'class': 'fm-editor-head' }, [ r.path, r.info ]),
++			E('div', { 'class': 'fm-bar' }, [
++				r.save,
++				E('button', { 'class': 'btn cbi-button', 'type': 'button', 'click': () => this.reloadFile() }, txt(_('Reload'))),
++				E('button', { 'class': 'btn cbi-button', 'type': 'button', 'click': () => this.closeEditor() }, txt(_('Close'))),
++				E('button', { 'class': 'btn cbi-button', 'type': 'button', 'click': () => this.downloadFile(ed.real, baseName(ed.path), ed.stat.size) }, txt(_('Download'))),
++				r.mode,
++				E('label', { 'class': 'fm-toggle' }, [ r.wrap, txt(_('Wrap lines')) ]),
++				E('label', { 'class': 'fm-toggle' }, [ r.lines, txt(_('Line numbers')) ])
++			]),
++			r.body
++		]);
++
++		this.renderEditorBody();
++	},
++
++	renderEditorBody() {
++		const ed = this.ed;
++		const r = this.dom.ed;
++		const font = (config.editorFontSize == 'auto') ? (window.matchMedia('(pointer: coarse)').matches ? 16 : 13) : (parseInt(config.editorFontSize, 10) || 13);
++
++		this.closeHex();
++		r.body.style.setProperty('--fm-font', `${font}px`);
++
++		if (ed.mode == 'text') {
++			r.gutter = E('pre', { 'class': 'fm-gutter', 'aria-hidden': 'true' });
++			r.ta = E('textarea', {
++				'class': 'fm-text',
++				'spellcheck': 'false', 'autocapitalize': 'off', 'autocomplete': 'off', 'autocorrect': 'off',
++				'aria-label': ed.path,
++				'input': () => {
++					this.setDirty(true);
++					this.scheduleGutter();
++				},
++				'scroll': () => { r.gutter.scrollTop = r.ta.scrollTop; },
++				'keydown': ev => this.onEditorKey(ev)
++			});
++			r.ta.value = ed.text;
++			dom.content(r.body, [ r.gutter, r.ta ]);
+ 		}
+-		if (statusProgress) {
+-			statusProgress.innerHTML = '';
+-			const progressBarContainer = E('div', {
+-				'class': 'cbi-progressbar',
+-				'title': '0%'
+-			}, [E('div', {
+-				'style': 'width:0%'
+-			})]);
+-			statusProgress.appendChild(progressBarContainer);
++		else {
++			const box = E('div');
++			dom.content(r.body, [ E('div', { 'class': 'fm-hex' }, [ box ]) ]);
++			ed.hex = HE.initialize(box);
++			ed.hex.setData(ed.data);
++			r.ta = r.gutter = null;
+ 		}
+ 
+-		uploadFile(filePath, contentBlob, (percent) => {
+-			if (statusProgress) {
+-				const progressBar = statusProgress.querySelector('.cbi-progressbar div');
+-				if (progressBar) {
+-					progressBar.style.width = percent.toFixed(2) + '%';
+-					statusProgress.querySelector('.cbi-progressbar').setAttribute('title', percent.toFixed(2) + '%');
+-				}
+-			}
+-		}).then(() => {
+-			const permissions = self.originalFilePermissions;
+-			if (permissions !== undefined) {
+-				return fs.exec('chmod', [permissions, filePath]).then((res) => {
+-					if (res.code !== 0) {
+-						throw new Error(res.stderr.trim());
+-					}
+-				}).then(() => {
+-					if (statusInfo) {
+-						statusInfo.textContent = _('File "%s" uploaded successfully.').format(fileName);
+-					}
+-					popTimeout(null, E('p', _('File "%s" uploaded successfully.').format(fileName)), 5000, 'info');
+-					return self.loadFileList(currentPath).then(() => {
+-						self.initResizeableColumns();
+-					});
+-				}).catch((err) => {
+-					pop(null, E('p', _('Failed to apply permissions to file "%s": %s').format(fileName, err.message)), 'error');
+-				});
+-			} else {
+-				if (statusInfo) {
+-					statusInfo.textContent = _('File "%s" uploaded successfully.').format(fileName);
+-				}
+-				popTimeout(null, E('p', _('File "%s" uploaded successfully.').format(fileName)), 5000, 'info');
+-				return self.loadFileList(currentPath).then(() => {
+-					self.initResizeableColumns();
+-				});
+-			}
+-		}).catch((err) => {
+-			if (statusProgress) {
+-				statusProgress.innerHTML = '';
+-			}
+-			if (statusInfo) {
+-				statusInfo.textContent = _('Failed to save file "%s": %s').format(fileName, err.message);
+-			}
+-			pop(null, E('p', _('Failed to save file "%s": %s').format(fileName, err.message)), 'error');
+-		});
++		this.applyEditorView();
++		this.renderEditorHead();
++		this.fitEditor();
+ 	},
+ 
+-	// Handler for clicking on a symbolic link
+-	handleSymlinkClick(linkPath, targetPath, mode) {
+-		// Navigate to the target of the symbolic link
+-		const self = this;
+-		if (!targetPath.startsWith('/')) {
+-			targetPath = joinPath(currentPath, targetPath);
+-		}
+-		fs.stat(targetPath).then((stat) => {
+-			if (stat.type === 'directory') {
+-				self.handleDirectoryClick(targetPath);
+-			} else if (stat.type === 'file') {
+-				self.handleFileClick(targetPath, mode);
+-			} else {
+-				pop(null, E('p', _('The symlink points to an unsupported type.')), 'error');
+-			}
+-		}).catch((err) => {
+-			pop(null, E('p', _('Failed to access symlink target: %s').format(err.message)), 'error');
+-		});
+-		const statusInfo = document.getElementById('status-info');
+-		if (statusInfo) {
+-			statusInfo.textContent = _('Symlink: ') + linkPath + ' -> ' + targetPath;
++	applyEditorView() {
++		const r = this.dom.ed;
++		const text = (this.ed.mode == 'text');
++
++		r.wrap.checked = this.wrap;
++		r.lines.checked = this.lines;
++		r.wrap.disabled = !text;
++		r.lines.disabled = !text || this.wrap;
++		r.lines.parentNode.title = this.wrap ? _('Line numbers are shown when lines are not wrapped.') : '';
++		r.mode.disabled = !text && !this.ed.textual;
++		dom.content(r.mode, txt(text ? _('Hex editor') : _('Text editor')));
++
++		if (text) {
++			r.ta.classList.toggle('wrap', this.wrap);
++			r.ta.setAttribute('wrap', this.wrap ? 'soft' : 'off');
++			r.gutter.hidden = this.wrap || !this.lines;
++			this.gutterLines = 0;
++			this.updateGutter();
+ 		}
+ 	},
+ 
+-	// Initialize resizeable columns in the table
+-	initResizeableColumns() {
+-		// Add handlers to adjust column widths
+-		const self = this;
+-		const table = document.getElementById('file-table');
+-		if (!table) {
++	scheduleGutter() {
++		if (this.gutterPending)
+ 			return;
+-		}
+-		const headers = table.querySelectorAll('th');
+-		headers.forEach((header, index) => {
+-			const resizer = header.querySelector('.resizer');
+-			if (resizer) {
+-				resizer.removeEventListener('mousedown', header.resizeHandler);
+-				header.resizeHandler = (e) => {
+-					e.preventDefault();
+-					const startX = e.pageX;
+-					const startWidth = header.offsetWidth;
+-					const field = header.getAttribute('data-field');
+-					const minWidth = config.columnMinWidths[field] || 50;
+-					const maxWidth = config.columnMaxWidths[field] || 500;
+-
+-					function doDrag(e) {
+-						const currentX = e.pageX;
+-						const newWidth = startWidth + (currentX - startX);
+-						if (newWidth >= minWidth && newWidth <= maxWidth) {
+-							header.style.width = newWidth + 'px';
+-							if (field) {
+-								config.columnWidths[field] = newWidth;
+-							}
+-							const rows = table.querySelectorAll('tr');
+-							rows.forEach((row, rowIndex) => {
+-								const cell = row.children[index];
+-								if (cell) {
+-									cell.style.width = newWidth + 'px';
+-								}
+-							});
+-						}
+-					}
+-
+-					function stopDrag() {
+-						document.removeEventListener('mousemove', doDrag, false);
+-						document.removeEventListener('mouseup', stopDrag, false);
+-						saveConfig();
+-					}
+-					document.addEventListener('mousemove', doDrag, false);
+-					document.addEventListener('mouseup', stopDrag, false);
+-				};
+-				resizer.addEventListener('mousedown', header.resizeHandler, false);
+-			}
++		this.gutterPending = true;
++		window.requestAnimationFrame(() => {
++			this.gutterPending = false;
++			this.updateGutter();
+ 		});
+ 	},
+ 
+-	// Handler for editing a file's properties (name, permissions, etc.)
+-	handleEditFile(filePath, fileInfo) {
+-		// Display a form to edit the file's properties
+-		const self = this;
+-		const statusInfo = document.getElementById('status-info');
+-		const statusProgress = document.getElementById('status-progress');
+-		if (statusInfo && statusProgress) {
+-			statusInfo.innerHTML = '';
+-			statusProgress.innerHTML = '';
+-			const nameInput = E('input', {
+-				'type': 'text',
+-				'value': fileInfo.name,
+-				'placeholder': fileInfo.name,
+-				'style': 'margin-right: 10px;'
+-			});
+-			const permsInput = E('input', {
+-				'type': 'text',
+-				'placeholder': fileInfo.numericPermissions,
+-				'style': 'margin-right: 10px; width: 80px;'
+-			});
+-			const ownerInput = E('input', {
+-				'type': 'text',
+-				'placeholder': fileInfo?.user || fileInfo.uid,
+-				'style': 'margin-right: 10px; width: 100px;'
+-			});
+-			const groupInput = E('input', {
+-				'type': 'text',
+-				'placeholder': fileInfo?.group || fileInfo.gid,
+-				'style': 'margin-right: 10px; width: 100px;'
+-			});
+-			const saveButton = E('button', {
+-				'class': 'btn',
+-				'disabled': true,
+-				'click'() {
+-					self.saveFileChanges(filePath, fileInfo, nameInput.value, permsInput.value, ownerInput.value, groupInput.value);
+-				}
+-			}, _('Save'));
+-			[nameInput, permsInput, ownerInput, groupInput].forEach((input) => {
+-				input.addEventListener('input', () => {
+-					if (nameInput.value !== fileInfo.name || permsInput.value || ownerInput.value || groupInput.value) {
+-						saveButton.disabled = false;
+-					} else {
+-						saveButton.disabled = true;
+-					}
+-				});
+-			});
+-			statusInfo.appendChild(E('span', {}, _('Editing %s: "%s"').format(_('item'), fileInfo.name)));
+-			statusInfo.appendChild(nameInput);
+-			statusInfo.appendChild(permsInput);
+-			statusInfo.appendChild(ownerInput);
+-			statusInfo.appendChild(groupInput);
+-			statusProgress.appendChild(saveButton);
++	updateGutter() {
++		const r = this.dom.ed;
++
++		if (!r?.gutter || r.gutter.hidden)
++			return;
++
++		const v = r.ta.value;
++		let n = 1;
++		for (let i = v.indexOf('\n'); i >= 0; i = v.indexOf('\n', i + 1))
++			n++;
++
++		if (n != this.gutterLines) {
++			this.gutterLines = n;
++			r.gutter.textContent = Array.from({ length: n }, (_x, i) => i + 1).join('\n');
+ 		}
++
++		r.gutter.style.paddingBottom = `calc(.4em + ${r.ta.offsetHeight - r.ta.clientHeight}px)`;
++		r.gutter.scrollTop = r.ta.scrollTop;
+ 	},
+ 
+-	// Save changes to a file's properties
+-	saveFileChanges(filePath, fileInfo, newName, newPerms, newOwner, newGroup) {
+-		// Apply changes and update the interface
+-		const self = this;
+-		const commands = [];
+-		const originalPath = filePath;
+-		const originalName = fileInfo.name;
+-		const newItemName = newName || originalName;
++	onEditorKey(ev) {
++		const ta = ev.target;
+ 
+-		if (newName && newName !== fileInfo.name) {
+-			const newPath = joinPath(currentPath, newName);
+-			commands.push(['mv', [filePath, newPath]]);
+-			filePath = newPath;
+-		}
+-		if (newPerms) {
+-			commands.push(['chmod', [newPerms, filePath]]);
++		/* Tab inserts a tab; Esc then Tab moves the focus on */
++		if (ev.key == 'Escape') {
++			this.tabOut = true;
++			return;
+ 		}
+ 
+-		if (newOwner || newGroup) {
+-			const owner = newOwner ?? (fileInfo?.user || fileInfo.uid);
+-			const group = newGroup ?? (fileInfo?.group || fileInfo.gid);
+-
+-			commands.push(['chown', [`${owner}:${group}`, filePath]]);
++		if (ev.key == 'Tab' && !ev.shiftKey && !ev.ctrlKey && !ev.altKey && !ev.metaKey && !this.tabOut) {
++			ev.preventDefault();
++			if (!document.execCommand('insertText', false, '\t')) {
++				ta.setRangeText('\t', ta.selectionStart, ta.selectionEnd, 'end');
++				ta.dispatchEvent(new Event('input'));
++			}
+ 		}
+ 
+-		let promise = Promise.resolve();
+-		commands.forEach((cmd) => {
+-			promise = promise.then(() => {
+-				return fs.exec(cmd[0], cmd[1]).then((res) => {
+-					if (res.code !== 0) {
+-						return Promise.reject(new Error(res.stderr.trim()));
+-					}
+-				});
+-			});
+-		});
+-		promise.then(() => {
+-			popTimeout(null, E('p', _('Changes to %s "%s" uploaded successfully.').format(_('item'), newItemName)), 5000, 'info');
+-			self.loadFileList(currentPath).then(() => {
+-				self.initResizeableColumns();
+-			});
+-			const statusInfo = document.getElementById('status-info');
+-			const statusProgress = document.getElementById('status-progress');
+-			if (statusInfo) statusInfo.textContent = _('No item selected.');
+-			if (statusProgress) statusProgress.innerHTML = '';
+-		}).catch((err) => {
+-			pop(null, E('p', _('Failed to save changes to %s "%s": %s').format(_('item'), newItemName, err.message)), 'error');
+-		});
++		this.tabOut = false;
+ 	},
+ 
+-	handleSaveSettings(ev) {
+-		ev.preventDefault();
+-		var self = this;
++	setDirty(on) {
++		if (!this.ed || this.ed.dirty == on)
++			return;
++		this.ed.dirty = on;
++		this.renderEditorHead();
++	},
+ 
+-		const parseAndSetConfig = (configPath, value) => {
+-			const input = document.getElementById(`${configPath}-input`);
+-			if (!input) return;
+-			let v = input.value.trim();
++	renderEditorHead() {
++		const ed = this.ed;
++		const r = this.dom.ed;
+ 
+-			if (typeof value == 'object') {
+-				parseKeyValuePairs(v, ':', (k, v) => {
+-					config[configPath][k] = parseInt(v, 10);
+-				});
++		if (!ed || !r)
++			return;
+ 
+-			} else 
+-				config[configPath] = v;
+-		};
++		const info = [ formatSize(ed.stat.size), modeString(ed.stat.mode, 'file') ];
+ 
+-		Object.entries(config).forEach(([configPath, value]) => {
+-			parseAndSetConfig(configPath, value);
+-		});
++		if (ed.mode == 'text') {
++			info.push('UTF-8' + (ed.bom ? ' BOM' : ''));
++			info.push({ crlf: 'CRLF', lf: 'LF', mixed: _('mixed line ends') }[ed.eol]);
++		}
++		if (ed.real != ed.path)
++			info.push(_('link to %s').format(ed.real));
++		if (ed.deleted)
++			info.push(_('deleted on the router'));
++
++		dom.content(r.path, txt(ed.path));
++		dom.content(r.info, [
++			ed.dirty ? E('span', { 'class': 'fm-dirty' }, txt(_('modified') + ' ')) : '',
++			txt(info.join(' · '))
++		]);
+ 
+-			saveConfig().then(() => {
+-				popTimeout(null, E('p', _('Settings uploaded successfully.')), 5000, 'info');
+-				self.setInitialColumnWidths();
+-				const styleElement = document.querySelector('style');
+-				if (styleElement) {
+-					styleElement.textContent = styleElement.textContent.replace(/padding: \d+px/g, 'padding: ' + config.padding + 'px');
+-				}
+-				currentPath = config.currentDirectory || '/';
+-				const pathInput = document.getElementById('path-input');
+-				if (pathInput) {
+-					pathInput.value = currentPath;
+-				}
+-				self.loadFileList(currentPath).then(() => {
+-					self.initResizeableColumns();
+-				});
+-				const editorContainer = document.getElementById('editor-container');
+-				if (editorContainer) {
+-					const editorMode = self.editorMode;
+-					const editorSizes = {
+-						height: config[`${editorMode}editorHeight`] || 550
+-					};
+-					editorContainer.style.height = editorSizes.height + 'px';
+-				}
+-			}).catch((err) => {
+-				pop(null, E('p', _('Failed to save settings: %s').format(err.message)), 'error');
+-			});
++		dom.content(this.dom.tabs.editor, txt(`${_('Editor')}: ${baseName(ed.path)}${ed.dirty ? ' •' : ''}`));
++		this.dom.tabs.editor.title = ed.path;
+ 	},
+ 
+-	// Load settings into the settings form
+-	loadSettings() {
+-		const setInputValue = (inputId, value) => {
+-			const input = document.getElementById(`${inputId}-input`);
+-			if (!input) return;
+-			let v;
+-			if (typeof value == 'object')
+-				input.value = Object.entries(value).map(([id, value]) => {
+-					return `${id}:${value}`
+-				}).join(',');
+-			else
+-				input.value = value;
+-		};
++	fitEditor() {
++		const body = this.dom.ed?.body;
+ 
+-		Object.entries(config).forEach(([inputId, value]) => {
+-			setInputValue(inputId, value);
+-		});
+-	},
++		if (!body || !this.ed)
++			return;
+ 
+-	updateUI() {
+-		const styleElement = document.querySelector('style');
+-		if (styleElement) {
+-			styleElement.textContent = styleElement.textContent.replace(/padding: \d+px/g, `padding: ${config.padding}px`);
++		if (config.editorHeight != 'auto' && parseInt(config.editorHeight, 10) > 0) {
++			body.style.height = `${parseInt(config.editorHeight, 10)}px`;
+ 		}
+-
+-		const editorContainer = document.getElementById('editor-container');
+-		if (editorContainer) {
+-			const editorMode = this.editorMode;
+-			const editorHeight = config[`${editorMode}editorHeight`] || 550;
+-			editorContainer.style.height = `${editorHeight}px`;
++		else {
++			/* the editor with its buttons fits the window below a fixed
++			   header of the theme; the page is scrolled to its start */
++			const vh = window.visualViewport?.height ?? window.innerHeight;
++			const inset = topInset();
++			const panel = this.dom.editor.getBoundingClientRect();
++			const offset = body.getBoundingClientRect().top - panel.top;
++
++			window.scrollBy(0, panel.top - inset - 8);
++			body.style.height = `${Math.max(200, Math.floor(vh - inset - 8 - offset - 12))}px`;
+ 		}
++
++		this.ed.hex?.calculateVisibleRows?.();
++		this.updateGutter();
+ 	},
+ 
+-	renderEditor(filePath) {
+-		const self = this;
++	toggleMode() {
++		const ed = this.ed;
+ 
+-		const editorContainer = document.getElementById('editor-container');
++		if (ed.mode == 'text') {
++			ed.data = this.textBytes();
++			ed.text = this.dom.ed.ta.value;
++			ed.mode = 'hex';
++		}
++		else {
++			const data = ed.hex.getData();
+ 
+-		// Clear the editor container
+-		editorContainer.innerHTML = '';
++			if (!isText(data)) {
++				notify(_('The data is not UTF-8 text and cannot be shown in the text editor.'), 'error');
++				return;
++			}
+ 
+-		// Get the sizes from the config
+-		const mode = self.editorMode; // 'text' or 'hex'
+-		const editorHeight = config[`${mode}editorHeight`] || 550;
++			ed.data = data;
++			ed.textual = true;
++			this.setText(data);
++			ed.mode = 'text';
++		}
+ 
+-		// Create the editor content container
+-		const editorContentContainer = E('div', {
+-			'class': 'editor-content',
+-			'style': 'flex: 1; display: flex; overflow: hidden;'
+-		}, []);
++		this.renderEditorBody();
++	},
+ 
+-		// Action buttons array
+-		let actionButtons = [];
++	reloadFile() {
++		const ed = this.ed;
++		if (!ed || !this.confirmDiscard())
++			return;
++		ed.dirty = false;
++		this.ed = null;
++		return this.openFile(ed.path, ed.mode).then(() => {
++			if (!this.ed)
++				this.ed = ed;
++		});
++	},
+ 
+-		if (mode === 'text') {
+-			// Create line numbers div (initially hidden)
+-			const lineNumbersDiv = E('div', {
+-				'id': 'line-numbers',
+-				'class': 'line-numbers',
+-				'style': 'display: none;' // Initially hidden
+-			}, []);
++	closeEditor() {
++		if (!this.ed || !this.confirmDiscard())
++			return;
+ 
+-			// Create textarea for text editing
+-			const editorTextarea = E('textarea', {
+-				'wrap': 'off',
+-				'id': 'editor-textarea',
+-				'style': 'flex: 1; resize: none; border: none; padding: 0; margin: 0; overflow: auto;'
+-			}, [self.fileContent || '']);
++		this.closeHex();
++		this.ed = null;
++		this.dom.ed = null;
++		dom.content(this.dom.editor, null);
++		dom.content(this.dom.tabs.editor, txt(_('Editor')));
++		this.dom.tabs.editor.disabled = true;
++		this.dom.tabs.editor.title = '';
++
++		if (history.state?.fm == 'edit')
++			history.back();
++		else
++			this.showTab('files');
++	},
+ 
+-			// Append line numbers and textarea to the editor content container
+-			editorContentContainer.appendChild(lineNumbersDiv);
+-			editorContentContainer.appendChild(editorTextarea);
++	saveFile() {
++		const ed = this.ed;
+ 
+-			// Add event listeners for updating line numbers and synchronizing scroll
+-			editorTextarea.addEventListener('input', self.updateLineNumbers.bind(self));
+-			editorTextarea.addEventListener('scroll', self.syncScroll.bind(self));
+-			lineNumbersDiv.addEventListener('scroll', () => {
+-				editorTextarea.scrollTop = lineNumbersDiv.scrollTop;
+-			});
++		if (!ed || this.isBusy())
++			return Promise.resolve();
+ 
+-			// Define action buttons specific to Text Mode
+-			actionButtons = [
+-				E('button', {
+-					'class': 'btn cbi-button-save custom-save-button',
+-					'click'() {
+-						self.handleSaveFile(filePath);
+-					}
+-				}, _('Save')),
+-				E('button', {
+-					'class': 'btn',
+-					'id': 'toggle-hex-mode',
+-					'style': 'margin-left: 10px;',
+-					'click'() {
+-						self.toggleHexMode(filePath);
+-					}
+-				}, _('Toggle to Hex Mode')),
+-				E('button', {
+-					'class': 'btn',
+-					'id': 'toggle-line-numbers',
+-					'style': 'margin-left: 10px;',
+-					'click'() {
+-						self.toggleLineNumbers();
+-					}
+-				}, _('Toggle Line Numbers'))
+-			];
+-		} else if (mode === 'hex') {
+-			// Create hex editor container
+-			const hexeditContainer = E('div', {
+-				'id': 'hexedit-container',
+-				'style': 'flex: 1; overflow: hidden; display: flex; flex-direction: column;'
+-			});
++		const data = (ed.mode == 'text') ? this.textBytes() : ed.hex.getData();
+ 
+-			// Append hex editor to the editor content container
+-			editorContentContainer.appendChild(hexeditContainer);
+-
+-			// Initialize the HexEditor instance
+-
+-			self.hexEditorInstance = HE.initialize(hexeditContainer);
+-
+-			// Load data into the HexEditor
+-			self.hexEditorInstance.setData(self.fileData); // self.fileData is a Uint8Array
+-
+-			// Define action buttons specific to Hex Mode
+-			actionButtons = [
+-				E('button', {
+-					'class': 'btn cbi-button-save custom-save-button',
+-					'click'() {
+-						self.handleSaveFile(filePath);
+-					}
+-				}, _('Save')),
+-				...(self.textType !== 'hex' ? [
+-					E('button', {
+-						'class': 'btn',
+-						'id': 'toggle-text-mode',
+-						'style': 'margin-left: 10px;',
+-						'click'() {
+-							self.toggleHexMode(filePath);
+-						}
+-					}, _('Toggle to ASCII Mode'))
+-				] : [])
+-			];
+-		}
++		return L.resolveDefault(fs.stat(ed.real), null).then((st) => {
++			if (!st)
++				return dialog(_('Save'), [ E('p', {}, txt(_('"%s" no longer exists on the router. Create it again?').format(ed.real))) ], [
++					{ label: _('Cancel'), value: null },
++					{ label: _('Save'), value: true, cls: 'cbi-button-positive', primary: true }
++				]);
+ 
+-		// Create the editor container with resizing and scrolling
+-		const editor = E('div', {
+-			'class': 'editor-container',
+-			'style': 'display: flex; flex-direction: column; height: ' + editorHeight + 'px; resize: both; overflow: hidden;'
+-		}, [
+-			editorContentContainer,
+-			E('div', {
+-				'class': 'cbi-page-actions'
+-			}, actionButtons)
+-		]);
++			if (st.mtime != ed.stat.mtime || st.size != ed.stat.size)
++				return dialog(_('Save'), [ E('p', {}, txt(_('"%s" was changed on the router after it was opened. Overwrite those changes?').format(ed.real))) ], [
++					{ label: _('Cancel'), value: null },
++					{ label: _('Overwrite'), value: true, cls: 'cbi-button-negative', primary: true }
++				]);
+ 
+-		// Append the editor to the editorContainer
+-		editorContainer.appendChild(editor);
++			return true;
++		}).then((ok) => {
++			if (!ok)
++				return;
+ 
+-		// Update status bar and message
+-		const statusInfo = document.getElementById('status-info');
+-		if (statusInfo) {
+-			statusInfo.textContent = _('Editing: ') + filePath;
+-		}
+-		const editorMessage = document.getElementById('editor-message');
+-		if (editorMessage) {
+-			editorMessage.textContent = _('Editing: ') + filePath;
+-		}
++			const label = _('Saving "%s"…').format(baseName(ed.path));
++			this.busy = label;
++			this.setProgress(label, 0);
+ 
+-		// Clear any progress messages
+-		const statusProgress = document.getElementById('status-progress');
+-		if (statusProgress) {
+-			statusProgress.innerHTML = '';
+-		}
++			return uploadBlob(ed.real, new Blob([ data ]), ed.stat.mode & 0o7777, {
++				onUploadProgress: (l, t) => this.setProgress(label, t ? l / t : null)
++			}).then(() => {
++				/* cgi-upload creates a new file owned by root */
++				if (ed.stat.uid || ed.stat.gid)
++					return this.exec('chown', [ `${ed.stat.uid}:${ed.stat.gid}`, '--', ed.real ]);
++			}).then(() => fs.stat(ed.real)).then((st) => {
++				ed.stat = st;
++				ed.deleted = false;
++				if (this.ed === ed) {
++					ed.data = data;
++					this.setDirty(false);
++					this.renderEditorHead();
++				}
++				notify(_('Saved "%s".').format(ed.path));
++				if (this.path == dirName(ed.path) || this.path == dirName(ed.real))
++					this.refresh();
++			}).catch((err) => {
++				notify(_('Failed to save "%s": %s').format(ed.path, errMsg(err)), 'error');
++			}).finally(() => {
++				this.busy = null;
++				this.setProgress(null);
++			});
++		});
++	},
+ 
+-		// **Add ResizeObserver to editor-container to update config.editorContainerSizes**
+-		if (typeof ResizeObserver !== 'undefined') {
+-			// Disconnect existing observer if it exists to prevent multiple observers
+-			if (self.editorResizeObserver) {
+-				self.editorResizeObserver.disconnect();
+-				self.editorResizeObserver = null;
+-			}
++	/* --- settings ----------------------------------------------------- */
+ 
+-			// Initialize a new ResizeObserver instance
+-			self.editorResizeObserver = new ResizeObserver((entries) => {
+-				for (let entry of entries) {
+-					let newHeight = Math.round(entry.contentRect.height);
++	renderSettings() {
++		const row = (label, field, hint) => E('div', { 'class': 'cbi-value' }, [
++			E('label', { 'class': 'cbi-value-title' }, txt(label)),
++			E('div', { 'class': 'cbi-value-field' }, [ field, hint ? E('div', { 'class': 'cbi-value-description' }, txt(hint)) : '' ])
++		]);
++		const select = (value, opts) => E('select', { 'class': 'cbi-input-select' },
++			opts.map(([ v, l ]) => E('option', { 'value': v, 'selected': (String(value) == v) ? '' : null }, txt(l))));
++		const checkbox = on => { const c = E('input', { 'type': 'checkbox' }); c.checked = on; return c; };
++
++		const f = {
++			startMode: select(config.startMode, [ [ 'last', _('The last opened folder') ], [ 'fixed', _('Always the folder below') ] ]),
++			currentDirectory: E('input', { 'type': 'text', 'class': 'cbi-input-text', 'value': config.currentDirectory, 'autocapitalize': 'off', 'spellcheck': 'false' }),
++			foldersFirst: checkbox(config.foldersFirst == '1'),
++			columns: Object.keys(columnTitles).map(c => [ c, checkbox(this.columns().includes(c)) ]),
++			editorWrap: select(config.editorWrap, [ [ 'auto', _('On narrow screens') ], [ 'on', _('Always') ], [ 'off', _('Never') ] ]),
++			editorLineNumbers: checkbox(config.editorLineNumbers == '1'),
++			editorFontSize: select(config.editorFontSize, [ [ 'auto', _('Automatic (16 px on touch screens)') ], ...[ 12, 13, 14, 15, 16, 18, 20 ].map(n => [ String(n), `${n} px` ]) ]),
++			editorHeight: E('input', { 'type': 'number', 'class': 'cbi-input-text', 'min': '200', 'step': '50',
++				'placeholder': _('automatic'), 'value': (config.editorHeight == 'auto') ? '' : config.editorHeight })
++		};
+ 
+-					// Update config only if newWidth and newHeight are greater than 0
+-					if (newHeight > 0) {
+-						config.editorHeight = newHeight;
+-					}
+-				}
++		const apply = (values) => {
++			const old = Object.assign({}, config);
++			Object.assign(config, values);
++			return saveConfig().then(() => {
++				notify(_('Settings saved.'));
++				this.wrap = this.lines = null;
++				this.renderList();
++				if (this.ed)
++					this.renderEditor();
++				this.renderSettings();
++			}).catch((err) => {
++				config = old;
++				notify(_('Failed to save settings: %s').format(errMsg(err)), 'error');
+ 			});
++		};
+ 
+-			// Observe the editor container
+-			self.editorResizeObserver.observe(editor);
+-		}
++		dom.content(this.dom.settings, [
++			E('div', { 'class': 'cbi-section fm-section' }, [
++				E('h3', {}, txt(_('Files'))),
++				row(_('Start in'), f.startMode),
++				row(_('Folder'), f.currentDirectory, _('Used when the start folder is fixed.')),
++				row(_('Folders first'), f.foldersFirst),
++				row(_('Columns'), E('div', {}, f.columns.map(([ c, cb ]) => E('label', { 'class': 'fm-toggle' }, [ cb, txt(columnTitles[c]) ]))),
++					_('On narrow screens the size, date and permissions are shown under the name.'))
++			]),
++			E('div', { 'class': 'cbi-section fm-section' }, [
++				E('h3', {}, txt(_('Editor'))),
++				row(_('Wrap lines'), f.editorWrap),
++				row(_('Line numbers'), f.editorLineNumbers),
++				row(_('Font size'), f.editorFontSize),
++				row(_('Editor height, px'), f.editorHeight, _('Empty: the editor fills the window.'))
++			]),
++			E('div', { 'class': 'fm-bar' }, [
++				E('button', { 'class': 'btn cbi-button cbi-button-save', 'type': 'button', 'click': () => {
++					const h = parseInt(f.editorHeight.value, 10);
++					apply({
++						startMode: f.startMode.value,
++						currentDirectory: normPath(f.currentDirectory.value || '/'),
++						foldersFirst: f.foldersFirst.checked ? '1' : '0',
++						columns: f.columns.filter(([ , cb ]) => cb.checked).map(([ c ]) => c).join(','),
++						editorWrap: f.editorWrap.value,
++						editorLineNumbers: f.editorLineNumbers.checked ? '1' : '0',
++						editorFontSize: f.editorFontSize.value,
++						editorHeight: (h >= 100) ? String(h) : 'auto'
++					});
++				} }, txt(_('Save'))),
++				E('button', { 'class': 'btn cbi-button cbi-button-reset', 'type': 'button', 'click': () => apply(Object.assign({}, defaults)) },
++					txt(_('Reset to defaults')))
++			])
++		]);
+ 	},
+ 
+-	/**
+-	 * Toggles the editor mode between text and hex.
+-	 *
+-	 * @param {string} filePath - The path of the file to be edited.
+-	 */
+-	toggleHexMode(filePath) {
+-		const self = this;
+-
+-		if (self.editorMode === 'text') {
+-			// Before switching to hex mode, update self.fileData from the textarea
+-			const textarea = document.querySelector('#editor-container textarea');
+-			if (textarea) {
+-				const content = textarea.value;
+-				self.fileContent = content;
+-
+-				// Convert content to Uint8Array
+-				const encoder = new TextEncoder();
+-				self.fileData = encoder.encode(content);
+-			}
+-			self.editorMode = 'hex';
+-		} else {
+-			// Before switching to text mode, check if the file is textual
+-			if (self.textType !== 'text') {
+-				pop(null, E('p', _('This file is not a text file and cannot be edited in text mode.')), 'error');
+-				return; // Abort the toggle
+-			}
+-
+-			// Before switching to text mode, update self.fileData from HexEditor
+-			if (self.hexEditorInstance) {
+-				const hexData = self.hexEditorInstance.getData();
+-				if (hexData instanceof Uint8Array) {
+-					self.fileData = hexData;
+-				} else {
+-					pop(null, E('p', _('Failed to retrieve data from Hex Editor.')), 'error');
+-					return; // Abort the toggle if data retrieval fails
+-				}
+-			}
+-
+-			// Convert self.fileData to string
+-			const decoder = new TextDecoder();
+-			try {
+-				self.fileContent = decoder.decode(self.fileData);
+-			} catch (error) {
+-				pop(null, E('p', _('Failed to decode file data to text: %s').format(error.message)), 'error');
+-				return; // Abort the toggle if decoding fails
+-			}
+-			self.editorMode = 'text';
+-		}
++	/* --- help --------------------------------------------------------- */
+ 
+-		// Re-render the editor with the updated mode and content
+-		self.renderEditor(filePath);
++	renderHelp() {
++		const list = items => E('ul', {}, items.map(t => E('li', {}, txt(t))));
++
++		dom.content(this.dom.help, [
++			E('h4', {}, txt(_('Files'))),
++			list([
++				_('Tap or click a name to open a folder or a file. The path above the list leads to any parent folder; ✎ lets you type a path, also of a file.'),
++				_('⋮ next to an item, a right click or a long press opens its actions: edit, hex editor, download, rename, properties, duplicate, copy, cut, copy path, delete.'),
++				_('Tick items to copy, cut, download or delete several at once. Copy and Cut remember the items: open another folder and press Paste here.'),
++				_('A folder or several items are downloaded as a .tar.gz archive made in /tmp; there must be enough free memory for it.'),
++				_('Upload adds files to the current folder; on a computer they can also be dropped onto the list. Files that exist are replaced only after a question, their permissions and owner are kept.'),
++				_('Long operations run on the router in the background, they continue when the page is closed.'),
++				_('Back in the browser returns to the previous folder. The address of the page contains the folder and can be bookmarked.'),
++				_('Keys: Delete, F2 (rename), Ctrl+A, Ctrl+C, Ctrl+X, Ctrl+V, Escape, Alt+↑ (parent folder).')
++			]),
++			E('h4', {}, txt(_('Editor'))),
++			list([
++				_('Save (Ctrl+S) writes the file in place: its permissions, owner, line ends and BOM stay the same. A link is saved to its target.'),
++				_('If the file was changed on the router after it was opened, saving asks before overwriting.'),
++				_('Tab inserts a tab character; press Escape and then Tab to leave the text field.'),
++				_('Files that are not UTF-8 text open in the hex editor. Editing bytes needs a keyboard.'),
++				_('Files larger than 16 MiB are not opened in the browser, download them instead.')
++			])
++		]);
+ 	}
+-
+ });
+-- 
+2.43.0
+

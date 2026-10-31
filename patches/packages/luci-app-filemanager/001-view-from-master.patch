@@ -1,0 +1,1108 @@
+From 3ec5cee1a4bc0e3bb23ef1da0f523a1864ada29c Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 31 Oct 2026 10:00:00 +0000
+Subject: [PATCH] filemanager: take the view from master
+
+The views of the package in openwrt-25.12 are those of December 2025.
+openwrt/luci master has two later changes of the author:
+
+- 357f9fb "flexible width, dark mode, refinements": automatic width
+  and height of the file list and the editors, colors that follow the
+  light or dark mode of the theme, styles limited to the file manager
+  so they do not change other elements of the page;
+- 177cf48 "correctness fixes": the settings form showed the column
+  widths without names and saved them wrong.
+
+The four files are taken from master as they are, so the next patches
+of this folder apply to 25.12 and to master alike. On master this patch
+is found in the sources and skipped.
+---
+ .../resources/view/system/filemanager.js      | 312 +++++++++---------
+ .../view/system/filemanager/HexEditor.js      | 122 +++----
+ .../resources/view/system/filemanager/md.js   |   2 +-
+ .../view/system/filemanager/md_help.js        |  14 +-
+ 4 files changed, 225 insertions(+), 225 deletions(-)
+
+diff --git a/htdocs/luci-static/resources/view/system/filemanager.js b/htdocs/luci-static/resources/view/system/filemanager.js
+index d49a759..b9e4d6f 100644
+--- a/htdocs/luci-static/resources/view/system/filemanager.js
++++ b/htdocs/luci-static/resources/view/system/filemanager.js
+@@ -79,14 +79,8 @@ let config = {
+ 	paddingMin: 5,
+ 	paddingMax: 20,
+ 	currentDirectory: '/', // Current directory
+-
+-	windowHeight: 800,
+-	windowWidth: 400,
+-
+ 	texteditorHeight: 550,
+-	texteditorWidth: 850,
+ 	hexeditorHeight: 550,
+-	hexeditorWidth: 850,
+ 
+ 	// otherSettings: {} // Additional settings
+ };
+@@ -193,11 +187,7 @@ function saveConfig() {
+ 		'\toption paddingMin \'' + config.paddingMin + '\'',
+ 		'\toption paddingMax \'' + config.paddingMax + '\'',
+ 		'\toption currentDirectory \'' + config.currentDirectory + '\'',
+-		'\toption windowHeight \'' + config.windowHeight + '\'',
+-		'\toption windowWidth \'' + config.windowWidth + '\'',
+-		'\toption texteditorWidth \'' + config.texteditorWidth + '\'',
+ 		'\toption texteditorHeight \'' + config.texteditorHeight + '\'',
+-		'\toption hexeditorWidth \'' + config.hexeditorWidth + '\'',
+ 		'\toption hexeditorHeight \'' + config.hexeditorHeight + '\'',
+ 	];
+ 
+@@ -263,7 +253,35 @@ function insertCss(cssContent) {
+ 
+ // CSS styles for the file manager interface
+ const cssContent = `
+-.cbi-button-apply, .cbi-button-reset, .cbi-button-save:not(.custom-save-button) {
++:root {
++	color-scheme: light dark;
++	--light-bg: #EEE;
++	--light-bg-semi: #FFF;
++	--light-bg-semi2: #EEE;
++	--light-color: #111;
++	--light-border: #CCC;
++	--dark-bg: #111;
++	--dark-bg-semi: #222;
++	--dark-bg-semi2: #333;
++	--dark-color: #EEE;
++	--dark-border: #666;
++}
++#file-manager-container,
++#file-manager-container textarea,
++#file-manager-container textarea:hover,
++#file-manager-container input,
++#file-manager-container input:hover {
++	color: light-dark(var(--light-color),var(--dark-color));
++	background-color: light-dark(var(--light-bg-semi), var(--dark-bg-semi));
++}
++.node-admin-system-filemanager .main-right,
++.main-right > #maincontent,
++[data-page=admin-system-filemanager] > #maincontainer > #maincontent {
++    background-color: light-dark(var(--light-bg-semi), var(--dark-bg-semi));
++}
++.cbi-button-apply, 
++.cbi-button-reset, 
++.cbi-button-save:not(.custom-save-button) {
+ 	display: none !important;
+ }
+ .cbi-page-actions {
+@@ -275,88 +293,102 @@ const cssContent = `
+ 	justify-content: flex-start;
+ 	margin-top: 10px;
+ }
+-.cbi-tabmenu {
++#file-manager-container .cbi-tabmenu {
+ 	background: none !important;
+ 	border: none !important;
+ 	margin: 0 !important;
+ 	padding: 0 !important;
+ }
+-.cbi-tabmenu li {
+-	display: inline-block;
+-	margin-right: 10px;
++#file-manager-container .cbi-tabmenu > li[class~="cbi-tab"] {
++	background: none !important;
++}
++#file-manager-container .cbi-tabmenu li {
++	margin: 15px 15px 21px 0;
++	border: 0;
++	height: unset;
++}
++#file-manager-container .cbi-tabmenu > li > a {
++	background-color: light-dark(var(--light-bg), var(--dark-bg));
++	color: light-dark(var(--light-color),var(--dark-color));
++	padding: 3px 13px;
++	border-radius: 5px;
++	border: 1px solid;
++	border-color: light-dark(var(--light-border),var(--dark-border));
++}
++#file-manager-container .cbi-tabmenu > li > a:hover {
++	background-color: light-dark(var(--dark-bg), var(--light-bg));
++	color: light-dark(var(--dark-color),var(--light-color));
+ }
+ #file-list-container {
+-	margin-top: 30px !important;
+ 	overflow: auto;
+-	border: 1px solid #ccc;
++	border-top: 1px solid;
++	border-bottom: 1px solid;
++	border-left: 1px solid;
++	border-color: light-dark(var(--light-border),var(--dark-border));
+ 	padding: 0;
+ 	min-width: 600px;
+ 	position: relative;
+ 	resize: both;
+ }
+-#file-list-container.drag-over {
+-	border: 2px dashed #00BFFF;
+-	background-color: rgba(0, 191, 255, 0.1);
++#file-list {
++	background-color: light-dark(var(--light-bg-semi), var(--dark-bg-semi));
+ }
+-/* Add extra space to the left of the Name and Type columns */
+-.table th:nth-child(1), .table td:nth-child(1),  /* Name column */
+-.table th:nth-child(2), .table td:nth-child(2) { /* Type column */
+-	padding-left: 5px; /* Adjust this value for the desired spacing */
++#file-list > tr:nth-of-type(2n) {
++	background-color: light-dark(var(--light-bg-semi2), var(--dark-bg-semi2));
+ }
+-/* Add extra space to the right of the Size column */
+-.table th:nth-child(3), .table td:nth-child(3) { /* Size column */
+-	padding-right: 5px; /* Adjust this value for the desired spacing */
++#file-table > thead > tr > th:last-child {
++border-right: 1px solid;
++border-color: light-dark(var(--light-border),var(--dark-border));
+ }
+-/* Add extra space to the left of the Size column header */
+-.table th:nth-child(3) { /* Size column header */
+-	padding-left: 15px; /* Adjust this value for the desired spacing */
++#file-list-container .drag-over {
++	border: 2px dashed #00BFFF;
++	background-color: light-dark(var(--light-bg), var(--dark-bg));
+ }
+-
+ #drag-overlay {
+ 	position: absolute;
+ 	top: 0;
+ 	left: 0;
+ 	width: 100%;
+ 	height: 100%;
+-	background-color: rgba(0, 191, 255, 0.2);
++	background-color: light-dark(var(--light-bg), var(--dark-bg));
+ 	display: flex;
+ 	align-items: center;
+ 	justify-content: center;
+ 	font-size: 24px;
+-	color: #00BFFF;
++	color: light-dark(var(--light-color), var(--dark-color));
+ 	z-index: 10;
+ 	pointer-events: none;
+ }
+-#content-editor {
+-	margin-top: 30px !important;
+-}
+-.editor-container {
++#file-manager-container .editor-container {
+ 	display: flex;
+ 	flex-direction: column;
+ 	resize: both;
+ 	overflow: hidden;
+ }
+-.editor-content {
++#file-manager-container .editor-content {
+ 	flex: 1;
+ 	display: flex;
+ 	overflow: hidden;
++	border: 1px solid;
++	border-color: light-dark(var(--light-border),var(--dark-border));
+ }
+-.line-numbers {
++#file-manager-container .line-numbers {
+ 	width: 50px;
+-	background-color: #f0f0f0;
++	background-color: light-dark(var(--light-bg), var(--dark-bg));
+ 	text-align: right;
+ 	padding-right: 5px;
+ 	user-select: none;
+-	border-right: 1px solid #ccc;
++	border-right: 1px solid;
++	border-color: light-dark(var(--light-border),var(--dark-border));
+ 	overflow: hidden;
+ 	flex-shrink: 0;
+ 	-ms-overflow-style: none; /* Hide scrollbar in IE и Edge */
+ 	scrollbar-width: none; /* Hide scrollbar in Firefox */
+ }
+-.line-numbers::-webkit-scrollbar {
++#file-manager-container .line-numbers::-webkit-scrollbar {
+ 	display: none; /* Hide scrollbar in Chrome, Safari и Opera */
+ }
+-.line-numbers div {
++#file-manager-container .line-numbers div {
+ 	font-family: monospace;
+ 	font-size: 14px;
+ 	line-height: 1.2em;
+@@ -381,94 +413,107 @@ const cssContent = `
+ #editor-textarea, .line-numbers {
+ 	overflow-y: scroll;
+ }
+-th {
++#file-manager-container .parent-dir {
++	background-color: light-dark(var(--light-bg), var(--dark-bg));
++	border-top: 1px solid;
++	border-bottom: 1px solid;
++	border-color: light-dark(var(--light-border),var(--dark-border));
++}
++#file-table th {
+ 	text-align: left !important;
+ 	position: sticky;
+ 	top: 0;
+-	border-right: 1px solid #ddd;
++	border-right: 1px solid;
++	border-color: light-dark(var(--light-border),var(--dark-border));
+ 	box-sizing: border-box;
+ 	padding-right: 30px;
+ 	white-space: nowrap;
+ 	min-width: 100px;
+-	background-color: #fff;
++	background-color: light-dark(var(--light-bg), var(--dark-bg));
+ 	z-index: 2;
++	padding: 5px 6px;
++	color: light-dark(var(--light-color),var(--dark-color));
+ }
+-td {
++#file-table td {
+ 	text-align: left !important;
+-	border-right: 1px solid #ddd;
++	border-right: 1px solid;
++	border-color: light-dark(var(--light-border),var(--dark-border));
+ 	box-sizing: border-box;
+ 	white-space: nowrap;
+ 	min-width: 100px;
+ 	overflow: hidden;
+ 	text-overflow: ellipsis;
++	padding: 1px 6px;
++	color: light-dark(var(--light-color),var(--dark-color));
+ }
+-tr:hover {
+-	background-color: #f0f0f0 !important;
++#file-manager-container th:last-child, td:last-child {
++	border-right: 0;
+ }
+-.download-button {
++#file-manager-container tr:hover {
++	background-color: light-dark(var(--light-bg), var(--dark-bg)) !important;
++}
++#file-manager-container .download-button {
+ 	color: green;
+ 	cursor: pointer;
+ 	margin-left: 5px;
+ }
+-.delete-button {
++#file-manager-container .delete-button {
+ 	color: red;
+ 	cursor: pointer;
+ 	margin-left: 5px;
+ }
+-.edit-button {
++#file-manager-container .edit-button {
+ 	color: blue;
+ 	cursor: pointer;
+ 	margin-left: 5px;
+ }
+-.duplicate-button {
++#file-manager-container .duplicate-button {
+ 	color: orange;
+ 	cursor: pointer;
+ 	margin-left: 5px;
+ }
+-.symlink {
++#file-manager-container .symlink {
+ 	color: green;
+ }
+-.status-link {
++#file-manager-container .status-link {
+ 	color: blue;
+ 	text-decoration: underline;
+ 	cursor: pointer;
+ }
+-.action-button {
++#file-manager-container .action-button {
+ 	margin-right: 10px;
+ 	cursor: pointer;
+ }
+-.size-cell {
++#file-manager-container .size-cell {
+ 	font-family: monospace;
+ 	box-sizing: border-box;
+ 	white-space: nowrap;
+ 	align-items: center;
+ }
+-.size-number {
++#file-manager-container .size-number {
+ 	display: inline-block;
+ 	width: 8ch;
+ 	text-align: right;
+ }
+-.size-unit {
++#file-manager-container .size-unit {
+ 	display: inline-block;
+ 	width: 4ch;
+ 	text-align: right;
+ 	margin-left: 0.5ch;
+ }
+-.table {
++#file-manager-container .table {
+ 	table-layout: fixed;
+ 	border-collapse: collapse;
+ 	white-space: nowrap;
+ 	width: 100%;
++	margin: 0 !important;
+ }
+-.table th:nth-child(3), .table td:nth-child(3) {
++#file-manager-container .table th:nth-child(3), .table td:nth-child(3) {
+ 	width: 100px;
+ 	min-width: 100px;
+ 	max-width: 500px;
+ }
+-.table th:nth-child(3) + th, .table td:nth-child(3) + td {
+-	padding-left: 10px;
+-}
+-.resizer {
++#file-manager-container .resizer {
+ 	position: absolute;
+ 	right: 0;
+ 	top: 0;
+@@ -478,7 +523,7 @@ tr:hover {
+ 	user-select: none;
+ 	z-index: 3;
+ }
+-.resizer::after {
++#file-manager-container .resizer::after {
+ 	content: "";
+ 	position: absolute;
+ 	right: 2px;
+@@ -491,13 +536,14 @@ tr:hover {
+ 	resize: both;
+ 	overflow: auto;
+ }
+-.sort-button {
++#file-manager-container .sort-button {
+ 	position: absolute;
+ 	right: 10px;
+ 	top: 50%;
+ 	transform: translateY(-50%);
+ 	background: none;
+-	border: 1px solid #ccc; /* Add a visible border */
++	border: 1px solid; /* Add a visible border */
++	border-color: light-dark(var(--light-border),var(--dark-border));
+ 	color: #fff; /* White text color for better contrast on dark backgrounds */
+ 	cursor: pointer;
+ 	padding: 2px 5px; /* Add padding for better clickability */
+@@ -507,19 +553,21 @@ tr:hover {
+ 	transition: background-color 0.3s, color 0.3s; /* Smooth transition effects for hover */
+ }
+ 
+-.sort-button:hover {
++#file-manager-container .sort-button:hover {
+ 	background-color: #fff; /* Change background to white on hover */
+ 	color: #000; /* Change text color to black on hover */
+ 	border-color: #fff; /* White border on hover */
+ }
+-.sort-button:focus {
++#file-manager-container .sort-button:focus {
+ 	outline: none;
+ }
+ #status-bar {
+ 	margin-top: 10px;
+ 	padding: 10px;
+ 	background-color: #f9f9f9;
+-	border: 1px solid #ccc;
++	background-color: light-dark(var(--light-bg), var(--dark-bg));
++	border: 1px solid;
++	border-color: light-dark(var(--light-border),var(--dark-border));
+ 	min-height: 40px;
+ 	display: flex;
+ 	align-items: center;
+@@ -530,19 +578,22 @@ tr:hover {
+ 	display: flex;
+ 	align-items: center;
+ }
++#status-info span {
++	padding-right: 10px;
++}
+ #status-progress {
+ 	width: 50%;
+ }
+ .cbi-progressbar {
+ 	width: 100%;
+-	background-color: #e0e0e0;
++	background-color: light-dark(var(--light-bg), var(--dark-bg));
+ 	border-radius: 5px;
+ 	overflow: hidden;
+ 	height: 10px;
+ }
+ .cbi-progressbar div {
+ 	height: 100%;
+-	background-color: #76c7c0;
++	background-color: light-dark(var(--light-bg), var(--dark-bg));
+ 	width: 0%;
+ 	transition: width 0.2s;
+ }
+@@ -552,26 +603,38 @@ tr:hover {
+ }
+ .file-manager-header h2 {
+ 	margin: 0;
++	min-width: fit-content;
+ }
+ .file-manager-header input {
+ 	margin-left: 10px;
+ 	width: 100%;
+-	max-width: 700px;
+ 	font-size: 18px;
+ }
+-.file-manager-header button {
+-	margin-left: 10px;
++#go-button {
+ 	font-size: 18px;
++	background-color: light-dark(var(--light-bg), var(--dark-bg));
++	color: light-dark(var(--light-color),var(--dark-color));
++	border-radius: 5px;
++	border: 1px solid;
++	border-color: light-dark(var(--light-border),var(--dark-border));
++}
++#go-button:hover {
++	background-color: light-dark(var(--dark-bg), var(--light-bg));
++	color: light-dark(var(--dark-color),var(--light-color));
+ }
+-.directory-link {
+-	/* Choose a color with good contrast or let the theme decide */
+-	color: #00BFFF; /* DeepSkyBlue */
++#file-manager-container .directory-link {
+ 	font-weight: bold;
+ }
+ 
+-.file-link {
++#file-manager-container .file-link {
+ 	color: inherit; /* Use the default text color */
+ }
++#content-settings h3 {
++  margin-top: 0;
++  padding-top: 0;
++  padding-bottom: 25px;
++  line-height: unset;
++}
+ `;
+ 
+ 
+@@ -614,8 +677,8 @@ return view.extend({
+ 				E('button', {
+ 					'id': 'go-button',
+ 					'click': this.handleGoButtonClick.bind(this),
+-					'style': 'margin-left: 10px;'
+-				}, _('Go'))
++					'style': 'margin-left: 10px; padding: 3px 12px;'
++				}, _('&#8594;'))
+ 			]),
+ 
+ 			// Tab Panels
+@@ -682,7 +745,6 @@ return view.extend({
+ 						const fileListContainer = E('div', {
+ 							'id': 'file-list-container',
+ 							'class': 'resizeable',
+-							'style': 'width: ' + config.windowWidth + 'px; height: ' + config.windowHeight + 'px;'
+ 						}, [
+ 							E('table', {
+ 								'class': 'table',
+@@ -840,7 +902,7 @@ return view.extend({
+ 				E('div', {
+ 					'id': 'content-help',
+ 					'class': 'cbi-tab',
+-					'style': 'display:none; padding: 10px; overflow:auto; width: 650px; height: 600px; resize: both; border: 1px solid #ccc; box-sizing: border-box;'
++					'style': 'display:none; padding: 10px; overflow:auto; width: 100%; height: 600px; resize: both; border: 1px solid; border-color: light-dark(var(--light-border),var(--dark-border)); box-sizing: border-box;'
+ 				}, [
+ 					// The content will be dynamically inserted by renderHelp()
+ 				]),
+@@ -851,9 +913,7 @@ return view.extend({
+ 					'class': 'cbi-tab',
+ 					'style': 'display:none;'
+ 				}, [
+-					E('div', {
+-						'style': 'margin-top: 20px;'
+-					}, [
++					E('div', {}, [
+ 						E('h3', {}, _('Interface Settings')),
+ 						E('div', {
+ 							'id': 'settings-container'
+@@ -861,33 +921,6 @@ return view.extend({
+ 							E('form', {
+ 								'id': 'settings-form'
+ 							}, [
+-								E('div', {}, [
+-									E('label', {}, _('Window Width:')),
+-									E('input', {
+-										'type': 'number',
+-										'id': 'windowWidth-input',
+-										'value': config.windowWidth,
+-										'style': 'width:100%; margin-bottom:10px;'
+-									})
+-								]),
+-								E('div', {}, [
+-									E('label', {}, _('Window Height:')),
+-									E('input', {
+-										'type': 'number',
+-										'id': 'windowHeight-input',
+-										'value': config.windowHeight,
+-										'style': 'width:100%; margin-bottom:10px;'
+-									})
+-								]),
+-								E('div', {}, [
+-									E('label', {}, _('Text Editor Width:')),
+-									E('input', {
+-										'type': 'number',
+-										'id': 'texteditorWidth-input',
+-										'value': config.texteditorWidth,
+-										'style': 'width:100%; margin-bottom:10px;'
+-									})
+-								]),
+ 								E('div', {}, [
+ 									E('label', {}, _('Text Editor Height:')),
+ 									E('input', {
+@@ -897,15 +930,6 @@ return view.extend({
+ 										'style': 'width:100%; margin-bottom:10px;'
+ 									})
+ 								]),
+-								E('div', {}, [
+-									E('label', {}, _('Hex Editor Width:')),
+-									E('input', {
+-										'type': 'number',
+-										'id': 'hexeditorWidth-input',
+-										'value': config.hexeditorWidth,
+-										'style': 'width:100%; margin-bottom:10px;'
+-									})
+-								]),
+ 								E('div', {}, [
+ 									E('label', {}, _('Hex Editor Height:')),
+ 									E('input', {
+@@ -920,7 +944,7 @@ return view.extend({
+ 									E('input', {
+ 										'type': 'text',
+ 										'id': 'columnWidths-input',
+-										'value': Object.values(config.columnWidths).join(''),
++										'value': Object.entries(config.columnWidths).map(([k,v]) => k+':'+v).join(','),
+ 										'style': 'width:100%; margin-bottom:10px;'
+ 									})
+ 								]),
+@@ -929,7 +953,7 @@ return view.extend({
+ 									E('input', {
+ 										'type': 'text',
+ 										'id': 'columnMinWidths-input',
+-										'value': Object.values(config.columnMinWidths).join(''),
++										'value': Object.entries(config.columnMinWidths).map(([k,v]) => k+':'+v).join(','),
+ 										'style': 'width:100%; margin-bottom:10px;'
+ 									})
+ 								]),
+@@ -938,7 +962,7 @@ return view.extend({
+ 									E('input', {
+ 										'type': 'text',
+ 										'id': 'columnMaxWidths-input',
+-										'value': Object.values(config.columnMaxWidths).join(''),
++										'value': Object.entries(config.columnMaxWidths).map(([k,v]) => k+':'+v).join(','),
+ 										'style': 'width:100%; margin-bottom:10px;'
+ 									})
+ 								]),
+@@ -1014,12 +1038,6 @@ return view.extend({
+ 						for (let entry of entries) {
+ 							const newWidth = entry.contentRect.width;
+ 							const newHeight = entry.contentRect.height;
+-
+-							// Update config only if newWidth and newHeight are greater than 0
+-							if (newWidth > 0 && newHeight > 0) {
+-								config.windowWidth = newWidth;
+-								config.windowHeight = newHeight;
+-							}
+ 						}
+ 					});
+ 					self.fileListResizeObserver.observe(fileListContainer);
+@@ -1146,8 +1164,8 @@ return view.extend({
+ 
+ 		if (helpContent) {
+ 			// Set initial dimensions
+-			helpContent.style.width = '700px';
+-			helpContent.style.height = '600px';
++			helpContent.style.width = '100%';
++			helpContent.style.height = '500px';
+ 			helpContent.style.resize = 'both';
+ 			helpContent.style.overflow = 'auto';
+ 			helpContent.style.border = '1px solid #ccc';
+@@ -1560,7 +1578,7 @@ return view.extend({
+ 				for (const col of columns) {
+ 					if (col === 'name') {
+ 						tr.appendChild(
+-							E('td', { colspan: columns.length }, [
++							E('td', { colspan: columns.length, 	class: 'parent-dir' }, [
+ 								E('a', {
+ 									href: '#',
+ 									click: () => self.handleDirectoryClick(parentPath)
+@@ -2401,11 +2419,6 @@ return view.extend({
+ 				if (styleElement) {
+ 					styleElement.textContent = styleElement.textContent.replace(/padding: \d+px/g, 'padding: ' + config.padding + 'px');
+ 				}
+-				const fileListContainer = document.getElementById('file-list-container');
+-				if (fileListContainer) {
+-					fileListContainer.style.width = config.windowWidth + 'px';
+-					fileListContainer.style.height = config.windowHeight + 'px';
+-				}
+ 				currentPath = config.currentDirectory || '/';
+ 				const pathInput = document.getElementById('path-input');
+ 				if (pathInput) {
+@@ -2418,10 +2431,8 @@ return view.extend({
+ 				if (editorContainer) {
+ 					const editorMode = self.editorMode;
+ 					const editorSizes = {
+-						width: config[`${editorMode}editorWidth`] || 850,
+ 						height: config[`${editorMode}editorHeight`] || 550
+ 					};
+-					editorContainer.style.width = editorSizes.width + 'px';
+ 					editorContainer.style.height = editorSizes.height + 'px';
+ 				}
+ 			}).catch((err) => {
+@@ -2454,18 +2465,10 @@ return view.extend({
+ 			styleElement.textContent = styleElement.textContent.replace(/padding: \d+px/g, `padding: ${config.padding}px`);
+ 		}
+ 
+-		const fileListContainer = document.getElementById('file-list-container');
+-		if (fileListContainer) {
+-			fileListContainer.style.width = `${config.windowWidth}px`;
+-			fileListContainer.style.height = `${config.windowHeight}px`;
+-		}
+-
+ 		const editorContainer = document.getElementById('editor-container');
+ 		if (editorContainer) {
+ 			const editorMode = this.editorMode;
+ 			const editorHeight = config[`${editorMode}editorHeight`] || 550;
+-			const editorWidth = config[`${editorMode}editorWidth`] || 850;
+-			editorContainer.style.width = `${editorWidth}px`;
+ 			editorContainer.style.height = `${editorHeight}px`;
+ 		}
+ 	},
+@@ -2481,7 +2484,6 @@ return view.extend({
+ 		// Get the sizes from the config
+ 		const mode = self.editorMode; // 'text' or 'hex'
+ 		const editorHeight = config[`${mode}editorHeight`] || 550;
+-		const editorWidth = config[`${mode}editorWidth`] || 850;
+ 
+ 		// Create the editor content container
+ 		const editorContentContainer = E('div', {
+@@ -2584,7 +2586,7 @@ return view.extend({
+ 		// Create the editor container with resizing and scrolling
+ 		const editor = E('div', {
+ 			'class': 'editor-container',
+-			'style': 'display: flex; flex-direction: column; width: ' + editorWidth + 'px; height: ' + editorHeight + 'px; resize: both; overflow: hidden;'
++			'style': 'display: flex; flex-direction: column; height: ' + editorHeight + 'px; resize: both; overflow: hidden;'
+ 		}, [
+ 			editorContentContainer,
+ 			E('div', {
+@@ -2622,12 +2624,10 @@ return view.extend({
+ 			// Initialize a new ResizeObserver instance
+ 			self.editorResizeObserver = new ResizeObserver((entries) => {
+ 				for (let entry of entries) {
+-					let newWidth = Math.round(entry.contentRect.width);
+ 					let newHeight = Math.round(entry.contentRect.height);
+ 
+ 					// Update config only if newWidth and newHeight are greater than 0
+-					if (newWidth > 0 && newHeight > 0) {
+-						config.editorWidth = newWidth;
++					if (newHeight > 0) {
+ 						config.editorHeight = newHeight;
+ 					}
+ 				}
+diff --git a/htdocs/luci-static/resources/view/system/filemanager/HexEditor.js b/htdocs/luci-static/resources/view/system/filemanager/HexEditor.js
+index 56786b8..e3e1ffb 100644
+--- a/htdocs/luci-static/resources/view/system/filemanager/HexEditor.js
++++ b/htdocs/luci-static/resources/view/system/filemanager/HexEditor.js
+@@ -25,12 +25,14 @@ function injectHexEditorCSS() {
+ 
+ var hexeditCssContent = `
+ /* Hex Editor CSS Styles */
+-.hexview:focus,
+-.textview:focus {
++
++#file-manager-container .hexview:focus,
++#file-manager-container .textview:focus {
+ 	outline: none;
+ 	box-shadow: none;
+ 	border-right: 2px solid var(--clr-border); 
+ }
++
+ :root {
+ 	--span-spacing: 0.25ch;
+ 	--clr-background: #f5f5f5;
+@@ -47,41 +49,40 @@ var hexeditCssContent = `
+ }
+ 
+ /* Apply box-sizing to all elements */
+-.hexedit *,
+-.hexedit *::before,
+-.hexedit *::after {
++#file-manager-container .hexedit *,
++#file-manager-container .hexedit *::before,
++#file-manager-container .hexedit *::after {
+ 	box-sizing: border-box;
+ }
+ 
+ /* Main hex editor container */
+-.hexedit {
++#file-manager-container .hexedit {
+ 	display: flex;
+ 	flex-direction: column;
+ 	flex: 1; /* Allow hexedit to expand */
+ 	font-family: monospace;
+ 	font-size: 14px;
+ 	line-height: 1.2em;
+-	background-color: var(--clr-background);
+ 	border: 1px solid var(--clr-border);
+ 	width: 100%;
+ }
+ 
+-.hexedit:focus {
++#file-manager-container .hexedit:focus {
+ 	outline: none;
+ }
+ 
+ /* Headers container */
+-.hexedit-headers {
++#file-manager-container .hexedit-headers {
+ 	display: flex;
+-	background-color: var(--clr-background);
+ 	border-bottom: 2px solid var(--clr-border);
+ 	font-family: monospace;
++	background: #ccc;
+ }
+ 
+ /* Header styles */
+-.offsets-header,
+-.hexview-header,
+-.textview-header {
++#file-manager-container .offsets-header,
++#file-manager-container .hexview-header,
++#file-manager-container .textview-header {
+ 	display: flex;
+ 	align-items: center;
+ 	padding: 5px;
+@@ -91,34 +92,34 @@ var hexeditCssContent = `
+ 	border-right: 2px solid var(--clr-border);
+ }
+ 
+-.offsets-header {
++#file-manager-container .offsets-header {
+ 	width: 100px; /* Ensure alignment with .offsets */
+ 	text-align: left;
+ }
+ 
+-.hexview-header {
++#file-manager-container .hexview-header {
+ 	width: calc(16 * 2ch + 20 * var(--span-spacing)); /* Increased width to match content */
+ 	display: flex;
+ }
+ 
+-.hexview-header span {
++#file-manager-container .hexview-header span {
+ 	width: 2ch;
+ 	margin-right: var(--span-spacing);
+ 	text-align: center;
+ }
+ 
+-.hexview-header span:last-child {
++#file-manager-container .hexview-header span:last-child {
+ 	margin-right: 0;
+ }
+ 
+-.textview-header {
++#file-manager-container .textview-header {
+ 	flex: 1;
+ 	margin-left: 10px;
+ 	text-align: left;
+ }
+ 
+ /* Content container */
+-.hexedit-content {
++#file-manager-container .hexedit-content {
+ 	display: flex;
+ 	height: 100%;
+ 	flex: 1 1 auto;
+@@ -128,9 +129,9 @@ var hexeditCssContent = `
+ }
+ 
+ /* Columns */
+-.offsets,
+-.hexview,
+-.textview {
++#file-manager-container .offsets,
++#file-manager-container .hexview,
++#file-manager-container .textview {
+ 	flex-shrink: 0;
+ 	display: block;
+ 	padding: 5px;
+@@ -138,24 +139,24 @@ var hexeditCssContent = `
+ 	border-right: 2px solid var(--clr-border);
+ }
+ 
+-.offsets {
++#file-manager-container .offsets {
+ 	width: 100px; /* Increased width to match content */
+ 	display: flex;
+ 	flex-direction: column;
+ 	text-align: left;
+ }
+ 
+-.offsets span {
++#file-manager-container .offsets span {
+ 	display: block;
+ 	height: 1.2em;
+ }
+ 
+-.hexview {
++#file-manager-container .hexview {
+ 	width: calc(16 * 2ch + 20 * var(--span-spacing)); /* Increased width to match content */
+ 	text-align: center;
+ }
+ 
+-.textview {
++#file-manager-container .textview {
+ 	flex: 1;
+ 	margin-left: 10px;
+ 	text-align: left;
+@@ -163,15 +164,15 @@ var hexeditCssContent = `
+ }
+ 
+ /* Line containers */
+-.hex-line,
+-.text-line {
++#file-manager-container .hex-line,
++#file-manager-container .text-line {
+ 	display: flex;
+ 	height: 1.2em;
+ }
+ 
+ /* Byte spans */
+-.hex-line span,
+-.text-line span {
++#file-manager-container .hex-line span,
++#file-manager-container .text-line span {
+ 	width: 2ch;
+ 	margin-right: var(--span-spacing);
+ 	text-align: center;
+@@ -179,68 +180,67 @@ var hexeditCssContent = `
+ 	cursor: default;
+ }
+ 
+-.hex-line span:last-child,
+-.hexview-header span:last-child,
+-.text-line span:last-child {
++#file-manager-container .hex-line span:last-child,
++#file-manager-container .hexview-header span:last-child,
++#file-manager-container .text-line span:last-child {
+ 	margin-right: 0;
+ }
+ 
+ /* Selections */
+-.selected {
++#file-manager-container .selected {
+ 	background-color: var(--clr-selected);
+ }
+ 
+-.selected-editing {
++#file-manager-container .selected-editing {
+ 	background-color: var(--clr-selected-editing);
+ }
+ 
+-.non-printable {
++#file-manager-container .non-printable {
+ 	color: var(--clr-non-printable);
+ }
+ 
+ /* Remove individual scrollbars */
+-.offsets::-webkit-scrollbar,
+-.hexview::-webkit-scrollbar,
+-.textview::-webkit-scrollbar {
++#file-manager-container .offsets::-webkit-scrollbar,
++#file-manager-container .hexview::-webkit-scrollbar,
++#file-manager-container .textview::-webkit-scrollbar {
+ 	display: none;
+ }
+ 
+-.offsets,
+-.hexview,
+-.textview {
++#file-manager-container .offsets,
++#file-manager-container .hexview,
++#file-manager-container .textview {
+ 	scrollbar-width: none; /* For Firefox */
+ }
+ 
+ /* Adjust overall layout */
+-.hexedit .offsets,
+-.hexedit .hexview,
+-.hexedit .textview {
++#file-manager-container .hexedit .offsets,
++#file-manager-container .hexedit .hexview,
++#file-manager-container .hexedit .textview {
+ 	border-right: 2px solid var(--clr-border);
+ }
+ 
+-.hexedit .textview {
++#file-manager-container .hexedit .textview {
+ 	border-right: none;
+ }
+ 
+ /* Responsive adjustments */
+ @media (max-width: 768px) {
+-	.hexedit {
++	#file-manager-container .hexedit {
+ 	font-size: 12px;
+ 	}
+ 
+-	.offsets {
++	#file-manager-container .offsets {
+ 	width: 120px; /* Adjust for smaller screens */
+ 	}
+ 
+-	.hexview {
++	#file-manager-container .hexview {
+ 	width: calc(16 * 2ch + 20 * var(--span-spacing));
+ 	}
+ }
+ 
+ /* Search container styles */
+-.hexedit-search-container {
++#file-manager-container .hexedit-search-container {
+ 	padding: 10px;
+-	background-color: #f9f9f9;
+ 	border-bottom: 1px solid #ccc; /* Border to separate from headers */
+ 	display: flex;
+ 	flex-direction: column; /* Stack search groups vertically */
+@@ -250,7 +250,7 @@ var hexeditCssContent = `
+ }
+ 
+ /* Search group styles */
+-.hexedit-search-group {
++#file-manager-container .hexedit-search-group {
+ 	display: flex;
+ 	align-items: center;
+ 	gap: 5px;
+@@ -258,7 +258,7 @@ var hexeditCssContent = `
+ }
+ 
+ /* Search input fields */
+-.hexedit-search-input {
++#file-manager-container .hexedit-search-input {
+ 	flex: 1;
+ 	padding: 8px;
+ 	border: 1px solid #ddd;
+@@ -267,15 +267,14 @@ var hexeditCssContent = `
+ }
+ 
+ /* Search status fields */
+-.hexedit-search-status {
++#file-manager-container .hexedit-search-status {
+ 	width: 50px;
+ 	text-align: center;
+ 	font-size: 14px;
+-	color: #555;
+ }
+ 
+ /* Find Previous and Next buttons */
+-.hexedit-search-button {
++#file-manager-container .hexedit-search-button {
+ 	padding: 8px 12px;
+ 	cursor: pointer;
+ 	background-color: #007bff;
+@@ -286,12 +285,12 @@ var hexeditCssContent = `
+ 	transition: background-color 0.3s ease;
+ }
+ 
+-.hexedit-search-button:hover {
++#file-manager-container .hexedit-search-button:hover {
+ 	background-color: #0056b3;
+ }
+ 
+ /* Highlight search results */
+-.search-highlight {
++#file-manager-container .search-highlight {
+ 	background-color: var(--clr-highlight);
+ }
+ 
+@@ -303,18 +302,19 @@ var hexeditCssContent = `
+ }
+ 
+ /* Classes for active view cursor blinking */
+-.active-view-cursor {
++#file-manager-container .active-view-cursor {
+ 	animation: blink-blue var(--animation-duration) infinite;
+ 	background-color: var(--clr-cursor-active); /* Initial color */
+ }
+ 
+ /* Classes for passive view cursor highlighting */
+-.passive-view-cursor {
++#file-manager-container .passive-view-cursor {
+ 	background-color: var(--clr-cursor-passive);
++	color: #000;
+ }
+ 
+ /* Highlighted class to maintain yellow background for matches */
+-.highlighted {
++#file-manager-container .highlighted {
+ 	background-color: var(--clr-highlight);
+ }
+ `;
+diff --git a/htdocs/luci-static/resources/view/system/filemanager/md.js b/htdocs/luci-static/resources/view/system/filemanager/md.js
+index 48100fb..3912bdd 100644
+--- a/htdocs/luci-static/resources/view/system/filemanager/md.js
++++ b/htdocs/luci-static/resources/view/system/filemanager/md.js
+@@ -153,4 +153,4 @@ function escapeHtml(text) {
+ 
+ return L.Class.extend({
+ 	parseMarkdown: parseMarkdown,
+-});
+\ No newline at end of file
++});
+diff --git a/htdocs/luci-static/resources/view/system/filemanager/md_help.js b/htdocs/luci-static/resources/view/system/filemanager/md_help.js
+index fd21c06..61b1d62 100644
+--- a/htdocs/luci-static/resources/view/system/filemanager/md_help.js
++++ b/htdocs/luci-static/resources/view/system/filemanager/md_help.js
+@@ -51,8 +51,8 @@ The **LuCI OpenWrt File Manager** is a tool to navigate directories, manage file
+ 
+ 6. **Customizable Settings**
+    - **Interface Customization**:
+-     - **Column Widths**: Define the width of each column in the file list for optimal viewing.
+-     - **Window Sizes**: Adjust the size of the file list container and editor windows.
++     - **Column Width**: Define the width of each column in the file list for optimal viewing.
++     - **Window Height**: Adjust the height of each editor window.
+      - **Padding**: Set padding values to control the spacing within the interface.
+    - **Persistent Configuration**: Save your settings to ensure a consistent user experience across sessions.
+ 
+@@ -60,18 +60,18 @@ The **LuCI OpenWrt File Manager** is a tool to navigate directories, manage file
+ 
+ 1. **Accessing the Application**
+    - Navigate to your OpenWrt device's LuCI web interface.
+-   - Locate and select the **File Manager** application from **System** menu .
++   - Locate and select the **File Manager** application from **System** menu.
+ 
+ 2. **Navigating the Interface**
+    - **Tabs**: Use the top navigation tabs to switch between **File Manager**, **Editor**, **Settings**, and **Help**.
+    - **File Manager Tab**:
+      - Browse through directories by clicking on folder names.
+-     - Use the "Go" button or press "Enter" after typing a path in the path input field to navigate to specific directories.
++     - Use the "→" button or press "Enter" after typing a path in the path input field to navigate to specific directories.
+    - **Editor Tab**:
+      - Select a file from the File Manager to open it in the Editor.
+      - Choose between text or hex editing modes using the toggle buttons.
+    - **Settings Tab**:
+-     - Adjust interface settings such as column widths, window sizes, and padding.
++     - Adjust interface settings such as column width, editor window height, and padding.
+      - Save your configurations to apply changes immediately.
+    - **Help Tab**:
+      - Access detailed instructions and information about the application's features and functionalities.
+@@ -113,12 +113,12 @@ The **LuCI OpenWrt File Manager** is a tool to navigate directories, manage file
+ 
+ 6. **Customizing Settings**
+    - Navigate to the **Settings Tab** to personalize the application's layout and behavior.
+-   - Adjust parameters such as column widths, window sizes, and padding to suit your preferences.
++   - Adjust parameters such as column width, editor window height, and padding to suit your preferences.
+    - Save settings to ensure they persist across sessions.
+ 
+ ## Additional Functionalities
+ 
+-- **Resizeable Columns and Windows**: Enhance the interface's flexibility by resizing table columns and editor windows to match your workflow. The Help window starts at **650x600** pixels and can be adjusted as needed.
++- **Resizeable Columns and Windows**: Enhance the interface's flexibility by resizing table columns and editor windows to match your workflow.
+ - **Responsive Design**: The application adapts to different screen sizes, ensuring usability across various devices.
+ - **Error Handling and Notifications**: Receive immediate feedback on actions, helping you stay informed about the status of your file management tasks.
+ - **Line Number Toggle**: Easily show or hide line numbers in the text editor to assist with content navigation.
+-- 
+2.43.0
+

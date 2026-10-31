@@ -1,0 +1,511 @@
+From 012cd792f4561a6aad470ac250cb12970bac34ea Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 31 Oct 2026 10:00:02 +0000
+Subject: [PATCH] filemanager: Russian translation of the new strings
+
+The strings of the previous patch in a separate catalog
+po/ru/filemanager-ext.po: it is built into the same package
+luci-i18n-filemanager-ru as filemanager.ru.lmo, and LuCI loads every
+*.ru.lmo. The translations of filemanager.po are left as they are; the
+strings it or luci-base translate already are not repeated.
+
+Requires: 002-touch-screens-and-file-operations
+---
+ po/ru/filemanager-ext.po | 485 +++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 485 insertions(+)
+ create mode 100644 po/ru/filemanager-ext.po
+
+diff --git a/po/ru/filemanager-ext.po b/po/ru/filemanager-ext.po
+new file mode 100644
+index 0000000..d34b642
+--- /dev/null
++++ b/po/ru/filemanager-ext.po
+@@ -0,0 +1,485 @@
++msgid ""
++msgstr ""
++"Content-Type: text/plain; charset=UTF-8\n"
++"Language: ru\n"
++"Plural-Forms: nplurals=3; plural=n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2;\n"
++
++msgid "The name must not be empty, \".\" or \"..\"."
++msgstr "Имя не может быть пустым, «.» или «..»."
++
++msgid "The name must not contain \"/\"."
++msgstr "Имя не может содержать «/»."
++
++msgid "The name is too long."
++msgstr "Слишком длинное имя."
++
++msgid "%d byte"
++msgid_plural "%d bytes"
++msgstr[0] "%d байт"
++msgstr[1] "%d байта"
++msgstr[2] "%d байт"
++
++msgid "Network error"
++msgstr "Ошибка сети"
++
++msgid "Cancelled"
++msgstr "Отменено"
++
++msgid "…and %d more"
++msgstr "…и ещё %d"
++
++msgid "The browser did not allow copying"
++msgstr "Браузер не разрешил копирование"
++
++msgid "Path"
++msgstr "Путь"
++
++msgid "Type a path"
++msgstr "Ввести путь"
++
++msgid "Go"
++msgstr "Перейти"
++
++msgid "Filter by name"
++msgstr "Фильтр по имени"
++
++msgid "Parent folder"
++msgstr "Папка выше"
++
++msgid "Refresh"
++msgstr "Обновить"
++
++msgid "New folder"
++msgstr "Новая папка"
++
++msgid "New file"
++msgstr "Новый файл"
++
++msgid "Cannot open \"%s\": %s"
++msgstr "Не удалось открыть «%s»: %s"
++
++msgid "Cannot open folder \"%s\": %s"
++msgstr "Не удалось открыть папку «%s»: %s"
++
++msgid "Select all"
++msgstr "Выбрать всё"
++
++msgid "Sort by"
++msgstr "Сортировка"
++
++msgid "Sort: %s"
++msgstr "Сортировка: %s"
++
++msgid "Reverse order"
++msgstr "Обратный порядок"
++
++msgid "Nothing matches the filter."
++msgstr "Ничего не найдено."
++
++msgid "This folder is empty."
++msgstr "Папка пуста."
++
++msgid "Select %s"
++msgstr "Выбрать %s"
++
++msgid "Actions for %s"
++msgstr "Действия с %s"
++
++msgid "%d folder"
++msgid_plural "%d folders"
++msgstr[0] "%d папка"
++msgstr[1] "%d папки"
++msgstr[2] "%d папок"
++
++msgid "%d file"
++msgid_plural "%d files"
++msgstr[0] "%d файл"
++msgstr[1] "%d файла"
++msgstr[2] "%d файлов"
++
++msgid "%d selected"
++msgid_plural "%d selected"
++msgstr[0] "выбран %d"
++msgstr[1] "выбрано %d"
++msgstr[2] "выбрано %d"
++
++msgid "Copy"
++msgstr "Копировать"
++
++msgid "Cut"
++msgstr "Вырезать"
++
++msgid "Clear selection"
++msgstr "Снять выделение"
++
++msgid "%d item"
++msgid_plural "%d items"
++msgstr[0] "%d объект"
++msgstr[1] "%d объекта"
++msgstr[2] "%d объектов"
++
++msgid "To move: %s from %s"
++msgstr "Переместить: %s из %s"
++
++msgid "To copy: %s from %s"
++msgstr "Скопировать: %s из %s"
++
++msgid "Move here"
++msgstr "Переместить сюда"
++
++msgid "Paste here"
++msgstr "Вставить сюда"
++
++msgid "The items are already in this folder."
++msgstr "Эти объекты уже в этой папке."
++
++msgid "A folder cannot be copied or moved into itself: %s"
++msgstr "Папку нельзя скопировать или переместить в саму себя: %s"
++
++msgid "Moving…"
++msgstr "Перемещение…"
++
++msgid "Copying…"
++msgstr "Копирование…"
++
++msgid "Moved."
++msgstr "Перемещено."
++
++msgid "Copied."
++msgstr "Скопировано."
++
++msgid "Items already exist"
++msgstr "Такие объекты уже есть"
++
++msgid "This folder already has an item with the same name:"
++msgid_plural "This folder already has items with the same names:"
++msgstr[0] "В этой папке уже есть объект с таким именем:"
++msgstr[1] "В этой папке уже есть объекты с такими именами:"
++msgstr[2] "В этой папке уже есть объекты с такими именами:"
++
++msgid "Replace deletes the existing items (whole folders) and puts the new ones in their place."
++msgstr "«Заменить» удалит существующие объекты (папки целиком) и положит новые на их место."
++
++msgid "Replace"
++msgstr "Заменить"
++
++msgid "Open"
++msgstr "Открыть"
++
++msgid "Open in hex editor"
++msgstr "Открыть в HEX-редакторе"
++
++msgid "Download as archive"
++msgstr "Скачать архивом"
++
++msgid "Rename"
++msgstr "Переименовать"
++
++msgid "Properties"
++msgstr "Свойства"
++
++msgid "Copy path"
++msgstr "Копировать путь"
++
++msgid "Path copied."
++msgstr "Путь скопирован."
++
++msgid "Wait until the current operation finishes."
++msgstr "Дождитесь окончания текущей операции."
++
++msgid "Command failed with code %d"
++msgstr "Команда завершилась с кодом %d"
++
++msgid "The operation could not be started."
++msgstr "Не удалось запустить операцию."
++
++msgid "Cancelled."
++msgstr "Отменено."
++
++msgid "Not enough free space in /tmp: about %s needed, %s free."
++msgstr "Мало места в /tmp: нужно около %s, свободно %s."
++
++msgid "An item with this name already exists."
++msgstr "Объект с таким именем уже есть."
++
++msgid "Failed to create \"%s\": %s"
++msgstr "Не удалось создать «%s»: %s"
++
++msgid "New name"
++msgstr "Новое имя"
++
++msgid "Failed to rename \"%s\": %s"
++msgstr "Не удалось переименовать «%s»: %s"
++
++msgid "Delete this item?"
++msgid_plural "Delete these %d items?"
++msgstr[0] "Удалить %d объект?"
++msgstr[1] "Удалить %d объекта?"
++msgstr[2] "Удалить %d объектов?"
++
++msgid "Folders are deleted with everything in them. This cannot be undone."
++msgstr "Папки удаляются со всем содержимым. Отменить это нельзя."
++
++msgid "This cannot be undone."
++msgstr "Отменить это нельзя."
++
++msgid "Deleting…"
++msgstr "Удаление…"
++
++msgid "Failed to delete \"%s\": %s"
++msgstr "Не удалось удалить «%s»: %s"
++
++msgid "Deleted."
++msgid_plural "Deleted %d items."
++msgstr[0] "Удалён %d объект."
++msgstr[1] "Удалено %d объекта."
++msgstr[2] "Удалено %d объектов."
++
++msgid "Created \"%s\"."
++msgstr "Создан «%s»."
++
++msgid "Calculate"
++msgstr "Посчитать"
++
++msgid "Permissions of a link are those of its target: open the target to change them."
++msgstr "Права ссылки — это права её цели: чтобы их изменить, откройте цель."
++
++msgid "Read"
++msgstr "Чтение"
++
++msgid "Write"
++msgstr "Запись"
++
++msgid "Execute"
++msgstr "Выполнение"
++
++msgid "Group"
++msgstr "Группа"
++
++msgid "Others"
++msgstr "Остальные"
++
++msgid "Permissions must be 3 or 4 octal digits, e.g. 644 or 0755."
++msgstr "Права — 3 или 4 восьмеричные цифры, например 644 или 0755."
++
++msgid "Enter the owner and group as names or numbers."
++msgstr "Укажите владельца и группу именами или числами."
++
++msgid "Apply to everything inside"
++msgstr "Применить ко всему содержимому"
++
++msgid "Apply"
++msgstr "Применить"
++
++msgid "Changing permissions…"
++msgstr "Изменение прав…"
++
++msgid "Changing owner…"
++msgstr "Изменение владельца…"
++
++msgid "Changes applied."
++msgstr "Изменения применены."
++
++msgid "Failed to change \"%s\": %s"
++msgstr "Не удалось изменить «%s»: %s"
++
++msgid "Special files and broken links are not downloaded."
++msgstr "Специальные файлы и битые ссылки не скачиваются."
++
++msgid "Packing into an archive…"
++msgstr "Упаковка в архив…"
++
++msgid "The browser downloads \"%s\"."
++msgstr "Браузер скачивает «%s»."
++
++msgid "The browser downloads \"%s\" as \"%s\" (the router does not allow other characters in this case)."
++msgstr "Браузер скачивает «%s» под именем «%s» (в этом случае роутер не допускает другие символы)."
++
++msgid "Downloading \"%s\"…"
++msgstr "Скачивание «%s»…"
++
++msgid "Failed to download \"%s\": %s"
++msgstr "Не удалось скачать «%s»: %s"
++
++msgid "Folders cannot be uploaded, only files."
++msgstr "Папки загрузить нельзя, только файлы."
++
++msgid "Not uploaded, a folder with this name exists: %s"
++msgstr "Не загружено, есть папка с таким именем: %s"
++
++msgid "Uploading…"
++msgstr "Загрузка…"
++
++msgid "Uploading \"%s\" (%d of %d)…"
++msgstr "Загрузка «%s» (%d из %d)…"
++
++msgid "Uploading \"%s\"…"
++msgstr "Загрузка «%s»…"
++
++msgid "Upload failed:"
++msgstr "Не удалось загрузить:"
++
++msgid "Uploaded %d file."
++msgid_plural "Uploaded %d files."
++msgstr[0] "Загружен %d файл."
++msgstr[1] "Загружено %d файла."
++msgstr[2] "Загружено %d файлов."
++
++msgid "The link points to a missing file: %s"
++msgstr "Ссылка указывает на несуществующий файл: %s"
++
++msgid "The file \"%s\" has unsaved changes. Discard them?"
++msgstr "В файле «%s» есть несохранённые изменения. Отбросить их?"
++
++msgid "This is not a regular file."
++msgstr "Это не обычный файл."
++
++msgid "The file is too large to edit in the browser (%s). Download it instead."
++msgstr "Файл слишком большой для правки в браузере (%s). Скачайте его."
++
++msgid "The file is large (%s). Opening it may slow the browser down. Open anyway?"
++msgstr "Файл большой (%s), браузер может работать медленно. Всё равно открыть?"
++
++msgid "Opening \"%s\"…"
++msgstr "Открытие «%s»…"
++
++msgid "The file is not UTF-8 text, it is opened in the hex editor."
++msgstr "Файл — не текст UTF-8, он открыт в HEX-редакторе."
++
++msgid "Failed to open \"%s\": %s"
++msgstr "Не удалось открыть «%s»: %s"
++
++msgid "The file has mixed line ends (CR, LF, CRLF); after saving all of them are LF."
++msgstr "В файле смешаны концы строк (CR, LF, CRLF); после сохранения все станут LF."
++
++msgid "Reload"
++msgstr "Перечитать"
++
++msgid "Wrap lines"
++msgstr "Переносить строки"
++
++msgid "Line numbers"
++msgstr "Номера строк"
++
++msgid "Line numbers are shown when lines are not wrapped."
++msgstr "Номера строк видны, когда строки не переносятся."
++
++msgid "Hex editor"
++msgstr "HEX-редактор"
++
++msgid "Text editor"
++msgstr "Текстовый редактор"
++
++msgid "mixed line ends"
++msgstr "смешанные концы строк"
++
++msgid "link to %s"
++msgstr "ссылка на %s"
++
++msgid "deleted on the router"
++msgstr "удалён на роутере"
++
++msgid "modified"
++msgstr "изменён"
++
++msgid "The data is not UTF-8 text and cannot be shown in the text editor."
++msgstr "Данные — не текст UTF-8, их нельзя показать в текстовом редакторе."
++
++msgid "\"%s\" no longer exists on the router. Create it again?"
++msgstr "«%s» больше нет на роутере. Создать его заново?"
++
++msgid "\"%s\" was changed on the router after it was opened. Overwrite those changes?"
++msgstr "«%s» изменили на роутере после открытия. Перезаписать эти изменения?"
++
++msgid "Overwrite"
++msgstr "Перезаписать"
++
++msgid "Saving \"%s\"…"
++msgstr "Сохранение «%s»…"
++
++msgid "Saved \"%s\"."
++msgstr "Сохранён «%s»."
++
++msgid "Failed to save \"%s\": %s"
++msgstr "Не удалось сохранить «%s»: %s"
++
++msgid "The last opened folder"
++msgstr "Последняя открытая папка"
++
++msgid "Always the folder below"
++msgstr "Всегда папка ниже"
++
++msgid "On narrow screens"
++msgstr "На узких экранах"
++
++msgid "Automatic (16 px on touch screens)"
++msgstr "Авто (16 px на сенсорных экранах)"
++
++msgid "Settings saved."
++msgstr "Настройки сохранены."
++
++msgid "Start in"
++msgstr "Открывать"
++
++msgid "Folder"
++msgstr "Папка"
++
++msgid "Used when the start folder is fixed."
++msgstr "Используется, если выбрана постоянная папка."
++
++msgid "Folders first"
++msgstr "Папки сначала"
++
++msgid "Columns"
++msgstr "Столбцы"
++
++msgid "On narrow screens the size, date and permissions are shown under the name."
++msgstr "На узких экранах размер, дата и права показываются под именем."
++
++msgid "Font size"
++msgstr "Размер шрифта"
++
++msgid "Editor height, px"
++msgstr "Высота редактора, px"
++
++msgid "Empty: the editor fills the window."
++msgstr "Пусто — редактор занимает окно."
++
++msgid "Tap or click a name to open a folder or a file. The path above the list leads to any parent folder; ✎ lets you type a path, also of a file."
++msgstr "Нажатие на имя открывает папку или файл. Путь над списком ведёт в любую папку выше; ✎ — ввести путь, в том числе к файлу."
++
++msgid "⋮ next to an item, a right click or a long press opens its actions: edit, hex editor, download, rename, properties, duplicate, copy, cut, copy path, delete."
++msgstr "⋮ рядом с объектом, правая кнопка мыши или долгое нажатие открывают действия: правка, HEX-редактор, скачивание, переименование, свойства, копия, копировать, вырезать, копировать путь, удалить."
++
++msgid "Tick items to copy, cut, download or delete several at once. Copy and Cut remember the items: open another folder and press Paste here."
++msgstr "Отметьте объекты, чтобы копировать, вырезать, скачать или удалить несколько сразу. «Копировать» и «Вырезать» запоминают объекты: откройте другую папку и нажмите «Вставить сюда»."
++
++msgid "A folder or several items are downloaded as a .tar.gz archive made in /tmp; there must be enough free memory for it."
++msgstr "Папка или несколько объектов скачиваются архивом .tar.gz, который создаётся в /tmp; для него нужна свободная память."
++
++msgid "Upload adds files to the current folder; on a computer they can also be dropped onto the list. Files that exist are replaced only after a question, their permissions and owner are kept."
++msgstr "«Загрузить» добавляет файлы в текущую папку; на компьютере их можно перетащить на список. Существующие файлы заменяются только после вопроса, их права и владелец сохраняются."
++
++msgid "Long operations run on the router in the background, they continue when the page is closed."
++msgstr "Долгие операции идут на роутере в фоне и продолжаются, если закрыть страницу."
++
++msgid "Back in the browser returns to the previous folder. The address of the page contains the folder and can be bookmarked."
++msgstr "«Назад» в браузере возвращает в предыдущую папку. Папка видна в адресе страницы, его можно сохранить в закладки."
++
++msgid "Keys: Delete, F2 (rename), Ctrl+A, Ctrl+C, Ctrl+X, Ctrl+V, Escape, Alt+↑ (parent folder)."
++msgstr "Клавиши: Delete, F2 (переименовать), Ctrl+A, Ctrl+C, Ctrl+X, Ctrl+V, Escape, Alt+↑ (папка выше)."
++
++msgid "Save (Ctrl+S) writes the file in place: its permissions, owner, line ends and BOM stay the same. A link is saved to its target."
++msgstr "«Сохранить» (Ctrl+S) записывает файл на место: права, владелец, концы строк и BOM не меняются. Ссылка сохраняется в свою цель."
++
++msgid "If the file was changed on the router after it was opened, saving asks before overwriting."
++msgstr "Если файл изменили на роутере после открытия, перед перезаписью будет вопрос."
++
++msgid "Tab inserts a tab character; press Escape and then Tab to leave the text field."
++msgstr "Tab вставляет табуляцию; чтобы выйти из поля, нажмите Escape, затем Tab."
++
++msgid "Files that are not UTF-8 text open in the hex editor. Editing bytes needs a keyboard."
++msgstr "Файлы, которые не являются текстом UTF-8, открываются в HEX-редакторе. Для правки байтов нужна клавиатура."
++
++msgid "Files larger than 16 MiB are not opened in the browser, download them instead."
++msgstr "Файлы больше 16 МиБ в браузере не открываются, их можно скачать."
+-- 
+2.43.0
+
