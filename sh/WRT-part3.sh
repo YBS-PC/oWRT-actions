@@ -161,6 +161,21 @@ fi
 # (luci-app-homeproxy теперь клонируется и на ImmortalWrt, см. выше). Пакет
 # из чужого фида — отдельная копия со своей историей, сравнение с эталонами
 # давало бы ложные остановки; для него прежнее поведение.
+#
+# Пакет из фида (luci-app-commands, luci-app-filemanager из фида LuCI)
+# собирается с того коммита фида, который взял feeds update (с галочкой
+# feeds_latest — коммит репозитория пакетов). BASE его серии ни на что не
+# переключает: это только коммит, с которого сняты патчи. Патч правит код
+# автора с -F 0: если автор изменил эти строки, патч не ложится, и пакет
+# собирается как у автора, без отката к BASE.
+#
+# Заголовок «Requires: <патч>» — патч применяется, только если применён или
+# уже есть в исходниках указанный (как в WRT-part2.sh).
+# Заголовок «Supersedes: <путь> <хеш> [<хеш> ...]» — патч ставит свой код
+# вместо файла автора (например, новые страницы вместо старых), и ложится,
+# даже если автор этот файл изменил. Хеши — git-хеши (начало) версий файла,
+# с которыми патч сверен. Другая версия — у автора что-то новое, что патч
+# скрыл бы: патч не применяется, в сборку идёт версия автора.
 # =========================================================
 # shellcheck source=sh/patch-drift.sh
 if ! . "$GITHUB_WORKSPACE/sh/patch-drift.sh" 2>/dev/null; then
@@ -188,10 +203,29 @@ patch_build_if() {
     done
 }
 
+# patch_superseded <патч> <каталог пакета> — по строке на каждый файл из
+# «Supersedes:», версия которого у автора не из списка проверенных
+patch_superseded() {
+    local _path _hashes _cur _h _known
+    sed -n '/^diff --git /q; s/^Supersedes:[[:space:]]*//p' "$1" | while read -r _path _hashes; do
+        [ -n "$_path" ] || continue
+        if [ ! -f "$2/$_path" ]; then
+            echo "$_path (файла нет)"
+            continue
+        fi
+        _cur=$(git hash-object --no-filters -- "$2/$_path" 2>/dev/null)
+        _known=0
+        for _h in $_hashes; do
+            case "$_cur" in "$_h"*) _known=1 ;; esac
+        done
+        [ "$_known" = 1 ] || echo "$_path"
+    done
+}
+
 apply_package_patches() {
     local _dir _name _pkg _p _pp _patch _applied _present _failed _failed_names _ok
-    local _f _q _tmp _later _still _rev _d _skipf _cond _other
-    local -A _drift
+    local _f _q _tmp _later _still _rev _d _skipf _cond _other _req _missing _sup _feed _fc _base
+    local -A _drift _why
 
     for _dir in "$GITHUB_WORKSPACE"/patches/packages/*/; do
         [ -d "$_dir" ] || continue
@@ -207,7 +241,15 @@ apply_package_patches() {
             continue
         fi
 
-        _applied=0; _present=0; _failed=0; _failed_names=""; _ok=" "; _drift=(); _skipf=""; _other=0
+        # Пакет из фида: какой коммит фида пошёл в сборку (BASE его не меняет)
+        if [ "$_pkg" != "package/$_name" ]; then
+            _feed=${_pkg#feeds/}; _feed=${_feed%%/*}
+            _fc=$(git -C "feeds/$_feed" log -1 --format='%h от %cd' --date=short 2>/dev/null)
+            _base=$(command -v patch_base >/dev/null && patch_base пакет "$_name")
+            echo ">>> $_name: из фида $_feed, коммит ${_fc:-?}${_base:+; патчи сняты с ${_base:0:12} (BASE не меняет коммит фида)}"
+        fi
+
+        _applied=0; _present=0; _failed=0; _failed_names=""; _ok=" "; _drift=(); _why=(); _skipf=""; _other=0
         _pp="/tmp/pkgpatch.$$.patch"
         for _p in "$_dir"*.patch; do
             [ -f "$_p" ] || continue
@@ -225,9 +267,20 @@ apply_package_patches() {
             if [ "${PATCH_DRIFT_CHECK:-1}" = "1" ] && [ "$_pkg" = "package/$_name" ]; then
                 _d=$(patch_drift "$_pp" "$_pkg" "$_skipf")
             fi
+            _missing=""
+            for _req in $(sed -n '/^diff --git /q; s/^Requires:[[:space:]]*//p' "$_pp"); do
+                case "$_ok" in *" $_req "*) ;; *) _missing="$_missing $_req" ;; esac
+            done
+            _sup=$(patch_superseded "$_pp" "$_pkg" | sed '/^$/d' | tr '\n' ',' | sed 's/,$//; s/,/, /g')
             if patch -p1 -d "$_pkg" -R -F 0 -f -s --dry-run < "$_pp" >/dev/null 2>&1; then
                 echo "✓ $_name: $_patch уже есть в исходниках, пропуск"
                 _ok="$_ok$_patch "; _present=$((_present + 1))
+            elif [ -n "$_missing" ]; then
+                _why[$_patch]="не применён, потому что не применён$_missing"
+                _failed=$((_failed + 1)); _failed_names="$_failed_names $_patch"
+            elif [ -n "$_sup" ]; then
+                _why[$_patch]="не применён: у автора новая версия $_sup, патч заменил бы её своим кодом; в сборке версия автора"
+                _failed=$((_failed + 1)); _failed_names="$_failed_names $_patch"
             elif [ -n "$_d" ]; then
                 # Файлы патча изменились у автора — не применяем (см. patch-drift.sh)
                 _drift[$_patch]="$_d"
@@ -253,6 +306,11 @@ apply_package_patches() {
         _still=""; _rev=""
         for _f in $_failed_names; do _rev="$_f $_rev"; done
         for _f in $_rev; do
+            # Пропущен по Requires или Supersedes — проверять повторно нечего
+            if [ -n "${_why[$_f]:-}" ]; then
+                _still="$_f $_still"
+                continue
+            fi
             _tmp=$(mktemp -d) || break
             tar -C "$_pkg" --exclude=.git -cf - . | tar -C "$_tmp" -xf -
             _later=""
@@ -275,6 +333,10 @@ apply_package_patches() {
         for _f in $_still; do
             if [ -n "${_drift[$_f]:-}" ]; then
                 patch_drift_record "пакет" "$_name" "$_f" "${_drift[$_f]}"
+                continue
+            fi
+            if [ -n "${_why[$_f]:-}" ]; then
+                echo "::warning::$_name: $_f ${_why[$_f]}"
                 continue
             fi
             echo "::warning::$_name: $_f не применяется (код пакета изменился или исправление уже внесено в другом виде), пропущен"
