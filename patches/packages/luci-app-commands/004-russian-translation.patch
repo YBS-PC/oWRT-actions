@@ -10,8 +10,7 @@ package luci-i18n-commands-ru as commands.ru.lmo, and LuCI loads every
 strings luci-base translates already (Cancel, Close, Save, Stop, Name)
 are not repeated.
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
+Requires: 003-run-and-settings-pages
 ---
  po/ru/commands-ext.po | 164 ++++++++++++++++++++++++++++++++++++++++++
  1 file changed, 164 insertions(+)
