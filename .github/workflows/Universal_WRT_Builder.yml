@@ -351,7 +351,7 @@ jobs:
             #     sing-box-forkop base; R6S trafira: extended, без ytb (свой
             #     Zapret) — все с AGH latest, zz1 и патчами
             #   RB5009 clear и RB5009 switch: без AGH/sing-box/ytb, zz1, с патчами
-            #     (к ним относятся только patches/packages/luci-app-commands)
+            #     (к ним относятся только patches/packages/luci-app-commands и luci-app-filemanager)
             # $(entry ...) — подстановка: в ней NOTES не сохраняется, для
             # combo это и не нужно (значения ниже уже согласованы с вариантами).
             # Запасные сборки (дописать в include через запятую):
