@@ -1,6 +1,7 @@
 e969939b49167516e219d465df8030d98d443d67
-# openwrt/luci, ветка openwrt-25.12, 31.10.2026: коммит, с которого сняты патчи этой папки.
+# openwrt/luci, ветка openwrt-25.12: коммит, с которого сняты патчи этой папки.
 # Пакет luci-app-filemanager берётся из фида LuCI выпуска (OpenWrt или ImmortalWrt), галочка
 # use_base_commit на него не действует. 001 переносит файлы из master, на master
 # он уже есть и пропускается. Серия проверена на openwrt/luci openwrt-25.12 и
-# master, immortalwrt/luci openwrt-25.12 и master. Обновляется вместе с патчами.
+# master, immortalwrt/luci openwrt-25.12 и master. При перевыпуске серии меняется
+# только первая строка; дата коммита — в patches/README.md.
