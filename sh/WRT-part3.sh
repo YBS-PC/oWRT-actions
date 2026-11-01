@@ -27,7 +27,7 @@ echo ">>>>>>>>> WRT-part3 start. Использование: до make defconfig
 mkdir -p ./package/luci-app-log-viewer
 
 # Клонируем общие пакеты
-echo ">>> Клонируем тему luci-app-log-viewer..."
+echo ">>> Клонируем luci-app-log-viewer..."
 # --depth=1: история пакета сборке не нужна (как у темы ниже)
 git clone --depth=1 -b master https://github.com/gSpotx2f/luci-app-log.git ./package/luci-app-log-viewer/
 
