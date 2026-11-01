@@ -6,8 +6,8 @@ stop_service и возвращает их в конце start_service. TCP-со�
 клиента LAN, открытое в этом промежутке, уходит в WAN напрямую через
 masquerade, и conntrack держит этот NAT до конца соединения: redirect,
 появившийся позже, к нему уже не применяется. Браузеры и приложения ТВ
-долго держат такие соединения HTTP/2 — заблокированные сайты не
-открываются минутами.
+долго держат такие соединения HTTP/2, и они минутами остаются вне
+правил.
 
 После возврата правил удаляются записи conntrack TCP с masquerade.
 Следующий пакет такого соединения отслеживается заново и попадает в
@@ -23,7 +23,7 @@ redirect (DNAT) и собственные соединения роутера (�
  1 file changed, 13 insertions(+)
 
 diff --git a/root/etc/init.d/homeproxy b/root/etc/init.d/homeproxy
-index 9082356..6369b77 100755
+index 9082356..ab0b02c 100755
 --- a/root/etc/init.d/homeproxy
 +++ b/root/etc/init.d/homeproxy
 @@ -256,6 +256,19 @@ start_service() {
@@ -33,7 +33,7 @@ index 9082356..6369b77 100755
 +	# A restart takes the rules down (stop_service) and puts them back above.
 +	# A LAN connection opened in between went straight to WAN, and conntrack
 +	# keeps its masquerade for as long as it lives: the redirect never applies
-+	# to it, and to a blocked site it hangs for minutes. Drop the masqueraded
++	# to it, and the connection stays outside the rules. Drop the masqueraded
 +	# TCP entries. The next packet of such a connection is tracked anew and
 +	# meets the rules: a proxied one is reset (the core has no state for it)
 +	# and the client reconnects, a direct one goes on through masquerade.
