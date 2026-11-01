@@ -676,13 +676,11 @@ if [ "$CURRENT_VARIANT" = "passwall" ] && [ -f "/etc/config/passwall2" ]; then
     fi
 fi
 
-# luci-app-xray: заводские настройки пакета рассчитаны на Китай — напрямую
-# идут только адреса GeoIP «cn», «Fast DNS» по умолчанию 223.5.5.5 (Alibaba),
-# напрямую через него разрешаются geosite:cn. На роутере в России это значит:
-# весь российский трафик — через сервер, DNS имени сервера — через китайский
-# резолвер. Меняем только нетронутые заводские значения и только на первой
-# загрузке: напрямую — GeoIP «ru» и домены geosite:category-ru (их же
-# разрешает Яндекс DNS напрямую), остальное — по правилам пакета.
+# luci-app-xray: значения пакета по умолчанию — GeoIP direct «cn», bypassed
+# domain rules «geosite:cn», Fast DNS не задан (пакет берёт 223.5.5.5).
+# Меняем только эти нетронутые значения и только на первой загрузке: коды
+# GeoIP и geosite и Fast DNS этой сборки — ниже, остальное — по правилам
+# пакета.
 # Нужны geoip.dat/geosite.dat (пакеты v2ray-geoip, v2ray-geosite в сборке):
 # без них luci-app-xray молча отбрасывает все geoip:/geosite: правила.
 if [ ! -f "$LOCK_FILE" ] && [ "$CURRENT_VARIANT" = "xray" ] && [ -f /etc/config/xray_core ]; then
@@ -723,7 +721,7 @@ fi
 #   dpi_ips      — youtubeUnblock: reject UDP/443 и очередь UDP на прочие порты
 #                  (TCP/443 и UDP/443 идут в очередь к любым адресам)
 #                  (наполняет fwlist-dpi.sh)
-#   bypass_ips   — обход homeproxy по метке 0x64 (RU-трафик мимо VPN)
+#   bypass_ips   — метка 0x64: эти адреса идут мимо homeproxy
 #                  И обход очереди youtubeUnblock для UDP кроме 443 (наполняет fwlist-bypass.sh)
 #   bypass_local — обход очереди youtubeUnblock по адресу ИСТОЧНИКА, отсюда
 #                  match=src_net, а не dest_net
@@ -819,11 +817,10 @@ add rule inet fw4 youtubeUnblock meta mark 0x00000042 counter return
 # Source IP in the bypass_local list: exit the chain
 add rule inet fw4 youtubeUnblock ip saddr @bypass_local counter return
 
-# TCP/443 and QUIC to any address, before the bypass_ips check: YouTube also
-# serves video from Google caches inside Russian ISP networks (GGC), their
-# addresses are in bypass_ips and not in dpi_ips. youtubeUnblock picks
-# connections by SNI itself (--sni-domains; for QUIC with
-# --udp-filter-quic=parse), the rest pass through unchanged.
+# TCP/443 and QUIC to any address, before the bypass_ips check: an address
+# can be in bypass_ips and not in dpi_ips and still need the queue.
+# youtubeUnblock picks connections by SNI itself (--sni-domains; for QUIC
+# with --udp-filter-quic=parse), the rest pass through unchanged.
 add rule inet fw4 youtubeUnblock tcp dport 443 ct original packets < 20 counter queue num $YTB_QUEUE bypass
 add rule inet fw4 youtubeUnblock udp dport 443 ct original packets < 9 counter queue num $YTB_QUEUE bypass
 
@@ -1132,10 +1129,10 @@ done
 # netshift они тоже идут через FakeIP) адреса FakeIP 198.18.0.0/15. Правило
 # youtubeUnblock «ip daddr @dpi_ips udp dport 443 reject» видит только настоящие
 # адреса, поэтому QUIC клиента к FakeIP проходил бы в sing-box, а оттуда — в
-# очередь 537 как обычный UDP, и видео (googlevideo) могло тормозить. Штатная
-# опция disable_quic ставит в sing-box правило reject для QUIC на входе tproxy:
-# браузер сразу переходит на TCP, который youtubeUnblock обрабатывает. HTTP/3
-# при этом не используется и для сайтов через VPS — для прокси это обычно лучше.
+# очередь 537 как обычный UDP, а не как QUIC. Штатная опция disable_quic
+# ставит в sing-box правило reject для QUIC на входе tproxy: браузер сразу
+# переходит на TCP, который youtubeUnblock обрабатывает. HTTP/3 при этом не
+# используется и для остальных соединений через sing-box.
 # Без youtubeUnblock (forkop-mod и trafira — у них свой Zapret; forkop 2.x —
 # если youtubeUnblock не выбран) опцию не трогаем.
 if [ -x /usr/bin/youtubeUnblock ]; then
