@@ -11,16 +11,16 @@ strings it or luci-base translate already are not repeated.
 
 Requires: 002-touch-screens-and-file-operations
 ---
- po/ru/filemanager-ext.po | 485 +++++++++++++++++++++++++++++++++++++++
- 1 file changed, 485 insertions(+)
+ po/ru/filemanager-ext.po | 491 +++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 491 insertions(+)
  create mode 100644 po/ru/filemanager-ext.po
 
 diff --git a/po/ru/filemanager-ext.po b/po/ru/filemanager-ext.po
 new file mode 100644
-index 0000000..d34b642
+index 0000000..d70815a
 --- /dev/null
 +++ b/po/ru/filemanager-ext.po
-@@ -0,0 +1,485 @@
+@@ -0,0 +1,491 @@
 +msgid ""
 +msgstr ""
 +"Content-Type: text/plain; charset=UTF-8\n"
@@ -78,6 +78,9 @@ index 0000000..d34b642
 +msgid "New file"
 +msgstr "Новый файл"
 +
++msgid "Selection"
++msgstr "Выбранное"
++
 +msgid "Cannot open \"%s\": %s"
 +msgstr "Не удалось открыть «%s»: %s"
 +
@@ -107,18 +110,6 @@ index 0000000..d34b642
 +
 +msgid "Actions for %s"
 +msgstr "Действия с %s"
-+
-+msgid "%d folder"
-+msgid_plural "%d folders"
-+msgstr[0] "%d папка"
-+msgstr[1] "%d папки"
-+msgstr[2] "%d папок"
-+
-+msgid "%d file"
-+msgid_plural "%d files"
-+msgstr[0] "%d файл"
-+msgstr[1] "%d файла"
-+msgstr[2] "%d файлов"
 +
 +msgid "%d selected"
 +msgid_plural "%d selected"
@@ -152,6 +143,21 @@ index 0000000..d34b642
 +
 +msgid "Paste here"
 +msgstr "Вставить сюда"
++
++msgid "%d folder"
++msgid_plural "%d folders"
++msgstr[0] "%d папка"
++msgstr[1] "%d папки"
++msgstr[2] "%d папок"
++
++msgid "%d file"
++msgid_plural "%d files"
++msgstr[0] "%d файл"
++msgstr[1] "%d файла"
++msgstr[2] "%d файлов"
++
++msgid "free %s of %s"
++msgstr "свободно %s из %s"
 +
 +msgid "The items are already in this folder."
 +msgstr "Эти объекты уже в этой папке."
