@@ -86,11 +86,11 @@
 
 | Папка | Репозиторий | Коммит | Дата коммита |
 |---|---|---|---|
-| `feeds/forkop/` | [ushan0v/forkop](https://github.com/ushan0v/forkop) | [`9544f3d`](https://github.com/ushan0v/forkop/commit/9544f3de09c62c935e1147147136234594d04f02) | 27.10.2026 |
+| `feeds/forkop/` | [ushan0v/forkop](https://github.com/ushan0v/forkop) | [`20d1a62`](https://github.com/ushan0v/forkop/commit/20d1a62fd7a90ec6856f16e6c9f065255209d6d7) | 31.10.2026 |
 | `feeds/forkopmod/` | [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) | [`aa05cf9`](https://github.com/Gavr1024/forkop-mod/commit/aa05cf939f12fc3f30df394c4fa64916895377e0) | 28.10.2026 |
 | `feeds/luciappxray/` | [yichya/luci-app-xray](https://github.com/yichya/luci-app-xray) | [`4d5a6fd`](https://github.com/yichya/luci-app-xray/commit/4d5a6fd7fc4d2fbbcd7f70f1319da06b91ec1d56) | 22.09.2026 |
-| `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`f4f5eba`](https://github.com/yandexru45/netshift/commit/f4f5ebaa853cdcf443f21166ce8dbe2d58a4e0d8) | 29.10.2026 |
-| `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`b6e75a3`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/b6e75a3e154c393875a2868fab9f508b4b77a214) | 28.10.2026 |
+| `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`3d5c24f`](https://github.com/yandexru45/netshift/commit/3d5c24f28799502db16e76b6475ce38c7f0def33) | 31.10.2026 |
+| `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`be8d917`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/be8d917a3b88a090c084540af9bb9c1864578552) | 01.11.2026 |
 | `feeds/podkop/` | [itdoginfo/podkop](https://github.com/itdoginfo/podkop) | [`c654bf5`](https://github.com/itdoginfo/podkop/commit/c654bf5da75309754e3fb63b9441981db65fff68) | 24.10.2026 |
 | `feeds/trafira/` | [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) | [`15ae0f9`](https://github.com/petrouspetr-pixel/trafira/commit/15ae0f909cbcad0f632245cbc13fb6103dd3cce0) | 30.10.2026 |
 | `packages/luci-app-commands/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`75a306d`](https://github.com/openwrt/luci/commit/75a306df84a020c57a631ef5b4c02ace56d93387) | 15.10.2026 |
@@ -150,7 +150,7 @@
 [sing-box-forkop](https://github.com/ushan0v/sing-box-forkop): сборка ставит
 его пакетом из релиза (поле `sb`: `forkop-base`, `forkop-full`, `forkop-tiny`).
 
-Патчи сняты с коммита [`9544f3d`](https://github.com/ushan0v/forkop/commit/9544f3de09c62c935e1147147136234594d04f02) от 27.10.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`20d1a62`](https://github.com/ushan0v/forkop/commit/20d1a62fd7a90ec6856f16e6c9f065255209d6d7) от 31.10.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Удаление пакета.** Скрипт удаления forkop написан на ucode, а
   сборка OpenWrt выполняет его как shell (apk — в своём скрипте удаления,
@@ -212,7 +212,7 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
 
 Вариант `netshift`, фид [yandexru45/netshift](https://github.com/yandexru45/netshift).
 
-Патчи сняты с коммита [`f4f5eba`](https://github.com/yandexru45/netshift/commit/f4f5ebaa853cdcf443f21166ce8dbe2d58a4e0d8) от 29.10.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`3d5c24f`](https://github.com/yandexru45/netshift/commit/3d5c24f28799502db16e76b6475ce38c7f0def33) от 31.10.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Разбор ссылок.** Правильно читаются логин и пароль socks5 со
   спецсимволами и ссылки VLESS/Trojan с транспортом http (ссылки без
@@ -228,7 +228,7 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
 
 Вариант `passwall`, фид [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2).
 
-Патчи сняты с коммита [`b6e75a3`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/b6e75a3e154c393875a2868fab9f508b4b77a214) от 28.10.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`be8d917`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/be8d917a3b88a090c084540af9bb9c1864578552) от 01.11.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Соединения после перезапуска.** Пока passwall2 перезапускается,
   правил нет, и новые соединения из сети уходят напрямую. После запуска
