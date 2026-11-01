@@ -1,5 +1,0 @@
-4a223b03508e564dace57c1a7f3fc6bc2636b8cd
-# Waujito/youtubeUnblock, ветка main: коммит, на который снят патч этой папки.
-# youtubeUnblock берётся с последнего коммита main (или из ветки openwrt — коммит
-# из её Makefile), и WRT-part2.sh проверяет патч на его файлах. При перевыпуске
-# патча меняется только первая строка; дата коммита — в patches/README.md.
