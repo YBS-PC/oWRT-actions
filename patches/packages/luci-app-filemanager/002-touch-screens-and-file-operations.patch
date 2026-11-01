@@ -40,6 +40,13 @@ List:
 - several items can be selected to copy, cut, download or delete; Copy
   and Cut keep the items until Paste here in another folder; existing
   names are replaced or skipped after a question;
+- a bar above the list is always there and keeps its height, so
+  selecting does not move the list: without a selection it shows the
+  number and size of the items and the free space of the file system
+  (df), with a selection its actions, after Copy or Cut Paste here; with
+  a selection it stays in view under the header of the theme while the
+  list scrolls; on a phone its buttons are icons with a caption;
+- the progress of an operation floats at the bottom of the window;
 - uploads by the button or dropped files, with progress and cancel; a
   replaced file keeps its permissions and owner, new files get 0644;
 - a file is downloaded with progress; a folder or several items as a
@@ -73,21 +80,22 @@ translatable text; md.js and md_help.js are no longer loaded.
 
 Checked in Chromium with luci-base 25.12, themes bootstrap and
 proton2025, 1280 and 412 pixels wide, against rpcd file.* and cgi-io
-from OpenWrt 25.12 with busybox: 47 checks each (CRLF, BOM, links,
+from OpenWrt 25.12 with busybox: 57 checks each (CRLF, BOM, links,
 owner and mode kept on save and upload, a change on the router before
 saving, hex editor, create, rename, duplicate, copy and move with
 conflicts and into itself, upload error, download of a file and of a
 folder archive, chmod, recursive chown, delete, settings, the old
-settings file, Back in the browser); no errors in the console.
+settings file, Back in the browser, the list not moving when items
+are selected, copied or cleared); no errors in the console.
 ---
- .../resources/view/system/filemanager.js      | 4901 +++++++++--------
- 1 file changed, 2523 insertions(+), 2378 deletions(-)
+ .../resources/view/system/filemanager.js      | 5005 +++++++++--------
+ 1 file changed, 2626 insertions(+), 2379 deletions(-)
 
 diff --git a/htdocs/luci-static/resources/view/system/filemanager.js b/htdocs/luci-static/resources/view/system/filemanager.js
-index b9e4d6f..0defc85 100644
+index b9e4d6f..ce6406d 100644
 --- a/htdocs/luci-static/resources/view/system/filemanager.js
 +++ b/htdocs/luci-static/resources/view/system/filemanager.js
-@@ -4,2691 +4,2836 @@
+@@ -4,2691 +4,2938 @@
  'require ui';
  'require dom';
  'require rpc';
@@ -777,10 +785,20 @@ index b9e4d6f..0defc85 100644
 +	link: 'M10.6 13.4a1 1 0 0 1 0-1.4l3.6-3.6a3 3 0 1 1 4.2 4.2l-2 2a1 1 0 1 1-1.4-1.4l2-2a1 1 0 0 0-1.4-1.4l-3.6 3.6a1 1 0 0 1-1.4 0zm2.8-2.8a1 1 0 0 1 0 1.4l-3.6 3.6a3 3 0 1 1-4.2-4.2l2-2a1 1 0 1 1 1.4 1.4l-2 2a1 1 0 0 0 1.4 1.4l3.6-3.6a1 1 0 0 1 1.4 0z',
 +	special: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 4a6 6 0 1 1 0 12 6 6 0 0 1 0-12z',
 +	broken: 'M12 2 1 21h22zm-1 7h2v6h-2zm0 8h2v2h-2z',
++	/* buttons of the action bar (drawn with fill-rule evenodd) */
++	copy: 'M9 7h10a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1zm1 2v10h8V9zM5 3h10v2H6v11H4V4a1 1 0 0 1 1-1z',
++	cut: 'M7 13a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7zm0 2a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zM17 13a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7zm0 2a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zM8.4 13.2 15.4 2.5l1.7 1.1-7 10.7zM15.6 13.2 8.6 2.5 6.9 3.6l7 10.7z',
++	download: 'M11 3h2v10.2l3.6-3.6 1.4 1.4-6 6-6-6 1.4-1.4 3.6 3.6zM4 19h16v2H4z',
++	trash: 'M9 3h6l1 1h4v2H4V4h4zM6 8h12l-1 13H7zm3 2v9h2v-9zm4 0v9h2v-9z',
++	close: 'M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4z',
++	paste: 'M9 2h6v2H9zM6 4h12a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zm1 2v14h10V6zm2 0h6v2H9z',
++	selectall: 'M4 4h16v16H4zm2 2v12h12V6zm4.6 9.2-3.1-3.1 1.4-1.4 1.7 1.7 4.5-4.5 1.4 1.4z'
 +};
 +
++const ICONS_EVENODD = [ 'copy', 'cut', 'download', 'trash', 'close', 'paste', 'selectall' ];
++
 +function iconCss(name) {
-+	const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="${ICONS[name]}"/></svg>`;
++	const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill-rule="${ICONS_EVENODD.includes(name) ? 'evenodd' : 'nonzero'}" d="${ICONS[name]}"/></svg>`;
 +	const url = `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 +	return `-webkit-mask-image:${url};mask-image:${url};`;
  }
@@ -934,19 +952,42 @@ index b9e4d6f..0defc85 100644
 +#file-manager-container .fm-crumbs .fm-sep { color: var(--fm-muted); padding: 0 .05em; }
 +#file-manager-container .fm-path input { flex: 1; min-width: 0; width: auto; margin: 0; }
 +#file-manager-container .fm-filter { flex: 1 1 10em; min-width: 6em; width: auto !important; margin: 0; }
-+#file-manager-container .fm-banner {
++#file-manager-container .fm-actbar {
 +	display: flex;
-+	flex-wrap: wrap;
 +	align-items: center;
-+	gap: .4em;
++	gap: .4em .6em;
++	box-sizing: border-box;
++	height: calc(2.9em + 2px);
 +	border: 1px solid var(--fm-border);
-+	border-left: 4px solid var(--fm-accent);
++	border-left: 4px solid var(--fm-border);
 +	border-radius: 4px;
-+	padding: .4em .6em;
++	padding: .3em .3em .3em .6em;
 +	margin-bottom: .5em;
++	background: var(--fm-bg, Canvas);
 +}
-+#file-manager-container .fm-banner[hidden] { display: none; }
-+#file-manager-container .fm-banner .fm-grow { flex: 1 1 10em; overflow-wrap: anywhere; }
++#file-manager-container .fm-actslot { margin-bottom: .5em; }
++#file-manager-container .fm-actslot .fm-actbar { margin-bottom: 0; }
++#file-manager-container .fm-actbar.active { border-left-color: var(--fm-accent); }
++#file-manager-container .fm-actbar.floating {
++	position: fixed;
++	z-index: 700;
++	box-shadow: 0 2px 10px rgba(0, 0, 0, .25);
++}
++#file-manager-container .fm-actbar .fm-info { flex: 1 1 8em; min-width: 0; height: 1.4em; line-height: 1.4em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
++#file-manager-container .fm-actbar .fm-acts { display: flex; flex-wrap: nowrap; gap: .4em; flex: 0 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: thin; }
++#file-manager-container .fm-actbar .fm-acts .btn { flex: 0 0 auto; margin: 0; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: .35em; box-sizing: border-box; height: 2.3em; }
++#file-manager-container .fm-bi {
++	flex: none;
++	width: 1.15em;
++	height: 1.15em;
++	background-color: currentColor;
++	-webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
++	-webkit-mask-size: contain; mask-size: contain;
++	-webkit-mask-position: center; mask-position: center;
++}
++${[ 'copy', 'cut', 'download', 'trash', 'close', 'paste', 'selectall' ].map(n => `#file-manager-container .fm-bi.${n} { ${iconCss(n)} }`).join('\n')}
++#file-manager-container .fm-acts .btn.fm-icon-only .fm-bl { display: none; }
++#file-manager-container .fm-muted { color: var(--fm-muted); }
 +#file-manager-container .fm-list {
 +	border: 1px solid var(--fm-border);
 +	border-radius: 4px;
@@ -984,7 +1025,9 @@ index b9e4d6f..0defc85 100644
  	z-index: 2;
 -	padding: 5px 6px;
 -	color: light-dark(var(--light-color),var(--dark-color));
--}
++	background: inherit;
++	background: color-mix(in srgb, Canvas 92%, currentColor);
+ }
 -#file-table td {
 -	text-align: left !important;
 -	border-right: 1px solid;
@@ -992,9 +1035,6 @@ index b9e4d6f..0defc85 100644
 -	box-sizing: border-box;
 -	white-space: nowrap;
 -	min-width: 100px;
-+	background: inherit;
-+	background: color-mix(in srgb, Canvas 92%, currentColor);
-+}
 +#file-manager-container .fm-cell {
 +	padding: .25em .4em;
 +	min-width: 0;
@@ -1064,7 +1104,7 @@ index b9e4d6f..0defc85 100644
  	white-space: nowrap;
 -	width: 100%;
 -	margin: 0 !important;
- }
+-}
 -#file-manager-container .table th:nth-child(3), .table td:nth-child(3) {
 -	width: 100px;
 -	min-width: 100px;
@@ -1088,7 +1128,7 @@ index b9e4d6f..0defc85 100644
 -	width: 1px;
 -	height: 100%;
 -	background: #aaa;
--}
+ }
 -#file-list-container.resizeable {
 -	resize: both;
 -	overflow: auto;
@@ -1146,6 +1186,10 @@ index b9e4d6f..0defc85 100644
 +#file-manager-container .fm-open {
  	display: flex;
  	align-items: center;
+-	justify-content: space-between;
+-}
+-#status-info {
+-	font-weight: bold;
 +	gap: .5em;
 +	color: inherit;
 +	text-decoration: none;
@@ -1192,18 +1236,14 @@ index b9e4d6f..0defc85 100644
 +#file-manager-container .fm-more:hover,
 +#file-manager-container .fm-more:focus-visible { border-color: var(--fm-border); background: var(--fm-hover); }
 +#file-manager-container .fm-empty { padding: 1.5em; text-align: center; color: var(--fm-muted); }
-+#file-manager-container .fm-status {
-+	display: flex;
-+	flex-wrap: wrap;
-+	gap: .3em 1em;
- 	justify-content: space-between;
-+	color: var(--fm-muted);
-+	font-size: .9em;
-+	padding: .4em .1em;
- }
--#status-info {
--	font-weight: bold;
 +#file-manager-container .fm-progress {
++	position: fixed;
++	z-index: 850;
++	left: 50%;
++	bottom: 1em;
++	transform: translateX(-50%);
++	box-sizing: border-box;
++	width: min(36em, calc(100vw - 16px));
  	display: flex;
 +	flex-wrap: wrap;
  	align-items: center;
@@ -1220,9 +1260,10 @@ index b9e4d6f..0defc85 100644
 -	border-radius: 5px;
 +	gap: .5em;
 +	border: 1px solid var(--fm-border);
-+	border-radius: 4px;
-+	padding: .4em .6em;
-+	margin-bottom: .5em;
++	border-radius: 6px;
++	padding: .5em .8em;
++	background: var(--fm-bg, Canvas);
++	box-shadow: 0 6px 24px rgba(0, 0, 0, .3);
 +}
 +#file-manager-container .fm-progress[hidden] { display: none; }
 +#file-manager-container .fm-progress .fm-grow { overflow-wrap: anywhere; }
@@ -1415,6 +1456,13 @@ index b9e4d6f..0defc85 100644
 +	#file-manager-container .fm-mobile-sort select { width: auto; min-width: 0; margin: 0; flex: 1; }
 +	#file-manager-container .fm-more { font-size: 1.5em; padding: .2em .5em; }
 +	#file-manager-container .fm-filter { flex-basis: 100%; }
++	#file-manager-container .fm-actbar { flex-wrap: wrap; height: auto; padding: .4em .5em; }
++	#file-manager-container .fm-actbar .fm-info,
++	#file-manager-container .fm-actbar .fm-acts { flex: 1 1 100%; }
++	#file-manager-container .fm-actbar .fm-acts { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: .3em; overflow: visible; }
++	#file-manager-container .fm-actbar .fm-acts .btn { flex-direction: column; gap: .2em; min-width: 0; box-sizing: border-box; height: 4.6em !important; min-height: 0 !important; padding: 0 .1em !important; font-size: .74em; line-height: 1.15; }
++	#file-manager-container .fm-acts .btn .fm-bi { width: 1.7em; height: 1.7em; }
++	#file-manager-container .fm-acts .btn .fm-bl { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 +	#file-manager-container .fm-bar .btn,
 +	#file-manager-container .fm-bar .cbi-button { flex: 1 1 auto; }
 +	#file-manager-container .fm-editor-body { min-height: 10em; }
@@ -1425,8 +1473,18 @@ index b9e4d6f..0defc85 100644
  `;
  
 +/* height of a header the theme keeps fixed at the top of the window */
-+function topInset() {
-+	let n = document.elementFromPoint(window.innerWidth / 2, 2);
++/* height of a fixed or sticky theme header at the top of the window;
++   skip: our own element, which may itself be sticky there */
++function topInset(skip) {
++	let n = document.elementsFromPoint(window.innerWidth / 2, 2).find(x => !skip?.contains(x));
++
++	for (; n && n != document.body && n != document.documentElement; n = n.parentElement) {
++		const pos = window.getComputedStyle(n).position;
++		if (pos == 'fixed' || pos == 'sticky') {
++			const b = n.getBoundingClientRect().bottom;
++			return (b > 0 && b < window.innerHeight / 3) ? b : 0;
++		}
++	}
  
 -// Main exported view module
 -return view.extend({
@@ -1440,13 +1498,8 @@ index b9e4d6f..0defc85 100644
 -			return getFileList(currentPath); // Load the file list for the current directory
 -		});
 -	},
-+	for (; n && n != document.body && n != document.documentElement; n = n.parentElement) {
-+		const pos = window.getComputedStyle(n).position;
-+		if (pos == 'fixed' || pos == 'sticky') {
-+			const b = n.getBoundingClientRect().bottom;
-+			return (b > 0 && b < window.innerHeight / 3) ? b : 0;
-+		}
-+	}
++	return 0;
++}
  
 -	// Method to render the interface
 -	render(data) {
@@ -1477,7 +1530,14 @@ index b9e4d6f..0defc85 100644
 -					'style': 'margin-left: 10px; padding: 3px 12px;'
 -				}, _('&#8594;'))
 -			]),
-+	return 0;
++/* the page background under el, for the parts that float over the list */
++function pageBackground(el) {
++	for (let n = el; n; n = n.parentElement) {
++		const c = window.getComputedStyle(n).backgroundColor;
++		if (c && c != 'transparent' && !/^rgba\(.*,\s*0\)$/.test(c))
++			return c;
++	}
++	return '';
 +}
  
 -			// Tab Panels
@@ -2107,7 +2167,14 @@ index b9e4d6f..0defc85 100644
 +					this.fitEditor();
  			}
 -			// No additional actions are required for the Editor tab in this context
++			this.updateFloat(true);
 +		});
++		/* capture: some themes scroll an inner element, not the window */
++		let raf = 0;
++		document.addEventListener('scroll', () => {
++			if (!raf)
++				raf = window.requestAnimationFrame(() => { raf = 0; this.updateFloat(false); });
++		}, { capture: true, passive: true });
 +		document.addEventListener('keydown', ev => this.onKeyDown(ev));
 +		this.lastWidth = window.innerWidth;
 +
@@ -2172,6 +2239,7 @@ index b9e4d6f..0defc85 100644
 +			this.renderHelp();
 +		else if (name == 'editor')
 +			this.fitEditor();
++		this.updateFloat(false);
 +	},
  
 +	onPopState(ev) {
@@ -2241,7 +2309,7 @@ index b9e4d6f..0defc85 100644
 +			ev.preventDefault();
 +			this.saveFile();
 +			return;
-+		}
+ 		}
 +
 +		if (this.activeTab != 'files' || document.body.classList.contains('modal-overlay-active') || document.querySelector('.fm-menu'))
 +			return;
@@ -2273,7 +2341,7 @@ index b9e4d6f..0defc85 100644
 +		}
 +		else if (mod && k.toLowerCase() == 'v' && this.clip) {
 +			this.paste();
- 		}
++		}
 +		else
 +			return;
 +
@@ -2342,8 +2410,10 @@ index b9e4d6f..0defc85 100644
 +			d.filter
 +		]);
 +
-+		d.selBar = E('div', { 'class': 'fm-banner', 'hidden': '' });
-+		d.clipBar = E('div', { 'class': 'fm-banner', 'hidden': '' });
++		/* always there, so that selecting a file does not move the list; the
++		   slot keeps its place while the bar floats over a scrolled list */
++		d.actBar = E('div', { 'class': 'fm-actbar', 'role': 'toolbar', 'aria-label': _('Selection') });
++		d.actSlot = E('div', { 'class': 'fm-actslot' }, [ d.actBar ]);
 +
 +		d.list = E('div', {
 +			'class': 'fm-list',
@@ -2352,15 +2422,12 @@ index b9e4d6f..0defc85 100644
 +			'dragleave': ev => this.onDrag(ev, -1),
 +			'drop': ev => this.onDrop(ev)
 +		});
-+		d.status = E('div', { 'class': 'fm-status' });
 +
 +		return E('div', { 'class': 'fm-panel' }, [
 +			E('div', { 'class': 'fm-path' }, [ d.crumbs, d.pathInput, d.pathGo, d.pathEdit ]),
 +			d.toolbar,
-+			d.clipBar,
-+			d.selBar,
-+			d.list,
-+			d.status
++			d.actSlot,
++			d.list
 +		]);
  	},
  
@@ -2445,6 +2512,7 @@ index b9e4d6f..0defc85 100644
 +			if (path != this.path) {
 +				this.selected.clear();
 +				this.dom.filter.value = '';
++				this.free = null;
  			}
 -		}
 +			else {
@@ -2466,7 +2534,8 @@ index b9e4d6f..0defc85 100644
 +			this.editPath(false);
 +			this.renderCrumbs();
 +			this.renderList();
-+			this.renderClipboard();
++			this.updateFloat(true);
++			this.loadFree(path);
 +
 +			return true;
 +		}).catch((err) => {
@@ -2474,8 +2543,20 @@ index b9e4d6f..0defc85 100644
 +				notify(_('Cannot open folder "%s": %s').format(path, errMsg(err)), 'error');
 +			return false;
 +		});
-+	},
-+
+ 	},
+ 
+-	// Handler for dropping files into the drop zone
+-	handleDrop(event) {
+-		event.preventDefault();
+-		event.stopPropagation();
+-		dragCounter = 0; // Reset counter
+-		const self = this;
+-		const files = event.dataTransfer.files;
+-		const fileListContainer = document.getElementById('file-list-container');
+-		const dragOverlay = document.getElementById('drag-overlay');
+-		if (fileListContainer && dragOverlay) {
+-			fileListContainer.classList.remove('drag-over');
+-			dragOverlay.style.display = 'none';
 +	renderCrumbs() {
 +		const parts = this.path.split('/').filter(Boolean);
 +		const items = [ E('button', { 'type': 'button', 'title': '/', 'click': () => this.navigate('/') }, txt('/')) ];
@@ -2493,20 +2574,8 @@ index b9e4d6f..0defc85 100644
 +
 +	entry(name) {
 +		return this.entries.find(e => e.name == name);
- 	},
- 
--	// Handler for dropping files into the drop zone
--	handleDrop(event) {
--		event.preventDefault();
--		event.stopPropagation();
--		dragCounter = 0; // Reset counter
--		const self = this;
--		const files = event.dataTransfer.files;
--		const fileListContainer = document.getElementById('file-list-container');
--		const dragOverlay = document.getElementById('drag-overlay');
--		if (fileListContainer && dragOverlay) {
--			fileListContainer.classList.remove('drag-over');
--			dragOverlay.style.display = 'none';
++	},
++
 +	columns() {
 +		return String(config.columns).split(',').filter(c => columnTitles[c]);
 +	},
@@ -2645,8 +2714,7 @@ index b9e4d6f..0defc85 100644
 +		rows.push(E('div', { 'class': 'fm-drop' }, txt(_('Drop files here to upload'))));
 +
 +		dom.content(d.list, rows);
-+		this.renderSelection();
-+		this.renderStatus(list);
++		this.renderActions(list);
 +	},
 +
 +	renderRow(e, cols) {
@@ -2724,21 +2792,6 @@ index b9e4d6f..0defc85 100644
 -				self.loadFileList(currentPath).then(() => {
 -					self.initResizeableColumns();
 -				});
-+	renderStatus(list) {
-+		const dirs = list.filter(e => kind(e) == 'directory').length;
-+		const files = list.length - dirs;
-+		const bytes = list.reduce((s, e) => s + ((e.type == 'file') ? e.size : 0), 0);
-+		const left = [ N_(dirs, '%d folder', '%d folders').format(dirs), N_(files, '%d file', '%d files').format(files) ];
-+
-+		if (bytes)
-+			left.push(formatSize(bytes));
-+
-+		dom.content(this.dom.status, [
-+			E('span', {}, txt(left.join(', '))),
-+			E('span', {}, txt(this.selected.size ? N_(this.selected.size, '%d selected', '%d selected').format(this.selected.size) : ''))
-+		]);
-+	},
-+
 +	setSort(field, asc) {
 +		this.sort = { field: field, asc: asc };
 +		store('sort', this.sort);
@@ -2758,25 +2811,102 @@ index b9e4d6f..0defc85 100644
 +		this.renderList();
 +	},
 +
-+	renderSelection() {
-+		const d = this.dom;
++	/* free space of the file system of the folder, for the action bar */
++	loadFree(path) {
++		fs.exec('df', [ '-Pk', '--', path ]).then((res) => {
++			const f = (res.code == 0) ? String(res.stdout ?? '').trim().split('\n').pop().trim().split(/\s+/) : [];
++			const total = Number(f[1]) * 1024, avail = Number(f[3]) * 1024;
++
++			if (this.path != path)
++				return;
++			this.free = (f.length >= 6 && total > 0 && avail >= 0) ? { total: total, avail: avail } : null;
++			this.renderActions();
++		}).catch(() => {});
++	},
++
++	/* the action bar: what is selected, else what is on the clipboard, else
++	   what is in the folder; one line of text and one row of buttons in each
++	   state, so its height does not change */
++	renderActions(list) {
++		const bar = this.dom.actBar;
 +		const names = [ ...this.selected ];
 +		const n = names.length;
++		const c = this.clip;
++		/* icon and label (on a phone the label goes under the icon); the
++		   label of an icon-only button is its tooltip */
++		const btn = (icon, label, click, cls, title) => E('button', {
++			'class': `btn cbi-button${cls ? ' ' + cls : ''}`, 'type': 'button', 'title': title ?? label, 'click': click
++		}, [ E('span', { 'class': `fm-bi ${icon}`, 'aria-hidden': 'true' }), E('span', { 'class': 'fm-bl' }, txt(label)) ]);
++		let info, acts;
 +
-+		d.selBar.hidden = (n == 0);
-+		if (!n)
++		if (n) {
++			const bytes = names.reduce((s, x) => s + ((this.entry(x)?.type == 'file') ? this.entry(x).size : 0), 0);
++			info = [ N_(n, '%d selected', '%d selected').format(n) + (bytes ? ` (${formatSize(bytes)})` : '') ];
++			acts = [
++				btn('copy', _('Copy'), () => this.setClipboard('copy', names)),
++				btn('cut', _('Cut'), () => this.setClipboard('move', names)),
++				btn('download', _('Download'), () => this.downloadNames(names)),
++				btn('trash', _('Delete'), () => this.deleteNames(names), 'cbi-button-negative'),
++				btn('close', _('Clear selection'), () => this.setSelection([]), 'fm-icon-only')
++			];
++		}
++		else if (c) {
++			const what = (c.names.length == 1) ? `"${c.names[0]}"` : N_(c.names.length, '%d item', '%d items').format(c.names.length);
++			info = [ (c.op == 'move') ? _('To move: %s from %s').format(what, c.dir) : _('To copy: %s from %s').format(what, c.dir) ];
++			acts = [
++				btn('paste', c.op == 'move' ? _('Move here') : _('Paste here'), () => this.paste(), 'cbi-button-positive'),
++				btn('close', _('Cancel'), () => this.setClipboard(null))
++			];
++		}
++		else {
++			list = list ?? this.visibleEntries();
++			const dirs = list.filter(e => kind(e) == 'directory').length;
++			const files = list.length - dirs;
++			const bytes = list.reduce((s, e) => s + ((e.type == 'file') ? e.size : 0), 0);
++			const parts = [ N_(dirs, '%d folder', '%d folders').format(dirs), N_(files, '%d file', '%d files').format(files) ];
++
++			if (bytes)
++				parts.push(formatSize(bytes));
++			info = [ parts.join(', ') ];
++			if (this.free)
++				info.push(E('span', { 'class': 'fm-muted' }, txt(' · ' + _('free %s of %s').format(formatSize(this.free.avail), formatSize(this.free.total)))));
++			acts = [ btn('selectall', _('Select all'), () => this.setSelection(list.map(e => e.name)), null, `${_('Select all')} (Ctrl+A)`) ];
++			acts[0].disabled = !list.length;
++		}
++
++		const text = E('span', { 'class': 'fm-info' }, info.map(x => (typeof x == 'string') ? document.createTextNode(x) : x));
++		text.title = text.textContent;
++		bar.classList.toggle('active', !!(n || c));
++		dom.content(bar, [ text, E('span', { 'class': 'fm-acts' }, acts) ]);
++		this.updateFloat(false);
++	},
++
++	/* with something selected or on the clipboard, the action bar stays in
++	   view under a fixed theme header while the list scrolls (position:
++	   sticky does not work where the theme clips overflow of the content) */
++	updateFloat(full) {
++		const d = this.dom;
++		const r = d.root;
++
++		if (!r?.isConnected || !d.actSlot)
 +			return;
++		if (full) {
++			const bg = pageBackground(r.parentElement);
++			if (bg)
++				r.style.setProperty('--fm-bg', bg);
++		}
 +
-+		const bytes = names.reduce((s, x) => s + ((this.entry(x)?.type == 'file') ? this.entry(x).size : 0), 0);
++		const bar = d.actBar, slot = d.actSlot;
++		const s = slot.getBoundingClientRect();
++		const h = bar.offsetHeight;
++		const inset = (this.activeTab == 'files' && bar.classList.contains('active')) ? topInset(r) : null;
++		const float = inset != null && s.top < inset && d.list.getBoundingClientRect().bottom > inset + h;
 +
-+		dom.content(d.selBar, [
-+			E('span', { 'class': 'fm-grow' }, txt(N_(n, '%d selected', '%d selected').format(n) + (bytes ? ` (${formatSize(bytes)})` : ''))),
-+			E('button', { 'class': 'btn cbi-button', 'type': 'button', 'click': () => this.setClipboard('copy', names) }, txt(_('Copy'))),
-+			E('button', { 'class': 'btn cbi-button', 'type': 'button', 'click': () => this.setClipboard('move', names) }, txt(_('Cut'))),
-+			E('button', { 'class': 'btn cbi-button', 'type': 'button', 'click': () => this.downloadNames(names) }, txt(_('Download'))),
-+			E('button', { 'class': 'btn cbi-button cbi-button-negative', 'type': 'button', 'click': () => this.deleteNames(names) }, txt(_('Delete'))),
-+			E('button', { 'class': 'btn cbi-button', 'type': 'button', 'title': _('Clear selection'), 'click': () => this.setSelection([]) }, txt('✕'))
-+		]);
++		bar.classList.toggle('floating', float);
++		slot.style.height = float ? `${h}px` : '';
++		bar.style.top = float ? `${Math.round(inset)}px` : '';
++		bar.style.left = float ? `${Math.round(s.left)}px` : '';
++		bar.style.width = float ? `${Math.round(s.width)}px` : '';
 +	},
 +
 +	/* --- clipboard ------------------------------------------------------ */
@@ -2794,27 +2924,8 @@ index b9e4d6f..0defc85 100644
 +
 +		if (this.clip)
 +			this.setSelection([]);
-+
-+		this.renderClipboard();
-+	},
-+
-+	renderClipboard() {
-+		const c = this.clip;
-+		const bar = this.dom.clipBar;
-+
-+		bar.hidden = !c;
-+		if (!c)
-+			return;
-+
-+		const what = (c.names.length == 1) ? `"${c.names[0]}"` : N_(c.names.length, '%d item', '%d items').format(c.names.length);
-+		const label = (c.op == 'move') ? _('To move: %s from %s').format(what, c.dir) : _('To copy: %s from %s').format(what, c.dir);
-+
-+		dom.content(bar, [
-+			E('span', { 'class': 'fm-grow' }, txt(label)),
-+			E('button', { 'class': 'btn cbi-button cbi-button-positive', 'type': 'button', 'click': () => this.paste() },
-+				txt(c.op == 'move' ? _('Move here') : _('Paste here'))),
-+			E('button', { 'class': 'btn cbi-button', 'type': 'button', 'click': () => this.setClipboard(null) }, txt(_('Cancel')))
-+		]);
++		else
++			this.renderActions();
 +	},
 +
 +	paste() {
@@ -2835,15 +2946,15 @@ index b9e4d6f..0defc85 100644
  				return;
  			}
 +		}
-+
-+		const taken = new Set(this.entries.map(e => e.name));
-+		const pairs = [];
-+		const conflicts = [];
  
 -			const file = files[index];
 -			const fullFilePath = joinPath(directoryPath, file.name);
 -			if (statusInfo) {
 -				statusInfo.textContent = _('Uploading: "%s"...').format(file.name);
++		const taken = new Set(this.entries.map(e => e.name));
++		const pairs = [];
++		const conflicts = [];
++
 +		for (const n of c.names) {
 +			let t = n;
 +			if (c.op == 'copy' && c.dir == dest) {
@@ -3191,23 +3302,12 @@ index b9e4d6f..0defc85 100644
 +					notify(`${label.replace(/…$/, '')}: ${err.substring(0, 2000) || _('Command failed with code %d').format(code)}`, 'error');
 +					return false;
  				}
-+
-+				return keep ? dir : true;
- 			});
+-			});
 -			statusInfo.appendChild(E('span', {}, _('Create File: ')));
 -			statusInfo.appendChild(fileNameInput);
 -			statusProgress.appendChild(createButton);
 -		}
-+		}).catch((err) => {
-+			notify(`${label.replace(/…$/, '')}: ${errMsg(err)}`, 'error');
-+			return false;
-+		}).finally(() => {
-+			if (dir && (!keep || cancelled))
-+				L.resolveDefault(fs.remove(dir));
-+			this.busy = null;
-+			this.setProgress(null);
-+		});
- 	},
+-	},
  
 -	// Function to create a file
 -	createFile(fileName) {
@@ -3222,8 +3322,33 @@ index b9e4d6f..0defc85 100644
 -			popTimeout(null, E('p', _('File "%s" created successfully.').format(trimmedFileName)), 5000, 'info');
 -			self.loadFileList(currentPath).then(() => {
 -				self.initResizeableColumns();
++				return keep ? dir : true;
+ 			});
+-			const statusInfo = document.getElementById('status-info');
+-			const statusProgress = document.getElementById('status-progress');
+-			if (statusInfo) statusInfo.textContent = _('No file selected.');
+-			if (statusProgress) statusProgress.innerHTML = '';
+ 		}).catch((err) => {
+-			pop(null, E('p', _('Failed to create file "%s": %s').format(trimmedFileName, err.message)), 'error');
++			notify(`${label.replace(/…$/, '')}: ${errMsg(err)}`, 'error');
++			return false;
++		}).finally(() => {
++			if (dir && (!keep || cancelled))
++				L.resolveDefault(fs.remove(dir));
++			this.busy = null;
++			this.setProgress(null);
+ 		});
+ 	},
+ 
+-	// Handler for checkbox state change on a file
+-	handleCheckboxChange(ev) {
+-		const cb = ev.target;
+-		const filePath = cb.dataset.filePath;
 +	/* --- create, rename, delete, duplicate ------------------------------ */
-+
+ 
+-		cb.checked
+-			? selectedItems.add(filePath)
+-			: selectedItems.delete(filePath);
 +	checkNewName(name, current) {
 +		const msg = validName(name);
 +		if (msg)
@@ -3236,7 +3361,9 @@ index b9e4d6f..0defc85 100644
 +	createEntry(type) {
 +		if (this.isBusy())
 +			return;
-+
+ 
+-		this.updateDeleteSelectedButton();
+-		this.updateSelectAllCheckbox();
 +		const isDir = (type == 'directory');
 +
 +		return promptName(isDir ? _('New folder') : _('New file'), _('Name'), '', n => this.checkNewName(n), _('Create')).then((name) => {
@@ -3255,36 +3382,26 @@ index b9e4d6f..0defc85 100644
 +				return this.openFile(path, 'text');
 +			}).catch((err) => {
 +				notify(_('Failed to create "%s": %s').format(name, errMsg(err)), 'error');
- 			});
--			const statusInfo = document.getElementById('status-info');
--			const statusProgress = document.getElementById('status-progress');
--			if (statusInfo) statusInfo.textContent = _('No file selected.');
--			if (statusProgress) statusProgress.innerHTML = '';
--		}).catch((err) => {
--			pop(null, E('p', _('Failed to create file "%s": %s').format(trimmedFileName, err.message)), 'error');
- 		});
++			});
++		});
  	},
  
--	// Handler for checkbox state change on a file
--	handleCheckboxChange(ev) {
--		const cb = ev.target;
--		const filePath = cb.dataset.filePath;
+-	// Update the "Delete Selected" button
+-	updateDeleteSelectedButton() {
+-		const btn = document.getElementById('delete-selected-button');
+-		if (!btn) return;
 +	renameEntry(e) {
 +		if (!e || this.isBusy())
 +			return;
-+
+ 
+-		btn.style.display = selectedItems.size > 0 ? '' : 'none';
 +		return promptName(_('Rename'), _('New name'), e.name, n => this.checkNewName(n, e.name), _('Rename')).then((name) => {
 +			if (name == null || name == e.name)
 +				return;
- 
--		cb.checked
--			? selectedItems.add(filePath)
--			: selectedItems.delete(filePath);
++
 +			const from = joinPath(this.path, e.name);
 +			const to = joinPath(this.path, name);
- 
--		this.updateDeleteSelectedButton();
--		this.updateSelectAllCheckbox();
++
 +			return L.resolveDefault(fs.stat(to), null).then((st) => {
 +				if (st)
 +					throw new Error(_('An item with this name already exists.'));
@@ -3304,10 +3421,10 @@ index b9e4d6f..0defc85 100644
 +		});
  	},
  
--	// Update the "Delete Selected" button
--	updateDeleteSelectedButton() {
--		const btn = document.getElementById('delete-selected-button');
--		if (!btn) return;
+-	// Update the "Select All" checkbox state
+-	updateSelectAllCheckbox() {
+-		const selectAll = document.getElementById('select-all-checkbox');
+-		if (!selectAll) return;
 +	deleteNames(names) {
 +		if (!names.length || this.isBusy())
 +			return;
@@ -3328,8 +3445,7 @@ index b9e4d6f..0defc85 100644
 +
 +			const paths = entries.map(e => joinPath(this.path, e.name));
 +			let p;
- 
--		btn.style.display = selectedItems.size > 0 ? '' : 'none';
++
 +			if (entries.length == 1 && !dirs) {
 +				this.busy = _('Deleting…');
 +				p = this.exec('rm', [ '-f', '--', paths[0] ]).then(() => true).catch((err) => {
@@ -3350,13 +3466,8 @@ index b9e4d6f..0defc85 100644
 +				return this.refresh();
 +			});
 +		});
- 	},
++	},
  
--	// Update the "Select All" checkbox state
--	updateSelectAllCheckbox() {
--		const selectAll = document.getElementById('select-all-checkbox');
--		if (!selectAll) return;
--
 -		const checkboxes = [...document.querySelectorAll('.select-checkbox')];
 -		if (checkboxes.length === 0) {
 -			selectAll.checked = false;
@@ -4063,12 +4174,7 @@ index b9e4d6f..0defc85 100644
 +			const total = queue.reduce((s, f) => s + f.size, 0) || 1;
 +			const failed = [];
 +			let done = 0, xhr = null, cancelled = false, ok = 0;
- 
--		if (confirm(_('Are you sure you want to delete this %s: "%s"?').format(itemTypeLabel, itemName))) {
--			fs.remove(filePath).then(() => {
--				popTimeout(null, E('p', _('Successfully deleted %s: "%s".').format(itemTypeLabel, itemName)), 5000, 'info');
--				self.loadFileList(currentPath).then(() => {
--					self.initResizeableColumns();
++
 +			if (!queue.length)
 +				return;
 +
@@ -4084,7 +4190,12 @@ index b9e4d6f..0defc85 100644
 +				let old = null;
 +
 +				this.setProgress(label, done / total, () => { cancelled = true; xhr?.abort(); });
-+
+ 
+-		if (confirm(_('Are you sure you want to delete this %s: "%s"?').format(itemTypeLabel, itemName))) {
+-			fs.remove(filePath).then(() => {
+-				popTimeout(null, E('p', _('Successfully deleted %s: "%s".').format(itemTypeLabel, itemName)), 5000, 'info');
+-				self.loadFileList(currentPath).then(() => {
+-					self.initResizeableColumns();
 +				/* a replaced file keeps its permissions and owner as they are now */
 +				return (existing.has(f.name) ? L.resolveDefault(fs.stat(path), null) : Promise.resolve(null)).then((st) => {
 +					old = (st?.type == 'file') ? st : null;
@@ -4380,7 +4491,12 @@ index b9e4d6f..0defc85 100644
 +	textBytes() {
 +		const ed = this.ed;
 +		let s = this.dom.ed.ta.value;
-+
+ 
+-		const statusInfo = document.getElementById('status-info');
+-		const statusProgress = document.getElementById('status-progress');
+-		const fileName = filePath.split('/').pop();
+-		if (statusInfo) {
+-			statusInfo.textContent = _('Saving file: "%s"...').format(fileName);
 +		if (ed.eol == 'crlf')
 +			s = s.replace(/\n/g, '\r\n');
 +
@@ -4399,12 +4515,7 @@ index b9e4d6f..0defc85 100644
 +		if (this.ed)
 +			this.ed.hex = null;
 +	},
- 
--		const statusInfo = document.getElementById('status-info');
--		const statusProgress = document.getElementById('status-progress');
--		const fileName = filePath.split('/').pop();
--		if (statusInfo) {
--			statusInfo.textContent = _('Saving file: "%s"...').format(fileName);
++
 +	renderEditor() {
 +		const ed = this.ed;
 +		const narrow = window.matchMedia(NARROW).matches;
