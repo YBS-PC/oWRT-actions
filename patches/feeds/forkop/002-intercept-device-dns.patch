@@ -28,7 +28,7 @@ the section rules sends them direct (sing-box restores the domain).
 The rest of their traffic and their DNS stay untouched, as before.
 
 diff --git a/forkop/files/usr/lib/nft/apply.uc b/forkop/files/usr/lib/nft/apply.uc
-index e762019e..5d4c4c85 100644
+index 924928e3..c1ace8a5 100644
 --- a/forkop/files/usr/lib/nft/apply.uc
 +++ b/forkop/files/usr/lib/nft/apply.uc
 @@ -27,6 +27,8 @@ const TPROXY6_ADDRESS = singbox_constants.TPROXY_INBOUND6_ADDRESS;
@@ -138,7 +138,7 @@ index e762019e..5d4c4c85 100644
 +    }
      add_rule("mangle_output", REPLY_RETURN);
      add_rule("mangle_output", [ "ip", "daddr", "@" + LOCAL4, "return" ]);
-     add_rule("mangle_output", [ "ip6", "daddr", "@" + LOCAL6, "ip6", "daddr", "!=", FAKEIP6, "return" ]);
+     add_rule("mangle_output", [ "ip6", "daddr", "@" + LOCAL6, "return" ]);
 @@ -340,7 +403,7 @@ function build() {
          push(kept, ...nft_sections.provider_sets(entry.matchers));
      lines = [];
