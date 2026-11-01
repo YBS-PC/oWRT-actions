@@ -103,7 +103,9 @@
   LuCI на ucode. Lua-страницы LuCI работают через `luci-compat` и
   `luci-lua-runtime`.
 - **Скрипты на роутере** (`files/etc/uci-defaults/*`) — `#!/bin/sh`, то
-  есть busybox ash. Нужен POSIX sh без bash-конструкций. В busybox
+  есть busybox ash. Нужен POSIX sh без bash-конструкций. Исключение —
+  `exec > >(tee ...)` в начале zz1: ash OpenWrt собран с
+  `ASH_BASH_COMPAT`, а `/dev/fd` создаёт procd. В busybox
   OpenWrt нет дробного `sleep` и `sort -h`. GNU-утилиты (coreutils,
   gawk) есть не на всех устройствах: проверять через `command -v`.
 - **Скрипты сборки** (`sh/*.sh`) — bash, выполняются на раннере Ubuntu.
@@ -127,8 +129,10 @@
 
 ## Проверки перед тем, как отдать файл
 
-- `sh -n` для `files/etc/uci-defaults/*`, `bash -n` для `sh/*.sh`;
-  `shellcheck`, если установлен (для uci-defaults — `-s sh`).
+- `busybox ash -n` для `files/etc/uci-defaults/*` (`sh -n` на Ubuntu —
+  это dash, он не знает `>(...)` и ошибается на zz1), `bash -n` для
+  `sh/*.sh`; `shellcheck`, если установлен (для uci-defaults — `-s sh`,
+  SC3001 на `>(...)` в zz1 ожидаемо).
 - Workflow: разбор YAML (`python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))'`),
   `actionlint`, если установлен.
 - Патч: `git apply --check` на исходниках с коммита из `BASE`.
