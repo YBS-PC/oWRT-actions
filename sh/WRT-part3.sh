@@ -440,9 +440,9 @@ echo 'CONFIG_BUSYBOX_DEFAULT_FEATURE_USE_INITTAB=y' >> ./.config
 echo ">>> [Heavy packages] Тяжелые пакеты отключены."
         # Для сборок с homeproxy и podkop/netshift/forkop/trafira/tachyon ставим Tiny версию sing-box
         # (если sing-box не отключён полем sb; job setup тогда пишет sb=tiny).
-        # forkop 2.x — на своём ядре (sb=forkop-tiny), его ставит блок
-        # «ВЫБОР КОМПОНЕНТОВ» ниже.
-        if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "rehomeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "netshift" || "$VARIANT" == "forkop" || "$VARIANT" == "trafira" || "$VARIANT" == "tachyon" ]] && [ "${SB_MODE:-feed}" != "no" ] && [[ "${SB_MODE:-feed}" != forkop-* ]]; then
+        # forkop 2.x — на своём ядре (sb=forkop-tiny), tachyon на slateax — на
+        # tachyon-core (sb=tachyon-core); их ставит блок «ВЫБОР КОМПОНЕНТОВ» ниже.
+        if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "rehomeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "netshift" || "$VARIANT" == "forkop" || "$VARIANT" == "trafira" || "$VARIANT" == "tachyon" ]] && [ "${SB_MODE:-feed}" != "no" ] && [[ "${SB_MODE:-feed}" != forkop-* ]] && [ "${SB_MODE:-feed}" != "tachyon-core" ]; then
             echo ">>> [Heavy packages] Sing-box Tiny for $VARIANT compatibility..."
             sed -i '/sing-box/Id' ./.config
             echo '# CONFIG_PACKAGE_sing-box is not set' >> ./.config
@@ -829,6 +829,17 @@ forkop-*)
     drop_pkgs sing-box sing-box sing-box-tiny
     echo 'CONFIG_PACKAGE_sing-box-forkop=y' >> ./.config
     rm -f ./files/usr/bin/sing-box
+    ;;
+tachyon-core)
+    # slateax + tachyon: ядро tachyon-core (бинарник и метки в files/ кладёт
+    # шаг Download Sing-box workflow), sing-box в образ не идёт.
+    echo "   > sing-box: нет, ядро tachyon-core"
+    drop_pkgs sing-box sing-box sing-box-tiny
+    rm -f ./files/usr/bin/sing-box
+    if [ ! -x ./files/usr/bin/tachyon-core ]; then
+        echo "::error title=tachyon-core::Нет files/usr/bin/tachyon-core (шаг Download Sing-box)"
+        exit 1
+    fi
     ;;
 esac
 
