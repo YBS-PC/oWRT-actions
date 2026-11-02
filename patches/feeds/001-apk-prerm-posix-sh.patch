@@ -1,0 +1,70 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 2 Nov 2026 12:00:00 +0000
+Subject: [PATCH] Makefile: prerm hook in POSIX sh for buildroot packages
+
+The buildroot (include/package-pack.mk) drops the shebang of
+Package/tachyon/prerm and runs its body as shell: with CONFIG_USE_APK
+(OpenWrt 25.12) it is appended to the generated /bin/sh pre-deinstall,
+with opkg default_prerm sources it. The ucode body is a syntax error
+there, so `apk del tachyon` / `opkg remove tachyon` of a firmware or SDK
+build never ran `tachyon package_prerm`: the service was not stopped,
+dnsmasq was not restored and the routing table entry stayed.
+
+The same call in sh, bounded by timeout as before. The action comes
+from PKG_UPGRADE, set by opkg on an upgrade; apk runs pre-deinstall
+only on removal.
+
+diff --git a/tachyon/Makefile b/tachyon/Makefile
+index 0455d055..b5af9f5b 100644
+--- a/tachyon/Makefile
++++ b/tachyon/Makefile
+@@ -41,30 +41,25 @@ endef
+ define Build/Compile
+ endef
+ 
++# POSIX sh: the buildroot drops the shebang and runs this body as shell, appended
++# to its /bin/sh pre-deinstall with apk and sourced by default_prerm with opkg.
++# There $1 is not the action, so an upgrade is told by PKG_UPGRADE. The cleanup
++# belongs to the installed version, so it is bounded from the outside; BusyBox
++# timeout wanted `-t SECONDS` on older builds and rejects it on newer ones.
+ define Package/tachyon/prerm
+-#!/usr/bin/ucode
+-
+-// apk runs this as <pkg>-<version>.pre-upgrade and rolls the whole transaction
+-// back if the hook does not finish, which leaves the old build installed. The
+-// cleanup invoked below belongs to the OLD version, so it cannot be trusted to
+-// bound itself — the hook bounds it from the outside. 90s sits far below any
+-// package-manager or installer patience and far above a healthy cleanup.
+-// BusyBox timeout wanted `-t SECONDS` on older builds and rejects it on newer
+-// ones; the spelling is probed against /bin/true because probing with the real
+-// command would run the cleanup twice whenever the first form is unsupported.
+-if (getenv("IPKG_INSTROOT") == null || getenv("IPKG_INSTROOT") == "") {
+-	let prefix = "";
+-	if (system("timeout 1 /bin/true >/dev/null 2>&1") == 0)
+-		prefix = "timeout 90 ";
+-	else if (system("timeout -t 1 /bin/true >/dev/null 2>&1") == 0)
+-		prefix = "timeout -t 90 ";
+-
+-	system(prefix + "/usr/bin/tachyon package_prerm >/dev/null 2>&1");
+-}
+-
+-// Whatever the cleanup managed to do, the removal itself must proceed: a failing
+-// prerm aborts the upgrade on both package managers.
+-exit(0);
++#!/bin/sh
++
++[ -n "$${IPKG_INSTROOT}" ] && exit 0
++action=remove
++[ "$${PKG_UPGRADE}" = "1" ] && action=upgrade
++if timeout 1 /bin/true >/dev/null 2>&1; then
++	timeout 90 /usr/bin/tachyon package_prerm "$$action" >/dev/null 2>&1
++elif timeout -t 1 /bin/true >/dev/null 2>&1; then
++	timeout -t 90 /usr/bin/tachyon package_prerm "$$action" >/dev/null 2>&1
++else
++	/usr/bin/tachyon package_prerm "$$action" >/dev/null 2>&1
++fi
++exit 0
+ endef
+ 
+ define Package/tachyon/postupgrade
