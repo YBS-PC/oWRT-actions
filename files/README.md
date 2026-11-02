@@ -247,14 +247,15 @@ sed -i 's/ct original packets ge 30 flow offload @ft/flow offload @ft/' /usr/sha
   | Best Effort — низкий | CS0 | `0x01000000` |
   | Bulk — наименьший | LE | `0x05000000` |
 
-  Пример правил (`/etc/nftables.d/10-priority-mangle.nft`, адреса свои; `comment` — последним, после `return`):
+  Правила из шаблона (`/etc/nftables.d/10-priority-mangle.nft`; адреса — сети автора: VLAN 10, 20, 30 роутера
+  в варианте clear, на другой сети их нужно заменить; `comment` — последним, после `return`):
 ```
 chain priority_mangle_prerouting_dscp {
 	type filter hook prerouting priority mangle; policy accept;
-	ip saddr 192.168.1.10 meta l4proto udp counter ip dscp set ef ct mark set 0xb9000000 return comment "Console games: Voice"
-	ip saddr 192.168.1.0/24 counter ip dscp set af21 ct mark set 0x49000000 return comment "LAN: Video"
-	ip saddr 192.168.2.0/24 counter ip dscp set cs0 ct mark set 0x01000000 return comment "Guest: Best Effort"
-	ip saddr 192.168.3.0/24 counter ip dscp set lephb ct mark set 0x05000000 return comment "IoT: Bulk"
+	ip saddr 192.168.110.3 meta l4proto udp counter ip dscp set ef ct mark set 0xb9000000 return comment "Console UDP: Voice"
+	ip saddr 192.168.110.0/24 counter ip dscp set af21 ct mark set 0x49000000 return comment "LAN: Video"
+	ip saddr 192.168.130.0/24 counter ip dscp set cs0 ct mark set 0x01000000 return comment "Guest: Best Effort"
+	ip saddr 192.168.150.0/24 counter ip dscp set lephb ct mark set 0x05000000 return comment "Outdoor: Bulk"
 }
 ```
   Проверка: `fw4 check && service firewall restart`; `tc filter show dev <wan> parent ffff:` — есть `ctinfo`;
