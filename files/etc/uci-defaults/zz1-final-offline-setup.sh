@@ -249,29 +249,48 @@ else
     log_info "$CUSTOMFEEDS_FILE не трогаем (maintenance)"
 fi
 
-# sing-box прошивки вместо sing-box из резервной копии. tachyon перечисляет
-# /usr/bin/sing-box в /lib/upgrade/keep.d (у нас патч 002 это убирает, но
-# резервную копию делает ещё прежняя прошивка, а tachyon, обновлённый на
-# роутере из релиза автора, приносит прежний список). sysupgrade кладёт такие
+# Ядро прошивки вместо ядра из резервной копии. tachyon перечисляет в
+# /lib/upgrade/keep.d свои ядра: /usr/bin/sing-box (у нас патч 002 его
+# убирает, но резервную копию делает ещё прежняя прошивка, а tachyon,
+# обновлённый на роутере из релиза автора, приносит прежний список),
+# /usr/bin/tachyon-core и метки ядра в /etc/tachyon. sysupgrade кладёт такие
 # файлы в копию, даже если они из прошивки, и после прошивки с сохранением
-# настроек старый sing-box восстанавливался в overlay поверх нового из образа.
-# Только firstboot (в maintenance копия в overlay может быть поставлена на
-# роутере намеренно) и только если sing-box есть в образе (/rom). Путь,
-# указанный в /etc/sysupgrade.conf, сохранён намеренно — его не трогаем.
-# Ссылку (tachyon-core ставит /usr/bin/sing-box -> tachyon-core) сначала
-# удаляем: cp поверх ссылки записал бы sing-box в сам tachyon-core. Ниже
-# sing-box из /root/apps, если он есть, ставится как раньше.
-if [ "$MODE" = "firstboot" ] && [ -f /rom/usr/bin/sing-box ] \
-   && { [ -e /overlay/upper/usr/bin/sing-box ] || [ -L /overlay/upper/usr/bin/sing-box ]; }; then
-    if grep -qE '^[[:space:]]*/usr/bin/sing-box[[:space:]]*$' /etc/sysupgrade.conf 2>/dev/null; then
-        log_info "sing-box из резервной копии оставлен: /usr/bin/sing-box указан в /etc/sysupgrade.conf"
-    elif [ ! -L /usr/bin/sing-box ] && cmp -s /rom/usr/bin/sing-box /usr/bin/sing-box; then
-        log_ok "sing-box из резервной копии совпадает с sing-box прошивки"
-    elif rm -f /usr/bin/sing-box && cp /rom/usr/bin/sing-box /usr/bin/sing-box \
-         && chmod 755 /usr/bin/sing-box; then
-        log_ok "sing-box из резервной копии заменён на sing-box прошивки"
-    else
-        log_err "Не удалось вернуть sing-box прошивки вместо sing-box из резервной копии"
+# настроек старое ядро восстанавливалось в overlay поверх нового из образа.
+# Поэтому файл, который есть в образе (/rom), возвращается из образа.
+# В образе нет tachyon-core — его и метки не трогаем: это ядро, поставленное
+# на роутере. Только firstboot (в maintenance копия в overlay может быть
+# поставлена на роутере намеренно). Путь, указанный в /etc/sysupgrade.conf,
+# сохранён намеренно — его не трогаем. Ссылку сначала удаляем: cp поверх
+# ссылки записал бы файл в то, на что она указывает (/usr/bin/sing-box ->
+# tachyon-core). Ниже sing-box из /root/apps, если он есть, ставится как раньше.
+if [ "$MODE" = "firstboot" ]; then
+    for _core in /usr/bin/sing-box /usr/bin/tachyon-core \
+                 /etc/tachyon/tachyon-core-variant /etc/tachyon/tachyon-core-version; do
+        { [ -e "/rom$_core" ] || [ -L "/rom$_core" ]; } || continue
+        { [ -e "/overlay/upper$_core" ] || [ -L "/overlay/upper$_core" ]; } || continue
+        if grep -qE "^[[:space:]]*${_core}[[:space:]]*\$" /etc/sysupgrade.conf 2>/dev/null; then
+            log_info "$_core из резервной копии оставлен: указан в /etc/sysupgrade.conf"
+        elif [ -L "/rom$_core" ] && [ -L "$_core" ] && [ "$(readlink "/rom$_core")" = "$(readlink "$_core")" ]; then
+            log_ok "$_core из резервной копии совпадает с прошивкой"
+        elif [ ! -L "/rom$_core" ] && [ ! -L "$_core" ] && cmp -s "/rom$_core" "$_core"; then
+            log_ok "$_core из резервной копии совпадает с прошивкой"
+        elif rm -f "$_core" && cp -a "/rom$_core" "$_core"; then
+            log_ok "$_core из резервной копии заменён на файл прошивки"
+        else
+            log_err "Не удалось вернуть $_core прошивки вместо файла из резервной копии"
+        fi
+    done
+    # Образ с tachyon-core без sing-box (slateax + tachyon): sing-box из
+    # резервной копии прежней прошивки — лишние мегабайты во флеше, а с
+    # меткой прежнего ядра tachyon взял бы его вместо tachyon-core.
+    if [ -f /rom/usr/bin/tachyon-core ] && [ ! -e /rom/usr/bin/sing-box ] && [ ! -L /rom/usr/bin/sing-box ] \
+       && { [ -e /overlay/upper/usr/bin/sing-box ] || [ -L /overlay/upper/usr/bin/sing-box ]; } \
+       && ! grep -qE '^[[:space:]]*/usr/bin/sing-box[[:space:]]*$' /etc/sysupgrade.conf 2>/dev/null; then
+        if rm -f /usr/bin/sing-box; then
+            log_ok "sing-box из резервной копии удалён: в прошивке ядро tachyon-core"
+        else
+            log_err "Не удалось удалить sing-box из резервной копии"
+        fi
     fi
 fi
 
