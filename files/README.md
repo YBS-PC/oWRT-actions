@@ -320,12 +320,14 @@ cp /etc/apk/repositories.d/distfeeds.list.bak /etc/apk/repositories.d/distfeeds.
 ```
 
 ## 14. Локальные бинарники из `/root/apps/`
-**sing-box прошивки вместо sing-box из резервной копии** (только firstboot, только если sing-box есть в образе —
-`/rom/usr/bin/sing-box`). tachyon перечисляет `/usr/bin/sing-box` в `/lib/upgrade/keep.d/tachyon`, а sysupgrade
-кладёт такие файлы в резервную копию, даже если они из прошивки: после прошивки с сохранением настроек старый
-sing-box восстанавливался в overlay поверх нового. Если в overlay есть свой `/usr/bin/sing-box` (файл или ссылка
-на `tachyon-core`), он заменяется копией из `/rom`; совпадающий с прошивкой файл не трогается. Не трогается и путь,
-указанный в `/etc/sysupgrade.conf`. Ядро `tachyon-core`, поставленное на роутере, остаётся. Патч 002
+**Ядро прошивки вместо ядра из резервной копии** (только firstboot). tachyon перечисляет свои ядра в
+`/lib/upgrade/keep.d/tachyon`: `/usr/bin/sing-box`, `/usr/bin/tachyon-core` и метки ядра в `/etc/tachyon`. sysupgrade
+кладёт такие файлы в резервную копию, даже если они из прошивки, и после прошивки с сохранением настроек старое ядро
+восстанавливалось в overlay поверх нового. Поэтому каждый из файлов `/usr/bin/sing-box`, `/usr/bin/tachyon-core`,
+`/etc/tachyon/tachyon-core-variant` и `/etc/tachyon/tachyon-core-version`, который есть в образе (`/rom`) и
+восстановлен в overlay, заменяется файлом из образа (ссылка — ссылкой); совпадающий не трогается. Чего в образе нет
+(например tachyon-core, поставленный на роутере), остаётся. В образе с tachyon-core без sing-box (slateax + tachyon)
+`/usr/bin/sing-box` из копии удаляется. Путь, указанный в `/etc/sysupgrade.conf`, не трогается. Патч 002
 (`patches/feeds/tachyon`) убирает `/usr/bin/sing-box` из списка tachyon, но копию делает ещё прежняя прошивка, а
 tachyon, обновлённый на роутере из релиза автора, приносит прежний список. sing-box из `/root/apps` (таблица ниже)
 ставится уже после этого шага.
