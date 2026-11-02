@@ -223,22 +223,26 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
       - id: set-matrix
+        # Значения формы — через env, а не ${{ }} в тексте скрипта: блок run
+        # с выражениями GitHub разбирает как шаблон, а шаблон длиннее 21000
+        # байт делает весь файл workflow недействительным.
         env:
+          INPUT_TARGET: ${{ inputs.target }}
+          INPUT_VARIANT: ${{ inputs.variant }}
+          INPUT_AGH: ${{ inputs.agh }}
+          INPUT_SB: ${{ inputs.sb }}
+          INPUT_YTB: ${{ inputs.ytb }}
+          INPUT_ZZ: ${{ inputs.zz }}
+          INPUT_PATCHES: ${{ inputs.apply_patches }}
+          INPUT_FEEDS: ${{ inputs.feeds_latest }}
+          INPUT_BASE: ${{ inputs.use_base_commit }}
           # Только признак «секрет задан»: сам пароль в job setup не нужен.
           HAS_ARTIFACT_PASSWORD: ${{ secrets.ARTIFACT_PASSWORD != '' }}
         run: |
-          INPUT_TARGET="${{ inputs.target }}"
-          INPUT_VARIANT="${{ inputs.variant }}"
-          INPUT_AGH="${{ inputs.agh }}"
-          INPUT_SB="${{ inputs.sb }}"
-          INPUT_YTB="${{ inputs.ytb }}"
-          INPUT_ZZ="${{ inputs.zz }}"
-          INPUT_PATCHES="${{ inputs.apply_patches }}"
-          INPUT_FEEDS="${{ inputs.feeds_latest }}"
 
-          # Галочка use_base_commit: приложение варианта — с коммита автора из
-          # patches/<feeds|packages>/<имя>/BASE (коммит читает job build).
-          INPUT_BASE="${{ inputs.use_base_commit }}"
+          # Галочка use_base_commit (INPUT_BASE в env): приложение варианта —
+          # с коммита автора из patches/<feeds|packages>/<имя>/BASE (коммит
+          # читает job build).
 
           # Каждая сборка матрицы несёт СВОИ настройки:
           #   agh     — "no" (убрать из прошивки), "feed" (пакет из фида),
@@ -643,10 +647,14 @@ jobs:
       # Только при выбранной версии. no/feed/tiny — без загрузки; для чистых
       # сборок и вариантов со своими прокси-ядрами setup уже привёл sb к "no".
       if: matrix.sb != 'no' && matrix.sb != 'feed' && matrix.sb != 'tiny'
+      # matrix.sb и matrix.target — через env: в тексте run выражений нет, и
+      # длинный скрипт не упирается в предел шаблона GitHub (21000 байт).
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        M_SB: ${{ matrix.sb }}
+        M_TARGET: ${M_TARGET}
       run: |
-        SB_VERSION_CHOICE="${{ matrix.sb }}"
+        SB_VERSION_CHOICE="$M_SB"
         SB_TAG=""
         SB_URL=""
         SB_REPO="SagerNet/sing-box"
@@ -718,9 +726,9 @@ jobs:
             case "$FK_VARIANT" in base|full|tiny) ;; *)
                 echo "::error::Неизвестная сборка sing-box-forkop: '$FK_VARIANT'"; exit 1 ;;
             esac
-            FK_ARCH=$(sed -n 's/.*CONFIG_TARGET_ARCH_PACKAGES="\([^"]*\)".*/\1/p' "./config/conf/${{ matrix.target }}" | head -n1)
+            FK_ARCH=$(sed -n 's/.*CONFIG_TARGET_ARCH_PACKAGES="\([^"]*\)".*/\1/p' "./config/conf/${M_TARGET}" | head -n1)
             if [ -z "$FK_ARCH" ]; then
-                echo "::error title=sing-box-forkop::Не найдена архитектура пакетов в config/conf/${{ matrix.target }}"
+                echo "::error title=sing-box-forkop::Не найдена архитектура пакетов в config/conf/${M_TARGET}"
                 exit 1
             fi
             # Релизы — теги vX.Y.Z-rN; сборки между релизами тегов не имеют.
@@ -845,9 +853,9 @@ jobs:
             # что в .apk, бинарник — под тот же musl 1.2.5.
             SB_REPO="FiyeroT/podkop-engine"
             PE_PKG="$SB_VERSION_CHOICE"
-            PE_ARCH=$(sed -n 's/.*CONFIG_TARGET_ARCH_PACKAGES="\([^"]*\)".*/\1/p' "./config/conf/${{ matrix.target }}" | head -n1)
+            PE_ARCH=$(sed -n 's/.*CONFIG_TARGET_ARCH_PACKAGES="\([^"]*\)".*/\1/p' "./config/conf/${M_TARGET}" | head -n1)
             if [ -z "$PE_ARCH" ]; then
-                echo "::warning title=podkop-engine пропущен::Не найдена архитектура пакетов в config/conf/${{ matrix.target }}. Будет использован sing-box из фида."
+                echo "::warning title=podkop-engine пропущен::Не найдена архитектура пакетов в config/conf/${M_TARGET}. Будет использован sing-box из фида."
                 exit 0
             fi
             # Теги v<sing-box>-r<ревизия>: последний по версии sing-box и ревизии.
@@ -929,7 +937,7 @@ jobs:
             # составе прошивки: артефакт этой сборки шифрует шаг Encrypt.
             # Бинарник нигде не печатается и в кэш не попадает.
             SB_REPO="Dushnilin/tachyon-core"
-            TC_PKGARCH=$(sed -n 's/.*CONFIG_TARGET_ARCH_PACKAGES="\([^"]*\)".*/\1/p' "./config/conf/${{ matrix.target }}" | head -n1)
+            TC_PKGARCH=$(sed -n 's/.*CONFIG_TARGET_ARCH_PACKAGES="\([^"]*\)".*/\1/p' "./config/conf/${M_TARGET}" | head -n1)
             # Архитектура пакетов OpenWrt → имя сборки ядра (как в
             # tachyon_core_arch_suffix() самого tachyon)
             case "$TC_PKGARCH" in
@@ -940,7 +948,7 @@ jobs:
                 mips_*)            TC_ARCH=mips ;;
                 x86_64)            TC_ARCH=x86_64 ;;
                 riscv64*)          TC_ARCH=riscv64 ;;
-                *) echo "::error title=tachyon-core::Нет сборки ядра для архитектуры '${TC_PKGARCH:-?}' (config/conf/${{ matrix.target }})"; exit 1 ;;
+                *) echo "::error title=tachyon-core::Нет сборки ядра для архитектуры '${TC_PKGARCH:-?}' (config/conf/${M_TARGET})"; exit 1 ;;
             esac
             SB_TAG=$(git ls-remote --tags --refs "https://github.com/${SB_REPO}.git" 2>/dev/null \
                 | awk '{print $2}' | sed 's|refs/tags/||' \
@@ -976,8 +984,8 @@ jobs:
             rm -rf "$TC_UNPACK" ./files/usr/bin/sing-box
             printf 'tachyon-core\n' > ./files/etc/tachyon/tachyon-core-variant
             printf '%s\n' "${SB_TAG#v}" > ./files/etc/tachyon/tachyon-core-version
-            echo "SB_DOWNLOADED_TAG=$SB_TAG" >> $GITHUB_ENV
-            echo "SB_DOWNLOADED_REPO=$SB_REPO" >> $GITHUB_ENV
+            echo "SB_DOWNLOADED_TAG=$SB_TAG" >> "$GITHUB_ENV"
+            echo "SB_DOWNLOADED_REPO=$SB_REPO" >> "$GITHUB_ENV"
             echo "=========================================="
             echo "       [CORE DOWNLOAD SUMMARY]            "
             echo "=========================================="
