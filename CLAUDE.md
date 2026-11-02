@@ -43,8 +43,11 @@
 - не класть в `files/` ничего личного: эта папка целиком попадает в образ
   прошивки.
 
-Секреты workflow: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` и
-`GITHUB_TOKEN`. Используются только через `secrets.*`.
+Секреты workflow: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`,
+`ARTIFACT_PASSWORD` (пароль 7z для артефакта сборки с ядром tachyon-core,
+slateax + tachyon) и `GITHUB_TOKEN`. Используются только через `secrets.*`.
+Образ с бинарником, который нельзя распространять (tachyon-core), открыто
+не выкладывается: только зашифрованный архив.
 
 ### 3. Нейтральный технический язык
 
