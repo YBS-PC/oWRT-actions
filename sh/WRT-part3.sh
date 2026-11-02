@@ -93,7 +93,7 @@ checkout_variant_commit() {
 # Поэтому master ставится и на ImmortalWrt вместо копии из фида: один код,
 # одна серия патчей, и сверка с исходниками работает на обеих платформах.
 # =========================================================
-if [[ "$VARIANT" != "clear" && "$VARIANT" != "crystal_clear" && "$VARIANT" != "switch" && "$VARIANT" != "passwall" && "$VARIANT" != "xray" && "$VARIANT" != "v2raya" && "$VARIANT" != "podkop" && "$VARIANT" != "netshift" && "$VARIANT" != "forkop" && "$VARIANT" != "trafira" && "$VARIANT" != "rehomeproxy" ]]; then
+if [[ "$VARIANT" != "clear" && "$VARIANT" != "crystal_clear" && "$VARIANT" != "switch" && "$VARIANT" != "passwall" && "$VARIANT" != "xray" && "$VARIANT" != "v2raya" && "$VARIANT" != "podkop" && "$VARIANT" != "netshift" && "$VARIANT" != "forkop" && "$VARIANT" != "trafira" && "$VARIANT" != "tachyon" && "$VARIANT" != "rehomeproxy" ]]; then
     if ! grep -q "immortalwrt/luci" feeds.conf.default; then
         echo ">>> [HomeProxy] В фидах НЕ найден ImmortalWrt LuCI. Считаем, что это Official OpenWrt."
         echo ">>> [HomeProxy] Добавляем HomeProxy вручную..."
@@ -438,11 +438,11 @@ echo 'CONFIG_BUSYBOX_DEFAULT_ASH_BUILTIN_TEST=y' >> ./.config
 echo 'CONFIG_BUSYBOX_DEFAULT_FEATURE_FAST_TOP=y' >> ./.config
 echo 'CONFIG_BUSYBOX_DEFAULT_FEATURE_USE_INITTAB=y' >> ./.config
 echo ">>> [Heavy packages] Тяжелые пакеты отключены."
-        # Для сборок с homeproxy и podkop/netshift/forkop/trafira ставим Tiny версию sing-box
+        # Для сборок с homeproxy и podkop/netshift/forkop/trafira/tachyon ставим Tiny версию sing-box
         # (если sing-box не отключён полем sb; job setup тогда пишет sb=tiny).
         # forkop 2.x — на своём ядре (sb=forkop-tiny), его ставит блок
         # «ВЫБОР КОМПОНЕНТОВ» ниже.
-        if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "rehomeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "netshift" || "$VARIANT" == "forkop" || "$VARIANT" == "trafira" ]] && [ "${SB_MODE:-feed}" != "no" ] && [[ "${SB_MODE:-feed}" != forkop-* ]]; then
+        if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "rehomeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "netshift" || "$VARIANT" == "forkop" || "$VARIANT" == "trafira" || "$VARIANT" == "tachyon" ]] && [ "${SB_MODE:-feed}" != "no" ] && [[ "${SB_MODE:-feed}" != forkop-* ]]; then
             echo ">>> [Heavy packages] Sing-box Tiny for $VARIANT compatibility..."
             sed -i '/sing-box/Id' ./.config
             echo '# CONFIG_PACKAGE_sing-box is not set' >> ./.config
@@ -461,7 +461,7 @@ fi
 # =========================================================
 
 # Пакеты SQM. Вырезаются во всех прокси-вариантах (homeproxy, rehomeproxy, podkop,
-# netshift, forkop, trafira, xray, passwall, v2raya); SQM остаётся только в clear.
+# netshift, forkop, trafira, tachyon, xray, passwall, v2raya); SQM остаётся только в clear.
 SQM_BLOAT=(
 "sqm"
 "sqm-scripts"
@@ -684,7 +684,7 @@ SWITCH_BLOAT=(
 # --- ЛОГИКА ДЛЯ ПРОКСИ-ВАРИАНТОВ: без SQM ---
 # forkop-mod сюда приходит как VARIANT=forkop (setup в workflow), отдельно
 # его перечислять не нужно.
-if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "rehomeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "netshift" || "$VARIANT" == "forkop" || "$VARIANT" == "trafira" || "$VARIANT" == "xray" || "$VARIANT" == "passwall" || "$VARIANT" == "v2raya" ]]; then
+if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "rehomeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "netshift" || "$VARIANT" == "forkop" || "$VARIANT" == "trafira" || "$VARIANT" == "tachyon" || "$VARIANT" == "xray" || "$VARIANT" == "passwall" || "$VARIANT" == "v2raya" ]]; then
     echo ">>> [Variant: $VARIANT] Performing cleanup..."
     # Вычищаем пакеты из конфига. В SQM_BLOAT уже перечислены полные имена
     # (luci-app-sqm, luci-i18n-sqm-ru), поэтому префиксы не добавляем.
@@ -695,11 +695,11 @@ if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "rehomeproxy" || "$VARIANT" == 
     drop_sqm_files
 fi
 
-# trafira дополнительно без youtubeUnblock (свои Zapret/ByeDPI). forkop-mod
+# trafira и tachyon дополнительно без youtubeUnblock (свои Zapret/ByeDPI). forkop-mod
 # (ветка 1.x, тоже с Zapret/ByeDPI) сюда приходит как VARIANT=forkop с ytb=false
 # от job setup и выключается общим блоком YTB ниже; в forkop 2.x Zapret и ByeDPI
 # убраны, youtubeUnblock ему можно.
-if [[ "$VARIANT" == "trafira" ]]; then
+if [[ "$VARIANT" == "trafira" || "$VARIANT" == "tachyon" ]]; then
     sed -i '/youtubeUnblock/Id' ./.config
     echo "# CONFIG_PACKAGE_youtubeUnblock is not set" >> ./.config
     echo "# CONFIG_PACKAGE_luci-app-youtubeUnblock is not set" >> ./.config
@@ -858,7 +858,8 @@ echo ">>> [HomeProxy] Makefile patched to fix recursion dependency."
 # пакета дают ip=<версия> и конфликтуют: сборка доходила до установки пакетов
 # в образ и падала на «unable to select packages: ip-tiny ... conflicts:
 # ip-full». forkop нужна только команда ip, ip-full умеет всё то же, поэтому
-# зависимость меняется на него (forkop-mod и trafira и так зависят от ip-full).
+# зависимость меняется на него (forkop-mod, trafira и tachyon и так зависят от
+# ip-full).
 if grep -q '^CONFIG_PACKAGE_ip-full=y' ./.config; then
     for FK_MK in feeds/forkop*/forkop/Makefile; do
         [ -f "$FK_MK" ] && grep -q '+ip-tiny' "$FK_MK" || continue
