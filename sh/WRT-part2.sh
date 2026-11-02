@@ -10,10 +10,11 @@ echo ">>>>>>>>> WRT-part2 start. Использование: после feeds up
 # --------------------------------------------------------------------------
 # Версии пакетов, собираемых из git
 #
-# Makefile'ы forkop, trafira, podkop, netshift и luci-theme-proton2025 читают версию
-# из окружения:
+# Makefile'ы forkop, trafira, tachyon, podkop, netshift и luci-theme-proton2025
+# читают версию из окружения:
 #   forkop/Makefile       FORKOP_VERSION  -> без неё PKG_VERSION=0.0.0
 #   trafira/Makefile      TRAFIRA_VERSION -> без неё PKG_VERSION=0.0.0
+#   tachyon/Makefile      TACHYON_VERSION -> без неё PKG_VERSION=0.0.0
 #   podkop/Makefile       PODKOP_VERSION  -> без неё PKG_VERSION=0.<дата>
 #   netshift/Makefile     NETSHIFT_VERSION -> без неё версия, зашитая в
 #                         Makefile автора (а у luci-app-netshift — 0.<дата>)
@@ -31,7 +32,8 @@ resolve_latest_tag() {
 
     # Основной путь: ls-remote. sed срезает refs/tags/ и ведущую v,
     # grep отбрасывает нечисловые теги (nightly, 1.4.1-rc1) — Makefile'ы
-    # forkop и trafira падают с $(error), если версия не в формате x.y.z.
+    # forkop, trafira и tachyon падают с $(error), если версия не в формате
+    # x.y.z.
     _ver=$(git ls-remote --tags --refs "$_repo" 2>/dev/null \
         | awk '{print $2}' | sed 's|refs/tags/||; s|^v||' \
         | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
@@ -115,6 +117,23 @@ if [[ "$VARIANT" == "trafira" ]]; then
     fi
 fi
 
+if [[ "$VARIANT" == "tachyon" ]]; then
+    # tachyon/Makefile и luci-app-tachyon/Makefile: TACHYON_VERSION x.y.z
+    # (dev -> PKG_VERSION=0.0.0, иное -> $(error)). Версия видна в LuCI
+    # tachyon и в его проверке обновлений. Теги автора — и «1.7.9», и
+    # «v1.3.13»: resolve_latest_tag срезает v и сортирует по версии.
+    TACHYON_REPO=$(awk '$1 ~ /^src-git/ && $2 == "tachyon" { print $3; exit }' feeds.conf.default 2>/dev/null | sed 's/[;^].*//')
+    [ -n "$TACHYON_REPO" ] || TACHYON_REPO="https://github.com/Dushnilin/tachyon.git"
+    TACHYON_VER=$(variant_version tachyon "$TACHYON_REPO")
+    if [ -n "$TACHYON_VER" ]; then
+        export_build_var TACHYON_VERSION "$TACHYON_VER"
+        echo "✓ tachyon: $TACHYON_VER ($TACHYON_REPO)"
+    else
+        export_build_var TACHYON_VERSION "dev"
+        echo "⚠ tachyon: тег не определён, ставлю dev (PKG_VERSION=0.0.0)"
+    fi
+fi
+
 if [[ "$VARIANT" == "podkop" ]]; then
     # podkop/Makefile и luci-app-podkop/Makefile: без PODKOP_VERSION версия
     # пакета 0.<дата сборки>, и проверка обновлений в LuCI podkop всегда
@@ -162,7 +181,7 @@ fi
 # patches/*.patch (патчи к дереву openwrt). Патчи к фидам лежат в подпапках,
 # чтобы тот шаг их не трогал, и применяются здесь — после feeds update, до
 # feeds install. Имя подпапки = имя фида из feeds.conf (forkop, forkopmod,
-# trafira, podkop, netshift).
+# trafira, tachyon, podkop, netshift).
 # Подпапки фидов, которые не загружены, пропускаются — поэтому патчи для
 # обоих вариантов forkop могут лежать рядом, а применятся только нужные.
 #
@@ -338,7 +357,7 @@ apply_feed_patches
 # YTB — поле формы ytb (workflow экспортирует его; без него считаем «да»).
 # Варианты без youtubeUnblock job setup и так приводит к ytb=false (forkop-mod —
 # тоже: внутри сборки это VARIANT=forkop, а forkop 2.x youtubeUnblock можно).
-if [[ "$VARIANT" == "clear" || "$VARIANT" == "crystal_clear" || "$VARIANT" == "switch" || "$VARIANT" == "trafira" || "${YTB:-true}" != "true" ]]; then
+if [[ "$VARIANT" == "clear" || "$VARIANT" == "crystal_clear" || "$VARIANT" == "switch" || "$VARIANT" == "trafira" || "$VARIANT" == "tachyon" || "${YTB:-true}" != "true" ]]; then
     echo ">>> Variant '$VARIANT', ytb=${YTB:-true}. Skipping youtubeUnblock update."
 else
     echo "=================================================="
