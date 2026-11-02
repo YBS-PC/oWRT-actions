@@ -1,0 +1,30 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 2 Nov 2026 12:00:00 +0000
+Subject: [PATCH] keep.d: do not keep the sing-box binary across sysupgrade
+
+sysupgrade puts every file listed in /lib/upgrade/keep.d into the
+backup, whether it belongs to the firmware or not. /usr/bin/sing-box is
+in the firmware image when the image is built with sing-box, so the
+binary of the old firmware (tens of MiB) went into every backup and was
+restored into the overlay over the sing-box of the new firmware: after
+a flash with kept settings the old sing-box kept running, and the
+overlay held a second copy of it.
+
+/usr/bin/sing-box and /usr/lib/libcronet.so (used only with that
+binary) are no longer kept. The cores installed on the router itself
+are kept as before: /usr/bin/tachyon-core, its init script and the
+variant marker in /etc/tachyon.
+
+diff --git a/tachyon/files/lib/upgrade/keep.d/tachyon b/tachyon/files/lib/upgrade/keep.d/tachyon
+index 359c4e07..5569f53d 100644
+--- a/tachyon/files/lib/upgrade/keep.d/tachyon
++++ b/tachyon/files/lib/upgrade/keep.d/tachyon
+@@ -5,7 +5,5 @@
+ /etc/init.d/tachyon-core
+ /etc/init.d/steer
+ /usr/bin/tachyon-core
+-/usr/bin/sing-box
+-/usr/lib/libcronet.so
+ /usr/sbin/steer
+ /usr/sbin/steer-nfqws
