@@ -109,7 +109,7 @@ option group 'root'
 - Создаются группа и пользователь `adguardhome` (uid/gid 853), если их нет
 - `/etc/init.d/adguardhome`: `--logfile syslog` (или `/var/AdGuardHome.log` прежних версий) → `--logfile /tmp/log/AdGuardHome.log` — журнал в файл, а не в syslog
 - `/etc/config/adguardhome`: `list jail_mount_rw '/tmp/log'` — каталог журнала доступен для записи из песочницы ujail
-- `/etc/adguardhome/adguardhome.yaml` — upstream DNS зависит от варианта:
+- `/etc/adguardhome/adguardhome.yaml` — upstream DNS зависит от варианта (yaml правится, только если он есть: на чистой прошивке без сохранённых настроек он появляется после мастера AGH, и zz1 пишет в лог адрес, который нужно указать; настройки варианта ниже выставляются и без yaml):
   - `forkop`, `trafira`, `tachyon`, `podkop`, `netshift` → `127.0.0.42:53` (DNS их sing-box), плюс `<вариант>.settings.dont_touch_dhcp='1'`
   - tachyon сам перенаправляет DNS на свой вход только у устройств, для которых есть своя секция (фильтр устройств): их запросы AGH не видит, остальных клиентов видит
   - forkop 2.x вместо `dont_touch_dhcp` (опции нет: dnsmasq он не трогает) получает `forkop.settings.intercept_device_dns='0'` (наш патч 002) и `forkop.settings.unmatched_dns_mode='router'`. Без перехвата запросы клиентов идут в AGH, и он видит каждого; AGH пересылает их на `127.0.0.42:53`, где домены секций получают FakeIP, а остальные отвечают DNS-серверы forkop (правило «вне секций → роутер» на этом входе не действует, петли нет). Запросы на чужой DNS (8.8.8.8 и т.п.) патч тоже отправляет в AGH. Перехватываются только устройства из фильтров секций (им нужен ответ по адресу клиента) и сам роутер; их DNS вне секций с `router` уходит в AGH. FakeIP-соединения исключённых устройств патч 002 отправляет через sing-box напрямую. Без патча (сборка без `apply_patches`) опция ни на что не влияет, и клиенты в журнале AGH видны как `127.0.0.1`. forkop 2.x отличается от forkop-mod (ветка 1.x) по опции `unmatched_dns_mode` в `/usr/share/forkop/default-config`
@@ -373,8 +373,8 @@ cp /etc/banner.bak /etc/banner
 ```
 
 ## 16. Время
-- `hwclock -s -u` (если есть RTC)
-- При доступном интернете — разовая синхронизация `ntpd` по IP-адресам, затем `hwclock -w -u`
+- `hwclock -s -u` — только если есть `/dev/rtc0` или `/dev/rtc` (без аппаратных часов `hwclock` падал и давал ложную ошибку в логе)
+- При доступном интернете — разовая синхронизация `ntpd` по IP-адресам, затем `hwclock -w -u` (тоже только при RTC)
 - Файлы в `/etc` с mtime из будущего получают текущее время (иначе sysfixtime отбросит часы вперёд)
 
 ## 17. `/usr/share/luci/menu.d/luci-app-filemanager.json`
