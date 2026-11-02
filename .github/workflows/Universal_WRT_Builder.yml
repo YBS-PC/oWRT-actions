@@ -500,7 +500,7 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         M_SB: ${{ matrix.sb }}
-        M_TARGET: ${M_TARGET}
+        M_TARGET: ${{ matrix.target }}
       run: |
         SB_VERSION_CHOICE="$M_SB"
         SB_TAG=""
