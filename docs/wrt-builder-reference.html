@@ -884,6 +884,7 @@
   <section id="firstboot">
     <div class="sec-head"><span class="sec-num">08</span><h2>Первый старт после прошивки</h2></div>
     <p class="sec-sub">Скрипт <code>zz1-final-offline-setup.sh</code> лежит в <code>/etc/uci-defaults/</code> и выполняется при первой загрузке (режим <b>firstboot</b>, лог <code>/root/setup_log.txt</code>). Сохранённую копию можно запустить вручную, например после <code>apk upgrade</code> (режим <b>maintenance</b>, лог <code>/root/setup_log_maintenance.txt</code>). Многие шаги учитывают вариант. Скрипта нет в <code>crystal_clear</code> и в сборках с <code>zz</code> = нет. Полный список изменений — в <code>files/README.md</code>.</p>
+    <p class="sec-sub">Во всех сборках при первой загрузке <code>/etc/uci-defaults/95_luci-cache</code> ставит базе пакетов (<code>/lib/apk/db/installed</code>) время сборки образа из <code>/etc/build_time</code> (пишет <code>WRT-part3.sh</code>). От этого времени зависит <code>?v=</code> у скриптов и стилей LuCI: иначе у прошивок с одних и тех же коммитов OpenWrt и LuCI адреса совпадают, и браузер может показывать страницы прежней прошивки из кэша.</p>
     <ol class="steps">
       <li><b>Инициализация.</b> Логирование, определение версии ядра, архитектуры, модели роутера и текущего варианта сборки.</li>
       <li><b>База.</b> Часовой пояс (Europe/Moscow), очистка строки FullCone, сохранение system.</li>
