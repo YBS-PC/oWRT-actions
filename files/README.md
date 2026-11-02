@@ -320,6 +320,16 @@ cp /etc/apk/repositories.d/distfeeds.list.bak /etc/apk/repositories.d/distfeeds.
 ```
 
 ## 14. Локальные бинарники из `/root/apps/`
+**sing-box прошивки вместо sing-box из резервной копии** (только firstboot, только если sing-box есть в образе —
+`/rom/usr/bin/sing-box`). tachyon перечисляет `/usr/bin/sing-box` в `/lib/upgrade/keep.d/tachyon`, а sysupgrade
+кладёт такие файлы в резервную копию, даже если они из прошивки: после прошивки с сохранением настроек старый
+sing-box восстанавливался в overlay поверх нового. Если в overlay есть свой `/usr/bin/sing-box` (файл или ссылка
+на `tachyon-core`), он заменяется копией из `/rom`; совпадающий с прошивкой файл не трогается. Не трогается и путь,
+указанный в `/etc/sysupgrade.conf`. Ядро `tachyon-core`, поставленное на роутере, остаётся. Патч 002
+(`patches/feeds/tachyon`) убирает `/usr/bin/sing-box` из списка tachyon, но копию делает ещё прежняя прошивка, а
+tachyon, обновлённый на роутере из релиза автора, приносит прежний список. sing-box из `/root/apps` (таблица ниже)
+ставится уже после этого шага.
+
 | Файл | Куда |
 |------|------|
 | `sing-box.tar.gz`, `sing-box` | `/usr/bin/sing-box` (сервис sing-box останавливается). Если стоит пакет `sing-box-forkop` (ядро forkop 2.x), не ставится: forkop на другом sing-box не запускается, файл остаётся в `/root/apps` |
