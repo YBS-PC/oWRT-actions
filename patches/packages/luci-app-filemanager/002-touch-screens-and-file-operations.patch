@@ -50,6 +50,8 @@ List:
 - the progress of an operation floats at the bottom of the window;
 - icons are inline SVG, not CSS masks, which some WebKit browsers drew
   as filled squares;
+- a theme that draws every checkbox as a wide switch (proton2025) gets
+  plain checkboxes in the selection column, the switch did not fit it;
 - uploads by the button or dropped files, with progress and cancel; a
   replaced file keeps its permissions and owner, new files get 0644;
 - a file is downloaded with progress; a folder or several items as a
@@ -83,7 +85,7 @@ translatable text; md.js and md_help.js are no longer loaded.
 
 Checked in Chromium with luci-base 25.12, themes bootstrap and
 proton2025, 1280 and 412 pixels wide, against rpcd file.* and cgi-io
-from OpenWrt 25.12 with busybox: 60 checks each (CRLF, BOM, links,
+from OpenWrt 25.12 with busybox: 61 checks each (CRLF, BOM, links,
 owner and mode kept on save and upload, a change on the router before
 saving, hex editor, create, rename, duplicate, copy and move with
 conflicts and into itself, upload error, download of a file and of a
@@ -91,14 +93,14 @@ folder archive, chmod, recursive chown, delete, settings, the old
 settings file, Back in the browser, the list not moving when items
 are selected, copied or cleared); no errors in the console.
 ---
- .../resources/view/system/filemanager.js      | 5002 +++++++++--------
- 1 file changed, 2623 insertions(+), 2379 deletions(-)
+ .../resources/view/system/filemanager.js      | 5024 +++++++++--------
+ 1 file changed, 2657 insertions(+), 2367 deletions(-)
 
 diff --git a/htdocs/luci-static/resources/view/system/filemanager.js b/htdocs/luci-static/resources/view/system/filemanager.js
-index b9e4d6f..3dc30ce 100644
+index b9e4d6f..71088c9 100644
 --- a/htdocs/luci-static/resources/view/system/filemanager.js
 +++ b/htdocs/luci-static/resources/view/system/filemanager.js
-@@ -4,2691 +4,2935 @@
+@@ -4,2691 +4,2981 @@
  'require ui';
  'require dom';
  'require rpc';
@@ -1068,106 +1070,38 @@ index b9e4d6f..3dc30ce 100644
 -	color: blue;
 -	cursor: pointer;
 -	margin-left: 5px;
--}
++	white-space: nowrap;
+ }
 -#file-manager-container .duplicate-button {
 -	color: orange;
--	cursor: pointer;
++#file-manager-container .fm-check { display: flex; justify-content: center; padding: 0; }
++#file-manager-container .fm-check input { margin: 0; cursor: pointer; }
++/* a theme that draws every checkbox as a wide switch (proton2025): the
++   selection column keeps a plain checkbox, see fitChecks() */
++#file-manager-container.fm-plain-check .fm-check input[type="checkbox"] {
++	-webkit-appearance: checkbox;
++	appearance: auto;
++	width: 18px;
++	height: 18px;
++	border: 0;
++	border-radius: 0;
++	background: none;
++	box-shadow: none;
++	transition: none;
++	accent-color: var(--proton-accent, auto);
++}
++#file-manager-container.fm-plain-check .fm-check input[type="checkbox"]::before,
++#file-manager-container.fm-plain-check .fm-check input[type="checkbox"]::after { content: none; display: none; }
++#file-manager-container .fm-sort {
++	appearance: none;
++	background: none;
++	border: 0;
++	color: inherit;
+ 	cursor: pointer;
 -	margin-left: 5px;
 -}
 -#file-manager-container .symlink {
 -	color: green;
--}
--#file-manager-container .status-link {
--	color: blue;
--	text-decoration: underline;
--	cursor: pointer;
--}
--#file-manager-container .action-button {
--	margin-right: 10px;
--	cursor: pointer;
--}
--#file-manager-container .size-cell {
--	font-family: monospace;
--	box-sizing: border-box;
--	white-space: nowrap;
--	align-items: center;
--}
--#file-manager-container .size-number {
--	display: inline-block;
--	width: 8ch;
--	text-align: right;
--}
--#file-manager-container .size-unit {
--	display: inline-block;
--	width: 4ch;
--	text-align: right;
--	margin-left: 0.5ch;
--}
--#file-manager-container .table {
--	table-layout: fixed;
--	border-collapse: collapse;
- 	white-space: nowrap;
--	width: 100%;
--	margin: 0 !important;
--}
--#file-manager-container .table th:nth-child(3), .table td:nth-child(3) {
--	width: 100px;
--	min-width: 100px;
--	max-width: 500px;
--}
--#file-manager-container .resizer {
--	position: absolute;
--	right: 0;
--	top: 0;
--	width: 5px;
--	height: 100%;
--	cursor: col-resize;
--	user-select: none;
--	z-index: 3;
- }
--#file-manager-container .resizer::after {
--	content: "";
--	position: absolute;
--	right: 2px;
--	top: 0;
--	width: 1px;
--	height: 100%;
--	background: #aaa;
--}
--#file-list-container.resizeable {
--	resize: both;
--	overflow: auto;
--}
--#file-manager-container .sort-button {
--	position: absolute;
--	right: 10px;
--	top: 50%;
--	transform: translateY(-50%);
-+#file-manager-container .fm-check { display: flex; justify-content: center; padding: 0; }
-+#file-manager-container .fm-check input { margin: 0; cursor: pointer; }
-+#file-manager-container .fm-sort {
-+	appearance: none;
- 	background: none;
--	border: 1px solid; /* Add a visible border */
--	border-color: light-dark(var(--light-border),var(--dark-border));
--	color: #fff; /* White text color for better contrast on dark backgrounds */
-+	border: 0;
-+	color: inherit;
- 	cursor: pointer;
--	padding: 2px 5px; /* Add padding for better clickability */
--	font-size: 12px; /* Set font size */
--	border-radius: 4px; /* Rounded corners for a better appearance */
--	background-color: rgba(0, 0, 0, 0.5); /* Semi-transparent black background */
--	transition: background-color 0.3s, color 0.3s; /* Smooth transition effects for hover */
--}
--
--#file-manager-container .sort-button:hover {
--	background-color: #fff; /* Change background to white on hover */
--	color: #000; /* Change text color to black on hover */
--	border-color: #fff; /* White border on hover */
--}
--#file-manager-container .sort-button:focus {
--	outline: none;
 +	font: inherit;
 +	font-weight: bold;
 +	padding: .2em 0;
@@ -1177,28 +1111,22 @@ index b9e4d6f..3dc30ce 100644
 +	overflow: hidden;
 +	text-overflow: ellipsis;
  }
--#status-bar {
--	margin-top: 10px;
--	padding: 10px;
--	background-color: #f9f9f9;
--	background-color: light-dark(var(--light-bg), var(--dark-bg));
--	border: 1px solid;
--	border-color: light-dark(var(--light-border),var(--dark-border));
--	min-height: 40px;
+-#file-manager-container .status-link {
+-	color: blue;
+-	text-decoration: underline;
 +#file-manager-container .fm-sort.sorted::after { content: " ▲"; font-size: .75em; }
 +#file-manager-container .fm-sort.sorted.desc::after { content: " ▼"; }
 +#file-manager-container .fm-mobile-sort { display: none; }
 +#file-manager-container .fm-open {
- 	display: flex;
- 	align-items: center;
--	justify-content: space-between;
--}
--#status-info {
--	font-weight: bold;
++	display: flex;
++	align-items: center;
 +	gap: .5em;
 +	color: inherit;
 +	text-decoration: none;
-+	cursor: pointer;
+ 	cursor: pointer;
+-}
+-#file-manager-container .action-button {
+-	margin-right: 10px;
 +	min-width: 0;
 +	padding: .2em 0;
 +}
@@ -1219,7 +1147,10 @@ index b9e4d6f..3dc30ce 100644
 +	border: 1px solid transparent;
 +	border-radius: 4px;
 +	color: inherit;
-+	cursor: pointer;
+ 	cursor: pointer;
+-}
+-#file-manager-container .size-cell {
+-	font-family: monospace;
 +	font-size: 1.3em;
 +	line-height: 1;
 +	margin: 0 auto;
@@ -1235,22 +1166,12 @@ index b9e4d6f..3dc30ce 100644
 +	left: 50%;
 +	bottom: 1em;
 +	transform: translateX(-50%);
-+	box-sizing: border-box;
+ 	box-sizing: border-box;
+-	white-space: nowrap;
 +	width: min(36em, calc(100vw - 16px));
- 	display: flex;
++	display: flex;
 +	flex-wrap: wrap;
  	align-items: center;
--}
--#status-info span {
--	padding-right: 10px;
--}
--#status-progress {
--	width: 50%;
--}
--.cbi-progressbar {
--	width: 100%;
--	background-color: light-dark(var(--light-bg), var(--dark-bg));
--	border-radius: 5px;
 +	gap: .5em;
 +	border: 1px solid var(--fm-border);
 +	border-radius: 6px;
@@ -1265,14 +1186,25 @@ index b9e4d6f..3dc30ce 100644
 +	height: .5em;
 +	border-radius: .25em;
 +	background: var(--fm-border);
- 	overflow: hidden;
--	height: 10px;
++	overflow: hidden;
  }
--.cbi-progressbar div {
--	height: 100%;
--	background-color: light-dark(var(--light-bg), var(--dark-bg));
--	width: 0%;
--	transition: width 0.2s;
+-#file-manager-container .size-number {
+-	display: inline-block;
+-	width: 8ch;
+-	text-align: right;
+-}
+-#file-manager-container .size-unit {
+-	display: inline-block;
+-	width: 4ch;
+-	text-align: right;
+-	margin-left: 0.5ch;
+-}
+-#file-manager-container .table {
+-	table-layout: fixed;
+-	border-collapse: collapse;
+-	white-space: nowrap;
+-	width: 100%;
+-	margin: 0 !important;
 +#file-manager-container .fm-meter > div { height: 100%; width: 0; background: var(--fm-accent); transition: width .2s; }
 +#file-manager-container .fm-meter.busy > div { width: 30% !important; animation: fm-busy 1.2s infinite linear; }
 +@keyframes fm-busy { from { margin-left: -30%; } to { margin-left: 100%; } }
@@ -1289,7 +1221,10 @@ index b9e4d6f..3dc30ce 100644
 +	z-index: 5;
 +	pointer-events: none;
  }
--.file-manager-header {
+-#file-manager-container .table th:nth-child(3), .table td:nth-child(3) {
+-	width: 100px;
+-	min-width: 100px;
+-	max-width: 500px;
 +#file-manager-container .fm-list.dragover .fm-drop { display: flex; }
 +
 +#file-manager-container .fm-editor-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .3em 1em; margin-bottom: .4em; }
@@ -1299,45 +1234,42 @@ index b9e4d6f..3dc30ce 100644
 +#file-manager-container .fm-toggle { display: inline-flex; align-items: center; gap: .3em; white-space: nowrap; cursor: pointer; margin: 0 .3em; }
 +#file-manager-container .fm-toggle input { margin: 0; }
 +#file-manager-container .fm-editor-body {
- 	display: flex;
--	align-items: center;
++	display: flex;
 +	border: 1px solid var(--fm-border);
 +	border-radius: 4px;
 +	overflow: hidden;
 +	height: 30em;
 +	min-height: 12em;
  }
--.file-manager-header h2 {
+-#file-manager-container .resizer {
+-	position: absolute;
+-	right: 0;
+-	top: 0;
+-	width: 5px;
+-	height: 100%;
+-	cursor: col-resize;
 +#file-manager-container .fm-gutter {
 +	flex: none;
- 	margin: 0;
--	min-width: fit-content;
--}
--.file-manager-header input {
--	margin-left: 10px;
--	width: 100%;
--	font-size: 18px;
--}
--#go-button {
--	font-size: 18px;
--	background-color: light-dark(var(--light-bg), var(--dark-bg));
--	color: light-dark(var(--light-color),var(--dark-color));
--	border-radius: 5px;
--	border: 1px solid;
--	border-color: light-dark(var(--light-border),var(--dark-border));
++	margin: 0;
 +	padding: .4em .5em .4em .3em;
 +	min-width: 2.5em;
 +	text-align: right;
 +	color: var(--fm-muted);
 +	border-right: 1px solid var(--fm-border);
 +	overflow: hidden;
-+	user-select: none;
+ 	user-select: none;
+-	z-index: 3;
 +	white-space: pre;
 +	background: var(--fm-hover);
  }
--#go-button:hover {
--	background-color: light-dark(var(--dark-bg), var(--light-bg));
--	color: light-dark(var(--dark-color),var(--light-color));
+-#file-manager-container .resizer::after {
+-	content: "";
+-	position: absolute;
+-	right: 2px;
+-	top: 0;
+-	width: 1px;
+-	height: 100%;
+-	background: #aaa;
 +#file-manager-container .fm-gutter,
 +#file-manager-container .fm-text {
 +	font-family: monospace;
@@ -1345,7 +1277,8 @@ index b9e4d6f..3dc30ce 100644
 +	line-height: 1.4;
 +	tab-size: 4;
  }
--#file-manager-container .directory-link {
+-#file-list-container.resizeable {
+-	resize: both;
 +#file-manager-container .fm-text {
 +	flex: 1;
 +	min-width: 0;
@@ -1359,7 +1292,7 @@ index b9e4d6f..3dc30ce 100644
 +	box-shadow: none !important;
 +	resize: none !important;
 +	outline: none;
-+	overflow: auto;
+ 	overflow: auto;
 +	white-space: pre;
 +	overflow-wrap: normal;
 +	color: inherit;
@@ -1391,29 +1324,33 @@ index b9e4d6f..3dc30ce 100644
 +[data-darkmode="true"] .fm-menu { color-scheme: dark; }
 +.fm-menu .fm-menu-title {
 +	padding: .4em 1em .5em;
- 	font-weight: bold;
++	font-weight: bold;
 +	border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent);
 +	margin-bottom: .3em;
 +	overflow-wrap: anywhere;
  }
--
--#file-manager-container .file-link {
--	color: inherit; /* Use the default text color */
--}
--#content-settings h3 {
--  margin-top: 0;
--  padding-top: 0;
--  padding-bottom: 25px;
--  line-height: unset;
+-#file-manager-container .sort-button {
+-	position: absolute;
+-	right: 10px;
+-	top: 50%;
+-	transform: translateY(-50%);
 +.fm-menu button {
 +	appearance: none;
 +	display: block;
 +	width: 100%;
 +	text-align: left;
-+	background: none;
+ 	background: none;
+-	border: 1px solid; /* Add a visible border */
+-	border-color: light-dark(var(--light-border),var(--dark-border));
+-	color: #fff; /* White text color for better contrast on dark backgrounds */
 +	border: 0;
 +	color: inherit;
-+	cursor: pointer;
+ 	cursor: pointer;
+-	padding: 2px 5px; /* Add padding for better clickability */
+-	font-size: 12px; /* Set font size */
+-	border-radius: 4px; /* Rounded corners for a better appearance */
+-	background-color: rgba(0, 0, 0, 0.5); /* Semi-transparent black background */
+-	transition: background-color 0.3s, color 0.3s; /* Smooth transition effects for hover */
 +	font: inherit;
 +	margin: 0;
 +	padding: .55em 1em;
@@ -1470,8 +1407,27 @@ index b9e4d6f..3dc30ce 100644
 +	#file-manager-container .fm-acts .btn .fm-bl { display: none; }
 +	#file-manager-container .fm-actbar .fm-acts .btn { height: 44px !important; }
  }
- `;
++`;
  
+-#file-manager-container .sort-button:hover {
+-	background-color: #fff; /* Change background to white on hover */
+-	color: #000; /* Change text color to black on hover */
+-	border-color: #fff; /* White border on hover */
+-}
+-#file-manager-container .sort-button:focus {
+-	outline: none;
+-}
+-#status-bar {
+-	margin-top: 10px;
+-	padding: 10px;
+-	background-color: #f9f9f9;
+-	background-color: light-dark(var(--light-bg), var(--dark-bg));
+-	border: 1px solid;
+-	border-color: light-dark(var(--light-border),var(--dark-border));
+-	min-height: 40px;
+-	display: flex;
+-	align-items: center;
+-	justify-content: space-between;
 +/* height of a header the theme keeps fixed at the top of the window */
 +/* height of a fixed or sticky theme header at the top of the window;
 +   skip: our own element, which may itself be sticky there */
@@ -1485,21 +1441,297 @@ index b9e4d6f..3dc30ce 100644
 +			return (b > 0 && b < window.innerHeight / 3) ? b : 0;
 +		}
 +	}
++
++	return 0;
+ }
+-#status-info {
+-	font-weight: bold;
+-	display: flex;
+-	align-items: center;
++
++/* the page background under el, for the parts that float over the list */
++function pageBackground(el) {
++	for (let n = el; n; n = n.parentElement) {
++		const c = window.getComputedStyle(n).backgroundColor;
++		if (c && c != 'transparent' && !/^rgba\(.*,\s*0\)$/.test(c))
++			return c;
++	}
++	return '';
+ }
+-#status-info span {
+-	padding-right: 10px;
++
++function insertCss() {
++	if (!document.getElementById('fm-style'))
++		document.head.appendChild(E('style', { 'id': 'fm-style' }, [ cssContent ]));
+ }
+-#status-progress {
+-	width: 50%;
++
++/* --- small dialogs ----------------------------------------------------- */
++
++function dialog(title, body, buttons) {
++	return new Promise((resolve) => {
++		let done = false;
++		const finish = (v) => {
++			if (done)
++				return;
++			done = true;
++			ui.hideModal();
++			resolve(v);
++		};
++
++		const btns = buttons.map(b => E('button', {
++			'class': `btn cbi-button ${b.cls ?? ''}`,
++			'click': ui.createHandlerFn(this, () => {
++				if (b.check && !b.check())
++					return;
++				finish(b.value);
++			})
++		}, txt(b.label)));
++
++		const root = E('div', {
++			'class': 'fm-dialog',
++			'keydown': (ev) => {
++				if (ev.key == 'Escape') {
++					ev.stopPropagation();
++					finish(null);
++				}
++				else if (ev.key == 'Enter' && ev.target.tagName == 'INPUT' && ev.target.type != 'checkbox') {
++					ev.preventDefault();
++					const i = buttons.findIndex(b => b.primary);
++					if (i >= 0)
++						btns[i].click();
++				}
++			}
++		}, [ ...body, E('div', { 'class': 'right' }, btns) ]);
++
++		ui.showModal(esc(title), root);
++
++		const focus = root.querySelector('input[type=text]') ?? btns[buttons.findIndex(b => b.primary)] ?? btns[0];
++		window.setTimeout(() => focus?.focus(), 50);
++	});
+ }
+-.cbi-progressbar {
+-	width: 100%;
+-	background-color: light-dark(var(--light-bg), var(--dark-bg));
+-	border-radius: 5px;
+-	overflow: hidden;
+-	height: 10px;
++
++function promptName(title, label, value, check, okLabel) {
++	const input = E('input', { 'type': 'text', 'class': 'cbi-input-text', 'value': value ?? '',
++		'autocapitalize': 'off', 'autocomplete': 'off', 'spellcheck': 'false' });
++	const error = E('div', { 'class': 'fm-error' });
++	const validate = () => {
++		const msg = check(input.value);
++		dom.content(error, msg ? txt(msg) : null);
++		return !msg;
++	};
++
++	input.addEventListener('input', () => dom.content(error, null));
++
++	const p = dialog(title, [
++		E('div', { 'class': 'fm-field' }, [ E('label', {}, txt(label)), input ]),
++		error
++	], [
++		{ label: _('Cancel'), value: null },
++		{ label: okLabel ?? _('OK'), value: true, cls: 'cbi-button-positive', primary: true, check: validate }
++	]);
++
++	/* preselect the name without the extension */
++	window.setTimeout(() => {
++		const dot = input.value.lastIndexOf('.');
++		input.setSelectionRange(0, dot > 0 ? dot : input.value.length);
++	}, 60);
++
++	return p.then(ok => ok ? input.value : null);
+ }
+-.cbi-progressbar div {
+-	height: 100%;
+-	background-color: light-dark(var(--light-bg), var(--dark-bg));
+-	width: 0%;
+-	transition: width 0.2s;
++
++function itemList(names) {
++	const max = 12;
++	const items = names.slice(0, max).map(n => E('li', {}, txt(n)));
++
++	if (names.length > max)
++		items.push(E('li', {}, txt(_('…and %d more').format(names.length - max))));
++
++	return E('ul', { 'class': 'fm-dialog-list' }, items);
+ }
+-.file-manager-header {
+-	display: flex;
+-	align-items: center;
++
++function copyText(text) {
++	if (navigator.clipboard && window.isSecureContext)
++		return navigator.clipboard.writeText(text);
++
++	const ta = E('textarea', { 'style': 'position:fixed;top:0;left:0;opacity:0' }, [ text ]);
++	document.body.appendChild(ta);
++	ta.select();
++	const ok = document.execCommand('copy');
++	ta.remove();
++	return ok ? Promise.resolve() : Promise.reject(new Error(_('The browser did not allow copying')));
+ }
+-.file-manager-header h2 {
+-	margin: 0;
+-	min-width: fit-content;
++
++function copyName(name, taken) {
++	const dot = name.lastIndexOf('.');
++	const ext = (dot > 0 && dot < name.length - 1) ? name.substring(dot) : '';
++	const base = ext ? name.substring(0, dot) : name;
++	let candidate = `${base} (copy)${ext}`;
++
++	for (let n = 2; taken.has(candidate); n++)
++		candidate = `${base} (copy ${n})${ext}`;
++
++	return candidate;
+ }
+-.file-manager-header input {
+-	margin-left: 10px;
+-	width: 100%;
+-	font-size: 18px;
+-}
+-#go-button {
+-	font-size: 18px;
+-	background-color: light-dark(var(--light-bg), var(--dark-bg));
+-	color: light-dark(var(--light-color),var(--dark-color));
+-	border-radius: 5px;
+-	border: 1px solid;
+-	border-color: light-dark(var(--light-border),var(--dark-border));
+-}
+-#go-button:hover {
+-	background-color: light-dark(var(--dark-bg), var(--light-bg));
+-	color: light-dark(var(--dark-color),var(--light-color));
+-}
+-#file-manager-container .directory-link {
+-	font-weight: bold;
++
++function hashFor(path) {
++	return '#' + path.split('/').map(encodeURIComponent).join('/');
+ }
+ 
+-#file-manager-container .file-link {
+-	color: inherit; /* Use the default text color */
+-}
+-#content-settings h3 {
+-  margin-top: 0;
+-  padding-top: 0;
+-  padding-bottom: 25px;
+-  line-height: unset;
++function pathFromHash() {
++	const h = window.location.hash;
++
++	if (!h.startsWith('#/'))
++		return null;
++
++	try {
++		return normPath(h.substring(1).split('/').map(decodeURIComponent).join('/'));
++	}
++	catch (e) {
++		return null;
++	}
+ }
+-`;
+ 
++/* --- the view ---------------------------------------------------------- */
  
 -// Main exported view module
--return view.extend({
+ return view.extend({
 -	editorMode: 'text',
 -	hexEditorInstance: null,
 -	// Method called when the view is loaded
--	load() {
++	handleSaveApply: null,
++	handleSave: null,
++	handleReset: null,
++
+ 	load() {
 -		const self = this;
 -		return loadConfig().then(() => {
 -			currentPath = config.currentDirectory || '/';
 -			return getFileList(currentPath); // Load the file list for the current directory
--		});
--	},
-+	return 0;
-+}
++		return loadConfig();
++	},
++
++	render() {
++		insertCss();
++
++		this.path = null;
++		this.entries = [];
++		this.selected = new Set();
++		this.sort = stored('sort') ?? { field: 'name', asc: true };
++		this.clip = null;
++		this.busy = null;
++		this.ed = null;
++		this.navToken = 0;
++		this.dragDepth = 0;
++		this.collator = new Intl.Collator(document.documentElement.lang || undefined, { numeric: true, sensitivity: 'base' });
++
++		try { this.clip = JSON.parse(window.sessionStorage.getItem('luci-filemanager-clipboard')); } catch (e) {}
++
++		const d = this.dom = {};
++
++		d.tabs = {
++			files: this.tabButton('files', _('Files')),
++			editor: this.tabButton('editor', _('Editor')),
++			settings: this.tabButton('settings', _('Settings')),
++			help: this.tabButton('help', _('Help'))
++		};
++		d.tabs.editor.disabled = true;
++		d.progress = E('div', { 'class': 'fm-progress', 'hidden': '' });
++
++		d.root = E('div', { 'id': 'file-manager-container' }, [
++			E('h2', {}, txt(_('File Manager'))),
++			E('div', { 'class': 'fm-tabs', 'role': 'tablist' }, Object.values(d.tabs)),
++			d.progress,
++			d.files = this.renderFiles(),
++			d.editor = E('div', { 'class': 'fm-panel', 'hidden': '' }),
++			d.settings = E('div', { 'class': 'fm-panel', 'hidden': '' }),
++			d.help = E('div', { 'class': 'fm-panel fm-help', 'hidden': '' })
++		]);
++
++		window.addEventListener('popstate', ev => this.onPopState(ev));
++		window.addEventListener('beforeunload', (ev) => {
++			if (this.ed?.dirty || this.busy) {
++				ev.preventDefault();
++				ev.returnValue = '';
++			}
+ 		});
++		window.addEventListener('resize', () => {
++			if (this.lastWidth != window.innerWidth) {
++				this.lastWidth = window.innerWidth;
++				this.renderList();
++				if (this.activeTab == 'editor')
++					this.fitEditor();
++			}
++			this.updateFloat(true);
++		});
++		/* capture: some themes scroll an inner element, not the window */
++		let raf = 0;
++		document.addEventListener('scroll', () => {
++			if (!raf)
++				raf = window.requestAnimationFrame(() => { raf = 0; this.updateFloat(false); });
++		}, { capture: true, passive: true });
++		document.addEventListener('keydown', ev => this.onKeyDown(ev));
++		this.lastWidth = window.innerWidth;
++
++		let start = pathFromHash();
++		if (!start)
++			start = (config.startMode == 'fixed') ? config.currentDirectory : (stored('lastDir') ?? config.currentDirectory);
++
++		this.activeTab = 'files';
++		this.navigate(start, 'replace').then((ok) => {
++			if (!ok && start != '/')
++				return this.navigate('/', 'replace');
++		});
++
++		return d.root;
+ 	},
  
 -	// Method to render the interface
 -	render(data) {
@@ -1530,15 +1762,17 @@ index b9e4d6f..3dc30ce 100644
 -					'style': 'margin-left: 10px; padding: 3px 12px;'
 -				}, _('&#8594;'))
 -			]),
-+/* the page background under el, for the parts that float over the list */
-+function pageBackground(el) {
-+	for (let n = el; n; n = n.parentElement) {
-+		const c = window.getComputedStyle(n).backgroundColor;
-+		if (c && c != 'transparent' && !/^rgba\(.*,\s*0\)$/.test(c))
-+			return c;
-+	}
-+	return '';
-+}
++	tabButton(name, label) {
++		return E('button', {
++			'class': 'fm-tab',
++			'type': 'button',
++			'role': 'tab',
++			'click': ev => {
++				ev.preventDefault();
++				this.selectTab(name);
++			}
++		}, txt(label));
++	},
  
 -			// Tab Panels
 -			E('div', {
@@ -1587,10 +1821,16 @@ index b9e4d6f..3dc30ce 100644
 -					])
 -				])
 -			]),
-+function insertCss() {
-+	if (!document.getElementById('fm-style'))
-+		document.head.appendChild(E('style', { 'id': 'fm-style' }, [ cssContent ]));
-+}
++	/* a tab chosen by the user: the editor gets its own history entry, so
++	   "Back" on a phone returns to the list */
++	selectTab(name) {
++		if (name == 'editor' && this.ed && history.state?.fm != 'edit')
++			history.pushState({ fm: 'edit', path: this.path, file: this.ed.path }, '', hashFor(this.path));
++		else if (name != 'editor' && history.state?.fm == 'edit') {
++			this.pendingTab = name;
++			history.back();
++			return;
++		}
  
 -			// Tab Contents
 -			E('div', {
@@ -1747,7 +1987,8 @@ index b9e4d6f..3dc30ce 100644
 -						}, _('Delete Selected'))
 -					])
 -				]),
-+/* --- small dialogs ----------------------------------------------------- */
++		this.showTab(name);
++	},
  
 -				// Editor Content
 -				E('div', {
@@ -1770,16 +2011,8 @@ index b9e4d6f..3dc30ce 100644
 -				}, [
 -					// The content will be dynamically inserted by renderHelp()
 -				]),
-+function dialog(title, body, buttons) {
-+	return new Promise((resolve) => {
-+		let done = false;
-+		const finish = (v) => {
-+			if (done)
-+				return;
-+			done = true;
-+			ui.hideModal();
-+			resolve(v);
-+		};
++	showTab(name) {
++		this.activeTab = name;
  
 -				// Settings Content
 -				E('div', {
@@ -1898,21 +2131,107 @@ index b9e4d6f..3dc30ce 100644
 -				const field = button.getAttribute('data-field');
 -				if (field) {
 -					self.sortBy(field); // Sort the file list by the selected field
-+		const btns = buttons.map(b => E('button', {
-+			'class': `btn cbi-button ${b.cls ?? ''}`,
-+			'click': ui.createHandlerFn(this, () => {
-+				if (b.check && !b.check())
-+					return;
-+				finish(b.value);
-+			})
-+		}, txt(b.label)));
++		for (const k in this.dom.tabs) {
++			this.dom.tabs[k].classList.toggle('active', k == name);
++			this.dom.tabs[k].setAttribute('aria-selected', k == name ? 'true' : 'false');
++			this.dom[k].hidden = (k != name);
++		}
 +
-+		const root = E('div', {
-+			'class': 'fm-dialog',
++		if (name == 'settings')
++			this.renderSettings();
++		else if (name == 'help')
++			this.renderHelp();
++		else if (name == 'editor')
++			this.fitEditor();
++		else if (name == 'files')
++			this.fitChecks();
++		this.updateFloat(false);
++	},
++
++	onPopState(ev) {
++		const st = ev.state;
++		const tab = this.pendingTab;
++
++		this.pendingTab = null;
++
++		if (!st?.fm) {
++			const p = pathFromHash();
++			if (p) {
++				this.showTab('files');
++				this.navigate(p, 'replace');
++			}
++			return;
++		}
++
++		if (st.fm == 'edit' && this.ed?.path == st.file) {
++			this.showTab('editor');
++			return;
++		}
++
++		this.showTab(tab ?? 'files');
++
++		if (st.path && st.path != this.path)
++			this.navigate(st.path, 'none');
++	},
++
++	onKeyDown(ev) {
++		if (this.activeTab == 'editor' && this.ed && (ev.ctrlKey || ev.metaKey) && !ev.altKey && ev.key.toLowerCase() == 's') {
++			ev.preventDefault();
++			this.saveFile();
++			return;
++		}
++
++		if (this.activeTab != 'files' || document.body.classList.contains('modal-overlay-active') || document.querySelector('.fm-menu'))
++			return;
++
++		const t = ev.target;
++		if (t && (t.tagName == 'INPUT' || t.tagName == 'TEXTAREA' || t.tagName == 'SELECT' || t.isContentEditable))
++			return;
++
++		const sel = [ ...this.selected ];
++		const k = ev.key;
++		const mod = ev.ctrlKey || ev.metaKey;
++
++		if (k == 'Delete' && sel.length)
++			this.deleteNames(sel);
++		else if (k == 'F2' && sel.length == 1)
++			this.renameEntry(this.entry(sel[0]));
++		else if (k == 'Escape' && sel.length)
++			this.setSelection([]);
++		else if (k == 'ArrowUp' && ev.altKey)
++			this.goUp();
++		else if (mod && k.toLowerCase() == 'a') {
++			this.setSelection(this.visibleEntries().map(e => e.name));
++		}
++		else if (mod && k.toLowerCase() == 'c' && sel.length && !String(window.getSelection())) {
++			this.setClipboard('copy', sel);
++		}
++		else if (mod && k.toLowerCase() == 'x' && sel.length) {
++			this.setClipboard('move', sel);
++		}
++		else if (mod && k.toLowerCase() == 'v' && this.clip) {
++			this.paste();
++		}
++		else
++			return;
++
++		ev.preventDefault();
++	},
++
++	/* --- file list ----------------------------------------------------- */
++
++	renderFiles() {
++		const d = this.dom;
++
++		d.crumbs = E('div', { 'class': 'fm-crumbs', 'aria-label': _('Path') });
++		d.pathInput = E('input', {
++			'type': 'text', 'class': 'cbi-input-text', 'hidden': '',
++			'autocapitalize': 'off', 'autocomplete': 'off', 'spellcheck': 'false',
++			'aria-label': _('Path'),
 +			'keydown': (ev) => {
-+				if (ev.key == 'Escape') {
-+					ev.stopPropagation();
-+					finish(null);
++				if (ev.key == 'Enter') {
++					ev.preventDefault();
++					this.goToTyped(d.pathInput.value);
  				}
 -			});
 -		});
@@ -1930,17 +2249,54 @@ index b9e4d6f..3dc30ce 100644
 -						}
 -					});
 -					self.fileListResizeObserver.observe(fileListContainer);
-+				else if (ev.key == 'Enter' && ev.target.tagName == 'INPUT' && ev.target.type != 'checkbox') {
++				else if (ev.key == 'Escape') {
 +					ev.preventDefault();
-+					const i = buttons.findIndex(b => b.primary);
-+					if (i >= 0)
-+						btns[i].click();
++					this.editPath(false);
  				}
  			}
--		});
+ 		});
 -		return viewContainer;
--	},
-+		}, [ ...body, E('div', { 'class': 'right' }, btns) ]);
++		d.pathEdit = E('button', { 'class': 'btn cbi-button', 'type': 'button', 'title': _('Type a path'),
++			'click': () => this.editPath(d.pathInput.hidden) }, txt('✎'));
++		d.pathGo = E('button', { 'class': 'btn cbi-button cbi-button-action', 'type': 'button', 'hidden': '',
++			'click': () => this.goToTyped(d.pathInput.value) }, txt(_('Go')));
++
++		d.filter = E('input', {
++			'type': 'search', 'class': 'cbi-input-text fm-filter', 'placeholder': _('Filter by name'),
++			'autocapitalize': 'off', 'autocomplete': 'off', 'spellcheck': 'false',
++			'aria-label': _('Filter by name'),
++			'input': () => this.renderList()
++		});
++
++		d.toolbar = E('div', { 'class': 'fm-bar' }, [
++			E('button', { 'class': 'btn cbi-button', 'type': 'button', 'title': _('Parent folder') + ' (Alt+↑)', 'aria-label': _('Parent folder'), 'click': () => this.goUp() }, txt('↑')),
++			E('button', { 'class': 'btn cbi-button', 'type': 'button', 'title': _('Refresh'), 'aria-label': _('Refresh'), 'click': () => this.refresh() }, txt('⟳')),
++			E('button', { 'class': 'btn cbi-button', 'type': 'button', 'click': () => this.createEntry('directory') }, txt(_('New folder'))),
++			E('button', { 'class': 'btn cbi-button', 'type': 'button', 'click': () => this.createEntry('file') }, txt(_('New file'))),
++			E('button', { 'class': 'btn cbi-button cbi-button-action', 'type': 'button', 'click': () => this.pickUpload() }, txt(_('Upload'))),
++			d.filter
++		]);
++
++		/* always there, so that selecting a file does not move the list; the
++		   slot keeps its place while the bar floats over a scrolled list */
++		d.actBar = E('div', { 'class': 'fm-actbar', 'role': 'toolbar', 'aria-label': _('Selection') });
++		d.actSlot = E('div', { 'class': 'fm-actslot' }, [ d.actBar ]);
++
++		d.list = E('div', {
++			'class': 'fm-list',
++			'dragenter': ev => this.onDrag(ev, 1),
++			'dragover': ev => this.onDrag(ev, 0),
++			'dragleave': ev => this.onDrag(ev, -1),
++			'drop': ev => this.onDrop(ev)
++		});
++
++		return E('div', { 'class': 'fm-panel' }, [
++			E('div', { 'class': 'fm-path' }, [ d.crumbs, d.pathInput, d.pathGo, d.pathEdit ]),
++			d.toolbar,
++			d.actSlot,
++			d.list
++		]);
+ 	},
  
 -	// Handler for the "Select All" checkbox click
 -	handleSelectAllClick(ev) {
@@ -1949,104 +2305,20 @@ index b9e4d6f..3dc30ce 100644
 -			this.handleInvertSelection();
 -		} else {
 -			// Proceed with normal click handling; the 'change' event will be triggered
--		}
-+		ui.showModal(esc(title), root);
++	editPath(on) {
++		const d = this.dom;
 +
-+		const focus = root.querySelector('input[type=text]') ?? btns[buttons.findIndex(b => b.primary)] ?? btns[0];
-+		window.setTimeout(() => focus?.focus(), 50);
-+	});
-+}
++		d.crumbs.hidden = on;
++		d.pathInput.hidden = !on;
++		d.pathGo.hidden = !on;
++		d.pathEdit.textContent = on ? '✕' : '✎';
++		d.pathEdit.title = on ? _('Cancel') : _('Type a path');
 +
-+function promptName(title, label, value, check, okLabel) {
-+	const input = E('input', { 'type': 'text', 'class': 'cbi-input-text', 'value': value ?? '',
-+		'autocapitalize': 'off', 'autocomplete': 'off', 'spellcheck': 'false' });
-+	const error = E('div', { 'class': 'fm-error' });
-+	const validate = () => {
-+		const msg = check(input.value);
-+		dom.content(error, msg ? txt(msg) : null);
-+		return !msg;
-+	};
-+
-+	input.addEventListener('input', () => dom.content(error, null));
-+
-+	const p = dialog(title, [
-+		E('div', { 'class': 'fm-field' }, [ E('label', {}, txt(label)), input ]),
-+		error
-+	], [
-+		{ label: _('Cancel'), value: null },
-+		{ label: okLabel ?? _('OK'), value: true, cls: 'cbi-button-positive', primary: true, check: validate }
-+	]);
-+
-+	/* preselect the name without the extension */
-+	window.setTimeout(() => {
-+		const dot = input.value.lastIndexOf('.');
-+		input.setSelectionRange(0, dot > 0 ? dot : input.value.length);
-+	}, 60);
-+
-+	return p.then(ok => ok ? input.value : null);
-+}
-+
-+function itemList(names) {
-+	const max = 12;
-+	const items = names.slice(0, max).map(n => E('li', {}, txt(n)));
-+
-+	if (names.length > max)
-+		items.push(E('li', {}, txt(_('…and %d more').format(names.length - max))));
-+
-+	return E('ul', { 'class': 'fm-dialog-list' }, items);
-+}
-+
-+function copyText(text) {
-+	if (navigator.clipboard && window.isSecureContext)
-+		return navigator.clipboard.writeText(text);
-+
-+	const ta = E('textarea', { 'style': 'position:fixed;top:0;left:0;opacity:0' }, [ text ]);
-+	document.body.appendChild(ta);
-+	ta.select();
-+	const ok = document.execCommand('copy');
-+	ta.remove();
-+	return ok ? Promise.resolve() : Promise.reject(new Error(_('The browser did not allow copying')));
-+}
-+
-+function copyName(name, taken) {
-+	const dot = name.lastIndexOf('.');
-+	const ext = (dot > 0 && dot < name.length - 1) ? name.substring(dot) : '';
-+	const base = ext ? name.substring(0, dot) : name;
-+	let candidate = `${base} (copy)${ext}`;
-+
-+	for (let n = 2; taken.has(candidate); n++)
-+		candidate = `${base} (copy ${n})${ext}`;
-+
-+	return candidate;
-+}
-+
-+function hashFor(path) {
-+	return '#' + path.split('/').map(encodeURIComponent).join('/');
-+}
-+
-+function pathFromHash() {
-+	const h = window.location.hash;
-+
-+	if (!h.startsWith('#/'))
-+		return null;
-+
-+	try {
-+		return normPath(h.substring(1).split('/').map(decodeURIComponent).join('/'));
-+	}
-+	catch (e) {
-+		return null;
-+	}
-+}
-+
-+/* --- the view ---------------------------------------------------------- */
-+
-+return view.extend({
-+	handleSaveApply: null,
-+	handleSave: null,
-+	handleReset: null,
-+
-+	load() {
-+		return loadConfig();
++		if (on) {
++			d.pathInput.value = this.path;
++			d.pathInput.focus();
++			d.pathInput.select();
+ 		}
  	},
  
 -	// Function to invert selection
@@ -2059,49 +2331,18 @@ index b9e4d6f..3dc30ce 100644
 -				selectedItems.add(filePath);
 -			} else {
 -				selectedItems.delete(filePath);
-+	render() {
-+		insertCss();
+-			}
++	/* a typed path may name a file: open its folder and the file */
++	goToTyped(value) {
++		const path = normPath(value.trim().startsWith('/') ? value.trim() : joinPath(this.path, value.trim()));
 +
-+		this.path = null;
-+		this.entries = [];
-+		this.selected = new Set();
-+		this.sort = stored('sort') ?? { field: 'name', asc: true };
-+		this.clip = null;
-+		this.busy = null;
-+		this.ed = null;
-+		this.navToken = 0;
-+		this.dragDepth = 0;
-+		this.collator = new Intl.Collator(document.documentElement.lang || undefined, { numeric: true, sensitivity: 'base' });
-+
-+		try { this.clip = JSON.parse(window.sessionStorage.getItem('luci-filemanager-clipboard')); } catch (e) {}
-+
-+		const d = this.dom = {};
-+
-+		d.tabs = {
-+			files: this.tabButton('files', _('Files')),
-+			editor: this.tabButton('editor', _('Editor')),
-+			settings: this.tabButton('settings', _('Settings')),
-+			help: this.tabButton('help', _('Help'))
-+		};
-+		d.tabs.editor.disabled = true;
-+		d.progress = E('div', { 'class': 'fm-progress', 'hidden': '' });
-+
-+		d.root = E('div', { 'id': 'file-manager-container' }, [
-+			E('h2', {}, txt(_('File Manager'))),
-+			E('div', { 'class': 'fm-tabs', 'role': 'tablist' }, Object.values(d.tabs)),
-+			d.progress,
-+			d.files = this.renderFiles(),
-+			d.editor = E('div', { 'class': 'fm-panel', 'hidden': '' }),
-+			d.settings = E('div', { 'class': 'fm-panel', 'hidden': '' }),
-+			d.help = E('div', { 'class': 'fm-panel fm-help', 'hidden': '' })
-+		]);
-+
-+		window.addEventListener('popstate', ev => this.onPopState(ev));
-+		window.addEventListener('beforeunload', (ev) => {
-+			if (this.ed?.dirty || this.busy) {
-+				ev.preventDefault();
-+				ev.returnValue = '';
- 			}
++		return fs.stat(path).then((st) => {
++			this.editPath(false);
++			if (st.type == 'directory')
++				return this.navigate(path);
++			return this.navigate(dirName(path)).then(ok => ok && this.openFile(path));
++		}).catch((err) => {
++			notify(_('Cannot open "%s": %s').format(path, errMsg(err)), 'error');
  		});
 -		// Update the "Select All" checkbox state
 -		this.updateSelectAllCheckbox();
@@ -2159,334 +2400,6 @@ index b9e4d6f..3dc30ce 100644
 -			} else if (tab === 'help') {
 -				// Render the Help content when the Help tab is activated
 -				this.renderHelp();
-+		window.addEventListener('resize', () => {
-+			if (this.lastWidth != window.innerWidth) {
-+				this.lastWidth = window.innerWidth;
-+				this.renderList();
-+				if (this.activeTab == 'editor')
-+					this.fitEditor();
- 			}
--			// No additional actions are required for the Editor tab in this context
-+			this.updateFloat(true);
-+		});
-+		/* capture: some themes scroll an inner element, not the window */
-+		let raf = 0;
-+		document.addEventListener('scroll', () => {
-+			if (!raf)
-+				raf = window.requestAnimationFrame(() => { raf = 0; this.updateFloat(false); });
-+		}, { capture: true, passive: true });
-+		document.addEventListener('keydown', ev => this.onKeyDown(ev));
-+		this.lastWidth = window.innerWidth;
-+
-+		let start = pathFromHash();
-+		if (!start)
-+			start = (config.startMode == 'fixed') ? config.currentDirectory : (stored('lastDir') ?? config.currentDirectory);
-+
-+		this.activeTab = 'files';
-+		this.navigate(start, 'replace').then((ok) => {
-+			if (!ok && start != '/')
-+				return this.navigate('/', 'replace');
-+		});
-+
-+		return d.root;
-+	},
-+
-+	tabButton(name, label) {
-+		return E('button', {
-+			'class': 'fm-tab',
-+			'type': 'button',
-+			'role': 'tab',
-+			'click': ev => {
-+				ev.preventDefault();
-+				this.selectTab(name);
-+			}
-+		}, txt(label));
-+	},
-+
-+	/* a tab chosen by the user: the editor gets its own history entry, so
-+	   "Back" on a phone returns to the list */
-+	selectTab(name) {
-+		if (name == 'editor' && this.ed && history.state?.fm != 'edit')
-+			history.pushState({ fm: 'edit', path: this.path, file: this.ed.path }, '', hashFor(this.path));
-+		else if (name != 'editor' && history.state?.fm == 'edit') {
-+			this.pendingTab = name;
-+			history.back();
-+			return;
- 		}
-+
-+		this.showTab(name);
- 	},
- 
--	/**
--	 * Renders the Help content by converting Markdown to HTML and inserting it into the Help container.
--	 */
--	renderHelp() {
--		const self = this;
-+	showTab(name) {
-+		this.activeTab = name;
- 
--		// Convert Markdown to HTML
-+		for (const k in this.dom.tabs) {
-+			this.dom.tabs[k].classList.toggle('active', k == name);
-+			this.dom.tabs[k].setAttribute('aria-selected', k == name ? 'true' : 'false');
-+			this.dom[k].hidden = (k != name);
-+		}
- 
--		const helpContentHTML = md.parseMarkdown(md_help.helpContentMarkdown);
-+		if (name == 'settings')
-+			this.renderSettings();
-+		else if (name == 'help')
-+			this.renderHelp();
-+		else if (name == 'editor')
-+			this.fitEditor();
-+		this.updateFloat(false);
-+	},
- 
-+	onPopState(ev) {
-+		const st = ev.state;
-+		const tab = this.pendingTab;
- 
--		// Get the Help content container
--		const helpContent = document.getElementById('content-help');
-+		this.pendingTab = null;
- 
--		if (helpContent) {
--			// Insert the converted HTML into the Help container
--			helpContent.innerHTML = helpContentHTML;
-+		if (!st?.fm) {
-+			const p = pathFromHash();
-+			if (p) {
-+				this.showTab('files');
-+				this.navigate(p, 'replace');
-+			}
-+			return;
-+		}
- 
--			// Initialize resizeable functionality for the Help window
--			self.initResizeableHelp();
--		} else {
--			console.error('Help content container not found.');
--			pop(null, E('p', _('Failed to render Help content: Container not found.')), 'error');
-+		if (st.fm == 'edit' && this.ed?.path == st.file) {
-+			this.showTab('editor');
-+			return;
- 		}
-+
-+		this.showTab(tab ?? 'files');
-+
-+		if (st.path && st.path != this.path)
-+			this.navigate(st.path, 'none');
- 	},
- 
--	/**
--	 * Initializes the resizeable functionality for the Help window.
--	 */
--	initResizeableHelp() {
--		const helpContent = document.getElementById('content-help');
--
--		if (helpContent) {
--			// Set initial dimensions
--			helpContent.style.width = '100%';
--			helpContent.style.height = '500px';
--			helpContent.style.resize = 'both';
--			helpContent.style.overflow = 'auto';
--			helpContent.style.border = '1px solid #ccc';
--			helpContent.style.padding = '10px';
--			helpContent.style.boxSizing = 'border-box';
--
--			// Optional: Add a drag handle for better user experience
--			/*
--			var dragHandle = E('div', {
--				'class': 'resize-handle',
--				'style': 'width: 10px; height: 10px; background: #ccc; position: absolute; bottom: 0; right: 0; cursor: se-resize;'
--			});
--			helpContent.appendChild(dragHandle);
--			*/
--		} else {
--			console.error('Help content container not found for resizing.');
-+	onKeyDown(ev) {
-+		if (this.activeTab == 'editor' && this.ed && (ev.ctrlKey || ev.metaKey) && !ev.altKey && ev.key.toLowerCase() == 's') {
-+			ev.preventDefault();
-+			this.saveFile();
-+			return;
-+		}
-+
-+		if (this.activeTab != 'files' || document.body.classList.contains('modal-overlay-active') || document.querySelector('.fm-menu'))
-+			return;
-+
-+		const t = ev.target;
-+		if (t && (t.tagName == 'INPUT' || t.tagName == 'TEXTAREA' || t.tagName == 'SELECT' || t.isContentEditable))
-+			return;
-+
-+		const sel = [ ...this.selected ];
-+		const k = ev.key;
-+		const mod = ev.ctrlKey || ev.metaKey;
-+
-+		if (k == 'Delete' && sel.length)
-+			this.deleteNames(sel);
-+		else if (k == 'F2' && sel.length == 1)
-+			this.renameEntry(this.entry(sel[0]));
-+		else if (k == 'Escape' && sel.length)
-+			this.setSelection([]);
-+		else if (k == 'ArrowUp' && ev.altKey)
-+			this.goUp();
-+		else if (mod && k.toLowerCase() == 'a') {
-+			this.setSelection(this.visibleEntries().map(e => e.name));
- 		}
-+		else if (mod && k.toLowerCase() == 'c' && sel.length && !String(window.getSelection())) {
-+			this.setClipboard('copy', sel);
-+		}
-+		else if (mod && k.toLowerCase() == 'x' && sel.length) {
-+			this.setClipboard('move', sel);
-+		}
-+		else if (mod && k.toLowerCase() == 'v' && this.clip) {
-+			this.paste();
-+		}
-+		else
-+			return;
-+
-+		ev.preventDefault();
- 	},
- 
--	// Handler for the "Go" button click to navigate to a directory
--	handleGoButtonClick() {
--		// Logic to navigate to the specified directory and update the file list
--		const self = this;
--		const pathInput = document.getElementById('path-input');
--		if (pathInput) {
--			const newPath = pathInput.value.trim() || '/';
--			fs.stat(newPath).then((stat) => {
--				if (stat.type === 'directory') {
--					currentPath = newPath;
--					pathInput.value = currentPath;
--					self.loadFileList(currentPath).then(() => {
--						self.initResizeableColumns();
--					});
--				} else {
--					pop(null, E('p', _('The specified path does not appear to be a directory.')), 'error');
-+	/* --- file list ----------------------------------------------------- */
-+
-+	renderFiles() {
-+		const d = this.dom;
-+
-+		d.crumbs = E('div', { 'class': 'fm-crumbs', 'aria-label': _('Path') });
-+		d.pathInput = E('input', {
-+			'type': 'text', 'class': 'cbi-input-text', 'hidden': '',
-+			'autocapitalize': 'off', 'autocomplete': 'off', 'spellcheck': 'false',
-+			'aria-label': _('Path'),
-+			'keydown': (ev) => {
-+				if (ev.key == 'Enter') {
-+					ev.preventDefault();
-+					this.goToTyped(d.pathInput.value);
- 				}
--			}).catch((err) => {
--				pop(null, E('p', _('Failed to access the specified path: %s').format(err.message)), 'error');
--			});
--		}
-+				else if (ev.key == 'Escape') {
-+					ev.preventDefault();
-+					this.editPath(false);
-+				}
-+			}
-+		});
-+		d.pathEdit = E('button', { 'class': 'btn cbi-button', 'type': 'button', 'title': _('Type a path'),
-+			'click': () => this.editPath(d.pathInput.hidden) }, txt('✎'));
-+		d.pathGo = E('button', { 'class': 'btn cbi-button cbi-button-action', 'type': 'button', 'hidden': '',
-+			'click': () => this.goToTyped(d.pathInput.value) }, txt(_('Go')));
-+
-+		d.filter = E('input', {
-+			'type': 'search', 'class': 'cbi-input-text fm-filter', 'placeholder': _('Filter by name'),
-+			'autocapitalize': 'off', 'autocomplete': 'off', 'spellcheck': 'false',
-+			'aria-label': _('Filter by name'),
-+			'input': () => this.renderList()
-+		});
-+
-+		d.toolbar = E('div', { 'class': 'fm-bar' }, [
-+			E('button', { 'class': 'btn cbi-button', 'type': 'button', 'title': _('Parent folder') + ' (Alt+↑)', 'aria-label': _('Parent folder'), 'click': () => this.goUp() }, txt('↑')),
-+			E('button', { 'class': 'btn cbi-button', 'type': 'button', 'title': _('Refresh'), 'aria-label': _('Refresh'), 'click': () => this.refresh() }, txt('⟳')),
-+			E('button', { 'class': 'btn cbi-button', 'type': 'button', 'click': () => this.createEntry('directory') }, txt(_('New folder'))),
-+			E('button', { 'class': 'btn cbi-button', 'type': 'button', 'click': () => this.createEntry('file') }, txt(_('New file'))),
-+			E('button', { 'class': 'btn cbi-button cbi-button-action', 'type': 'button', 'click': () => this.pickUpload() }, txt(_('Upload'))),
-+			d.filter
-+		]);
-+
-+		/* always there, so that selecting a file does not move the list; the
-+		   slot keeps its place while the bar floats over a scrolled list */
-+		d.actBar = E('div', { 'class': 'fm-actbar', 'role': 'toolbar', 'aria-label': _('Selection') });
-+		d.actSlot = E('div', { 'class': 'fm-actslot' }, [ d.actBar ]);
-+
-+		d.list = E('div', {
-+			'class': 'fm-list',
-+			'dragenter': ev => this.onDrag(ev, 1),
-+			'dragover': ev => this.onDrag(ev, 0),
-+			'dragleave': ev => this.onDrag(ev, -1),
-+			'drop': ev => this.onDrop(ev)
-+		});
-+
-+		return E('div', { 'class': 'fm-panel' }, [
-+			E('div', { 'class': 'fm-path' }, [ d.crumbs, d.pathInput, d.pathGo, d.pathEdit ]),
-+			d.toolbar,
-+			d.actSlot,
-+			d.list
-+		]);
- 	},
- 
--	// Handler for dragging files over the drop zone
--	handleDragEnter(event) {
--		event.preventDefault();
--		event.stopPropagation();
--		dragCounter++;
--		const fileListContainer = document.getElementById('file-list-container');
--		const dragOverlay = document.getElementById('drag-overlay');
--		if (fileListContainer && dragOverlay) {
--			fileListContainer.classList.add('drag-over');
--			dragOverlay.style.display = 'flex';
-+	editPath(on) {
-+		const d = this.dom;
-+
-+		d.crumbs.hidden = on;
-+		d.pathInput.hidden = !on;
-+		d.pathGo.hidden = !on;
-+		d.pathEdit.textContent = on ? '✕' : '✎';
-+		d.pathEdit.title = on ? _('Cancel') : _('Type a path');
-+
-+		if (on) {
-+			d.pathInput.value = this.path;
-+			d.pathInput.focus();
-+			d.pathInput.select();
- 		}
- 	},
- 
--	// Handler for when files are over the drop zone
--	handleDragOver(event) {
--		event.preventDefault();
--		event.stopPropagation();
--		event.dataTransfer.dropEffect = 'copy'; // Indicate copy action
--	},
--
--	// Handler for leaving the drop zone
--	handleDragLeave(event) {
--		event.preventDefault();
--		event.stopPropagation();
--		dragCounter--;
--		if (dragCounter === 0) {
--			const fileListContainer = document.getElementById('file-list-container');
--			const dragOverlay = document.getElementById('drag-overlay');
--			if (fileListContainer && dragOverlay) {
--				fileListContainer.classList.remove('drag-over');
--				dragOverlay.style.display = 'none';
-+	/* a typed path may name a file: open its folder and the file */
-+	goToTyped(value) {
-+		const path = normPath(value.trim().startsWith('/') ? value.trim() : joinPath(this.path, value.trim()));
-+
-+		return fs.stat(path).then((st) => {
-+			this.editPath(false);
-+			if (st.type == 'directory')
-+				return this.navigate(path);
-+			return this.navigate(dirName(path)).then(ok => ok && this.openFile(path));
-+		}).catch((err) => {
-+			notify(_('Cannot open "%s": %s').format(path, errMsg(err)), 'error');
-+		});
 +	},
 +
 +	goUp() {
@@ -2514,6 +2427,7 @@ index b9e4d6f..3dc30ce 100644
 +				this.dom.filter.value = '';
 +				this.free = null;
  			}
+-			// No additional actions are required for the Editor tab in this context
 -		}
 +			else {
 +				const names = new Set(entries.map(e => e.name));
@@ -2543,8 +2457,13 @@ index b9e4d6f..3dc30ce 100644
 +				notify(_('Cannot open folder "%s": %s').format(path, errMsg(err)), 'error');
 +			return false;
 +		});
-+	},
-+
+ 	},
+ 
+-	/**
+-	 * Renders the Help content by converting Markdown to HTML and inserting it into the Help container.
+-	 */
+-	renderHelp() {
+-		const self = this;
 +	renderCrumbs() {
 +		const parts = this.path.split('/').filter(Boolean);
 +		const items = [ E('button', { 'type': 'button', 'title': '/', 'click': () => this.navigate('/') }, txt('/')) ];
@@ -2555,43 +2474,41 @@ index b9e4d6f..3dc30ce 100644
 +				items.push(E('span', { 'class': 'fm-sep' }, txt('/')));
 +			items.push(E('button', { 'type': 'button', 'click': () => this.navigate(target) }, txt(p)));
 +		});
-+
+ 
+-		// Convert Markdown to HTML
 +		dom.content(this.dom.crumbs, items);
 +		this.dom.crumbs.scrollLeft = this.dom.crumbs.scrollWidth;
- 	},
++	},
  
--	// Handler for dropping files into the drop zone
--	handleDrop(event) {
--		event.preventDefault();
--		event.stopPropagation();
--		dragCounter = 0; // Reset counter
--		const self = this;
--		const files = event.dataTransfer.files;
--		const fileListContainer = document.getElementById('file-list-container');
--		const dragOverlay = document.getElementById('drag-overlay');
--		if (fileListContainer && dragOverlay) {
--			fileListContainer.classList.remove('drag-over');
--			dragOverlay.style.display = 'none';
+-		const helpContentHTML = md.parseMarkdown(md_help.helpContentMarkdown);
 +	entry(name) {
 +		return this.entries.find(e => e.name == name);
 +	},
-+
+ 
 +	columns() {
 +		return String(config.columns).split(',').filter(c => columnTitles[c]);
 +	},
-+
+ 
+-		// Get the Help content container
+-		const helpContent = document.getElementById('content-help');
 +	compare(a, b) {
 +		const f = this.sort.field;
 +		const dir = this.sort.asc ? 1 : -1;
-+
+ 
+-		if (helpContent) {
+-			// Insert the converted HTML into the Help container
+-			helpContent.innerHTML = helpContentHTML;
 +		if (config.foldersFirst == '1') {
 +			const da = kind(a) == 'directory', db = kind(b) == 'directory';
 +			if (da != db)
 +				return da ? -1 : 1;
- 		}
--		if (files.length > 0) {
--			self.uploadFiles(files);
-+
++		}
+ 
+-			// Initialize resizeable functionality for the Help window
+-			self.initResizeableHelp();
+-		} else {
+-			console.error('Help content container not found.');
+-			pop(null, E('p', _('Failed to render Help content: Container not found.')), 'error');
 +		let r = 0;
 +		switch (f) {
 +		case 'size':
@@ -2614,25 +2531,59 @@ index b9e4d6f..3dc30ce 100644
 +		return (r || this.collator.compare(a.name, b.name)) * dir;
  	},
  
--	// Handler for uploading a file
--	handleUploadClick(ev) {
--		const self = this;
--		const fileInput = document.createElement('input');
--		fileInput.type = 'file';
--		fileInput.multiple = true; // Allow selecting multiple files
--		fileInput.style.display = 'none';
--		document.body.appendChild(fileInput);
--		fileInput.onchange = (event) => {
--			const files = event.target.files;
--			if (!files || files.length === 0) {
--				pop(null, E('p', _('No file selected.')), 'error');
--				return;
+-	/**
+-	 * Initializes the resizeable functionality for the Help window.
+-	 */
+-	initResizeableHelp() {
+-		const helpContent = document.getElementById('content-help');
+-
+-		if (helpContent) {
+-			// Set initial dimensions
+-			helpContent.style.width = '100%';
+-			helpContent.style.height = '500px';
+-			helpContent.style.resize = 'both';
+-			helpContent.style.overflow = 'auto';
+-			helpContent.style.border = '1px solid #ccc';
+-			helpContent.style.padding = '10px';
+-			helpContent.style.boxSizing = 'border-box';
+-
+-			// Optional: Add a drag handle for better user experience
+-			/*
+-			var dragHandle = E('div', {
+-				'class': 'resize-handle',
+-				'style': 'width: 10px; height: 10px; background: #ccc; position: absolute; bottom: 0; right: 0; cursor: se-resize;'
+-			});
+-			helpContent.appendChild(dragHandle);
+-			*/
+-		} else {
+-			console.error('Help content container not found for resizing.');
+-		}
 +	visibleEntries() {
 +		const q = this.dom.filter.value.trim().toLowerCase();
 +		const list = q ? this.entries.filter(e => e.name.toLowerCase().includes(q)) : this.entries.slice();
 +		return list.sort((a, b) => this.compare(a, b));
-+	},
-+
+ 	},
+ 
+-	// Handler for the "Go" button click to navigate to a directory
+-	handleGoButtonClick() {
+-		// Logic to navigate to the specified directory and update the file list
+-		const self = this;
+-		const pathInput = document.getElementById('path-input');
+-		if (pathInput) {
+-			const newPath = pathInput.value.trim() || '/';
+-			fs.stat(newPath).then((stat) => {
+-				if (stat.type === 'directory') {
+-					currentPath = newPath;
+-					pathInput.value = currentPath;
+-					self.loadFileList(currentPath).then(() => {
+-						self.initResizeableColumns();
+-					});
+-				} else {
+-					pop(null, E('p', _('The specified path does not appear to be a directory.')), 'error');
+-				}
+-			}).catch((err) => {
+-				pop(null, E('p', _('Failed to access the specified path: %s').format(err.message)), 'error');
+-			});
 +	cellText(e, col) {
 +		switch (col) {
 +		case 'size':
@@ -2645,10 +2596,21 @@ index b9e4d6f..3dc30ce 100644
 +			return `${e.user ?? e.uid}:${e.group ?? e.gid}`;
 +		case 'type':
 +			return (e.type == 'symlink' && e.target) ? `${fileTypes.symlink} → ${fileTypes[e.target.type] ?? e.target.type}` : (fileTypes[e.type] ?? e.type);
-+		}
+ 		}
 +		return '';
-+	},
-+
+ 	},
+ 
+-	// Handler for dragging files over the drop zone
+-	handleDragEnter(event) {
+-		event.preventDefault();
+-		event.stopPropagation();
+-		dragCounter++;
+-		const fileListContainer = document.getElementById('file-list-container');
+-		const dragOverlay = document.getElementById('drag-overlay');
+-		if (fileListContainer && dragOverlay) {
+-			fileListContainer.classList.add('drag-over');
+-			dragOverlay.style.display = 'flex';
+-		}
 +	renderList() {
 +		const d = this.dom;
 +		const cols = this.columns();
@@ -2715,6 +2677,52 @@ index b9e4d6f..3dc30ce 100644
 +
 +		dom.content(d.list, rows);
 +		this.renderActions(list);
++		this.fitChecks();
+ 	},
+ 
+-	// Handler for when files are over the drop zone
+-	handleDragOver(event) {
+-		event.preventDefault();
+-		event.stopPropagation();
+-		event.dataTransfer.dropEffect = 'copy'; // Indicate copy action
+-	},
+-
+-	// Handler for leaving the drop zone
+-	handleDragLeave(event) {
+-		event.preventDefault();
+-		event.stopPropagation();
+-		dragCounter--;
+-		if (dragCounter === 0) {
+-			const fileListContainer = document.getElementById('file-list-container');
+-			const dragOverlay = document.getElementById('drag-overlay');
+-			if (fileListContainer && dragOverlay) {
+-				fileListContainer.classList.remove('drag-over');
+-				dragOverlay.style.display = 'none';
++	/* a checkbox much wider than high is a switch of the theme: it does not
++	   fit the selection column, so the column gets a plain checkbox */
++	fitChecks() {
++		const d = this.dom;
++
++		if (this.checksFitted)
++			return;
++
++		if (!d.list.isConnected) {
++			if (!this.checksPending) {
++				this.checksPending = true;
++				window.requestAnimationFrame(() => { this.checksPending = false; if (d.list.isConnected) this.fitChecks(); });
+ 			}
++			return;
+ 		}
++
++		const cb = d.list.querySelector('.fm-check input');
++
++		if (!cb || !cb.offsetHeight)
++			return;
++
++		this.checksFitted = true;
++
++		if (cb.offsetWidth > cb.offsetHeight * 1.4)
++			d.root.classList.add('fm-plain-check');
 +	},
 +
 +	renderRow(e, cols) {
@@ -2741,10 +2749,7 @@ index b9e4d6f..3dc30ce 100644
 +					return;
 +				ev.preventDefault();
 +				this.openEntry(e, ev.altKey ? 'hex' : null, ev.currentTarget);
- 			}
--			self.uploadFiles(files); // Use the shared upload function
--		};
--		fileInput.click();
++			}
 +		}, [
 +			svgIcon(icon || 'file', `fm-icon ${icon}`),
 +			E('span', { 'class': 'fm-label' }, [
@@ -2777,21 +2782,8 @@ index b9e4d6f..3dc30ce 100644
 +		]);
 +
 +		return row;
- 	},
- 
--	uploadFiles(files) {
--		const self = this;
--		const directoryPath = currentPath;
--		const statusInfo = document.getElementById('status-info');
--		const statusProgress = document.getElementById('status-progress');
--		const totalFiles = files.length;
--		let uploadedFiles = 0;
--
--		function uploadNextFile(index) {
--			if (index >= totalFiles) {
--				self.loadFileList(currentPath).then(() => {
--					self.initResizeableColumns();
--				});
++	},
++
 +	setSort(field, asc) {
 +		this.sort = { field: field, asc: asc };
 +		store('sort', this.sort);
@@ -2822,8 +2814,20 @@ index b9e4d6f..3dc30ce 100644
 +			this.free = (f.length >= 6 && total > 0 && avail >= 0) ? { total: total, avail: avail } : null;
 +			this.renderActions();
 +		}).catch(() => {});
-+	},
-+
+ 	},
+ 
+-	// Handler for dropping files into the drop zone
+-	handleDrop(event) {
+-		event.preventDefault();
+-		event.stopPropagation();
+-		dragCounter = 0; // Reset counter
+-		const self = this;
+-		const files = event.dataTransfer.files;
+-		const fileListContainer = document.getElementById('file-list-container');
+-		const dragOverlay = document.getElementById('drag-overlay');
+-		if (fileListContainer && dragOverlay) {
+-			fileListContainer.classList.remove('drag-over');
+-			dragOverlay.style.display = 'none';
 +	/* the action bar: what is selected, else what is on the clipboard, else
 +	   what is in the folder; one line of text and one row of buttons in each
 +	   state, so its height does not change */
@@ -2849,7 +2853,9 @@ index b9e4d6f..3dc30ce 100644
 +				btn('trash', _('Delete'), () => this.deleteNames(names), 'cbi-button-negative'),
 +				btn('close', _('Clear selection'), () => this.setSelection([]), 'fm-icon-only')
 +			];
-+		}
+ 		}
+-		if (files.length > 0) {
+-			self.uploadFiles(files);
 +		else if (c) {
 +			const what = (c.names.length == 1) ? `"${c.names[0]}"` : N_(c.names.length, '%d item', '%d items').format(c.names.length);
 +			info = [ (c.op == 'move') ? _('To move: %s from %s').format(what, c.dir) : _('To copy: %s from %s').format(what, c.dir) ];
@@ -2857,7 +2863,7 @@ index b9e4d6f..3dc30ce 100644
 +				btn('paste', c.op == 'move' ? _('Move here') : _('Paste here'), () => this.paste(), 'cbi-button-positive'),
 +				btn('close', _('Cancel'), () => this.setClipboard(null))
 +			];
-+		}
+ 		}
 +		else {
 +			list = list ?? this.visibleEntries();
 +			const dirs = list.filter(e => kind(e) == 'directory').length;
@@ -2879,8 +2885,25 @@ index b9e4d6f..3dc30ce 100644
 +		bar.classList.toggle('active', !!(n || c));
 +		dom.content(bar, [ text, E('span', { 'class': 'fm-acts' }, acts) ]);
 +		this.updateFloat(false);
-+	},
-+
+ 	},
+ 
+-	// Handler for uploading a file
+-	handleUploadClick(ev) {
+-		const self = this;
+-		const fileInput = document.createElement('input');
+-		fileInput.type = 'file';
+-		fileInput.multiple = true; // Allow selecting multiple files
+-		fileInput.style.display = 'none';
+-		document.body.appendChild(fileInput);
+-		fileInput.onchange = (event) => {
+-			const files = event.target.files;
+-			if (!files || files.length === 0) {
+-				pop(null, E('p', _('No file selected.')), 'error');
+-				return;
+-			}
+-			self.uploadFiles(files); // Use the shared upload function
+-		};
+-		fileInput.click();
 +	/* with something selected or on the clipboard, the action bar stays in
 +	   view under a fixed theme header while the list scrolls (position:
 +	   sticky does not work where the theme clips overflow of the content) */
@@ -2907,8 +2930,21 @@ index b9e4d6f..3dc30ce 100644
 +		bar.style.top = float ? `${Math.round(inset)}px` : '';
 +		bar.style.left = float ? `${Math.round(s.left)}px` : '';
 +		bar.style.width = float ? `${Math.round(s.width)}px` : '';
-+	},
-+
+ 	},
+ 
+-	uploadFiles(files) {
+-		const self = this;
+-		const directoryPath = currentPath;
+-		const statusInfo = document.getElementById('status-info');
+-		const statusProgress = document.getElementById('status-progress');
+-		const totalFiles = files.length;
+-		let uploadedFiles = 0;
+-
+-		function uploadNextFile(index) {
+-			if (index >= totalFiles) {
+-				self.loadFileList(currentPath).then(() => {
+-					self.initResizeableColumns();
+-				});
 +	/* --- clipboard ------------------------------------------------------ */
 +
 +	setClipboard(op, names) {
@@ -2946,15 +2982,15 @@ index b9e4d6f..3dc30ce 100644
  				return;
  			}
 +		}
++
++		const taken = new Set(this.entries.map(e => e.name));
++		const pairs = [];
++		const conflicts = [];
  
 -			const file = files[index];
 -			const fullFilePath = joinPath(directoryPath, file.name);
 -			if (statusInfo) {
 -				statusInfo.textContent = _('Uploading: "%s"...').format(file.name);
-+		const taken = new Set(this.entries.map(e => e.name));
-+		const pairs = [];
-+		const conflicts = [];
-+
 +		for (const n of c.names) {
 +			let t = n;
 +			if (c.op == 'copy' && c.dir == dest) {
@@ -3345,10 +3381,7 @@ index b9e4d6f..3dc30ce 100644
 -		const cb = ev.target;
 -		const filePath = cb.dataset.filePath;
 +	/* --- create, rename, delete, duplicate ------------------------------ */
- 
--		cb.checked
--			? selectedItems.add(filePath)
--			: selectedItems.delete(filePath);
++
 +	checkNewName(name, current) {
 +		const msg = validName(name);
 +		if (msg)
@@ -3361,15 +3394,18 @@ index b9e4d6f..3dc30ce 100644
 +	createEntry(type) {
 +		if (this.isBusy())
 +			return;
- 
--		this.updateDeleteSelectedButton();
--		this.updateSelectAllCheckbox();
-+		const isDir = (type == 'directory');
 +
++		const isDir = (type == 'directory');
+ 
+-		cb.checked
+-			? selectedItems.add(filePath)
+-			: selectedItems.delete(filePath);
 +		return promptName(isDir ? _('New folder') : _('New file'), _('Name'), '', n => this.checkNewName(n), _('Create')).then((name) => {
 +			if (name == null)
 +				return;
-+
+ 
+-		this.updateDeleteSelectedButton();
+-		this.updateSelectAllCheckbox();
 +			const path = joinPath(this.path, name);
 +
 +			return L.resolveDefault(fs.stat(path), null).then((st) => {
@@ -3393,15 +3429,15 @@ index b9e4d6f..3dc30ce 100644
 +	renameEntry(e) {
 +		if (!e || this.isBusy())
 +			return;
- 
--		btn.style.display = selectedItems.size > 0 ? '' : 'none';
++
 +		return promptName(_('Rename'), _('New name'), e.name, n => this.checkNewName(n, e.name), _('Rename')).then((name) => {
 +			if (name == null || name == e.name)
 +				return;
 +
 +			const from = joinPath(this.path, e.name);
 +			const to = joinPath(this.path, name);
-+
+ 
+-		btn.style.display = selectedItems.size > 0 ? '' : 'none';
 +			return L.resolveDefault(fs.stat(to), null).then((st) => {
 +				if (st)
 +					throw new Error(_('An item with this name already exists.'));
