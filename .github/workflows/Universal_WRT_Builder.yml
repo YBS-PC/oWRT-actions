@@ -461,10 +461,11 @@ jobs:
           done
 
           # tachyon без патчей: prerm на ucode, а buildroot выполняет его как
-          # sh — удаление пакета не останавливает службу и не чистит за ней.
+          # sh — удаление пакета не останавливает службу и не чистит за ней
+          # (001); keep.d сохраняет /usr/bin/sing-box при sysupgrade (002).
           echo "$json" | jq -r '.include[] | select(.variant == "tachyon" and .patches == false) | .target' |
           while read -r t; do
-            echo "::warning title=${t}: tachyon без патчей::Без патча 001 (patches/feeds/tachyon) «apk del tachyon» не выполнит очистку tachyon (prerm на ucode, а сборка OpenWrt запускает его как sh): служба не останавливается, dnsmasq не возвращается, остаётся запись таблицы маршрутизации. Включите apply_patches."
+            echo "::warning title=${t}: tachyon без патчей::Без патча 001 (patches/feeds/tachyon) «apk del tachyon» не выполнит очистку tachyon (prerm на ucode, а сборка OpenWrt запускает его как sh): служба не останавливается, dnsmasq не возвращается, остаётся запись таблицы маршрутизации; без патча 002 при sysupgrade с сохранением настроек sing-box прежней прошивки восстанавливается поверх нового из образа. Включите apply_patches."
           done
 
           # netshift без патчей: ссылки socks5 с ':' в логине/пароле дают
