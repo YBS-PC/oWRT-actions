@@ -92,6 +92,7 @@
 | `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`3d5c24f`](https://github.com/yandexru45/netshift/commit/3d5c24f28799502db16e76b6475ce38c7f0def33) | 31.10.2026 |
 | `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`be8d917`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/be8d917a3b88a090c084540af9bb9c1864578552) | 01.11.2026 |
 | `feeds/podkop/` | [itdoginfo/podkop](https://github.com/itdoginfo/podkop) | [`c654bf5`](https://github.com/itdoginfo/podkop/commit/c654bf5da75309754e3fb63b9441981db65fff68) | 24.10.2026 |
+| `feeds/tachyon/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) | [`b9811a3`](https://github.com/Dushnilin/tachyon/commit/b9811a3a0803d459975306c76e8ef370db35fa91) | 02.11.2026 |
 | `feeds/trafira/` | [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) | [`15ae0f9`](https://github.com/petrouspetr-pixel/trafira/commit/15ae0f909cbcad0f632245cbc13fb6103dd3cce0) | 30.10.2026 |
 | `packages/luci-app-commands/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`75a306d`](https://github.com/openwrt/luci/commit/75a306df84a020c57a631ef5b4c02ace56d93387) | 15.10.2026 |
 | `packages/luci-app-filemanager/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`e969939`](https://github.com/openwrt/luci/commit/e969939b49167516e219d465df8030d98d443d67) | 31.10.2026 |
@@ -123,7 +124,7 @@
 
 ## Патчи по пакетам
 
-Всего 57 патчей для 12 пакетов. Номер — порядок применения. Ссылки
+Всего 58 патчей для 13 пакетов. Номер — порядок применения. Ссылки
 вида `#98` / `PR #103` — обсуждение и предложенное исправление в
 репозитории автора.
 
@@ -289,6 +290,23 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
   podkop (галочка), по умолчанию **выключена**. *Условие:* в списке
   исключённых должен быть хотя бы один IP, иначе в журнале
   предупреждение.
+
+### tachyon — `feeds/tachyon/` (1)
+
+Вариант `tachyon`, фид [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) (1.7.9).
+В образ идёт sing-box из поля `sb`. Ядро
+[tachyon-core](https://github.com/Dushnilin/tachyon-core) в образ не
+кладётся: с v0.1.3 его лицензия запрещает распространять бинарник в
+составе образа прошивки. Его ставит на роутере установщик самого tachyon.
+
+Патчи сняты с коммита [`b9811a3`](https://github.com/Dushnilin/tachyon/commit/b9811a3a0803d459975306c76e8ef370db35fa91) от 02.11.2026 (файл `BASE`): на нём серия ложится точно.
+
+- **001. Удаление пакета.** Скрипт удаления tachyon написан на ucode, а
+  сборка OpenWrt выполняет его как shell (apk — в своём скрипте удаления,
+  opkg — через `default_prerm`). Из-за ошибки синтаксиса `apk del tachyon`
+  не останавливал службу, не возвращал настройки dnsmasq и не убирал
+  запись таблицы маршрутизации. Скрипт переписан на sh, с тем же
+  ограничением времени (90 секунд). *Всегда.*
 
 ### trafira — `feeds/trafira/` (6)
 
