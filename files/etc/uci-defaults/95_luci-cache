@@ -1,0 +1,29 @@
+#!/bin/sh
+
+# LuCI дописывает к адресам своих скриптов и стилей (?v=) версию luci-base
+# и время изменения базы пакетов (/lib/apk/db/installed, у opkg —
+# /usr/lib/opkg/status). В образе у всех файлов одно время — коммита
+# исходников OpenWrt (SOURCE_DATE_EPOCH). Поэтому у двух прошивок с одних и
+# тех же коммитов OpenWrt и LuCI, но с разными патчами пакетов, адреса
+# совпадают, и браузер может показывать страницы LuCI прежней прошивки из
+# своего кэша. Ставим базе пакетов время сборки образа (/etc/build_time,
+# пишет sh/WRT-part3.sh): адреса меняются только с новым образом.
+# Часы роутера здесь не годятся: без RTC и сохранённых настроек они после
+# прошивки идут от того же SOURCE_DATE_EPOCH.
+BUILD_TIME=$(head -n 1 /etc/build_time 2>/dev/null)
+case "$BUILD_TIME" in
+    ''|*[!0-9]*)
+        logger -t "95_luci-cache" "нет /etc/build_time, пропуск"
+        exit 0
+        ;;
+esac
+
+for DB in /lib/apk/db/installed /usr/lib/opkg/status; do
+    [ -f "$DB" ] || continue
+    if touch -d "@$BUILD_TIME" "$DB"; then
+        logger -t "95_luci-cache" "$DB: время $BUILD_TIME"
+    fi
+done
+
+# Всегда завершаем успешно, чтобы скрипт удалился
+exit 0
