@@ -753,7 +753,7 @@ fi
 # Версия sing-box — вне вариантных блоков: бинарник ставится и в podkop,
 # netshift, forkop, trafira, tachyon, passwall, где homeproxy нет.
 if [ -x /usr/bin/sing-box ]; then
-    SB_version=$(/usr/bin/sing-box version 2>/dev/null | grep -oP -m 1 'v?\K[\d.]+')
+    SB_version=$(/usr/bin/sing-box version 2>/dev/null | sed -n '1s/.*version v\{0,1\}\([0-9][0-9.]*\).*/\1/p')
     [ -n "$SB_version" ] && log_ok "Версия sing-box: $SB_version" || log_info "sing-box есть, версию определить не удалось"
 else
     log_info "sing-box не установлен"
@@ -1020,13 +1020,13 @@ EOF
     # ещё в local_ptr_upstreams и в правиле [/lan/arpa/local/]127.0.0.1:54,
     # их трогать нельзя. Повтор нужного адреса в списке не оставляется.
     AGH_YAML="/etc/adguardhome/adguardhome.yaml"
+    case "$CURRENT_VARIANT" in
+        forkop|trafira|tachyon|podkop|netshift) _AGH_EXPECTED='127.0.0.42:53' ;;
+        xray)          _AGH_EXPECTED='127.0.0.1:5300' ;;
+        passwall|v2raya) _AGH_EXPECTED='127.0.0.1:54' ;;
+        *)             _AGH_EXPECTED='127.0.0.1:5333' ;;
+    esac
     if [ -f "$AGH_YAML" ]; then
-        case "$CURRENT_VARIANT" in
-            forkop|trafira|tachyon|podkop|netshift) _AGH_EXPECTED='127.0.0.42:53' ;;
-            xray)          _AGH_EXPECTED='127.0.0.1:5300' ;;
-            passwall|v2raya) _AGH_EXPECTED='127.0.0.1:54' ;;
-            *)             _AGH_EXPECTED='127.0.0.1:5333' ;;
-        esac
         # $1: файл; new — адрес для замены (пусто — только проверить наличие)
         agh_upstream() {
             awk -v new="$2" -v want="$_AGH_EXPECTED" -v q="'" '
@@ -1052,63 +1052,43 @@ EOF
             log_err "adguardhome.yaml: не удалось заменить upstream DNS"
         fi
         rm -f "$AGH_YAML.zz1"
-        if [ "$_AGH_EXPECTED" = '127.0.0.42:53' ] && [ "$CURRENT_VARIANT" = "forkop" ] && forkop_v2; then
-            # forkop 2.x dnsmasq не трогает, а DNS клиентов (порт 53 с
-            # интерфейсов источника) и самого роутера (127.0.0.1:53) забирает
-            # себе nft-перенаправлением. Наш патч 002 (patches/feeds/forkop)
-            # добавляет intercept_device_dns: с '0' запросы клиентов идут в AGH,
-            # и он видит каждого; в forkop — только устройства из фильтров
-            # секций, им нужен свой ответ. AGH отправляет запросы на 127.0.0.42:
-            # там домены секций получают FakeIP, остальные отвечают DNS-серверы
-            # forkop (правила «вне секций → роутер» на этом входе нет, петли
-            # нет). FakeIP-соединения исключённых устройств патч 002 отправляет
-            # напрямую. Без патча опция ни на что не влияет: клиенты в журнале
-            # AGH видны как 127.0.0.1.
-            # unmatched_dns_mode=router — для тех, кого forkop перехватывает
-            # (устройства из фильтров, сам роутер): DNS вне секций — тоже через
-            # AGH (его сокет помечен, повторно не перехватывается).
-            uci -q set forkop.settings.intercept_device_dns='0' 2>/dev/null \
-                && uci -q set forkop.settings.unmatched_dns_mode='router' 2>/dev/null \
-                && uci commit forkop 2>/dev/null \
-                && log_ok "forkop 2.x: intercept_device_dns=0 (AGH видит клиентов), unmatched_dns_mode=router"
-            log_ok "AGH upstream → forkop sing-box ($_AGH_EXPECTED)"
-        elif [ "$_AGH_EXPECTED" = '127.0.0.42:53' ]; then
-            # Все они по умолчанию сами перенастраивают dnsmasq на 127.0.0.42
-            # (dont_touch_dhcp=0). Хозяин :53 — AGH, dnsmasq на :54 — поэтому
-            # выставляем флаг, чтобы они dnsmasq не трогали.
-            uci -q set "$CURRENT_VARIANT".settings.dont_touch_dhcp='1' 2>/dev/null \
-                && uci commit "$CURRENT_VARIANT" 2>/dev/null \
-                && log_ok "$CURRENT_VARIANT: dont_touch_dhcp=1 (AGH остаётся хозяином на :53)"
-            # trafira: опция есть (dns/apply.uc: dnsmasq не перенастраивается,
-            # прежние правки trafira в нём откатываются). По умолчанию (Alice
-            # Mode выключен, без секций с DNS по устройствам) он DNS клиентов
-            # не перехватывает и AGH видит каждого. С включённым Alice Mode
-            # DNS клиентов «в обход» уходит в DNS trafira мимо AGH
-            # (статистика/фильтры AGH для них не работают) — это его штатное
-            # поведение, здесь не меняется.
-            # tachyon: опция та же (dns/apply.uc). DNS клиентов он сам
-            # перенаправляет на свой вход только для устройств, у которых
-            # есть своя секция (фильтр устройств), — их AGH не видит.
-            log_ok "AGH upstream → $CURRENT_VARIANT sing-box ($_AGH_EXPECTED)"
-        elif [ "$CURRENT_VARIANT" = "xray" ]; then
-            # luci-app-xray сам кладёт dnsmasq «server=127.0.0.1#5300»; при AGH
-            # dnsmasq живёт на :54 и клиентский DNS не видит, поэтому AGH
-            # обращается к DNS-входу Xray напрямую. Локальные имена (PTR, .lan)
-            # dnsmasq по-прежнему отдаёт сам.
-            log_ok "AGH upstream → Xray DNS ($_AGH_EXPECTED)"
-        elif [ "$_AGH_EXPECTED" = '127.0.0.1:54' ]; then
-            log_ok "AGH upstream → dnsmasq ($_AGH_EXPECTED): DNS-правила $CURRENT_VARIANT"
-        else
-            log_ok "AGH upstream → homeproxy sing-box ($_AGH_EXPECTED)"
-        fi
         if agh_upstream "$AGH_YAML" "" >/dev/null; then
-            log_ok "adguardhome.yaml upstream DNS: $_AGH_EXPECTED на месте"
+            log_ok "AGH upstream → $_AGH_EXPECTED ($CURRENT_VARIANT)"
         else
             log_err "adguardhome.yaml upstream DNS: $_AGH_EXPECTED не найден в upstream_dns"
         fi
     else
-        log_info "AGH yaml не найден ($AGH_YAML) — upstream DNS не настроен автоматически"
+        # Чистая прошивка без сохранённых настроек: yaml появится после мастера AGH
+        log_info "AGH yaml не найден ($AGH_YAML): после первой настройки AGH укажите upstream DNS $_AGH_EXPECTED (или запустите сохранённую копию zz1)"
     fi
+    # Настройки варианта — и без yaml: хозяин :53 всё равно AGH (dnsmasq выше перенесён на :54).
+    if [ "$_AGH_EXPECTED" = '127.0.0.42:53' ] && [ "$CURRENT_VARIANT" = "forkop" ] && forkop_v2; then
+        # forkop 2.x dnsmasq не трогает, а DNS клиентов (порт 53 с
+        # интерфейсов источника) и самого роутера (127.0.0.1:53) забирает
+        # себе nft-перенаправлением. Наш патч 002 (patches/feeds/forkop)
+        # добавляет intercept_device_dns: с '0' запросы клиентов идут в AGH,
+        # и он видит каждого; в forkop — только устройства из фильтров
+        # секций, им нужен свой ответ. AGH отправляет запросы на 127.0.0.42:
+        # там домены секций получают FakeIP, остальные отвечают DNS-серверы
+        # forkop (правила «вне секций → роутер» на этом входе нет, петли
+        # нет). FakeIP-соединения исключённых устройств патч 002 отправляет
+        # напрямую. Без патча опция ни на что не влияет: клиенты в журнале
+        # AGH видны как 127.0.0.1.
+        # unmatched_dns_mode=router — для тех, кого forkop перехватывает
+        # (устройства из фильтров, сам роутер): DNS вне секций — тоже через
+        # AGH (его сокет помечен, повторно не перехватывается).
+        uci -q set forkop.settings.intercept_device_dns='0' 2>/dev/null \
+            && uci -q set forkop.settings.unmatched_dns_mode='router' 2>/dev/null \
+            && uci commit forkop 2>/dev/null \
+            && log_ok "forkop 2.x: intercept_device_dns=0 (AGH видит клиентов), unmatched_dns_mode=router"
+    elif [ "$_AGH_EXPECTED" = '127.0.0.42:53' ]; then
+        # Сами они перенастраивают dnsmasq на 127.0.0.42 (dont_touch_dhcp=0), а хозяин :53 — AGH.
+        # tachyon перехватывает DNS только устройств со своей секцией; trafira — с Alice Mode.
+        uci -q set "$CURRENT_VARIANT".settings.dont_touch_dhcp='1' 2>/dev/null \
+            && uci commit "$CURRENT_VARIANT" 2>/dev/null \
+            && log_ok "$CURRENT_VARIANT: dont_touch_dhcp=1 (AGH остаётся хозяином на :53)"
+    fi
+    # xray: AGH ходит прямо в DNS-вход Xray (:5300); passwall/v2raya — в dnsmasq (:54) с их правилами.
 
     run_cmd "Включение adguardhome" /etc/init.d/adguardhome enable
     run_cmd "Запуск adguardhome" /etc/init.d/adguardhome start
@@ -1399,7 +1379,8 @@ fi
 # =========================================================
 # СИНХРОНИЗАЦИЯ ВРЕМЕНИ И БАННЕР
 # =========================================================
-if command -v hwclock >/dev/null 2>&1; then
+# Только при аппаратных часах: без них hwclock падает и даёт ложную ошибку в логе
+if command -v hwclock >/dev/null 2>&1 && { [ -e /dev/rtc0 ] || [ -e /dev/rtc ]; }; then
     run_cmd "Синхронизация RTC" hwclock -s -u
 fi
 
@@ -1416,7 +1397,7 @@ if ping -c 1 -W 1 8.8.8.8 >/dev/null 2>&1; then
     /etc/init.d/sysntpd start 2>/dev/null
     CUR_YEAR=$(date +%Y)
     if [ "$NTP_OK" = "1" ] || { [ "$CUR_YEAR" -ge 2025 ] && [ "$CUR_YEAR" -le 2050 ]; }; then
-        hwclock -w -u 2>/dev/null && log_ok "RTC обновлён"
+        { [ -e /dev/rtc0 ] || [ -e /dev/rtc ]; } && hwclock -w -u 2>/dev/null && log_ok "RTC обновлён"
     else
         log_info "Часы недостоверны ($CUR_YEAR) — RTC не перезаписываем"
     fi
