@@ -249,6 +249,32 @@ else
     log_info "$CUSTOMFEEDS_FILE не трогаем (maintenance)"
 fi
 
+# sing-box прошивки вместо sing-box из резервной копии. tachyon перечисляет
+# /usr/bin/sing-box в /lib/upgrade/keep.d (у нас патч 002 это убирает, но
+# резервную копию делает ещё прежняя прошивка, а tachyon, обновлённый на
+# роутере из релиза автора, приносит прежний список). sysupgrade кладёт такие
+# файлы в копию, даже если они из прошивки, и после прошивки с сохранением
+# настроек старый sing-box восстанавливался в overlay поверх нового из образа.
+# Только firstboot (в maintenance копия в overlay может быть поставлена на
+# роутере намеренно) и только если sing-box есть в образе (/rom). Путь,
+# указанный в /etc/sysupgrade.conf, сохранён намеренно — его не трогаем.
+# Ссылку (tachyon-core ставит /usr/bin/sing-box -> tachyon-core) сначала
+# удаляем: cp поверх ссылки записал бы sing-box в сам tachyon-core. Ниже
+# sing-box из /root/apps, если он есть, ставится как раньше.
+if [ "$MODE" = "firstboot" ] && [ -f /rom/usr/bin/sing-box ] \
+   && { [ -e /overlay/upper/usr/bin/sing-box ] || [ -L /overlay/upper/usr/bin/sing-box ]; }; then
+    if grep -qE '^[[:space:]]*/usr/bin/sing-box[[:space:]]*$' /etc/sysupgrade.conf 2>/dev/null; then
+        log_info "sing-box из резервной копии оставлен: /usr/bin/sing-box указан в /etc/sysupgrade.conf"
+    elif [ ! -L /usr/bin/sing-box ] && cmp -s /rom/usr/bin/sing-box /usr/bin/sing-box; then
+        log_ok "sing-box из резервной копии совпадает с sing-box прошивки"
+    elif rm -f /usr/bin/sing-box && cp /rom/usr/bin/sing-box /usr/bin/sing-box \
+         && chmod 755 /usr/bin/sing-box; then
+        log_ok "sing-box из резервной копии заменён на sing-box прошивки"
+    else
+        log_err "Не удалось вернуть sing-box прошивки вместо sing-box из резервной копии"
+    fi
+fi
+
 # Установка локальных пакетов
 # Архив удаляем только после успешной установки: иначе падение tar
 # оставило бы и без бинарника, и без исходного архива.
