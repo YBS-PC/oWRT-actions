@@ -34,6 +34,7 @@ on:
           - forkop
           - forkop-mod
           - trafira
+          - tachyon
           - passwall
           - v2raya
           - xray
@@ -198,6 +199,15 @@ env:
   # из тегов этого репозитория (TRAFIRA_VERSION).
   TRAFIRA_FEED: "trafira https://github.com/petrouspetr-pixel/trafira.git;main"
 
+  # Фид tachyon (Dushnilin/tachyon, форк forkop на ucode). Отдельный вариант
+  # tachyon, свой конфиг /etc/config/tachyon. В образ идёт sing-box (поле
+  # sb). Ядро tachyon-core в образ не кладётся: с v0.1.3 его лицензия
+  # запрещает распространять бинарник в составе образа прошивки, а
+  # артефакты публичного репозитория доступны всем. Его ставит на роутере
+  # установщик самого tachyon (страница обновлений компонентов). Версия
+  # пакета — из тегов этого репозитория (TACHYON_VERSION).
+  TACHYON_FEED: "tachyon https://github.com/Dushnilin/tachyon.git;main"
+
   # Фид netshift (форк podkop от yandexru45: подписки с группами и
   # автовыбором, переключение sing-box ↔ sing-box-extended (xhttp) из LuCI,
   # IPv6, блокировка DoH). Как podkop: shell + jq, конфиг /etc/config/netshift,
@@ -273,8 +283,9 @@ jobs:
           # Приводит выбор к тому, что вариант реально допускает, чтобы имя
           # артефакта не врало: clear/crystal_clear/switch вырезают AGH,
           # sing-box и youtubeUnblock; passwall/v2raya/xray — sing-box;
-          # forkop-mod и trafira — youtubeUnblock (у них свой Zapret/ByeDPI на
-          # nfqueue; в forkop 2.0 их нет, youtubeUnblock ему можно);
+          # forkop-mod, trafira и tachyon — youtubeUnblock (у них свой
+          # Zapret/ByeDPI на nfqueue; в forkop 2.0 их нет, youtubeUnblock ему
+          # можно);
           # crystal_clear — zz1. homeproxy, rehomeproxy
           # podkop и netshift без sing-box не работают (podkop и netshift ещё
           # и тянут его зависимостью); rehomeproxy (Re:HomeProxy) умеет и hiddify-core,
@@ -294,7 +305,7 @@ jobs:
             case "$v" in
               clear|crystal_clear|switch) agh=no; sb=no; ytb=false ;;
               passwall|v2raya|xray)       sb=no ;;
-              trafira)                    ytb=false ;;
+              trafira|tachyon)            ytb=false ;;
               forkop) [ "$fk" = "forkop" ] || ytb=false ;;
             esac
             [ "$v" = "crystal_clear" ] && zz=false
@@ -303,8 +314,8 @@ jobs:
             esac
             # podkop-engine — sing-box под podkop: входы только tproxy, direct и
             # mixed, без TUN и redirect (их берут homeproxy и rehomeproxy), а
-            # у forkop своё ядро, trafira ставит ядро сам со страницы
-            # «Компоненты». Поэтому только podkop и netshift. netshift пишет и
+            # у forkop своё ядро, trafira и tachyon ставят ядро сами со своей
+            # страницы компонентов. Поэтому только podkop и netshift. netshift пишет и
             # выходы vmess/http, которые есть лишь в podkop-engine-full.
             case "$sb" in
               podkop-engine|podkop-engine-full)
@@ -324,7 +335,7 @@ jobs:
               case "$sb" in forkop-base|forkop-full|forkop-tiny) sb=feed ;; esac
             fi
             case " $TINY_TARGETS " in
-              *" $t "*) case "$v" in homeproxy|rehomeproxy|podkop|netshift|forkop|trafira)
+              *" $t "*) case "$v" in homeproxy|rehomeproxy|podkop|netshift|forkop|trafira|tachyon)
                 case "$sb" in no) ;; forkop-*) sb=forkop-tiny ;; *) sb=tiny ;; esac ;; esac ;;
             esac
             if [ "$orig" != "agh=$agh sb=$sb ytb=$ytb zz=$zz" ]; then
@@ -348,8 +359,10 @@ jobs:
             #   R6S homeproxy: AGH latest, sing-box-extended, ytb, zz1, патчи
             #     (XHTTP и ключ X25519MLKEM768 для REALITY)
             #   R6S podkop: podkop-engine; R6S netshift: extended; R6S forkop:
-            #     sing-box-forkop base; R6S trafira: extended, без ytb (свой
-            #     Zapret) — все с AGH latest, zz1 и патчами
+            #     sing-box-forkop base; R6S trafira и R6S tachyon: extended, без
+            #     ytb (свой Zapret) — все с AGH latest, zz1 и патчами. tachyon-core
+            #     в образ не входит (лицензия), его ставят на роутере со страницы
+            #     tachyon
             #   RB5009 clear и RB5009 switch: без AGH/sing-box/ytb, zz1, с патчами
             #     (к ним относятся только patches/packages/luci-app-commands и luci-app-filemanager)
             # $(entry ...) — подстановка: в ней NOTES не сохраняется, для
@@ -363,7 +376,7 @@ jobs:
             #   $(entry nanopi-r6s podkop latest podkop-engine-full true true true true),
             # homeproxy с sing-box-extended: только в этой связке применяются
             # патчи XHTTP и ключ X25519MLKEM768 для REALITY (Build-If).
-            json="{\"include\":[$(entry nanopi-r6s homeproxy latest extended true true true true),$(entry nanopi-r6s podkop latest podkop-engine true true true true),$(entry nanopi-r6s netshift latest extended true true true true),$(entry nanopi-r6s forkop latest forkop-base true true true true),$(entry nanopi-r6s trafira latest extended false true true true),$(entry rb5009 clear no no false true true true),$(entry rb5009 switch no no false true true true)]}"
+            json="{\"include\":[$(entry nanopi-r6s homeproxy latest extended true true true true),$(entry nanopi-r6s podkop latest podkop-engine true true true true),$(entry nanopi-r6s netshift latest extended true true true true),$(entry nanopi-r6s forkop latest forkop-base true true true true),$(entry nanopi-r6s trafira latest extended false true true true),$(entry nanopi-r6s tachyon latest extended false true true true),$(entry rb5009 clear no no false true true true),$(entry rb5009 switch no no false true true true)]}"
           else
             # Все устройства из config/conf/ — при добавлении нового дописать сюда.
             targets="nanopi-r6s nanopi-r5s rb5009 slateax ax59u brume2"
@@ -445,6 +458,13 @@ jobs:
           echo "$json" | jq -r '.include[] | select(.variant == "trafira" and .patches == false) | .target' |
           while read -r t; do
             echo "::warning title=${t}: trafira без патчей::Без патчей patches/feeds/trafira в прошивке нет правила fw4 для TPROXY — зоны с input=REJECT (гостевые) режут проксируемый трафик (002), ссылка с %40/%23 в пароле trojan или одна битая ссылка не дают trafira запуститься (004, 005), смена ядра sing-box на apk падает с «left-hand side is not a function» (008). Включите apply_patches."
+          done
+
+          # tachyon без патчей: prerm на ucode, а buildroot выполняет его как
+          # sh — удаление пакета не останавливает службу и не чистит за ней.
+          echo "$json" | jq -r '.include[] | select(.variant == "tachyon" and .patches == false) | .target' |
+          while read -r t; do
+            echo "::warning title=${t}: tachyon без патчей::Без патча 001 (patches/feeds/tachyon) «apk del tachyon» не выполнит очистку tachyon (prerm на ucode, а сборка OpenWrt запускает его как sh): служба не останавливается, dnsmasq не возвращается, остаётся запись таблицы маршрутизации. Включите apply_patches."
           done
 
           # netshift без патчей: ссылки socks5 с ':' в логине/пароле дают
@@ -1398,7 +1418,7 @@ jobs:
             case "$VARIANT" in
                 homeproxy)   BASE_DIR=packages/luci-app-homeproxy ;;
                 rehomeproxy) BASE_DIR=packages/luci-app-re-homeproxy ;;
-                podkop|netshift|trafira) BASE_DIR=feeds/$VARIANT ;;
+                podkop|netshift|trafira|tachyon) BASE_DIR=feeds/$VARIANT ;;
                 forkop)      BASE_DIR=feeds/$M_FK ;;
                 passwall)    BASE_DIR=feeds/passwall2 ;;
                 xray)        BASE_DIR=feeds/luciappxray ;;
@@ -1460,6 +1480,10 @@ jobs:
             # Адрес — TRAFIRA_FEED в env; патчи — patches/feeds/trafira (part2).
             echo ">>> trafira: фид $TRAFIRA_FEED"
             echo -e "\n$(feed_line "$TRAFIRA_FEED")" >> feeds.conf.default
+        elif [ "$VARIANT" == "tachyon" ]; then
+            # Адрес — TACHYON_FEED в env; патчи — patches/feeds/tachyon (part2).
+            echo ">>> tachyon: фид $TACHYON_FEED"
+            echo -e "\n$(feed_line "$TACHYON_FEED")" >> feeds.conf.default
         fi
 
         # --- ЗАМЕНА ЗЕРКАЛ (FIX 503 ERROR) Меняем git.openwrt.org на github.com---
@@ -1609,7 +1633,7 @@ jobs:
             sed -i '/sing-box/Id' ./.config
         fi
         
-        if [[ "$VARIANT" == "podkop" || "$VARIANT" == "netshift" || "$VARIANT" == "forkop" || "$VARIANT" == "trafira" || "$VARIANT" == "rehomeproxy" ]]; then
+        if [[ "$VARIANT" == "podkop" || "$VARIANT" == "netshift" || "$VARIANT" == "forkop" || "$VARIANT" == "trafira" || "$VARIANT" == "tachyon" || "$VARIANT" == "rehomeproxy" ]]; then
             # rehomeproxy: luci-app-re-homeproxy ставит файлы по тем же путям,
             # что luci-app-homeproxy, вместе их ставить нельзя. Его строки
             # добавляются ниже, уже после этой чистки.
@@ -1692,6 +1716,15 @@ jobs:
             echo 'CONFIG_PACKAGE_trafira=y' >> ./.config
             echo 'CONFIG_PACKAGE_luci-app-trafira=y' >> ./.config
             echo 'CONFIG_PACKAGE_luci-i18n-trafira-ru=y' >> ./.config
+
+        elif [ "$VARIANT" == "tachyon" ]; then
+            # Зависимости tachyon (ucode-mod-uloop, coreutils-timeout,
+            # kmod-inet-diag, bind-dig, curl ...) уже есть в WRT.config;
+            # конфликтующих (https-dns-proxy, nextdns, passwall) там нет.
+            # sing-box ставит part3/фид; tachyon-core — только на роутере.
+            echo 'CONFIG_PACKAGE_tachyon=y' >> ./.config
+            echo 'CONFIG_PACKAGE_luci-app-tachyon=y' >> ./.config
+            echo 'CONFIG_PACKAGE_luci-i18n-tachyon-ru=y' >> ./.config
 
         elif [ "$VARIANT" == "rehomeproxy" ]; then
             # Пакет клонирует WRT-part3.sh в package/luci-app-re-homeproxy.
@@ -1813,7 +1846,7 @@ jobs:
         echo "Variant selected: $VARIANT"
         echo "Checking key packages in .config:"
         # Проверяем наличие ключевых пакетов для уверенности
-        grep -E "CONFIG_PACKAGE_(luci-app-homeproxy|sing-box|sing-box-forkop|luci-app-passwall2|luci-app-v2raya|luci-app-xray|xray-core|v2ray-geoip|v2ray-geosite|luci-app-podkop|luci-app-netshift|luci-app-forkop|luci-app-trafira|luci-app-re-homeproxy)=" .config || echo "None found"
+        grep -E "CONFIG_PACKAGE_(luci-app-homeproxy|sing-box|sing-box-forkop|luci-app-passwall2|luci-app-v2raya|luci-app-xray|xray-core|v2ray-geoip|v2ray-geosite|luci-app-podkop|luci-app-netshift|luci-app-forkop|luci-app-trafira|luci-app-tachyon|luci-app-re-homeproxy)=" .config || echo "None found"
         echo "=========================================="
 
     - name: Telegram — патчи надо обновить
