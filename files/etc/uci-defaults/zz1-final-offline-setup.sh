@@ -1248,15 +1248,16 @@ if [ -f "/usr/lib/sqm/run.sh" ]; then
 # cake_ctinfo.qos восстанавливает её для входящих пакетов (нужен
 # kmod-sched-ctinfo). Значения: EF 0xb9000000, AF21 0x49000000,
 # CS0 0x01000000, LE 0x05000000.
-# Раскомментируйте цепочку, впишите свои адреса и выполните
+# Адреса — сети автора (VLAN 10, 20, 30 роутера в варианте clear).
+# Раскомментируйте цепочку (на другой сети — замените адреса) и выполните
 #   fw4 check && service firewall restart
 #
 #chain priority_mangle_prerouting_dscp {
 #	type filter hook prerouting priority mangle; policy accept;
-#	ip saddr 192.168.1.10 meta l4proto udp counter ip dscp set ef ct mark set 0xb9000000 return comment "Console games: Voice"
-#	ip saddr 192.168.1.0/24 counter ip dscp set af21 ct mark set 0x49000000 return comment "LAN: Video"
-#	ip saddr 192.168.2.0/24 counter ip dscp set cs0 ct mark set 0x01000000 return comment "Guest: Best Effort"
-#	ip saddr 192.168.3.0/24 counter ip dscp set lephb ct mark set 0x05000000 return comment "IoT: Bulk"
+#	ip saddr 192.168.110.3 meta l4proto udp counter ip dscp set ef ct mark set 0xb9000000 return comment "Console UDP: Voice"
+#	ip saddr 192.168.110.0/24 counter ip dscp set af21 ct mark set 0x49000000 return comment "LAN: Video"
+#	ip saddr 192.168.130.0/24 counter ip dscp set cs0 ct mark set 0x01000000 return comment "Guest: Best Effort"
+#	ip saddr 192.168.150.0/24 counter ip dscp set lephb ct mark set 0x05000000 return comment "Outdoor: Bulk"
 #}
 NFT
         _RC=$?; [ $_RC -eq 0 ] && log_ok "Шаблон $PRIO_NFT создан" || log_err "Ошибка создания $PRIO_NFT (exit: $_RC)"
