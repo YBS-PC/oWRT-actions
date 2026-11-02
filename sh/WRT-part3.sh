@@ -904,5 +904,10 @@ mkdir -p ./files/etc
 echo "$VARIANT" > ./files/etc/build_variant
 echo ">>> Build variant recorded successfully."
 
+# Время сборки отдельным файлом (секунды с 1970 года): по нему
+# /etc/uci-defaults/95_luci-cache меняет ?v= у статики LuCI после прошивки.
+# Важно только, что у каждого образа оно своё.
+date -u +%s > ./files/etc/build_time
+
 # =========================================================
 echo ">>>>>>>>> WRT-part3 end"
