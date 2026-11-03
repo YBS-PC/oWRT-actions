@@ -1,0 +1,87 @@
+name: Cleanup All
+
+# Удаляет ВСЕ завершённые запуски GitHub Actions
+# независимо от даты создания.
+# Активные и ожидающие запуски не затрагиваются.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+concurrency:
+  group: cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Delete all completed workflow runs
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          CURRENT_RUN_ID: ${{ github.run_id }}
+
+        run: |
+          set -Eeuo pipefail
+
+          echo "=========================================="
+          echo " CLEANUP ALL"
+          echo " Repository: ${GH_REPO}"
+          echo " Current run: ${CURRENT_RUN_ID}"
+          echo "=========================================="
+
+          # Получаем все завершённые запуски с пагинацией.
+          # Запрос не ограничивается датой или количеством запусков.
+          RUN_IDS=$(gh api --paginate \
+            "repos/${GH_REPO}/actions/runs?per_page=100" \
+            --jq '.workflow_runs[]
+              | select(.status == "completed")
+              | .id')
+
+          if [[ -z "$RUN_IDS" ]]; then
+            echo ">>> Нет завершённых запусков для удаления."
+            exit 0
+          fi
+
+          TOTAL=$(printf '%s\n' "$RUN_IDS" | wc -l)
+
+          echo ">>> Найдено завершённых запусков: $TOTAL"
+          echo ">>> Начинаем удаление..."
+
+          DELETED=0
+          FAILED=0
+
+          # Удаляем только завершённые запуски.
+          while IFS= read -r ID; do
+
+            [[ -z "$ID" ]] && continue
+
+            # Защита текущего запуска.
+            [[ "$ID" == "$CURRENT_RUN_ID" ]] && continue
+
+            if gh api --method DELETE \
+              "repos/${GH_REPO}/actions/runs/${ID}" \
+              >/dev/null; then
+
+              DELETED=$((DELETED + 1))
+              echo "Удалён запуск: $ID"
+
+            else
+              FAILED=$((FAILED + 1))
+              echo "::warning::Не удалось удалить запуск $ID"
+            fi
+
+          done <<< "$RUN_IDS"
+
+          echo "=========================================="
+          echo " CLEANUP COMPLETED"
+          echo " Найдено: $TOTAL"
+          echo " Удалено: $DELETED"
+          echo " Ошибок: $FAILED"
+          echo "=========================================="
