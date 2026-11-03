@@ -88,6 +88,7 @@
 |---|---|---|---|
 | `feeds/forkop/` | [ushan0v/forkop](https://github.com/ushan0v/forkop) | [`129d303`](https://github.com/ushan0v/forkop/commit/129d303e6cc879e9edc4e13c50b1f37637e69554) | 02.11.2026 |
 | `feeds/forkopmod/` | [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) | [`aa05cf9`](https://github.com/Gavr1024/forkop-mod/commit/aa05cf939f12fc3f30df394c4fa64916895377e0) | 28.10.2026 |
+| `feeds/internetdetector/` | [gSpotx2f/luci-app-internet-detector](https://github.com/gSpotx2f/luci-app-internet-detector) | [`e265fcc`](https://github.com/gSpotx2f/luci-app-internet-detector/commit/e265fcc8a9d9fd359f29fd0188ab2da3ce1438fa) | 09.10.2026 |
 | `feeds/luciappxray/` | [yichya/luci-app-xray](https://github.com/yichya/luci-app-xray) | [`4d5a6fd`](https://github.com/yichya/luci-app-xray/commit/4d5a6fd7fc4d2fbbcd7f70f1319da06b91ec1d56) | 22.09.2026 |
 | `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`3d5c24f`](https://github.com/yandexru45/netshift/commit/3d5c24f28799502db16e76b6475ce38c7f0def33) | 31.10.2026 |
 | `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`8c67190`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/8c67190debee97bc2b3d68c3e41521ba9ddea3b5) | 02.11.2026 |
@@ -124,7 +125,7 @@
 
 ## Патчи по пакетам
 
-Всего 59 патчей для 13 пакетов. Номер — порядок применения. Ссылки
+Всего 62 патча для 14 пакетов. Номер — порядок применения. Ссылки
 вида `#98` / `PR #103` — обсуждение и предложенное исправление в
 репозитории автора.
 
@@ -198,6 +199,78 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
   route», задержки узлов группы Xray в диагностике, а также части
   интерфейса и службы. Скрипт удаления
   переписан, чтобы `apk del` работал. *Всегда.*
+
+### internet-detector — `feeds/internetdetector/` (3)
+
+Фид [gSpotx2f/luci-app-internet-detector](https://github.com/gSpotx2f/luci-app-internet-detector)
+(internet-detector 1.7.4) подключается во всех сборках и берётся с HEAD
+автора; `BASE` — для сверки. Если автор изменит файлы, которые правят
+патчи, сверка остановит любую сборку (при включённой галочке «Стоп, если
+патч устарел»), пока серия не перевыпущена.
+
+Патчи сняты с коммита [`e265fcc`](https://github.com/gSpotx2f/luci-app-internet-detector/commit/e265fcc8a9d9fd359f29fd0188ab2da3ce1438fa) от 09.10.2026 (файл `BASE`): на нём серия ложится точно.
+
+- **001. Проверки: исправления, версия IP, проверка выхода sing-box.**
+  - Проверка по URL: у curl был только `--connect-timeout`. Соединение,
+    которое принимается сразу (локальный прокси, прозрачное
+    перенаправление) и потом зависает, останавливало экземпляр навсегда:
+    статус не менялся, в режиме «Web UI only» экземпляр не завершался.
+    Теперь есть `--max-time` (вдвое больше таймаута соединения, не меньше
+    3 с). Код ответа берётся из curl (`-w %{http_code}`), а не из первой
+    строки заголовков: через HTTP-прокси это был ответ самого прокси.
+  - TCP: пробуются все адреса хоста по очереди, а не только первый.
+  - Значения из UCI (хост, устройство, URL, логин и пароль прокси)
+    передаются в shell в одинарных кавычках: `$` или кавычка в пароле
+    больше не ломают команду.
+  - Интервал опроса считается по часам от начала проверки, а не числом
+    проходов цикла.
+  - В файле статуса — задержка последней успешной проверки (`latency`,
+    мс) и время последней проверки (`checked`); он пишется после каждой
+    проверки.
+  - *Всегда.*
+  - Новые опции экземпляра (вкладка «Основные настройки»):
+    - «Версия IP» (`ip_family`): любая / IPv4 / IPv6 — для TCP, ping и
+      проверки по URL;
+    - «Метод HTTP» (`http_method`): HEAD / GET — для серверов, которые
+      не отвечают на HEAD;
+    - «Любой HTTP-ответ» (`http_any_code`): доступность при любом коде
+      HTTP, включая 4xx и 5xx;
+    - тип проверки «Выход sing-box (Clash API)»: тест задержки указанных
+      выходов sing-box через Clash API (`GET /proxies/<тег>/delay`), по
+      очереди, пока один не ответит. Поля: выходы (`clash_api_outbounds`),
+      URL для теста, адрес и секрет Clash API. Пустой адрес — контроллер
+      и секрет homeproxy (`infra.clash_api_controller`,
+      `infra.clash_api_secret`, патч homeproxy 010), `0.0.0.0` заменяется
+      на `127.0.0.1`.
+
+    *Опция*, по умолчанию — как раньше (любая версия IP, HEAD, коды 2xx
+    и 3xx).
+- **002. Публичный IP: ответы DNS, IPv4 и IPv6, провайдеры.**
+  - Ответ DNS: как ответы читались и записи разделов authority и
+    additional, поэтому рядом с публичным IP показывались адреса
+    DNS-серверов, а IPv6 сокращался неверно (`2001:db8:10::1` выводился
+    как `2001:db8:1::1`). Теперь читается только раздел ответов, с
+    учётом сжатия имён и кода ответа, IPv6 — по RFC 5952. Сокет DNS
+    открывается в семействе выбранной версии IP.
+  - Запрос по HTTP: `--max-time`, прокси с логином и паролем (раньше
+    модуль передавал прокси без них), URL в одинарных кавычках.
+  - Ответ HTTP принимается в виде одного адреса, строки `ip=...`, поля
+    JSON `"ip"` или строки JSON.
+  - *Всегда.*
+  - «Версия IP» (`qtype`) действует и на HTTP-провайдеров (раньше —
+    только на DNS); по умолчанию IPv4. Новое значение «IPv4 + IPv6» —
+    два запроса и оба адреса в статусе. Новые провайдеры HTTPS (у
+    части — отдельный адрес для IPv6) и «Свой URL» с полями
+    `custom_url` и `custom_url6`. *Опция*, вкладка «Публичный IP
+    адрес». HTTP-провайдер с IPv4 по умолчанию: раньше curl сам выбирал
+    версию IP.
+- **003. Интерфейс LuCI.** Поля новых опций; список выходов sing-box
+  читается из Clash API новым методом rpcd `luci.internet-detector
+  ClashProxies` (адрес и секрет первого экземпляра с такой проверкой
+  или homeproxy). Подсказки для хостов и URL. В статусе на странице и в
+  обзоре — задержка, время последней проверки во всплывающей подсказке;
+  адрес больше не проходит через функцию перевода. Русский перевод
+  новых строк. *Всегда.*
 
 ### luci-app-xray — `feeds/luciappxray/` (1)
 
