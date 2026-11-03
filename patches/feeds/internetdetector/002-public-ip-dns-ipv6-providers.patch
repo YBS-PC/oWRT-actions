@@ -1,0 +1,581 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 3 Nov 2026 12:00:00 +0000
+Subject: [PATCH] mod_public_ip: correct DNS answers, IPv4 and IPv6, more providers
+Requires: 001-check-fixes-ip-version-outbound-check
+
+- DNS answers: every record of the authority and additional sections
+  was read as an answer (the number of records was the largest of
+  ANCOUNT, NSCOUNT, ARCOUNT), so addresses of name servers were shown
+  as the public IP. IPv6 addresses were shortened wrongly
+  (2001:db8:10::1 became 2001:db8:1::1). Now only the answer section is
+  read, names with compression are skipped, RCODE is checked and IPv6
+  is written by RFC 5952.
+- The DNS socket takes the family of the IP version, so an IPv6 request
+  to a server given by name goes over IPv6.
+- HTTP providers: the IP version (option qtype) applies to them too
+  (curl --ipv4/--ipv6; default IPv4). qtype 2 makes an IPv4 and an IPv6
+  request and shows both addresses.
+- curl got only --connect-timeout (now also --max-time), the proxy
+  without user and password, and the URL in double quotes. The proxy
+  string of the daemon is used (with authentication), values are
+  single-quoted.
+- More HTTP(S) providers; a provider with url6 uses a separate address
+  for IPv6. Provider "custom" with the options custom_url and
+  custom_url6. An answer is accepted as the address alone, a line
+  ip=..., a JSON field "ip" or a JSON string.
+
+diff --git a/internet-detector/files/usr/lib/lua/internet-detector/modules/mod_public_ip.lua b/internet-detector/files/usr/lib/lua/internet-detector/modules/mod_public_ip.lua
+index 10e0415c..659ba25a 100644
+--- a/internet-detector/files/usr/lib/lua/internet-detector/modules/mod_public_ip.lua
++++ b/internet-detector/files/usr/lib/lua/internet-detector/modules/mod_public_ip.lua
+@@ -28,6 +28,9 @@ local Module = {
+ 	timeout              = 3,
+ 	curlExec             = "/usr/bin/curl",
+ 	curlParams           = '-s -g --no-keepalive --user-agent "Mozilla/5.0 (X11; Linux x86_64; rv:153.0) Gecko/20100101 Firefox/153.0"',
++	-- DNS: server/server6 and queryType/queryType6 by the IP version.
++	-- HTTP: url, and url6 for an IPv6 request if the service has a separate
++	-- address for it (otherwise url over an IPv6 connection).
+ 	providers            = {
+ 		opendns1 = {
+ 			name    = "opendns1", type = "dns", host = "myip.opendns.com",
+@@ -87,27 +90,80 @@ local Module = {
+ 			name = "icanhazip", type = "http", url = "http://icanhazip.com/",
+ 			parseResponseFunc = nil,
+ 		},
++		-- HTTPS
++		ipify = {
++			name = "ipify", type = "http",
++			url = "https://api.ipify.org", url6 = "https://api6.ipify.org",
++		},
++		ident_me = {
++			name = "ident_me", type = "http",
++			url = "https://v4.ident.me", url6 = "https://v6.ident.me",
++		},
++		icanhazip_https = {
++			name = "icanhazip_https", type = "http",
++			url = "https://ipv4.icanhazip.com", url6 = "https://ipv6.icanhazip.com",
++		},
++		ipinfo = {
++			name = "ipinfo", type = "http",
++			url = "https://ipinfo.io/ip", url6 = "https://v6.ipinfo.io/ip",
++		},
++		yandex = {
++			name = "yandex", type = "http",
++			url = "https://ipv4-internet.yandex.net/api/v0/ip",
++			url6 = "https://ipv6-internet.yandex.net/api/v0/ip",
++		},
++		cloudflare = {
++			name = "cloudflare", type = "http", url = "https://www.cloudflare.com/cdn-cgi/trace",
++		},
++		ifconfig_co = {
++			name = "ifconfig_co", type = "http", url = "https://ifconfig.co/ip",
++		},
++		ifconfig_https = {
++			name = "ifconfig_https", type = "http", url = "https://ifconfig.me/ip",
++		},
++		seeip = {
++			name = "seeip", type = "http", url = "https://api.seeip.org",
++		},
++		ipsb = {
++			name = "ipsb", type = "http", url = "https://api.ip.sb/ip",
++		},
++		ipecho_https = {
++			name = "ipecho_https", type = "http", url = "https://ipecho.net/plain",
++		},
++		wgetip_https = {
++			name = "wgetip_https", type = "http", url = "https://wgetip.com",
++		},
++		amazonaws_https = {
++			name = "amazonaws_https", type = "http", url = "https://checkip.amazonaws.com",
++		},
++		-- URL from the options custom_url / custom_url6
++		custom = {
++			name = "custom", type = "http", url = nil, url6 = nil,
++		},
+ 	},
+ 	ipScript             = "",
+ 	enableIpScript       = false,
+ 	status               = nil,
+-	_proxyString         = "",
+ 	_provider            = nil,
+-	_qtype               = false,
++	_families            = { 4 },	-- IP versions to request
+ 	_currentIp           = nil,
+ 	_lastResolvedIp      = nil,
+ 	_enabled             = false,
+ 	_counter             = 0,
+ 	_IPFalseCounter      = 0,
+ 	_interval            = 600,
+-	_DNSPacket           = nil,
++	_DNSPackets          = {},
+ 	_requestIP           = nil,
+ }
+ 
++function Module:shellQuote(s)
++	return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
++end
++
+ function Module:runIpScript()
+ 	if not self.config.noModules and self.enableIpScript and unistd.access(self.ipScript, "r") then
+ 		stdlib.setenv("PUBLIC_IP", self.status)
+-		os.execute(string.format('/bin/sh "%s" &', self.ipScript))
++		os.execute(string.format('/bin/sh %s &', self:shellQuote(self.ipScript)))
+ 	end
+ end
+ 
+@@ -142,13 +198,7 @@ function Module:buildMessage(address, queryType)
+ 
+ 	local addressString = ""
+ 	for part in address:gmatch("[^.]+") do
+-		local t = {}
+-		for i in part:gmatch(".") do
+-			t[#t + 1] = i
+-		end
+-		addrLen       = #part
+-		addrPart      = table.concat(t)
+-		addressString = addressString .. string.char(addrLen) .. addrPart
++		addressString = addressString .. string.char(#part) .. part
+ 	end
+ 
+ 	local data = (
+@@ -167,14 +217,18 @@ function Module:buildMessage(address, queryType)
+ 	return data
+ end
+ 
+-function Module:sendUDPMessage(message, server, port)
++function Module:sendUDPMessage(message, server, port, family)
+ 	local success
+ 	local retCode = 1
+ 	local data
+ 
+ 	self.debugOutput(string.format("--- %s ---", self.name))
+ 
+-	local saTable, errMsg, errNum = socket.getaddrinfo(server, port)
++	-- The family of the socket is the IP version of the answer: the server
++	-- returns the address the request came from.
++	local hints = { socktype = socket.SOCK_DGRAM,
++		family = (family == 6) and socket.AF_INET6 or socket.AF_INET }
++	local saTable, errMsg, errNum = socket.getaddrinfo(server, tostring(port), hints)
+ 
+ 	if not saTable then
+ 		self.debugOutput(string.format(
+@@ -241,107 +295,153 @@ function Module:sendUDPMessage(message, server, port)
+ 			retCode = success and 0 or 1
+ 		end
+ 	end
+-	return retCode, tostring(data)
++	return retCode, data
+ end
+ 
+-function Module:parseParts(message, start, parts)
+-	local partStart = start + 2
+-	local partLen   = message:sub(start, start + 1)
+-	if #partLen == 0 then
+-		return parts
++function Module:isIPv4(s)
++	local a, b, c, d = s:match("^(%d+)%.(%d+)%.(%d+)%.(%d+)$")
++	if not a then
++		return false
+ 	end
+-	local partEnd     = partStart + (tonumber(partLen, 16) * 2)
+-	parts[#parts + 1] = message:sub(partStart, partEnd - 1)
+-	if message:sub(partEnd, partEnd + 1) == "00" or partEnd > #message then
+-		return parts
+-	else
+-		return self:parseParts(message, partEnd, parts)
++	for _, v in ipairs({ a, b, c, d }) do
++		if tonumber(v) > 255 or (#v > 1 and v:sub(1, 1) == "0") then
++			return false
++		end
++	end
++	return true
++end
++
++function Module:isIPv6(s)
++	return #s >= 2 and #s <= 45 and s:find(":", 1, true) ~= nil and
++		s:match("^[%x:%.]+$") ~= nil and select(2, s:gsub("::", "")) <= 1
++end
++
++function Module:isIP(s)
++	return type(s) == "string" and (self:isIPv4(s) or self:isIPv6(s))
++end
++
++-- 16 bytes -> text form of RFC 5952 (lower case, no leading zeros, the
++-- longest run of two or more zero groups as "::").
++function Module:formatIPv6(bytes)
++	local groups = {}
++	for i = 1, 16, 2 do
++		groups[#groups + 1] = bytes:byte(i) * 256 + bytes:byte(i + 1)
++	end
++	local bestStart, bestLen, curStart, curLen = 0, 0, 0, 0
++	for i = 1, 8 do
++		if groups[i] == 0 then
++			if curLen == 0 then
++				curStart = i
++			end
++			curLen = curLen + 1
++			if curLen > bestLen then
++				bestStart, bestLen = curStart, curLen
++			end
++		else
++			curLen = 0
++		end
+ 	end
++	if bestLen < 2 then
++		bestStart = 0
++	end
++	local parts, i = {}, 1
++	while i <= 8 do
++		if i == bestStart then
++			parts[#parts + 1] = (i == 1) and ":" or ""
++			i = i + bestLen
++			if i > 8 then
++				parts[#parts + 1] = ""
++			end
++		else
++			parts[#parts + 1] = string.format("%x", groups[i])
++			i = i + 1
++		end
++	end
++	return table.concat(parts, ":")
++end
++
++-- Position after a domain name (with compression pointers) or nil
++function Module:skipName(msg, pos)
++	for _ = 1, 128 do
++		local len = msg:byte(pos)
++		if not len then
++			return nil
++		elseif len == 0 then
++			return pos + 1
++		elseif len >= 192 then
++			return pos + 2
++		end
++		pos = pos + 1 + len
++	end
++	return nil
+ end
+ 
++-- IP addresses from the answer section only (ANCOUNT): authority and
++-- additional records hold the addresses of name servers.
+ function Module:decodeMessage(message)
+ 	local retTable = {}
+-	local t        = {}
+-	for i = 1, #message do
+-		t[#t + 1] = string.format("%.2x", string.byte(message, i))
+-	end
+-	message = table.concat(t)
+-
+-	local ANCOUNT = message:sub(13, 16)
+-	local NSCOUNT = message:sub(17, 20)
+-	local ARCOUNT = message:sub(21, 24)
+-
+-	-- Question section
+-	local questionSectionStarts = 25
+-	local questionParts = self:parseParts(message, questionSectionStarts, {})
+-	local qtypeStarts   = questionSectionStarts + (#table.concat(questionParts)) + (#questionParts * 2) + 1
+-	local qclassStarts  = qtypeStarts + 4
+-
+-	-- Answer section
+-	local answerSectionStarts = qclassStarts + 4
+-	local numAnswers          = math.max(
+-		tonumber(ANCOUNT, 16), tonumber(NSCOUNT, 16), tonumber(ARCOUNT, 16))
+-
+-	if numAnswers > 0 then
+-		for answerCount = 1, numAnswers do
+-			if answerSectionStarts < #message then
+-				local ATYPE          = tonumber(
+-					message:sub(answerSectionStarts + 5, answerSectionStarts + 8), 16)
+-				local RDLENGTH       = tonumber(
+-					message:sub(answerSectionStarts + 21, answerSectionStarts + 24), 16)
+-				local RDDATA         = message:sub(
+-					answerSectionStarts + 25, answerSectionStarts + 24 + (RDLENGTH * 2))
+-				local RDDATA_decoded = ""
+-
+-				if #RDDATA > 0 then
+-					if ATYPE == self:getQueryType("A") or ATYPE == self:getQueryType("AAAA") then
+-						local octets = {}
+-						local sep    = "."
+-						if #RDDATA > 8 then
+-							sep = ":"
+-							for i = 1, #RDDATA, 4 do
+-								local string = RDDATA:sub(i, i + 3)
+-								string = string:gsub("^00?0?", "")
+-								octets[#octets + 1] = string
+-							end
+-						else
+-							for i = 1, #RDDATA, 2 do
+-								octets[#octets + 1] = tonumber(RDDATA:sub(i, i + 1), 16)
+-							end
+-						end
+-						RDDATA_decoded = table.concat(octets, sep):gsub("0:[0:]+", "::", 1):gsub("::+", "::")
+-					else
+-						local rdata_t = {}
+-						for _, v in ipairs(self:parseParts(RDDATA, 1, {})) do
+-							local t = {}
+-							for i = 1, #v, 2 do
+-								t[#t + 1] = string.char(tonumber(v:sub(i, i + 1), 16))
+-							end
+-							rdata_t[#rdata_t + 1] = table.concat(t)
+-						end
+-						RDDATA_decoded = table.concat(rdata_t)
+-					end
+-				end
+-				answerSectionStarts = answerSectionStarts + 24 + (RDLENGTH * 2)
+-
+-				if RDDATA_decoded:match("^[a-fA-F0-9.:]+$") then
+-					retTable[#retTable + 1] = RDDATA_decoded
++	local function u16(p)
++		local a, b = message:byte(p, p + 1)
++		return a and b and (a * 256 + b)
++	end
++	if type(message) ~= "string" or #message < 12 then
++		return retTable
++	end
++	local flags = u16(3)
++	if not flags or flags % 16 ~= 0 then	-- RCODE
++		return retTable
++	end
++	local qdcount, ancount = u16(5), u16(7)
++	local pos = 13
++	for _ = 1, qdcount do
++		pos = self:skipName(message, pos)
++		if not pos then
++			return retTable
++		end
++		pos = pos + 4
++	end
++	local seen = {}
++	for _ = 1, ancount do
++		pos = pos and self:skipName(message, pos)
++		if not pos or pos + 10 > #message + 1 then
++			break
++		end
++		local rtype, rdlen = u16(pos), u16(pos + 8)
++		local rdata = message:sub(pos + 10, pos + 9 + rdlen)
++		pos = pos + 10 + rdlen
++		if #rdata == rdlen then
++			local value
++			if rtype == 1 and rdlen == 4 then
++				value = string.format("%d.%d.%d.%d", rdata:byte(1, 4))
++			elseif rtype == 28 and rdlen == 16 then
++				value = self:formatIPv6(rdata)
++			elseif rtype == 16 then
++				local t, p = {}, 1
++				while p <= #rdata do
++					local l = rdata:byte(p)
++					t[#t + 1] = rdata:sub(p + 1, p + l)
++					p = p + 1 + l
+ 				end
++				value = table.concat(t)
++			end
++			if value and self:isIP(value) and not seen[value] then
++				seen[value]             = true
++				retTable[#retTable + 1] = value
+ 			end
+ 		end
+ 	end
+ 	return retTable
+ end
+ 
+-function Module:requestIPDNS()
++function Module:requestIPDNS(family)
+ 	local res
+-	local qtype  = self._qtype and self._provider.queryType6 or self._provider.queryType
+-	local server = self._qtype and self._provider.server6 or self._provider.server
++	local qtype  = (family == 6) and self._provider.queryType6 or self._provider.queryType
++	local server = (family == 6) and self._provider.server6 or self._provider.server
+ 	local port   = self._provider.port or self.port
+-	if not self._DNSPacket then
+-		self._DNSPacket = self:buildMessage(self._provider.host, qtype)
++	if not self._DNSPackets[family] then
++		self._DNSPackets[family] = self:buildMessage(self._provider.host, qtype)
+ 	end
+-	local retCode, response = self:sendUDPMessage(self._DNSPacket, server, port)
++	local retCode, response = self:sendUDPMessage(self._DNSPackets[family], server, port, family)
+ 	if retCode == 0 and response then
+ 		local retTable = self:decodeMessage(response)
+ 		if #retTable > 0 then
+@@ -354,31 +454,34 @@ function Module:requestIPDNS()
+ 	return res
+ end
+ 
+-function Module:httpRequest(url)
+-	local retCode = 1, data
+-	local curl    = string.format(
+-		'%s%s%s --connect-timeout %s %s "%s"; printf "\n$?";',
++function Module:httpRequest(url, family)
++	local retCode, data = 1, nil
++	local sc   = self.config.serviceConfig
++	local curl = string.format(
++		'%s%s%s%s --connect-timeout %d --max-time %d %s %s; printf "\\n%%s" "$?"',
+ 		self.curlExec,
+-		self.config.serviceConfig.iface and (" --interface " .. self.config.serviceConfig.iface) or "",
+-		self._proxyString,
++		(family == 6) and " --ipv6" or " --ipv4",
++		sc.iface and (" --interface " .. self:shellQuote(sc.iface)) or "",
++		self.config.proxyString or "",
+ 		self.timeout,
++		self.timeout * 2,
+ 		self.curlParams,
+-		url
++		self:shellQuote(url)
+ 	)
+-	local fh      = io.popen(curl, "r")
++	local fh = io.popen(curl, "r")
+ 	if fh then
+ 		data = fh:read("*a")
+ 		fh:close()
+ 		if data ~= nil then
+-			local s, e = data:find("[0-9]+\n?$")
+-			retCode    = tonumber(data:sub(s))
+-			data       = data:sub(0, s - 2)
+-			if not data or data == "" then
++			local s = data:find("[0-9]+$")
++			if s then
++				retCode = tonumber(data:sub(s))
++				data    = data:sub(1, s - 2)
++			end
++			if data == "" then
+ 				data = nil
+ 			end
+ 		end
+-	else
+-		retCode = 1
+ 	end
+ 
+ 	self.debugOutput(string.format(
+@@ -391,20 +494,30 @@ function Module:httpRequest(url)
+ 	return retCode, data
+ end
+ 
++-- The address alone, a line "ip=..." (cdn-cgi/trace), a JSON field "ip"
++-- or a JSON string.
+ function Module:parseHTTPResponse(data)
+ 	data = data:gsub("^[%s%c]+", ""):gsub("[%s%c]+$", "")
+-	if data:match("^[a-fA-F0-9.:]+$") then
+-		return data
++	local candidates = {
++		data,
++		data:match("^\"([%x%.:]+)\"$"),
++		data:match("%f[%w]ip=([%x%.:]+)"),
++		data:match('"ip"%s*:%s*"([%x%.:]+)"'),
++	}
++	for i = 1, 4 do
++		if candidates[i] and self:isIP(candidates[i]) then
++			return candidates[i]
++		end
+ 	end
+ 	return
+ end
+ 
+-function Module:requestIPHTTP()
++function Module:requestIPHTTP(family)
+ 	local res
+-	local url               = self._provider.url
++	local url = (family == 6) and (self._provider.url6 or self._provider.url) or self._provider.url
+ 	local parseResponseFunc = self._provider.parseResponseFunc
+ 	if url then
+-		local retCode, data = self:httpRequest(url)
++		local retCode, data = self:httpRequest(url, family)
+ 		if retCode == 0 and data then
+ 			if type(parseResponseFunc) == "function" then
+ 				res = parseResponseFunc(data)
+@@ -419,6 +532,20 @@ function Module:requestIPHTTP()
+ 	return res
+ end
+ 
++-- One request per IP version; the addresses joined by ", "
++function Module:requestIPs()
++	local ips = {}
++	for _, family in ipairs(self._families) do
++		local ip = self:_requestIP(family)
++		if ip then
++			ips[#ips + 1] = ip
++		end
++	end
++	if #ips > 0 then
++		return table.concat(ips, ", ")
++	end
++end
++
+ function Module:init(t)
+ 	if t.interval ~= nil then
+ 		self.runInterval = tonumber(t.interval)
+@@ -437,6 +564,12 @@ function Module:init(t)
+ 	else
+ 		self._provider = self.providers.opendns1
+ 	end
++	if self._provider and self._provider.name == "custom" then
++		local url  = t.custom_url and tostring(t.custom_url) or ""
++		local url6 = t.custom_url6 and tostring(t.custom_url6) or ""
++		self._provider.url  = (url ~= "") and url or nil
++		self._provider.url6 = (url6 ~= "") and url6 or nil
++	end
+ 	if self.config.configDir then
+ 		self.ipScript = string.format(
+ 			"%s/public-ip-script.%s", self.config.configDir, self.config.serviceConfig.instance)
+@@ -444,23 +577,33 @@ function Module:init(t)
+ 			self.enableIpScript = (tonumber(t.enable_ip_script) ~= 0)
+ 		end
+ 	end
+-	if t.qtype ~= nil then
+-		self._qtype = (tonumber(t.qtype) ~= 0)
++	-- qtype: 0 - IPv4, 1 - IPv6, 2 - both
++	local qtype = tonumber(t.qtype) or 0
++	if qtype == 1 then
++		self._families = { 6 }
++	elseif qtype == 2 then
++		self._families = { 4, 6 }
++	else
++		self._families = { 4 }
+ 	end
+ 	self._currentIp      = nil
+ 	self._lastResolvedIp = nil
+-	self._DNSPacket      = nil
++	self._DNSPackets     = {}
+ 	self._interval       = self.runInterval
+ 	self._IPFalseCounter = 0
+ 	self._enabled        = true
+ 	if not self._provider then
+ 		self._enabled = false
+ 	else
+-		if self._provider.url and not unistd.access(self.curlExec, "x") then
++		if self._provider.type == "http" and not unistd.access(self.curlExec, "x") then
+ 			self._enabled = false
+ 			self.syslog("err", string.format(
+ 				"%s: %s is not available. You need to install curl.", self.name, self.curlExec))
+ 		end
++		if self._provider.type == "http" and not self._provider.url then
++			self._enabled = false
++			self.syslog("err", string.format("%s: provider URL is not set", self.name))
++		end
+ 		if self._provider.type == "dns" then
+ 			self._requestIP = self.requestIPDNS
+ 		elseif self._provider.type == "http" then
+@@ -469,15 +612,6 @@ function Module:init(t)
+ 			self._enabled = false
+ 		end
+ 	end
+-	if (self.config.serviceConfig.proxy_type and
+-		self.config.serviceConfig.proxy_host and
+-		self.config.serviceConfig.proxy_port) then
+-		self._proxyString = string.format(
+-			" --proxy %s://%s:%d",
+-			self.config.serviceConfig.proxy_type,
+-			self.config.serviceConfig.proxy_host,
+-			self.config.serviceConfig.proxy_port)
+-	end
+ end
+ 
+ function Module:run(currentStatus, lastStatus, timeDiff, timeNow, inetChecked)
+@@ -486,7 +620,7 @@ function Module:run(currentStatus, lastStatus, timeDiff, timeNow, inetChecked)
+ 	end
+ 	if currentStatus == 0 then
+ 		if self._counter == 0 or self._counter >= self._interval or currentStatus ~= lastStatus then
+-			local ip = self:_requestIP()
++			local ip = self:requestIPs()
+ 			if not ip then
+ 				ip                   = ""
+ 				self._IPFalseCounter = self._IPFalseCounter + 1

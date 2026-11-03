@@ -1,0 +1,595 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 3 Nov 2026 12:00:00 +0000
+Subject: [PATCH] internet-detector: check fixes, IP version, sing-box outbound check
+
+Fixes of the daemon (main.lua):
+
+- URL test: curl got only --connect-timeout. A connection that is
+  accepted at once (a local proxy, a transparent redirect) and then
+  hangs blocked the instance for good: the status stayed as it was, in
+  the "Web UI only" mode the instance did not even stop. Now --max-time
+  is twice the connection timeout (at least 3 s).
+- URL test: the HTTP code was taken from the first header line. Through
+  an HTTP proxy that is the answer of the proxy ("200 Connection
+  established"). Now the code comes from curl (-w %{http_code}).
+- TCP check: only the first address of the host was tried. Now every
+  address is tried until one accepts the connection.
+- Values from UCI (host, device, URL, proxy user and password) went to
+  /bin/sh unquoted or in double quotes: "$" or a quote in a password
+  broke the command. Now they are passed in single quotes.
+- The polling interval counted loop passes, not seconds: the time of
+  the check itself was added to the interval. Now it counts by the
+  monotonic clock from the start of a check.
+- Variables leaked into the global scope ("local a = 1, b").
+
+New options of an instance (the defaults keep the former behaviour):
+
+- ip_family: 0 (any, default), 4 or 6 - address family of the TCP
+  check, ping (-4/-6) and curl (--ipv4/--ipv6).
+- http_method: head (default) or get - for servers that answer HEAD
+  with 405 or 403.
+- http_any_code: 1 - the URL is available on any HTTP response (default
+  0: 2xx and 3xx only).
+- check_type 3: delay test of sing-box outbounds through the Clash API
+  (GET /proxies/<tag>/delay). Options clash_api_outbounds (list of
+  tags, tried in order), clash_api_test_url, clash_api_url and
+  clash_api_secret. With an empty clash_api_url the controller and the
+  secret of homeproxy (infra.clash_api_controller,
+  infra.clash_api_secret) are used, 0.0.0.0 replaced by 127.0.0.1.
+
+The status file gets "latency" (ms of the last successful check) and
+"checked" (time of the last check) and is written after every check.
+
+diff --git a/internet-detector/files/usr/lib/lua/internet-detector/main.lua b/internet-detector/files/usr/lib/lua/internet-detector/main.lua
+index 6ff4c7f9..e53e74b2 100644
+--- a/internet-detector/files/usr/lib/lua/internet-detector/main.lua
++++ b/internet-detector/files/usr/lib/lua/internet-detector/main.lua
+@@ -27,7 +27,7 @@ local InternetDetector = {
+ 	pingCmd         = "/bin/ping",
+ 	pingParams      = "-c 1",
+ 	curlExec        = "/usr/bin/curl",
+-	curlParams      = '-s -g --no-keepalive --head --user-agent "Mozilla/5.0 (X11; Linux x86_64; rv:153.0) Gecko/20100101 Firefox/153.0"',
++	curlParams      = '-s -g --no-keepalive --user-agent "Mozilla/5.0 (X11; Linux x86_64; rv:153.0) Gecko/20100101 Firefox/153.0"',
+ 	curlHttpOkCodes = {
+ 		[200] = true,
+ 		[202] = true,
+@@ -57,7 +57,14 @@ local InternetDetector = {
+ 		urls = {
+ 			[1] = "https://www.google.com",
+ 		},
+-		check_type          = 0,	-- 0: TCP, 1: ICMP, 2: URL test
++		check_type          = 0,	-- 0: TCP, 1: ICMP, 2: URL test, 3: sing-box outbound (Clash API)
++		ip_family           = 0,	-- 0: any, 4: IPv4, 6: IPv6
++		http_method         = "head",	-- URL test: head | get
++		http_any_code       = 0,	-- URL test: 1 - any HTTP response means available
++		clash_api_url       = nil,	-- empty: from homeproxy (infra.clash_api_controller)
++		clash_api_secret    = nil,
++		clash_api_test_url  = "https://www.gstatic.com/generate_204",
++		clash_api_outbounds = {},
+ 		tcp_port            = 53,
+ 		icmp_packet_size    = 56,
+ 		interval_up         = 30,
+@@ -79,6 +86,8 @@ local InternetDetector = {
+ 	uiCounter        = 0,
+ 	pidFile          = nil,
+ 	statusFile       = nil,
++	lastLatency      = nil,	-- ms, last successful check
++	lastCheck        = nil,	-- time of the last completed check
+ }
+ InternetDetector.configDir      = string.format("/etc/%s", InternetDetector.appName)
+ InternetDetector.modulesDir     = string.format(
+@@ -153,20 +162,79 @@ function InternetDetector:readValueFromFile(filePath)
+ 	return retValue
+ end
+ 
++function InternetDetector:jsonString(s)
++	return '"' .. tostring(s):gsub('[%c"\\]', function(c)
++		return string.format("\\u%04x", string.byte(c))
++	end) .. '"'
++end
++
+ function InternetDetector:statusJson(inet, instance, t)
+ 	local lines = { [1] = string.format(
+-		'{"instance":"%s","num":"%d","inet":%d',
+-		instance,
++		'{"instance":%s,"num":"%d","inet":%d',
++		self:jsonString(instance),
+ 		self.serviceConfig.instanceNum,
+ 		inet)}
++	if inet == 0 and self.lastLatency then
++		lines[#lines + 1] = string.format('"latency":%d', self.lastLatency)
++	end
++	if self.lastCheck then
++		lines[#lines + 1] = string.format('"checked":%d', self.lastCheck)
++	end
+ 	if t then
+ 		for k, v in pairs(t) do
+-			lines[#lines + 1] = string.format('"%s":"%s"', k, v)
++			lines[#lines + 1] = string.format('%s:%s', self:jsonString(k), self:jsonString(v))
+ 		end
+ 	end
+ 	return table.concat(lines, ",") .. "}"
+ end
+ 
++-- Argument for /bin/sh in single quotes
++function InternetDetector:shellQuote(s)
++	return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
++end
++
++function InternetDetector:urlEncode(s)
++	return (tostring(s):gsub("[^%w%-%._~]", function(c)
++		return string.format("%%%02X", string.byte(c))
++	end))
++end
++
++function InternetDetector:monotonicMs()
++	local t = time.clock_gettime(time.CLOCK_MONOTONIC)
++	return t.tv_sec * 1000 + math.floor(t.tv_nsec / 1000000)
++end
++
++-- --max-time for curl: --connect-timeout does not limit a connection that
++-- is accepted at once (a local proxy or redirect) and then hangs.
++function InternetDetector:curlMaxTime()
++	return math.max(3, self.serviceConfig.connection_timeout * 2)
++end
++
++function InternetDetector:curlFamilyArg()
++	local family = tonumber(self.serviceConfig.ip_family)
++	if family == 4 then
++		return " --ipv4"
++	elseif family == 6 then
++		return " --ipv6"
++	end
++	return ""
++end
++
++function InternetDetector:buildProxyString()
++	local sc = self.serviceConfig
++	self.proxyString     = ""
++	self.proxyAuthString = ""
++	if sc.proxy_type and sc.proxy_host and sc.proxy_port then
++		if sc.proxy_user and sc.proxy_passwd then
++			self.proxyAuthString = " --proxy-user " ..
++				self:shellQuote(string.format("%s:%s", sc.proxy_user, sc.proxy_passwd))
++		end
++		self.proxyString = " --proxy " .. self:shellQuote(string.format("%s://%s:%s",
++			sc.proxy_type, sc.proxy_host, sc.proxy_port)) .. self.proxyAuthString
++	end
++	return self.proxyString
++end
++
+ function InternetDetector:writeLogMessage(level, msg)
+ 	local levelItem  = self.logLevels[level]
+ 	local levelValue = (levelItem and levelItem.level) or self.logLevels["info"].level
+@@ -231,9 +299,18 @@ function InternetDetector:parseHost(host)
+ 	return addr, tonumber(port)
+ end
+ 
++function InternetDetector:listValue(v)
++	if type(v) == "table" then
++		return v
++	elseif v ~= nil and tostring(v) ~= "" then
++		return { tostring(v) }
++	end
++	return {}
++end
++
+ function InternetDetector:parseHosts()
+ 	self.parsedHosts = {}
+-	for k, v in ipairs(self.serviceConfig.hosts) do
++	for k, v in ipairs(self:listValue(self.serviceConfig.hosts)) do
+ 		local addr, port    = self:parseHost(v)
+ 		self.parsedHosts[k] = { addr = addr, port = port }
+ 	end
+@@ -241,38 +318,73 @@ end
+ 
+ function InternetDetector:parseUrls()
+ 	self.parsedHosts = {}
+-	for k, v in ipairs(self.serviceConfig.urls) do
++	for k, v in ipairs(self:listValue(self.serviceConfig.urls)) do
++		self.parsedHosts[k] = { addr = v }
++	end
++end
++
++function InternetDetector:parseOutbounds()
++	self.parsedHosts = {}
++	for k, v in ipairs(self:listValue(self.serviceConfig.clash_api_outbounds)) do
+ 		self.parsedHosts[k] = { addr = v }
+ 	end
+ end
+ 
+ function InternetDetector:pingHost(host)
++	local family = tonumber(self.serviceConfig.ip_family)
+ 	local ping = string.format(
+-		"%s %s -W %d -s %d%s %s > /dev/null 2>&1",
++		"%s %s%s -W %d -s %d%s %s > /dev/null 2>&1",
+ 		self.pingCmd,
+ 		self.pingParams,
++		(family == 4 and " -4") or (family == 6 and " -6") or "",
+ 		self.serviceConfig.connection_timeout,
+ 		self.serviceConfig.icmp_packet_size,
+-		self.serviceConfig.iface and (" -I " .. self.serviceConfig.iface) or "",
+-		host
++		self.serviceConfig.iface and (" -I " .. self:shellQuote(self.serviceConfig.iface)) or "",
++		self:shellQuote(host)
+ 	)
++	local startMs = self:monotonicMs()
+ 	local retCode = os.execute(ping)
++	local latency = self:monotonicMs() - startMs
+ 
+ 	self:debugOutput(string.format(
+ 		"--- Ping ---\ntime = %s\n%s\nretCode = %s", os.time(), ping, retCode))
+ 
+-	return retCode
++	return retCode, latency
+ end
+ 
++-- Tries every address of the host (of the family set by ip_family) until
++-- one accepts the connection.
+ function InternetDetector:TCPConnectionToHost(host, port)
+ 	local retCode = 1
+-	local saTable, errMsg, errNum = socket.getaddrinfo(host, port or self.serviceConfig.tcp_port)
++	local hints   = { socktype = socket.SOCK_STREAM }
++	local family  = tonumber(self.serviceConfig.ip_family)
++	if family == 4 then
++		hints.family = socket.AF_INET
++	elseif family == 6 then
++		hints.family = socket.AF_INET6
++	end
++	local saTable, errMsg, errNum = socket.getaddrinfo(
++		host, tostring(port or self.serviceConfig.tcp_port), hints)
+ 
+ 	if not saTable then
+ 		self:debugOutput(string.format(
+ 			"GETADDRINFO ERROR: %s, %s", errMsg, errNum))
+-	else
+-		local family = saTable[1].family
++		return retCode
++	end
++	for _, sa in ipairs(saTable) do
++		local startMs = self:monotonicMs()
++		retCode = self:TCPConnectionToAddr(host, port, sa)
++		if retCode == 0 then
++			return retCode, self:monotonicMs() - startMs
++		end
++	end
++	return retCode
++end
++
++function InternetDetector:TCPConnectionToAddr(host, port, sa)
++	local retCode = 1
++	do
++		local family = sa.family
+ 
+ 		if family then
+ 			local sock, errMsg, errNum = socket.socket(family, socket.SOCK_STREAM, 0)
+@@ -299,7 +411,7 @@ function InternetDetector:TCPConnectionToHost(host, port)
+ 				end
+ 			end
+ 
+-			local success = socket.connect(sock, saTable[1])
++			local success = socket.connect(sock, sa)
+ 
+ 			if self.debug then
+ 				if not success then
+@@ -341,32 +453,46 @@ function InternetDetector:TCPConnectionToHost(host, port)
+ 	return retCode
+ end
+ 
+-function InternetDetector:httpRequest(url)
+-	local retCode = 1, data
+-	local curl = string.format(
+-		'%s%s%s --connect-timeout %s %s "%s"; printf "\n$?";',
+-		self.curlExec,
+-		self.serviceConfig.iface and (" --interface " .. self.serviceConfig.iface) or "",
+-		self.proxyString,
+-		self.serviceConfig.connection_timeout,
+-		self.curlParams,
+-		url
+-	)
+-	local fh = io.popen(curl, "r")
++-- Runs a shell command line, returns its output and the exit code of the
++-- last command (printed after the output by the command line itself).
++function InternetDetector:runCommand(cmd)
++	local retCode, data = 1, nil
++	local fh = io.popen(cmd .. '; printf "\\n%s" "$?"', "r")
+ 	if fh then
+ 		data = fh:read("*a")
+ 		fh:close()
+ 		if data ~= nil then
+-			local s, e = data:find("[0-9]+\n?$")
+-			retCode    = tonumber(data:sub(s))
+-			data       = data:sub(0, s - 2)
+-			if not data or data == "" then
++			local s = data:find("[0-9]+$")
++			if s then
++				retCode = tonumber(data:sub(s))
++				data    = data:sub(1, s - 2)
++			end
++			if data == "" then
+ 				data = nil
+ 			end
+ 		end
+-	else
+-		retCode = 1
+ 	end
++	return retCode, data
++end
++
++function InternetDetector:curlCommand(url, extra)
++	return string.format(
++		"%s%s%s%s --connect-timeout %d --max-time %d %s%s %s",
++		self.curlExec,
++		self:curlFamilyArg(),
++		self.serviceConfig.iface and (" --interface " .. self:shellQuote(self.serviceConfig.iface)) or "",
++		self.proxyString,
++		self.serviceConfig.connection_timeout,
++		self:curlMaxTime(),
++		self.curlParams,
++		extra or "",
++		self:shellQuote(url)
++	)
++end
++
++function InternetDetector:httpRequest(url)
++	local curl = self:curlCommand(url)
++	local retCode, data = self:runCommand(curl)
+ 
+ 	self:debugOutput(string.format(
+ 		"--- Curl ---\ntime = %s\n%s\nretCode = %s\ndata = [\n%s]\n",
+@@ -378,22 +504,92 @@ function InternetDetector:httpRequest(url)
+ 	return retCode, data
+ end
+ 
+-function InternetDetector:getHTTPCode(data)
+-	local httpCode
+-	local respHeader = data:match("^HTTP/[^%c]+")
+-	if respHeader then
+-		httpCode = respHeader:match("%d%d%d")
++-- The HTTP code comes from curl (-w), not from the first header line:
++-- through an HTTP proxy that line is the answer of the proxy itself
++-- ("200 Connection established").
++function InternetDetector:checkURL(url)
++	local method = (self.serviceConfig.http_method == "get") and "" or " --head"
++	local curl   = self:curlCommand(url, method .. " -o /dev/null -w '%{http_code} %{time_total}'")
++	local retCode, data = self:runCommand(curl)
++	local httpCode, total
++	if data then
++		httpCode, total = data:match("(%d+) ([%d.,]+)%s*$")
++		httpCode = tonumber(httpCode)
++		total    = tonumber((tostring(total or ""):gsub(",", ".")))
++	end
++
++	self:debugOutput(string.format(
++		"--- Curl ---\ntime = %s\n%s\nretCode = %s\nhttp_code = %s\ntime_total = %s\n",
++		os.time(), curl, retCode, tostring(httpCode), tostring(total)))
++
++	if retCode ~= 0 or not httpCode then
++		return 1
++	end
++	local ok = self.curlHttpOkCodes[httpCode] or
++		(tonumber(self.serviceConfig.http_any_code) == 1 and httpCode >= 100)
++	if not ok then
++		return 1
++	end
++	return 0, total and math.floor(total * 1000 + 0.5)
++end
++
++-- sing-box Clash API: GET /proxies/<tag>/delay runs the URL test of
++-- clash_api_test_url through this outbound only, whatever the routing
++-- rules say. Answer {"delay":N} (ms) with HTTP 200 means it works.
++-- Address and secret of the Clash API: the options of the instance, or
++-- homeproxy's controller if the address is empty (0.0.0.0 / :: -> loopback).
++function InternetDetector:resolveClashApi()
++	local sc     = self.serviceConfig
++	local url    = sc.clash_api_url and tostring(sc.clash_api_url) or ""
++	local secret = sc.clash_api_secret and tostring(sc.clash_api_secret) or ""
++	if url == "" then
++		local ctl = uciCursor:get("homeproxy", "infra", "clash_api_controller")
++		if ctl and ctl ~= "" then
++			ctl = ctl:gsub("^0%.0%.0%.0:", "127.0.0.1:"):gsub("^%[::%]:", "[::1]:"):gsub("^:", "127.0.0.1:")
++			url = "http://" .. ctl
++			if secret == "" then
++				secret = uciCursor:get("homeproxy", "infra", "clash_api_secret") or ""
++			end
++		else
++			url = "http://127.0.0.1:9090"
++		end
+ 	end
+-	return tonumber(httpCode)
++	self.clashApiUrl    = (url:gsub("/+$", ""))
++	self.clashApiSecret = secret
+ end
+ 
+-function InternetDetector:checkURL(url)
+-	local httpCode
+-	local retCode, data = self:httpRequest(url)
+-	if retCode == 0 and data then
+-		httpCode = self:getHTTPCode(data)
++function InternetDetector:checkClashOutbound(tag)
++	local sc   = self.serviceConfig
++	if not self.clashApiUrl then
++		self:resolveClashApi()
++	end
++	local base = self.clashApiUrl
++	local url  = string.format("%s/proxies/%s/delay?url=%s&timeout=%d",
++		base,
++		self:urlEncode(tag),
++		self:urlEncode(sc.clash_api_test_url or "https://www.gstatic.com/generate_204"),
++		sc.connection_timeout * 1000)
++	local auth = ""
++	if self.clashApiSecret ~= "" then
++		auth = " -H " .. self:shellQuote("Authorization: Bearer " .. self.clashApiSecret)
++	end
++	local curl = string.format("%s -s -g --max-time %d%s -w '\\n%%{http_code}' %s",
++		self.curlExec, sc.connection_timeout + 3, auth, self:shellQuote(url))
++	local retCode, data = self:runCommand(curl)
++	local httpCode, delay
++	if data then
++		httpCode = tonumber(data:match("(%d+)%s*$"))
++		delay    = tonumber(data:match('"delay"%s*:%s*(%d+)'))
+ 	end
+-	return (not self.curlHttpOkCodes[httpCode]) and 1 or 0
++
++	self:debugOutput(string.format(
++		"--- Clash API ---\ntime = %s\nurl = %s\nretCode = %s\nhttp_code = %s\ndelay = %s\n",
++		os.time(), url, retCode, tostring(httpCode), tostring(delay)))
++
++	if retCode == 0 and httpCode == 200 and delay and delay > 0 then
++		return 0, delay
++	end
++	return 1
+ end
+ 
+ function InternetDetector:exit()
+@@ -428,6 +624,7 @@ function InternetDetector:mainLoop()
+ 	local checking      = false
+ 	local hostNum       = 1
+ 	local attempt       = 1
++	local loopLast      = time.clock_gettime(time.CLOCK_MONOTONIC).tv_sec
+ 
+ 	local checkFunc = self.TCPConnectionToHost
+ 	if self.serviceConfig.check_type == 1 then
+@@ -436,21 +633,9 @@ function InternetDetector:mainLoop()
+ 	elseif self.serviceConfig.check_type == 2 then
+ 		checkFunc = self.checkURL
+ 		self:parseUrls()
+-		if (self.serviceConfig.proxy_type and self.serviceConfig.proxy_host and
+-			self.serviceConfig.proxy_port) then
+-			if self.serviceConfig.proxy_user and self.serviceConfig.proxy_passwd then
+-				self.proxyAuthString = string.format(
+-					' --proxy-user "%s:%s"',
+-					self.serviceConfig.proxy_user,
+-					self.serviceConfig.proxy_passwd)
+-			end
+-			self.proxyString = string.format(
+-				" --proxy %s://%s:%d%s",
+-				self.serviceConfig.proxy_type,
+-				self.serviceConfig.proxy_host,
+-				self.serviceConfig.proxy_port,
+-				self.proxyAuthString)
+-		end
++	elseif self.serviceConfig.check_type == 3 then
++		checkFunc = self.checkClashOutbound
++		self:parseOutbounds()
+ 	else
+ 		self:parseHosts()
+ 	end
+@@ -471,13 +656,13 @@ function InternetDetector:mainLoop()
+ 				if attempt <= self.serviceConfig.connection_attempts then
+ 					local addr    = self.parsedHosts[hostNum].addr
+ 					local port    = self.parsedHosts[hostNum].port
+-					local retCode = 1
++					local retCode, latency = 1, nil
+ 					if self.debug then
+-						retCode = checkFunc(self, addr, port)
++						retCode, latency = checkFunc(self, addr, port)
+ 					else
+-						local ok, status = pcall(checkFunc, self, addr, port)
++						local ok, status, lat = pcall(checkFunc, self, addr, port)
+ 						if ok then
+-							retCode = status
++							retCode, latency = status, lat
+ 						else
+ 							self:writeLogMessage("err", string.format(
+ 								"An error occurred while checking the host %s: %s",
+@@ -493,6 +678,7 @@ function InternetDetector:mainLoop()
+ 						newStatus   = 0
+ 						counter     = 0
+ 						inetChecked = true
++						self.lastLatency = tonumber(latency)
+ 					else
+ 						attempt = attempt + 1
+ 						if attempt > self.serviceConfig.connection_attempts then
+@@ -518,23 +704,22 @@ function InternetDetector:mainLoop()
+ 			end
+ 
+ 			if inetChecked then
+-				currentStatus = newStatus
+-				if not stat.stat(self.statusFile) then
+-					self:writeValueToFile(self.statusFile, self:statusJson(
+-						currentStatus, self.serviceConfig.instance))
++				currentStatus  = newStatus
++				self.lastCheck = os.time()
++				if currentStatus == 1 then
++					self.lastLatency = nil
+ 				end
++				-- Every check rewrites the status: time of the check and latency
++				self:writeValueToFile(self.statusFile, self:statusJson(
++					currentStatus, self.serviceConfig.instance, modulesStatus))
+ 				if currentStatus == 0 then
+ 					interval = self.serviceConfig.interval_up
+ 					if currentStatus ~= lastStatus then
+-						self:writeValueToFile(self.statusFile, self:statusJson(
+-							currentStatus, self.serviceConfig.instance))
+ 						self:writeLogMessage("notice", "Connected")
+ 					end
+ 				elseif currentStatus == 1 then
+ 					interval = self.serviceConfig.interval_down
+ 					if currentStatus ~= lastStatus then
+-						self:writeValueToFile(self.statusFile, self:statusJson(
+-							currentStatus, self.serviceConfig.instance))
+ 						self:writeLogMessage("notice", "Disconnected")
+ 					end
+ 				end
+@@ -576,10 +761,13 @@ function InternetDetector:mainLoop()
+ 
+ 		unistd.sleep(1)
+ 
++		-- Interval by the clock: the time of the check itself counts too
++		local loopNow = time.clock_gettime(time.CLOCK_MONOTONIC).tv_sec
+ 		if not checking then
+ 			lastStatus = currentStatus
+-			counter    = counter + 1
++			counter    = counter + math.max(1, loopNow - loopLast)
+ 		end
++		loopLast = loopNow
+ 
+ 		if self.mode == 2 then
+ 			uiTimeNow = time.clock_gettime(time.CLOCK_MONOTONIC).tv_sec
+@@ -631,7 +819,7 @@ function InternetDetector:inetStatus()
+ end
+ 
+ function InternetDetector:stopInstance(pidFile)
+-	local retVal = false, pidValue
++	local retVal, pidValue = false, nil
+ 	if stat.stat(pidFile) then
+ 		pidValue = self:readValueFromFile(pidFile)
+ 		if pidValue then
+@@ -690,7 +878,7 @@ function InternetDetector:setSIGUSR()
+ 	if ok then
+ 		for item in commonDir do
+ 			if item:match(self.pidFilePattern) then
+-				pidValue = self:readValueFromFile(string.format("%s/%s", self.commonDir, item))
++				local pidValue = self:readValueFromFile(string.format("%s/%s", self.commonDir, item))
+ 				if pidValue then
+ 					signal.kill(tonumber(pidValue), signal.SIGUSR1)
+ 				end
+@@ -713,7 +901,8 @@ function InternetDetector:preRun()
+ 			os.exit(1)
+ 		end
+ 	end
+-	if self.serviceConfig.check_type == 2 and not unistd.access(self.curlExec, "x") then
++	if (self.serviceConfig.check_type == 2 or self.serviceConfig.check_type == 3) and
++		not unistd.access(self.curlExec, "x") then
+ 		io.stderr:write(string.format(
+ 			"Error, %s is not available. You need to install curl.\n", self.curlExec))
+ 		os.exit(1)
+@@ -741,6 +930,7 @@ function InternetDetector:run()
+ 		syslog.openlog(self.appName, syslog.LOG_PID, syslog.LOG_DAEMON)
+ 	end
+ 	self:writeLogMessage("info", "started")
++	self:buildProxyString()
+ 	self:loadModules()
+ 
+ 	-- Loaded modules
+@@ -756,7 +946,7 @@ function InternetDetector:run()
+ 
+ 	if self.debug then
+ 		local function inspectTable()
+-			local tables = {}, f
++			local tables, f = {}, nil
+ 			f = function(t, prefix)
+ 				tables[t] = true
+ 				for k, v in pairs(t) do
