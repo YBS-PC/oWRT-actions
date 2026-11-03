@@ -93,7 +93,7 @@
 | `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`3d5c24f`](https://github.com/yandexru45/netshift/commit/3d5c24f28799502db16e76b6475ce38c7f0def33) | 31.10.2026 |
 | `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`8c67190`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/8c67190debee97bc2b3d68c3e41521ba9ddea3b5) | 02.11.2026 |
 | `feeds/podkop/` | [itdoginfo/podkop](https://github.com/itdoginfo/podkop) | [`c654bf5`](https://github.com/itdoginfo/podkop/commit/c654bf5da75309754e3fb63b9441981db65fff68) | 24.10.2026 |
-| `feeds/tachyon/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) | [`64c8e29`](https://github.com/Dushnilin/tachyon/commit/64c8e29ee7ba852e075095441a92bbeab3e35332) | 03.11.2026 |
+| `feeds/tachyon/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) | [`7a8843f`](https://github.com/Dushnilin/tachyon/commit/7a8843fbf9475374ce5fffce354b060fcb33b431) | 03.11.2026 |
 | `feeds/trafira/` | [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) | [`15ae0f9`](https://github.com/petrouspetr-pixel/trafira/commit/15ae0f909cbcad0f632245cbc13fb6103dd3cce0) | 30.10.2026 |
 | `packages/luci-app-commands/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`75a306d`](https://github.com/openwrt/luci/commit/75a306df84a020c57a631ef5b4c02ace56d93387) | 15.10.2026 |
 | `packages/luci-app-filemanager/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`e969939`](https://github.com/openwrt/luci/commit/e969939b49167516e219d465df8030d98d443d67) | 31.10.2026 |
@@ -225,8 +225,13 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
   - Интервал опроса считается по часам от начала проверки, а не числом
     проходов цикла.
   - В файле статуса — задержка последней успешной проверки (`latency`,
-    мс) и время последней проверки (`checked`); он пишется после каждой
-    проверки.
+    мс), время последней проверки (`checked`) и причина последнего сбоя
+    (`error`: код curl или HTTP, ответ Clash API); он пишется после
+    каждой проверки.
+  - В режиме «Web UI only» экземпляр завершается, когда меняется
+    `/etc/config/internet-detector`, и следующий опрос страницы
+    запускает его с новыми настройками. Раньше открытая страница держала
+    экземпляры со старыми настройками.
   - *Всегда.*
   - Новые опции экземпляра (вкладка «Основные настройки»):
     - «Версия IP» (`ip_family`): любая / IPv4 / IPv6 — для TCP, ping и
@@ -241,7 +246,10 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
       URL для теста, адрес и секрет Clash API. Пустой адрес — контроллер
       и секрет homeproxy (`infra.clash_api_controller`,
       `infra.clash_api_secret`, патч homeproxy 010), `0.0.0.0` заменяется
-      на `127.0.0.1`.
+      на `127.0.0.1`. Выход можно указать и именем или меткой узла
+      маршрутизации либо узла homeproxy: homeproxy называет выход узла
+      маршрутизации по его узлу (`cfg-<узел>-out`), а выход узла
+      маршрутизации типа urltest — по самому узлу маршрутизации.
 
     *Опция*, по умолчанию — как раньше (любая версия IP, HEAD, коды 2xx
     и 3xx).
@@ -255,22 +263,37 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
   - Запрос по HTTP: `--max-time`, прокси с логином и паролем (раньше
     модуль передавал прокси без них), URL в одинарных кавычках.
   - Ответ HTTP принимается в виде одного адреса, строки `ip=...`, поля
-    JSON `"ip"` или строки JSON.
+    JSON `"ip"` или строки JSON. Адрес loopback, частный, link-local или
+    multicast публичным IP не считается (yandex.net без заголовка
+    `Origin`, который модуль теперь передаёт, отвечает `127.0.0.1`).
+  - Провайдер ifconfig (`http://ifconfig.me/`) на User-Agent браузера
+    отдаёт HTML-страницу и адреса не давал: теперь `/ip`.
+  - Один неудачный запрос оставляет прежний адрес (он сбрасывается после
+    `request_attempts` неудач подряд); повтор — через 5 с, а не через 1.
   - *Всегда.*
   - «Версия IP» (`qtype`) действует и на HTTP-провайдеров (раньше —
     только на DNS); по умолчанию IPv4. Новое значение «IPv4 + IPv6» —
     два запроса и оба адреса в статусе. Новые провайдеры HTTPS (у
     части — отдельный адрес для IPv6) и «Свой URL» с полями
-    `custom_url` и `custom_url6`. *Опция*, вкладка «Публичный IP
-    адрес». HTTP-провайдер с IPv4 по умолчанию: раньше curl сам выбирал
-    версию IP.
-- **003. Интерфейс LuCI.** Поля новых опций; список выходов sing-box
-  читается из Clash API новым методом rpcd `luci.internet-detector
-  ClashProxies` (адрес и секрет первого экземпляра с такой проверкой
-  или homeproxy). Подсказки для хостов и URL. В статусе на странице и в
-  обзоре — задержка, время последней проверки во всплывающей подсказке;
-  адрес больше не проходит через функцию перевода. Русский перевод
-  новых строк. *Всегда.*
+    `custom_url` и `custom_url6`. «Запасной провайдер» (`provider2`) —
+    запрашивается, если основной не дал адреса. *Опция*, вкладка
+    «Публичный IP адрес». HTTP-провайдер с IPv4 по умолчанию: раньше curl
+    сам выбирал версию IP.
+- **003. Интерфейс LuCI.**
+  - Поля новых опций. Список выходов sing-box читается из Clash API
+    новым методом rpcd `luci.internet-detector ClashProxies` (адрес и
+    секрет первого экземпляра с такой проверкой или homeproxy); рядом с
+    тегами — узлы маршрутизации homeproxy по имени и метки узлов.
+  - Подсказки для хостов и URL; у провайдеров публичного IP в названии —
+    сеть, через которую они работают. У поля «Устройство» — пояснение,
+    что с прозрачным прокси на роутере его оставляют пустым.
+  - Статус на странице и в обзоре — карточка на экземпляр: состояние,
+    описание, задержка, публичный IP, причина сбоя, время проверки.
+    Адрес больше не проходит через функцию перевода.
+  - Кнопка «Проверить заново»: новый метод rpcd `Restart` (права
+    записи) останавливает экземпляры и запускает их снова (в режиме
+    «Web UI only») или перезапускает службу.
+  - Русский перевод новых строк. *Всегда.*
 
 ### luci-app-xray — `feeds/luciappxray/` (1)
 
@@ -374,7 +397,7 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
 секрета `ARTIFACT_PASSWORD`. На остальных устройствах его ставит на
 роутере установщик самого tachyon.
 
-Патчи сняты с коммита [`64c8e29`](https://github.com/Dushnilin/tachyon/commit/64c8e29ee7ba852e075095441a92bbeab3e35332) от 03.11.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`7a8843f`](https://github.com/Dushnilin/tachyon/commit/7a8843fbf9475374ce5fffce354b060fcb33b431) от 03.11.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Удаление пакета.** Скрипт удаления tachyon написан на ucode, а
   сборка OpenWrt выполняет его как shell (apk — в своём скрипте удаления,
