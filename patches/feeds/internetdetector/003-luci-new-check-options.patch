@@ -1,0 +1,1133 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 3 Nov 2026 12:00:00 +0000
+Subject: [PATCH] luci-app-internet-detector: options of the new checks, latency
+Requires: 001-check-fixes-ip-version-outbound-check 002-public-ip-dns-ipv6-providers
+
+- Main settings: check type "sing-box outbound (Clash API)" with its
+  options; the list of outbounds is read from the Clash API by the new
+  rpcd method luci.internet-detector ClashProxies (address and secret
+  of the first instance with this check, or of homeproxy). IP version,
+  HTTP method and "Any HTTP response" for the other checks. Suggested
+  values for hosts and URLs.
+- Public IP: the new providers, a custom URL, IP version IPv4 / IPv6 /
+  IPv4 + IPv6 for all providers.
+- Status (page and overview): a card per instance with its state,
+  description, latency, public IP, reason of a failure and time of the
+  last check; the address is no longer passed through the translation
+  function. Button "Check again": the new rpcd method Restart (write
+  ACL) stops the instances and starts them again ("Web UI only") or
+  restarts the service.
+- Outbounds: homeproxy routing nodes by name and node labels next to
+  their tags (rpcd ClashProxies reads them from /etc/config/homeproxy).
+- Public IP: fallback provider; the network that serves each provider in
+  its title. Device: a note that a device breaks the connections to a
+  transparent proxy on the router.
+- Russian translation of the new strings.
+
+diff --git a/luci-app-internet-detector/htdocs/luci-static/resources/view/internet-detector.js b/luci-app-internet-detector/htdocs/luci-static/resources/view/internet-detector.js
+index 5e0dd2cf..46a71ead 100644
+--- a/luci-app-internet-detector/htdocs/luci-static/resources/view/internet-detector.js
++++ b/luci-app-internet-detector/htdocs/luci-static/resources/view/internet-detector.js
+@@ -60,6 +60,154 @@ document.head.append(E('style', {'type': 'text/css'},
+ }
+ `));
+ 
++/* Status cards (the same in status/include/00_internet.js) */
++document.head.append(E('style', {'type': 'text/css'},
++`
++.id-cards {
++	display: grid;
++	grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
++	gap: 10px;
++	width: 100%;
++	margin: 2px 0 6px;
++}
++.id-card {
++	--id-accent: #9aa0a6;
++	min-width: 0;
++	padding: 8px 12px;
++	border: 1px solid rgba(128, 128, 128, .28);
++	border-left: 4px solid var(--id-accent);
++	border-radius: 8px;
++	line-height: 1.4;
++	text-align: left;
++}
++.id-card.id-ok   { --id-accent: #2ea44f; }
++.id-card.id-down { --id-accent: #d1242f; }
++:root[data-darkmode="true"] .id-card.id-ok   { --id-accent: #3fb950; }
++:root[data-darkmode="true"] .id-card.id-down { --id-accent: #f85149; }
++.id-card-head {
++	display: flex;
++	align-items: center;
++	gap: 8px;
++	min-width: 0;
++}
++.id-dot {
++	flex: none;
++	width: 10px;
++	height: 10px;
++	border-radius: 50%;
++	background: var(--id-accent);
++}
++.id-card.id-wait .id-dot { animation: id-pulse 1.2s ease-in-out infinite; }
++@keyframes id-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
++.id-name { font-weight: 600; white-space: nowrap; }
++.id-desc {
++	min-width: 0;
++	overflow: hidden;
++	opacity: .65;
++	font-size: 90%;
++	white-space: nowrap;
++	text-overflow: ellipsis;
++}
++.id-state {
++	flex: none;
++	margin-left: auto;
++	color: var(--id-accent);
++	font-size: 85%;
++	font-weight: 600;
++}
++.id-kv {
++	display: flex;
++	justify-content: space-between;
++	align-items: baseline;
++	gap: 10px;
++	margin-top: 4px;
++	font-size: 90%;
++}
++.id-kv > span { opacity: .7; white-space: nowrap; }
++.id-kv > b { font-weight: 500; text-align: right; overflow-wrap: anywhere; }
++.id-ip { font-family: monospace; font-size: 95%; }
++.id-toolbar { margin-top: 4px; }
++`));
++
++function idErrorText(code) {
++	let m = String(code || '').match(/^([a-z-]+)(?::(\d+))?$/);
++	if(!m) {
++		return String(code || '');
++	};
++	let n = m[2];
++	switch(m[1]) {
++		case 'curl':
++			return ({ 6: _('name resolution failed'), 7: _('connection refused'),
++				28: _('timeout'), 35: _('TLS error'), 60: _('TLS error') })[n] || 'curl ' + n;
++		case 'http':
++			return 'HTTP ' + n;
++		case 'clash':
++			return ({ 401: _('Clash API: wrong secret'), 404: _('Clash API: no such outbound'),
++				503: _('outbound test failed'), 504: _('outbound test timeout') })[n] || 'Clash API: HTTP ' + n;
++		case 'clash-curl':
++			return (n == '7') ? _('Clash API is not available') : 'Clash API: curl ' + n;
++		case 'dns':
++			return _('name resolution failed');
++		case 'tcp':
++			return _('no TCP connection');
++		case 'ping':
++			return _('no ICMP reply');
++	};
++	return _('check error');
++}
++
++// instances: [{ instance, inet, latency, checked, error, mod_public_ip }]
++function idRenderCards(instances, describe, waiting) {
++	let lang = document.documentElement.lang || undefined;
++	let cards = [];
++	for(let i of instances) {
++		let cls   = 'id-wait', state = _('Checking...');
++		if(i.inet == 0) {
++			cls = 'id-ok';   state = _('Connected');
++		} else if(i.inet == 1) {
++			cls = 'id-down'; state = _('Disconnected');
++		};
++		let desc = describe ? describe(i.instance) : null;
++		let rows = [];
++		if(i.inet == 0 && i.latency !== undefined) {
++			rows.push(E('div', { 'class': 'id-kv' }, [
++				E('span', {}, _('Latency')), E('b', {}, '%s %s'.format(i.latency, _('msec'))) ]));
++		};
++		if(i.inet == 1 && i.error) {
++			rows.push(E('div', { 'class': 'id-kv' }, [
++				E('span', {}, _('Reason')), E('b', {}, idErrorText(i.error)) ]));
++		};
++		if(i.mod_public_ip !== undefined) {
++			rows.push(E('div', { 'class': 'id-kv' }, [
++				E('span', {}, _('Public IP')),
++				E('b', { 'class': 'id-ip' }, (i.mod_public_ip == '') ? _('Undefined') : i.mod_public_ip) ]));
++		};
++		if(i.checked) {
++			let d = new Date(i.checked * 1000);
++			rows.push(E('div', { 'class': 'id-kv' }, [
++				E('span', {}, _('Last check')), E('b', { 'title': d.toLocaleString(lang) }, d.toLocaleTimeString(lang)) ]));
++		};
++		cards.push(E('div', { 'class': 'id-card ' + cls }, [
++			E('div', { 'class': 'id-card-head' }, [
++				E('span', { 'class': 'id-dot' }),
++				E('span', { 'class': 'id-name' }, i.instance),
++				(desc && desc != i.instance) ? E('span', { 'class': 'id-desc', 'title': desc }, desc) : '',
++				E('span', { 'class': 'id-state' }, state),
++			]),
++		].concat(rows)));
++	};
++	if(cards.length == 0) {
++		cards.push(E('div', { 'class': 'id-card ' + (waiting ? 'id-wait' : '') }, [
++			E('div', { 'class': 'id-card-head' }, [
++				E('span', { 'class': 'id-dot' }),
++				E('span', { 'class': 'id-name' }, _('Internet')),
++				E('span', { 'class': 'id-state' }, waiting ? _('Checking...') : _('Undefined')),
++			]),
++		]));
++	};
++	return E('div', { 'class': 'id-cards' }, cards);
++}
++
+ const btnStyleEnabled  = 'btn cbi-button-save';
+ const btnStyleDisabled = 'btn cbi-button-reset';
+ const btnStyleApply    = 'btn cbi-button-apply';
+@@ -168,12 +316,28 @@ return view.extend({
+ 	appStatus              : 'stoped',
+ 	initStatus             : null,
+ 	inetStatus             : null,
+-	inetStatusArea         : E('div', { 'class': 'cbi-value-field', 'id': 'inetStatusArea' }),
++	inetStatusArea         : E('div', { 'id': 'inetStatusArea' }),
+ 	serviceStatusLabel     : E('em', { 'id': 'serviceStatusLabel' }),
+ 	initButton             : null,
+ 	currentAppMode         : '0',
+ 	defaultHosts           : [ '8.8.8.8', '1.1.1.1' ],
+ 	defaultURLs            : [ 'https://www.google.com' ],
++	presetHosts            : [
++		'8.8.8.8', '8.8.4.4', '1.1.1.1', '1.0.0.1', '9.9.9.9', '208.67.222.222',
++		'2001:4860:4860::8888', '2606:4700:4700::1111', '2620:fe::fe',
++	],
++	presetURLs             : [
++		'https://www.gstatic.com/generate_204',
++		'http://connectivitycheck.gstatic.com/generate_204',
++		'http://cp.cloudflare.com/generate_204',
++		'https://www.cloudflare.com/cdn-cgi/trace',
++		'http://www.msftconnecttest.com/connecttest.txt',
++		'http://captive.apple.com/hotspot-detect.html',
++		'http://detectportal.firefox.com/success.txt',
++		'https://www.google.com',
++	],
++	defaultClashTestURL    : 'https://www.gstatic.com/generate_204',
++	clashProxies           : null,
+ 	ledsPath               : '/sys/class/leds',
+ 	ledsPerInstance        : 3,
+ 	leds                   : [],
+@@ -187,13 +351,26 @@ return view.extend({
+ 			{ name: 'akamai',   title: 'akamai (DNS)' },
+ 		],
+ 		http: [
+-			{ name: 'akamai_http', title: 'akamai (HTTP)' },
+-			{ name: 'amazonaws',   title: 'amazonaws (HTTP)' },
+-			{ name: 'wgetip',      title: 'wgetip.com (HTTP)' },
+-			{ name: 'ifconfig',    title: 'ifconfig.me (HTTP)' },
+-			{ name: 'ipecho',      title: 'ipecho.net (HTTP)' },
+-			{ name: 'canhazip',    title: 'canhazip.com (HTTP)' },
+-			{ name: 'icanhazip',   title: 'icanhazip.com (HTTP)' },
++			{ name: 'akamai_http', title: 'akamai (HTTP, Akamai)' },
++			{ name: 'amazonaws',   title: 'amazonaws (HTTP, AWS)' },
++			{ name: 'wgetip',      title: 'wgetip.com (HTTP, Cloudflare)' },
++			{ name: 'ifconfig',    title: 'ifconfig.me (HTTP, Google)' },
++			{ name: 'ipecho',      title: 'ipecho.net (HTTP, Google)' },
++			{ name: 'canhazip',    title: 'canhazip.com (HTTP, Cloudflare)' },
++			{ name: 'icanhazip',   title: 'icanhazip.com (HTTP, Cloudflare)' },
++			{ name: 'ipify',           title: 'ipify.org (HTTPS, Cloudflare)' },
++			{ name: 'ident_me',        title: 'ident.me (HTTPS)' },
++			{ name: 'icanhazip_https', title: 'icanhazip.com (HTTPS, Cloudflare)' },
++			{ name: 'ipinfo',          title: 'ipinfo.io (HTTPS, Google)' },
++			{ name: 'yandex',          title: 'yandex.net (HTTPS, Yandex)' },
++			{ name: 'cloudflare',      title: 'cloudflare.com (HTTPS, Cloudflare)' },
++			{ name: 'ifconfig_co',     title: 'ifconfig.co (HTTPS, Cloudflare)' },
++			{ name: 'ifconfig_https',  title: 'ifconfig.me (HTTPS, Google)' },
++			{ name: 'seeip',           title: 'seeip.org (HTTPS)' },
++			{ name: 'ipsb',            title: 'ip.sb (HTTPS, Cloudflare)' },
++			{ name: 'ipecho_https',    title: 'ipecho.net (HTTPS, Google)' },
++			{ name: 'wgetip_https',    title: 'wgetip.com (HTTPS, Cloudflare)' },
++			{ name: 'amazonaws_https', title: 'amazonaws (HTTPS, AWS)' },
+ 		],
+ 	},
+ 	mm                     : false,
+@@ -295,6 +472,33 @@ return view.extend({
+ 		});
+ 	},
+ 
++	callClashProxies: rpc.declare({
++		object: 'luci.internet-detector',
++		method: 'ClashProxies',
++		params: [ 'url', 'secret' ],
++		expect: { '': {} }
++	}),
++
++	// Outbounds of sing-box for the first instance with the Clash API check
++	// (or homeproxy's controller): { url, data: { proxies } } or { url, error }
++	getClashProxies() {
++		let url = '', secret = '';
++		for(let sec of uci.sections(this.appName, 'instance')) {
++			if(sec.check_type == '3') {
++				url    = sec.clash_api_url || '';
++				secret = sec.clash_api_secret || '';
++				break;
++			};
++		};
++		return L.resolveDefault(this.callClashProxies(url, secret), {});
++	},
++
++	callRestart: rpc.declare({
++		object: 'luci.internet-detector',
++		method: 'Restart',
++		expect: { '': {} }
++	}),
++
+ 	callTgChatId: rpc.declare({
+ 		object: 'luci.internet-detector-mod-telegram',
+ 		method: 'GetTgChatId',
+@@ -312,45 +516,21 @@ return view.extend({
+ 	setInternetStatus() {
+ 		this.inetStatusArea.innerHTML = '';
+ 
+-		if(!this.inetStatus || !this.inetStatus.instances || this.inetStatus.instances.length == 0) {
+-			let label = E('span', { 'class': 'id-label-status id-undefined' }, _('Undefined'));
+-			if((this.currentAppMode == '1' && this.appStatus != 'stoped') || this.currentAppMode == '2') {
+-				label.classList.add('spinning');
+-			};
+-			this.inetStatusArea.append(label);
+-		} else {
+-			this.inetStatus.instances.sort((a, b) => a.num - b.num);
+-			for(let i of this.inetStatus.instances) {
+-				let status    = _('Disconnected');
+-				let className = 'id-label-status id-disconnected';
+-				if(i.inet == 0) {
+-					status    = _('Connected');
+-					className = 'id-label-status id-connected';
+-				}
+-				else if(i.inet == -1) {
+-					status    = _('Undefined');
+-					className = 'id-label-status id-undefined spinning';
+-				};
+-
+-				let publicIp = (i.mod_public_ip !== undefined) ?
+-					' | %s: %s'.format(_('Public IP'), (i.mod_public_ip == '') ? _('Undefined') : _(i.mod_public_ip))
+-				: '';
+-
+-				this.inetStatusArea.append(
+-					E('span', { 'class': className }, '%s%s%s'.format(
+-						i.instance + ': ', status, publicIp)
+-					)
+-				);
+-
+-				if(i.mod_regular_script) {
+-					this.modRegularScriptNextRun[i.instance] = i.mod_regular_script;
+-					let nextRunLabel = document.getElementById('id_next_run_' + i.instance);
+-					if(nextRunLabel) {
+-						if(this.appStatus == 'running') {
+-							nextRunLabel.innerHTML = this.modRegularScriptNextRun[i.instance];
+-						} else {
+-							nextRunLabel.innerHTML = _('Not scheduled');
+-						};
++		let instances = (this.inetStatus && this.inetStatus.instances) || [];
++		instances.sort((a, b) => a.num - b.num);
++		this.inetStatusArea.append(idRenderCards(instances,
++			name => uci.get(this.appName, name, 'description'),
++			(this.currentAppMode == '1' && this.appStatus != 'stoped') || this.currentAppMode == '2'));
++
++		for(let i of instances) {
++			if(i.mod_regular_script) {
++				this.modRegularScriptNextRun[i.instance] = i.mod_regular_script;
++				let nextRunLabel = document.getElementById('id_next_run_' + i.instance);
++				if(nextRunLabel) {
++					if(this.appStatus == 'running') {
++						nextRunLabel.innerHTML = this.modRegularScriptNextRun[i.instance];
++					} else {
++						nextRunLabel.innerHTML = _('Not scheduled');
+ 					};
+ 				};
+ 			};
+@@ -363,6 +543,19 @@ return view.extend({
+ 		};
+ 	},
+ 
++	// New check of all instances: the daemon drops the current values
++	restartChecks() {
++		return this.callRestart().then(() => {
++			this.inetStatus = { instances: [] };
++			this.setInternetStatus();
++			return new Promise(resolve => window.setTimeout(resolve, 2000));
++		}).then(() => {
++			return (this.currentAppMode == '1') ? this.servicePoll() : this.uiPoll();
++		}).catch(e => {
++			ui.addNotification(null, E('p', _('An error has occurred') + ': %s'.format(e.message)), 'warning');
++		});
++	},
++
+ 	servicePoll() {
+ 		return Promise.all([
+ 			this.getStatus(),
+@@ -544,10 +737,20 @@ return view.extend({
+ 		renderWidget(section_id, option_index, cfgvalue) {
+ 			this.ctx.setInternetStatus();
+ 
++			let field = [ this.ctx.inetStatusArea ];
++			if(this.ctx.currentAppMode == '1' || this.ctx.currentAppMode == '2') {
++				field.push(E('div', { 'class': 'id-toolbar' },
++					E('button', {
++						'class': 'btn cbi-button cbi-button-action',
++						'title': _('Stop the checks and start them again: the current values are dropped.'),
++						'click': ui.createHandlerFn(this.ctx, 'restartChecks'),
++					}, _('Check again'))
++				));
++			};
+ 			return E([
+ 				E('label', { 'class': 'cbi-value-title', 'for': 'inetStatusArea' },
+ 					_('Internet status')
+-				), this.ctx.inetStatusArea
++				), E('div', { 'class': 'cbi-value-field' }, field)
+ 			])
+ 		},
+ 	}),
+@@ -695,7 +898,12 @@ return view.extend({
+ 			L.resolveDefault(fs.list(this.ledsPath), []),
+ 			this.getInit(),
+ 			uci.load(this.appName),
+-		]).catch(e => {
++		]).then(data => {
++			return this.getClashProxies().then(r => {
++				this.clashProxies = r;
++				return data;
++			});
++		}).catch(e => {
+ 			ui.addNotification(null,
+ 				E('p', _('An error has occurred') + ': %s'.format(e.message)),
+ 				'warning'
+@@ -849,6 +1057,9 @@ return view.extend({
+ 		);
+ 		o.datatype  = 'or(host,hostport,ipaddrport(1))';
+ 		o.default   = this.defaultHosts;
++		for(let h of this.presetHosts) {
++			o.value(h);
++		};
+ 		o.depends({ check_type: '0' });
+ 		o.depends({ check_type: '1' });
+ 		o.rmempty   = false;
+@@ -863,6 +1074,9 @@ return view.extend({
+ 			);
+ 			o.validate  = this.validateUrl;
+ 			o.default   = this.defaultURLs;
++			for(let u of this.presetURLs) {
++				o.value(u);
++			};
+ 			o.rmempty   = false;
+ 			o.depends({ check_type: '2' });
+ 			o.modalonly = true;
+@@ -879,6 +1093,7 @@ return view.extend({
+ 		o.value(0, _('TCP port connection'));
+ 		if(this.curlExec) {
+ 			o.value(2, _('URL test (HTTP)'));
++			o.value(3, _('sing-box outbound (Clash API)'));
+ 		};
+ 		o.default   = '0';
+ 		o.modalonly = true;
+@@ -906,8 +1121,100 @@ return view.extend({
+ 		o.depends({ check_type: '1' });
+ 		o.modalonly = true;
+ 
++		// ip_family
++		o = s.taboption('main', form.ListValue,
++			'ip_family', _('IP version'),
++			_('Address family for name resolution and connections.')
++		);
++		o.value('0', _('Any'));
++		o.value('4', 'IPv4');
++		o.value('6', 'IPv6');
++		o.default   = '0';
++		o.depends({ check_type: '0' });
++		o.depends({ check_type: '1' });
++		o.depends({ check_type: '2' });
++		o.modalonly = true;
++
+ 		if(this.curlExec) {
+ 
++			// http_method
++			o = s.taboption('main', form.ListValue,
++				'http_method', _('HTTP method'),
++				_('HEAD requests only the headers of the response. GET is for servers that do not answer HEAD requests.')
++			);
++			o.value('head', 'HEAD');
++			o.value('get', 'GET');
++			o.default   = 'head';
++			o.depends({ check_type: '2' });
++			o.modalonly = true;
++
++			// http_any_code
++			o = s.taboption('main', form.Flag,
++				'http_any_code', _('Any HTTP response'),
++				_('The URL is available if the server returns any HTTP status code, including 4xx and 5xx (otherwise only 2xx and 3xx).')
++			);
++			o.depends({ check_type: '2' });
++			o.modalonly = true;
++
++			// clash_api_url
++			let clash = this.clashProxies || {};
++			o = s.taboption('main', form.Value,
++				'clash_api_url', _('Clash API address'),
++				_('Address of the sing-box Clash API controller. If empty, the controller of homeproxy is used (127.0.0.1 instead of 0.0.0.0), otherwise http://127.0.0.1:9090.')
++			);
++			o.validate    = this.validateUrl;
++			o.placeholder = clash.url || 'http://127.0.0.1:9090';
++			o.depends({ check_type: '3' });
++			o.modalonly   = true;
++
++			// clash_api_secret
++			o = s.taboption('main', form.Value,
++				'clash_api_secret', _('Clash API secret'),
++				_('If the address is empty, the secret of homeproxy is used.')
++			);
++			o.password  = true;
++			o.depends({ check_type: '3' });
++			o.modalonly = true;
++
++			// clash_api_outbounds
++			let outboundsDescr = _('Tags of sing-box outbounds. They are checked (in list order) by the delay test of the Clash API until one responds. In homeproxy the tag of a routing node is <code>cfg-&lt;node&gt;-out</code>.') + ' ' +
++				_('The name or label of a homeproxy routing node or node is accepted too.');
++			if(clash.error) {
++				outboundsDescr += '<br />' + _('Could not get the list of outbounds (%s): %s').format(clash.url || '', clash.error);
++			};
++			o = s.taboption('main', form.DynamicList,
++				'clash_api_outbounds', _('Outbounds'), outboundsDescr
++			);
++			if(clash.data && clash.data.proxies) {
++				let proxies = clash.data.proxies, labels = clash.labels || {};
++				for(let r of (clash.routing || [])) {
++					if(proxies[r.tag]) {
++						o.value(r.name, '%s \u2014 %s (%s)'.format(r.label, _('routing node'), proxies[r.tag].type));
++					};
++				};
++				for(let [ name, p ] of Object.entries(proxies).sort()) {
++					let type = (p && p.type) ? p.type : '';
++					o.value(name, labels[name] ? '%s (%s) \u00b7 %s'.format(labels[name], type, name) : '%s (%s)'.format(name, type));
++				};
++			};
++			o.rmempty   = false;
++			o.depends({ check_type: '3' });
++			o.modalonly = true;
++
++			// clash_api_test_url
++			o = s.taboption('main', form.Value,
++				'clash_api_test_url', _('Test URL'),
++				_('URL that sing-box requests through the outbound. Only https:// URLs are accepted, otherwise sing-box uses its default URL.')
++			);
++			o.validate    = this.validateUrl;
++			o.placeholder = this.defaultClashTestURL;
++			o.default     = this.defaultClashTestURL;
++			o.value('https://www.gstatic.com/generate_204');
++			o.value('https://cp.cloudflare.com/generate_204');
++			o.value('https://www.google.com/generate_204');
++			o.depends({ check_type: '3' });
++			o.modalonly   = true;
++
+ 			// proxy_type
+ 			o = s.taboption('main', form.ListValue,
+ 				'proxy_type', _('Proxy')
+@@ -959,7 +1266,8 @@ return view.extend({
+ 		// iface
+ 		o = s.taboption('main', widgets.DeviceSelect,
+ 			'iface', _('Device'),
+-			_('Network device for Internet access. If not specified, the default device is used.')
++			_('Network device for Internet access. If not specified, the default device is used.') + '<br />' +
++			_('With a transparent proxy on the router (homeproxy and others) leave it empty: connections bound to a device do not reach the proxy, and the check and the public IP fail.')
+ 		);
+ 		o.noaliases = true;
+ 		o.modalonly = true;
+@@ -1479,6 +1787,7 @@ return view.extend({
+ 			o = s.taboption('public_ip', form.ListValue,
+ 				'mod_public_ip_provider', _('Provider'),
+ 				_('Service for determining the public IP address.') + '<br />' +
++				_('In brackets: the network that serves the provider. The address is that of the route to the provider: with routing by addresses of that network it is the address of that route.') + '<br />' +
+ 				((this.curlExec) ? '' :
+ 					_('To support HTTP services, you need to install curl.'))
+ 			);
+@@ -1490,22 +1799,60 @@ return view.extend({
+ 				for(let i of this.publicIPProviders.http) {
+ 					o.value(i.name, i.title);
+ 				};
++				o.value('custom', _('Custom URL (HTTP/HTTPS)'));
+ 			};
+ 			o.default = this.publicIPProviders.dns[0].name;
+ 
+-			// ipv6
++			// provider2
+ 			o = s.taboption('public_ip', form.ListValue,
+-				'mod_public_ip_qtype', _('DNS query type'),
+-				_('The type of record requested in the DNS query (if the service supports it).')
++				'mod_public_ip_provider2', _('Fallback provider'),
++				_('Asked when the provider gives no address. Choose one with the same route as the provider.')
+ 			);
+ 			o.modalonly = true;
+-			o.value('0', 'A (IPv4)');
+-			o.value('1', 'AAAA (IPv6)');
+-			o.default = '0';
++			o.value('', _('Disabled'));
+ 			for(let i of this.publicIPProviders.dns) {
+-				o.depends({ mod_public_ip_provider: i.name });
++				o.value(i.name, i.title);
++			};
++			if(this.curlExec) {
++				for(let i of this.publicIPProviders.http) {
++					o.value(i.name, i.title);
++				};
++				o.value('custom', _('Custom URL (HTTP/HTTPS)'));
++			};
++
++			if(this.curlExec) {
++
++				// custom_url
++				o = s.taboption('public_ip', form.Value,
++					'mod_public_ip_custom_url', _('Provider URL'),
++					_('The answer must contain the IP address: as plain text, as a line ip=..., or as JSON with the field "ip".')
++				);
++				o.validate  = this.validateUrl;
++				o.rmempty   = false;
++				o.depends({ mod_public_ip_provider: 'custom' });
++				o.modalonly = true;
++
++				// custom_url6
++				o = s.taboption('public_ip', form.Value,
++					'mod_public_ip_custom_url6', _('Provider URL (IPv6)'),
++					_('For IPv6 requests. If empty, the URL above is requested over IPv6.')
++				);
++				o.validate  = this.validateUrl;
++				o.depends({ mod_public_ip_provider: 'custom' });
++				o.modalonly = true;
+ 			};
+ 
++			// ip version
++			o = s.taboption('public_ip', form.ListValue,
++				'mod_public_ip_qtype', _('IP version'),
++				_('IP version of the request: DNS record A or AAAA, or the HTTP connection over IPv4 or IPv6. "IPv4 + IPv6" makes both requests and shows both addresses.')
++			);
++			o.modalonly = true;
++			o.value('0', 'IPv4');
++			o.value('1', 'IPv6');
++			o.value('2', _('IPv4 + IPv6'));
++			o.default = '0';
++
+ 			// interval
+ 			o = s.taboption('public_ip', form.ListValue,
+ 				'mod_public_ip_interval', _('Polling interval'),
+diff --git a/luci-app-internet-detector/htdocs/luci-static/resources/view/status/include/00_internet.js b/luci-app-internet-detector/htdocs/luci-static/resources/view/status/include/00_internet.js
+index f6b4272b..b2314aca 100644
+--- a/luci-app-internet-detector/htdocs/luci-static/resources/view/status/include/00_internet.js
++++ b/luci-app-internet-detector/htdocs/luci-static/resources/view/status/include/00_internet.js
+@@ -55,6 +55,154 @@ document.head.append(E('style', {'type': 'text/css'},
+ }
+ `));
+ 
++/* Status cards (the same in view/internet-detector.js) */
++document.head.append(E('style', {'type': 'text/css'},
++`
++.id-cards {
++	display: grid;
++	grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
++	gap: 10px;
++	width: 100%;
++	margin: 2px 0 6px;
++}
++.id-card {
++	--id-accent: #9aa0a6;
++	min-width: 0;
++	padding: 8px 12px;
++	border: 1px solid rgba(128, 128, 128, .28);
++	border-left: 4px solid var(--id-accent);
++	border-radius: 8px;
++	line-height: 1.4;
++	text-align: left;
++}
++.id-card.id-ok   { --id-accent: #2ea44f; }
++.id-card.id-down { --id-accent: #d1242f; }
++:root[data-darkmode="true"] .id-card.id-ok   { --id-accent: #3fb950; }
++:root[data-darkmode="true"] .id-card.id-down { --id-accent: #f85149; }
++.id-card-head {
++	display: flex;
++	align-items: center;
++	gap: 8px;
++	min-width: 0;
++}
++.id-dot {
++	flex: none;
++	width: 10px;
++	height: 10px;
++	border-radius: 50%;
++	background: var(--id-accent);
++}
++.id-card.id-wait .id-dot { animation: id-pulse 1.2s ease-in-out infinite; }
++@keyframes id-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
++.id-name { font-weight: 600; white-space: nowrap; }
++.id-desc {
++	min-width: 0;
++	overflow: hidden;
++	opacity: .65;
++	font-size: 90%;
++	white-space: nowrap;
++	text-overflow: ellipsis;
++}
++.id-state {
++	flex: none;
++	margin-left: auto;
++	color: var(--id-accent);
++	font-size: 85%;
++	font-weight: 600;
++}
++.id-kv {
++	display: flex;
++	justify-content: space-between;
++	align-items: baseline;
++	gap: 10px;
++	margin-top: 4px;
++	font-size: 90%;
++}
++.id-kv > span { opacity: .7; white-space: nowrap; }
++.id-kv > b { font-weight: 500; text-align: right; overflow-wrap: anywhere; }
++.id-ip { font-family: monospace; font-size: 95%; }
++.id-toolbar { margin-top: 4px; }
++`));
++
++function idErrorText(code) {
++	let m = String(code || '').match(/^([a-z-]+)(?::(\d+))?$/);
++	if(!m) {
++		return String(code || '');
++	};
++	let n = m[2];
++	switch(m[1]) {
++		case 'curl':
++			return ({ 6: _('name resolution failed'), 7: _('connection refused'),
++				28: _('timeout'), 35: _('TLS error'), 60: _('TLS error') })[n] || 'curl ' + n;
++		case 'http':
++			return 'HTTP ' + n;
++		case 'clash':
++			return ({ 401: _('Clash API: wrong secret'), 404: _('Clash API: no such outbound'),
++				503: _('outbound test failed'), 504: _('outbound test timeout') })[n] || 'Clash API: HTTP ' + n;
++		case 'clash-curl':
++			return (n == '7') ? _('Clash API is not available') : 'Clash API: curl ' + n;
++		case 'dns':
++			return _('name resolution failed');
++		case 'tcp':
++			return _('no TCP connection');
++		case 'ping':
++			return _('no ICMP reply');
++	};
++	return _('check error');
++}
++
++// instances: [{ instance, inet, latency, checked, error, mod_public_ip }]
++function idRenderCards(instances, describe, waiting) {
++	let lang = document.documentElement.lang || undefined;
++	let cards = [];
++	for(let i of instances) {
++		let cls   = 'id-wait', state = _('Checking...');
++		if(i.inet == 0) {
++			cls = 'id-ok';   state = _('Connected');
++		} else if(i.inet == 1) {
++			cls = 'id-down'; state = _('Disconnected');
++		};
++		let desc = describe ? describe(i.instance) : null;
++		let rows = [];
++		if(i.inet == 0 && i.latency !== undefined) {
++			rows.push(E('div', { 'class': 'id-kv' }, [
++				E('span', {}, _('Latency')), E('b', {}, '%s %s'.format(i.latency, _('msec'))) ]));
++		};
++		if(i.inet == 1 && i.error) {
++			rows.push(E('div', { 'class': 'id-kv' }, [
++				E('span', {}, _('Reason')), E('b', {}, idErrorText(i.error)) ]));
++		};
++		if(i.mod_public_ip !== undefined) {
++			rows.push(E('div', { 'class': 'id-kv' }, [
++				E('span', {}, _('Public IP')),
++				E('b', { 'class': 'id-ip' }, (i.mod_public_ip == '') ? _('Undefined') : i.mod_public_ip) ]));
++		};
++		if(i.checked) {
++			let d = new Date(i.checked * 1000);
++			rows.push(E('div', { 'class': 'id-kv' }, [
++				E('span', {}, _('Last check')), E('b', { 'title': d.toLocaleString(lang) }, d.toLocaleTimeString(lang)) ]));
++		};
++		cards.push(E('div', { 'class': 'id-card ' + cls }, [
++			E('div', { 'class': 'id-card-head' }, [
++				E('span', { 'class': 'id-dot' }),
++				E('span', { 'class': 'id-name' }, i.instance),
++				(desc && desc != i.instance) ? E('span', { 'class': 'id-desc', 'title': desc }, desc) : '',
++				E('span', { 'class': 'id-state' }, state),
++			]),
++		].concat(rows)));
++	};
++	if(cards.length == 0) {
++		cards.push(E('div', { 'class': 'id-card ' + (waiting ? 'id-wait' : '') }, [
++			E('div', { 'class': 'id-card-head' }, [
++				E('span', { 'class': 'id-dot' }),
++				E('span', { 'class': 'id-name' }, _('Internet')),
++				E('span', { 'class': 'id-state' }, waiting ? _('Checking...') : _('Undefined')),
++			]),
++		]));
++	};
++	return E('div', { 'class': 'id-cards' }, cards);
++}
++
+ return baseclass.extend({
+ 	title          : _('Internet'),
+ 	appName        : 'internet-detector',
+@@ -107,40 +255,10 @@ return baseclass.extend({
+ 
+ 		this.inetStatus = data;
+ 
+-		let inetStatusArea = E('div', {});
+-
+-		if(!this.inetStatus || !this.inetStatus.instances || this.inetStatus.instances.length == 0) {
+-			let label = E('span', { 'class': 'id-label-status id-undefined' }, _('Undefined'));
+-			if(this.currentAppMode == '2') {
+-				label.classList.add('spinning');
+-			};
+-			inetStatusArea.append(label);
+-		} else {
+-			this.inetStatus.instances.sort((a, b) => a.num - b.num);
+-
+-			for(let i of this.inetStatus.instances) {
+-				let status    = _('Disconnected');
+-				let className = 'id-label-status id-disconnected';
+-				if(i.inet == 0) {
+-					status    = _('Connected');
+-					className = 'id-label-status id-connected';
+-				}
+-				else if(i.inet == -1) {
+-					status    = _('Undefined');
+-					className = 'id-label-status id-undefined spinning';
+-				};
+-
+-				let publicIp = (i.mod_public_ip !== undefined) ?
+-					' | %s: %s'.format(_('Public IP'), (i.mod_public_ip == '') ? _('Undefined') : _(i.mod_public_ip))
+-				: '';
+-
+-				inetStatusArea.append(
+-					E('span', { 'class': className }, '%s%s%s'.format(
+-						i.instance + ': ', status, publicIp)
+-					)
+-				);
+-			};
+-		};
++		let instances = (this.inetStatus && this.inetStatus.instances) || [];
++		instances.sort((a, b) => a.num - b.num);
++		let inetStatusArea = idRenderCards(instances,
++			name => uci.get(this.appName, name, 'description'), this.currentAppMode == '2');
+ 
+ 		return E('div', {
+ 			'class': 'cbi-section',
+diff --git a/luci-app-internet-detector/po/ru/internet-detector.po b/luci-app-internet-detector/po/ru/internet-detector.po
+index cae6c563..c8487542 100644
+--- a/luci-app-internet-detector/po/ru/internet-detector.po
++++ b/luci-app-internet-detector/po/ru/internet-detector.po
+@@ -745,3 +745,147 @@ msgstr "секунды"
+ 
+ msgid "up-script"
+ msgstr "up-script"
++
++msgid "Address family for name resolution and connections."
++msgstr "Семейство адресов для разрешения имён и подключений."
++
++msgid "Address of the sing-box Clash API controller. If empty, the controller of homeproxy is used (127.0.0.1 instead of 0.0.0.0), otherwise http://127.0.0.1:9090."
++msgstr "Адрес контроллера Clash API sing-box. Если пусто — контроллер homeproxy (127.0.0.1 вместо 0.0.0.0), иначе http://127.0.0.1:9090."
++
++msgid "Any"
++msgstr "Любое"
++
++msgid "Any HTTP response"
++msgstr "Любой HTTP-ответ"
++
++msgid "Clash API address"
++msgstr "Адрес Clash API"
++
++msgid "Clash API secret"
++msgstr "Секрет Clash API"
++
++msgid "Could not get the list of outbounds (%s): %s"
++msgstr "Не удалось получить список выходов (%s): %s"
++
++msgid "Custom URL (HTTP/HTTPS)"
++msgstr "Свой URL (HTTP/HTTPS)"
++
++msgid "For IPv6 requests. If empty, the URL above is requested over IPv6."
++msgstr "Для запросов IPv6. Если пусто — URL выше запрашивается по IPv6."
++
++msgid "HEAD requests only the headers of the response. GET is for servers that do not answer HEAD requests."
++msgstr "HEAD запрашивает только заголовки ответа. GET — для серверов, которые не отвечают на запросы HEAD."
++
++msgid "HTTP method"
++msgstr "Метод HTTP"
++
++msgid "IP version"
++msgstr "Версия IP"
++
++msgid "IP version of the request: DNS record A or AAAA, or the HTTP connection over IPv4 or IPv6. \"IPv4 + IPv6\" makes both requests and shows both addresses."
++msgstr "Версия IP запроса: DNS-запись A или AAAA либо HTTP-подключение по IPv4 или IPv6. «IPv4 + IPv6» — оба запроса, показываются оба адреса."
++
++msgid "IPv4 + IPv6"
++msgstr "IPv4 + IPv6"
++
++msgid "If the address is empty, the secret of homeproxy is used."
++msgstr "Если адрес пуст, используется секрет homeproxy."
++
++msgid "Last check"
++msgstr "Последняя проверка"
++
++msgid "Outbounds"
++msgstr "Выходы"
++
++msgid "Provider URL"
++msgstr "URL провайдера"
++
++msgid "Provider URL (IPv6)"
++msgstr "URL провайдера (IPv6)"
++
++msgid "Tags of sing-box outbounds. They are checked (in list order) by the delay test of the Clash API until one responds. In homeproxy the tag of a routing node is <code>cfg-&lt;node&gt;-out</code>."
++msgstr "Теги выходов sing-box. Они проверяются (по порядку списка) тестом задержки Clash API, пока один не ответит. В homeproxy тег узла маршрутизации — <code>cfg-&lt;узел&gt;-out</code>."
++
++msgid "Test URL"
++msgstr "URL для теста"
++
++msgid "The URL is available if the server returns any HTTP status code, including 4xx and 5xx (otherwise only 2xx and 3xx)."
++msgstr "URL доступен, если сервер вернул любой код HTTP, включая 4xx и 5xx (иначе только 2xx и 3xx)."
++
++msgid "The answer must contain the IP address: as plain text, as a line ip=..., or as JSON with the field \"ip\"."
++msgstr "В ответе должен быть IP-адрес: простым текстом, строкой ip=... или в JSON с полем \"ip\"."
++
++msgid "URL that sing-box requests through the outbound. Only https:// URLs are accepted, otherwise sing-box uses its default URL."
++msgstr "URL, который sing-box запрашивает через выход. Принимаются только https://, иначе sing-box берёт свой URL по умолчанию."
++
++msgid "sing-box outbound (Clash API)"
++msgstr "Выход sing-box (Clash API)"
++
++msgid "Asked when the provider gives no address. Choose one with the same route as the provider."
++msgstr "Запрашивается, если провайдер не вернул адрес. Выбирайте провайдера с тем же маршрутом, что и основной."
++
++msgid "Check again"
++msgstr "Проверить заново"
++
++msgid "Checking..."
++msgstr "Проверка…"
++
++msgid "Clash API is not available"
++msgstr "Clash API недоступен"
++
++msgid "Clash API: no such outbound"
++msgstr "Clash API: нет такого выхода"
++
++msgid "Clash API: wrong secret"
++msgstr "Clash API: неверный секрет"
++
++msgid "Fallback provider"
++msgstr "Запасной провайдер"
++
++msgid "In brackets: the network that serves the provider. The address is that of the route to the provider: with routing by addresses of that network it is the address of that route."
++msgstr "В скобках — сеть, через которую работает провайдер. Показывается адрес того маршрута, которым идёт запрос к провайдеру: если адреса этой сети направлены в другой маршрут, будет адрес этого маршрута."
++
++msgid "Latency"
++msgstr "Задержка"
++
++msgid "Reason"
++msgstr "Причина"
++
++msgid "Stop the checks and start them again: the current values are dropped."
++msgstr "Остановить проверки и запустить их снова: текущие значения сбрасываются."
++
++msgid "TLS error"
++msgstr "ошибка TLS"
++
++msgid "The name or label of a homeproxy routing node or node is accepted too."
++msgstr "Можно указать и имя или метку узла маршрутизации либо узла homeproxy."
++
++msgid "With a transparent proxy on the router (homeproxy and others) leave it empty: connections bound to a device do not reach the proxy, and the check and the public IP fail."
++msgstr "Если на роутере работает прозрачный прокси (homeproxy и другие), оставьте пустым: соединения, привязанные к устройству, не попадают в прокси, и проверка и публичный IP не работают."
++
++msgid "check error"
++msgstr "ошибка проверки"
++
++msgid "connection refused"
++msgstr "соединение отклонено"
++
++msgid "name resolution failed"
++msgstr "имя не разрешилось"
++
++msgid "no ICMP reply"
++msgstr "нет ответа ICMP"
++
++msgid "no TCP connection"
++msgstr "нет TCP-соединения"
++
++msgid "outbound test failed"
++msgstr "тест выхода не прошёл"
++
++msgid "outbound test timeout"
++msgstr "таймаут теста выхода"
++
++msgid "routing node"
++msgstr "узел маршрутизации"
++
++msgid "timeout"
++msgstr "таймаут"
+diff --git a/luci-app-internet-detector/root/usr/libexec/rpcd/luci.internet-detector b/luci-app-internet-detector/root/usr/libexec/rpcd/luci.internet-detector
+index 42da7acd..c1e535b1 100755
+--- a/luci-app-internet-detector/root/usr/libexec/rpcd/luci.internet-detector
++++ b/luci-app-internet-detector/root/usr/libexec/rpcd/luci.internet-detector
+@@ -76,8 +76,119 @@ local function uiPoll()
+ 	return InternetDetector:inetStatus()
+ end
+ 
++local function jsonString(s)
++	return '"' .. tostring(s):gsub('[%c"\\]', function(c)
++		return string.format("\\u%04x", string.byte(c))
++	end) .. '"'
++end
++
++local function shellQuote(s)
++	return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
++end
++
++-- Value of a string field from the JSON of rpcd call arguments
++local function jsonParam(input, key)
++	local s = input:match('"' .. key .. '"%s*:%s*"()')
++	if not s then
++		return ""
++	end
++	local out, i = {}, s
++	while i <= #input do
++		local c = input:sub(i, i)
++		if c == '"' then
++			break
++		elseif c == "\\" then
++			local n = input:sub(i + 1, i + 1)
++			if n == "u" then
++				out[#out + 1] = string.char(tonumber(input:sub(i + 2, i + 5), 16) % 256)
++				i = i + 6
++			else
++				out[#out + 1] = ({ n = "\n", t = "\t", r = "\r", b = "\b", f = "\f" })[n] or n
++				i = i + 2
++			end
++		else
++			out[#out + 1] = c
++			i = i + 1
++		end
++	end
++	return table.concat(out)
++end
++
++-- Outbounds of sing-box from its Clash API (GET /proxies). Empty url:
++-- homeproxy's controller and secret, as the daemon does.
++local function clashProxies(input)
++	local url    = jsonParam(input, "url")
++	local secret = jsonParam(input, "secret")
++	if url == "" then
++		local uciCursor = uci.cursor()
++		local ctl = uciCursor:get("homeproxy", "infra", "clash_api_controller")
++		if ctl and ctl ~= "" then
++			ctl = ctl:gsub("^0%.0%.0%.0:", "127.0.0.1:"):gsub("^%[::%]:", "[::1]:"):gsub("^:", "127.0.0.1:")
++			url = "http://" .. ctl
++			if secret == "" then
++				secret = uciCursor:get("homeproxy", "infra", "clash_api_secret") or ""
++			end
++		else
++			url = "http://127.0.0.1:9090"
++		end
++	end
++	url = url:gsub("/+$", "")
++	if not url:match("^https?://[%w%.%-]+:?%d*$") and not url:match("^https?://%[[%x:]+%]:?%d*$") then
++		return string.format('{"url":%s,"error":"invalid URL"}', jsonString(url))
++	end
++	if not unistd.access(curlExec, "x") then
++		return string.format('{"url":%s,"error":"curl is not installed"}', jsonString(url))
++	end
++	local auth = (secret ~= "") and (" -H " .. shellQuote("Authorization: Bearer " .. secret)) or ""
++	local fh = io.popen(string.format("%s -s -g --max-time 5%s -w '\\n%%{http_code}' %s",
++		curlExec, auth, shellQuote(url .. "/proxies")), "r")
++	local data = fh and fh:read("*a") or ""
++	if fh then
++		fh:close()
++	end
++	local body, code = data:match("^(.*)\n(%d+)$")
++	if code == "200" and body and body:match("^%s*{") then
++		-- Names of homeproxy routing nodes and nodes for the outbound tags
++		-- (cfg-<node>-out; an urltest routing node: cfg-<routing node>-out)
++		local uciCursor, routing, labels = uci.cursor(), {}, {}
++		uciCursor:foreach("homeproxy", "node", function(s)
++			labels[#labels + 1] = string.format('%s:%s',
++				jsonString("cfg-" .. s[".name"] .. "-out"), jsonString(s.label or s[".name"]))
++		end)
++		uciCursor:foreach("homeproxy", "routing_node", function(s)
++			local tag
++			if s.node == "urltest" then
++				tag = "cfg-" .. s[".name"] .. "-out"
++			elseif s.node and s.node ~= "" then
++				tag = "cfg-" .. s.node .. "-out"
++			end
++			if tag then
++				routing[#routing + 1] = string.format('{"name":%s,"label":%s,"tag":%s}',
++					jsonString(s[".name"]), jsonString(s.label or s[".name"]), jsonString(tag))
++			end
++		end)
++		return string.format('{"url":%s,"routing":[%s],"labels":{%s},"data":%s}', jsonString(url),
++			table.concat(routing, ","), table.concat(labels, ","), body)
++	end
++	return string.format('{"url":%s,"error":%s}', jsonString(url),
++		jsonString((code and code ~= "000") and ("HTTP " .. code) or "no connection"))
++end
++
++-- New check of every instance: running instances stop (and drop their
++-- status); "Web UI only" starts them at once, the service restarts.
++local function restart()
++	local mode = tonumber(uci.cursor():get(appName, "config", "mode"))
++	InternetDetector:stop()
++	if mode == 2 then
++		startUiInstances()
++	elseif mode == 1 then
++		os.execute("/etc/init.d/" .. appName .. " restart >/dev/null 2>&1")
++	end
++	return '{"result":true}'
++end
++
+ local function list()
+-	io.write('{"Init":{},"Status":{},"InetStatus":{},"UIPoll":{}}')
++	io.write('{"Init":{},"Status":{},"InetStatus":{},"UIPoll":{},"Restart":{},"ClashProxies":{"url":"str","secret":"str"}}')
+ end
+ 
+ if arg[1] == "list" then
+@@ -91,6 +202,10 @@ elseif arg[1] == "call" then
+ 		io.write(InternetDetector:inetStatus())
+ 	elseif arg[2] == "UIPoll" then
+ 		io.write(uiPoll())
++	elseif arg[2] == "Restart" then
++		io.write(restart())
++	elseif arg[2] == "ClashProxies" then
++		io.write(clashProxies(io.read("*a") or ""))
+ 	end
+ end
+ 
+diff --git a/luci-app-internet-detector/root/usr/share/rpcd/acl.d/luci-app-internet-detector.json b/luci-app-internet-detector/root/usr/share/rpcd/acl.d/luci-app-internet-detector.json
+index 0f9e8de0..ec3c829d 100644
+--- a/luci-app-internet-detector/root/usr/share/rpcd/acl.d/luci-app-internet-detector.json
++++ b/luci-app-internet-detector/root/usr/share/rpcd/acl.d/luci-app-internet-detector.json
+@@ -12,7 +12,7 @@
+ 			"uci": [ "internet-detector" ],
+ 			"ubus": {
+ 				"luci": [ "getInitList", "setInitAction" ],
+-				"luci.internet-detector": [ "Init", "Status", "InetStatus", "UIPoll" ]
++				"luci.internet-detector": [ "Init", "Status", "InetStatus", "UIPoll", "ClashProxies" ]
+ 			}
+ 		},
+ 		"write": {
+@@ -22,7 +22,10 @@
+ 				"/etc/internet-detector/public-ip-script*": [ "write" ],
+ 				"/etc/internet-detector/regular-script*": [ "write" ]
+ 			},
+-			"uci": [ "internet-detector" ]
++			"uci": [ "internet-detector" ],
++			"ubus": {
++				"luci.internet-detector": [ "Restart" ]
++			}
+ 		}
+ 	}
+ }
