@@ -20,13 +20,14 @@ Requires: 001-check-fixes-ip-version-outbound-check 002-public-ip-dns-ipv6-provi
   restarts the service.
 - Outbounds: homeproxy routing nodes by name and node labels next to
   their tags (rpcd ClashProxies reads them from /etc/config/homeproxy).
-- Public IP: fallback provider; the network that serves each provider in
-  its title. Device: a note that a device breaks the connections to a
+- Public IP: fallback provider; the autonomous system that serves each
+  provider in its title (checked by the addresses of the provider hosts;
+  ipify answers IPv6 from another network than IPv4). Device: a note that a device breaks the connections to a
   transparent proxy on the router.
 - Russian translation of the new strings.
 
 diff --git a/luci-app-internet-detector/htdocs/luci-static/resources/view/internet-detector.js b/luci-app-internet-detector/htdocs/luci-static/resources/view/internet-detector.js
-index 5e0dd2cf..46a71ead 100644
+index 5e0dd2cf..13d52918 100644
 --- a/luci-app-internet-detector/htdocs/luci-static/resources/view/internet-detector.js
 +++ b/luci-app-internet-detector/htdocs/luci-static/resources/view/internet-detector.js
 @@ -60,6 +60,154 @@ document.head.append(E('style', {'type': 'text/css'},
@@ -184,7 +185,7 @@ index 5e0dd2cf..46a71ead 100644
  const btnStyleEnabled  = 'btn cbi-button-save';
  const btnStyleDisabled = 'btn cbi-button-reset';
  const btnStyleApply    = 'btn cbi-button-apply';
-@@ -168,12 +316,28 @@ return view.extend({
+@@ -168,32 +316,61 @@ return view.extend({
  	appStatus              : 'stoped',
  	initStatus             : null,
  	inetStatus             : null,
@@ -214,8 +215,20 @@ index 5e0dd2cf..46a71ead 100644
  	ledsPath               : '/sys/class/leds',
  	ledsPerInstance        : 3,
  	leds                   : [],
-@@ -187,13 +351,26 @@ return view.extend({
- 			{ name: 'akamai',   title: 'akamai (DNS)' },
+ 	publicIPProviders      : {
+ 		dns : [
+-			{ name: 'opendns1', title: 'opendns1 (DNS)' },
+-			{ name: 'opendns2', title: 'opendns2 (DNS)' },
+-			{ name: 'opendns3', title: 'opendns3 (DNS)' },
+-			{ name: 'opendns4', title: 'opendns4 (DNS)' },
+-			{ name: 'google',   title: 'google (DNS)' },
+-			{ name: 'akamai',   title: 'akamai (DNS)' },
++			{ name: 'opendns1', title: 'opendns1 (DNS, Cisco OpenDNS)' },
++			{ name: 'opendns2', title: 'opendns2 (DNS, Cisco OpenDNS)' },
++			{ name: 'opendns3', title: 'opendns3 (DNS, Cisco OpenDNS)' },
++			{ name: 'opendns4', title: 'opendns4 (DNS, Cisco OpenDNS)' },
++			{ name: 'google',   title: 'google (DNS, Google)' },
++			{ name: 'akamai',   title: 'akamai (DNS, Akamai)' },
  		],
  		http: [
 -			{ name: 'akamai_http', title: 'akamai (HTTP)' },
@@ -232,15 +245,15 @@ index 5e0dd2cf..46a71ead 100644
 +			{ name: 'ipecho',      title: 'ipecho.net (HTTP, Google)' },
 +			{ name: 'canhazip',    title: 'canhazip.com (HTTP, Cloudflare)' },
 +			{ name: 'icanhazip',   title: 'icanhazip.com (HTTP, Cloudflare)' },
-+			{ name: 'ipify',           title: 'ipify.org (HTTPS, Cloudflare)' },
-+			{ name: 'ident_me',        title: 'ident.me (HTTPS)' },
++			{ name: 'ipify',           title: 'ipify.org (HTTPS, Cloudflare; IPv6: WebNX)' },
++			{ name: 'ident_me',        title: 'ident.me (HTTPS, Hetzner)' },
 +			{ name: 'icanhazip_https', title: 'icanhazip.com (HTTPS, Cloudflare)' },
 +			{ name: 'ipinfo',          title: 'ipinfo.io (HTTPS, Google)' },
 +			{ name: 'yandex',          title: 'yandex.net (HTTPS, Yandex)' },
 +			{ name: 'cloudflare',      title: 'cloudflare.com (HTTPS, Cloudflare)' },
 +			{ name: 'ifconfig_co',     title: 'ifconfig.co (HTTPS, Cloudflare)' },
 +			{ name: 'ifconfig_https',  title: 'ifconfig.me (HTTPS, Google)' },
-+			{ name: 'seeip',           title: 'seeip.org (HTTPS)' },
++			{ name: 'seeip',           title: 'seeip.org (HTTPS, WholeSale Internet)' },
 +			{ name: 'ipsb',            title: 'ip.sb (HTTPS, Cloudflare)' },
 +			{ name: 'ipecho_https',    title: 'ipecho.net (HTTPS, Google)' },
 +			{ name: 'wgetip_https',    title: 'wgetip.com (HTTPS, Cloudflare)' },
