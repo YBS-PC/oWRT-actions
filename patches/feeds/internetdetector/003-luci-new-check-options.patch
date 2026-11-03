@@ -27,7 +27,7 @@ Requires: 001-check-fixes-ip-version-outbound-check 002-public-ip-dns-ipv6-provi
 - Russian translation of the new strings.
 
 diff --git a/luci-app-internet-detector/htdocs/luci-static/resources/view/internet-detector.js b/luci-app-internet-detector/htdocs/luci-static/resources/view/internet-detector.js
-index 5e0dd2cf..13d52918 100644
+index 5e0dd2cf..b427d8fb 100644
 --- a/luci-app-internet-detector/htdocs/luci-static/resources/view/internet-detector.js
 +++ b/luci-app-internet-detector/htdocs/luci-static/resources/view/internet-detector.js
 @@ -60,6 +60,154 @@ document.head.append(E('style', {'type': 'text/css'},
@@ -559,7 +559,7 @@ index 5e0dd2cf..13d52918 100644
  				((this.curlExec) ? '' :
  					_('To support HTTP services, you need to install curl.'))
  			);
-@@ -1490,22 +1799,60 @@ return view.extend({
+@@ -1490,22 +1799,62 @@ return view.extend({
  				for(let i of this.publicIPProviders.http) {
  					o.value(i.name, i.title);
  				};
@@ -601,6 +601,7 @@ index 5e0dd2cf..13d52918 100644
 +				o.validate  = this.validateUrl;
 +				o.rmempty   = false;
 +				o.depends({ mod_public_ip_provider: 'custom' });
++				o.depends({ mod_public_ip_provider2: 'custom' });
 +				o.modalonly = true;
 +
 +				// custom_url6
@@ -610,6 +611,7 @@ index 5e0dd2cf..13d52918 100644
 +				);
 +				o.validate  = this.validateUrl;
 +				o.depends({ mod_public_ip_provider: 'custom' });
++				o.depends({ mod_public_ip_provider2: 'custom' });
 +				o.modalonly = true;
  			};
  
