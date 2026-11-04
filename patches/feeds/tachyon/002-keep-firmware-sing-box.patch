@@ -12,9 +12,9 @@ a flash with kept settings the old sing-box kept running, and the
 overlay held a second copy of it.
 
 /usr/bin/sing-box and /usr/lib/libcronet.so (used only with that
-binary) are no longer kept. The cores installed on the router itself
-are kept as before: /usr/bin/tachyon-core, its init script and the
-variant marker in /etc/tachyon.
+binary) are no longer kept. The other entries of the list (the core
+installed on the router itself, its init script and the markers in
+/etc/tachyon) are kept as before.
 
 diff --git a/tachyon/files/lib/upgrade/keep.d/tachyon b/tachyon/files/lib/upgrade/keep.d/tachyon
 index 95c0a2fd..ee2d2efd 100644
