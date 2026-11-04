@@ -327,7 +327,7 @@ cp /etc/apk/repositories.d/distfeeds.list.bak /etc/apk/repositories.d/distfeeds.
 восстанавливалось в overlay поверх нового. Поэтому каждый из файлов `/usr/bin/sing-box`, `/usr/bin/tachyon-core`,
 `/etc/tachyon/tachyon-core-variant` и `/etc/tachyon/tachyon-core-version`, который есть в образе (`/rom`) и
 восстановлен в overlay, заменяется файлом из образа (ссылка — ссылкой); совпадающий не трогается. Чего в образе нет
-(например tachyon-core, поставленный на роутере), остаётся. В образе с tachyon-core без sing-box (slateax + tachyon)
+(например tachyon-core, поставленный на роутере), остаётся. В образе с tachyon-core без sing-box (tachyon с `sb=feed`)
 `/usr/bin/sing-box` из копии удаляется. Путь, указанный в `/etc/sysupgrade.conf`, не трогается. Патч 002
 (`patches/feeds/tachyon`) убирает `/usr/bin/sing-box` из списка tachyon, но копию делает ещё прежняя прошивка, а
 tachyon, обновлённый на роутере из релиза автора, приносит прежний список. sing-box из `/root/apps` (таблица ниже)
