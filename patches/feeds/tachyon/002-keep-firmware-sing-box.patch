@@ -17,14 +17,12 @@ are kept as before: /usr/bin/tachyon-core, its init script and the
 variant marker in /etc/tachyon.
 
 diff --git a/tachyon/files/lib/upgrade/keep.d/tachyon b/tachyon/files/lib/upgrade/keep.d/tachyon
-index 359c4e07..5569f53d 100644
+index 95c0a2fd..ee2d2efd 100644
 --- a/tachyon/files/lib/upgrade/keep.d/tachyon
 +++ b/tachyon/files/lib/upgrade/keep.d/tachyon
-@@ -5,7 +5,5 @@
+@@ -3,5 +3,3 @@
+ /etc/tachyon-core/
  /etc/init.d/tachyon-core
- /etc/init.d/steer
  /usr/bin/tachyon-core
 -/usr/bin/sing-box
 -/usr/lib/libcronet.so
- /usr/sbin/steer
- /usr/sbin/steer-nfqws
