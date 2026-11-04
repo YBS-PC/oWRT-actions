@@ -440,7 +440,7 @@ echo 'CONFIG_BUSYBOX_DEFAULT_FEATURE_USE_INITTAB=y' >> ./.config
 echo ">>> [Heavy packages] Тяжелые пакеты отключены."
         # Для сборок с homeproxy и podkop/netshift/forkop/trafira/tachyon ставим Tiny версию sing-box
         # (если sing-box не отключён полем sb; job setup тогда пишет sb=tiny).
-        # forkop 2.x — на своём ядре (sb=forkop-tiny), tachyon с sb=feed — на
+        # forkop 2.x — на своём ядре (sb=forkop-tiny), tachyon с sb=default — на
         # своём ядре по умолчанию (sb=default); их ставит блок «ВЫБОР КОМПОНЕНТОВ» ниже.
         if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "rehomeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "netshift" || "$VARIANT" == "forkop" || "$VARIANT" == "trafira" || "$VARIANT" == "tachyon" ]] && [ "${SB_MODE:-feed}" != "no" ] && [[ "${SB_MODE:-feed}" != forkop-* ]] && [ "${SB_MODE:-feed}" != "default" ]; then
             echo ">>> [Heavy packages] Sing-box Tiny for $VARIANT compatibility..."
@@ -831,7 +831,7 @@ forkop-*)
     rm -f ./files/usr/bin/sing-box
     ;;
 default)
-    # tachyon с sb=feed: его ядро по умолчанию (бинарник и метки в files/ кладёт
+    # tachyon с sb=default: его ядро по умолчанию (бинарник и метки в files/ кладёт
     # шаг Download Sing-box workflow), sing-box в образ не идёт.
     echo "   > sing-box: нет, ядро tachyon по умолчанию"
     drop_pkgs sing-box sing-box sing-box-tiny
