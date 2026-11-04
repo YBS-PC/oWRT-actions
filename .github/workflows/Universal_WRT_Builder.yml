@@ -69,7 +69,7 @@ on:
           - 'latest'
 
       sb:
-        description: 'sing-box * (feed — из фида, иначе — скачать версию sing-box или иное ядро)'
+        description: 'sing-box * (feed — из фида, у tachyon — ядро tachyon-core; иначе — скачать версию sing-box или иное ядро)'
         required: true
         type: choice
         default: 'feed'
@@ -178,7 +178,7 @@ env:
   TRAFIRA_FEED: "trafira https://github.com/petrouspetr-pixel/trafira.git;main"
 
   # Фид tachyon, конфиг /etc/config/tachyon; версия — из тегов (TACHYON_VERSION).
-  # tachyon-core в образе только у slateax (артефакт шифруется), иначе его ставят на роутере.
+  # tachyon с sb=feed — ядро tachyon-core в образе (артефакт шифруется); с другим sb — выбранное ядро.
   TACHYON_FEED: "tachyon https://github.com/Dushnilin/tachyon.git;main"
 
   # Фид netshift (форк podkop), конфиг /etc/config/netshift; версия — из тегов (NETSHIFT_VERSION).
@@ -219,7 +219,7 @@ jobs:
           # entry <target> <variant> <agh> <sb> <ytb> <zz> <patches> <feeds>: приводит выбор к тому, что вариант допускает
           # (имя артефакта не врёт); изменения пишутся в NOTES.
           entry() {
-            local t="$1" v="$2" agh="$3" sb="$4" ytb="$5" zz="$6" pt="$7" fd="$8" orig
+            local t="$1" v="$2" agh="$3" sb="$4" ytb="$5" zz="$6" pt="$7" fd="$8" orig sb0="$4"
             # vname — имя для людей; fk — фид forkop (forkop-mod внутри сборки — тот же вариант forkop).
             local vname="$v" fk=""
             case "$v" in
@@ -256,8 +256,9 @@ jobs:
               *" $t "*) case "$v" in homeproxy|rehomeproxy|podkop|netshift|forkop|trafira|tachyon)
                 case "$sb" in no) ;; forkop-*) sb=forkop-tiny ;; *) sb=tiny ;; esac ;; esac ;;
             esac
-            # slateax + tachyon: tachyon-core вместо sing-box при любом sb; артефакт шифруется (шаг Encrypt).
-            if [ "$v" = "tachyon" ] && [ "$t" = "slateax" ]; then
+            # tachyon с sb=feed (по умолчанию) — ядро tachyon-core на любом устройстве, артефакт шифруется
+            # (шаг Encrypt). Другое значение sb — выбранное ядро без шифрования.
+            if [ "$v" = "tachyon" ] && [ "$sb0" = "feed" ]; then
               sb=tachyon-core
             elif [ "$sb" = "tachyon-core" ]; then
               sb=feed
@@ -278,7 +279,7 @@ jobs:
             # Пресет combo. Поля entry: устройство вариант agh sb ytb zz patches feeds.
             # Запасные строки: $(entry nanopi-r6s homeproxy latest latest true true false true) — без патчей;
             # $(entry nanopi-r6s podkop latest podkop-engine-full true true true true).
-            json="{\"include\":[$(entry nanopi-r6s homeproxy latest extended true true true true),$(entry nanopi-r6s podkop latest podkop-engine true true true true),$(entry nanopi-r6s netshift latest extended true true true true),$(entry nanopi-r6s forkop latest forkop-base true true true true),$(entry nanopi-r6s trafira latest extended false true true true),$(entry nanopi-r6s tachyon latest extended false true true true),$(entry rb5009 clear no no false true true true),$(entry rb5009 switch no no false true true true)]}"
+            json="{\"include\":[$(entry nanopi-r6s homeproxy latest extended true true true true),$(entry nanopi-r6s podkop latest podkop-engine true true true true),$(entry nanopi-r6s netshift latest extended true true true true),$(entry nanopi-r6s forkop latest forkop-base true true true true),$(entry nanopi-r6s trafira latest extended false true true true),$(entry nanopi-r6s tachyon latest feed false true true true),$(entry rb5009 clear no no false true true true),$(entry rb5009 switch no no false true true true)]}"
           else
             # Все устройства из config/conf/ — при добавлении нового дописать сюда.
             targets="nanopi-r6s nanopi-r5s rb5009 slateax ax59u brume2"
@@ -362,7 +363,7 @@ jobs:
           # Сборка с tachyon-core без секрета ARTIFACT_PASSWORD не начинается.
           if echo "$json" | jq -e '[.include[] | select(.sb == "tachyon-core")] | length > 0' >/dev/null; then
             if [ "$HAS_ARTIFACT_PASSWORD" != "true" ]; then
-              echo "::error title=Нет секрета ARTIFACT_PASSWORD::Сборка slateax + tachyon кладёт в образ ядро tachyon-core, и её артефакт шифруется паролем из секрета репозитория ARTIFACT_PASSWORD. Секрет не задан: Settings → Secrets and variables → Actions → New repository secret."
+              echo "::error title=Нет секрета ARTIFACT_PASSWORD::Сборка tachyon с sb=feed кладёт в образ ядро tachyon-core, и её артефакт шифруется паролем из секрета репозитория ARTIFACT_PASSWORD. Секрет не задан: Settings → Secrets and variables → Actions → New repository secret."
               exit 1
             fi
             echo "::notice title=Зашифрованный артефакт::Сборки с sb=tachyon-core выкладываются одним архивом 7z, зашифрованным паролем из секрета ARTIFACT_PASSWORD (AES-256, имена файлов тоже скрыты)."
@@ -736,7 +737,7 @@ jobs:
             echo "=========================================="
             exit 0
         elif [ "$SB_VERSION_CHOICE" == "tachyon-core" ]; then
-            # tachyon-core (slateax + tachyon): статический бинарник из tar.gz релиза, сверка по SHA256SUMS,
+            # tachyon-core (tachyon с sb=feed): статический бинарник из tar.gz релиза, сверка по SHA256SUMS,
             # в files/ — бинарник и метки /etc/tachyon как после установки со страницы tachyon. Бинарник не печатается.
             SB_REPO="Dushnilin/tachyon-core"
             TC_PKGARCH=$(sed -n 's/.*CONFIG_TARGET_ARCH_PACKAGES="\([^"]*\)".*/\1/p' "./config/conf/${M_TARGET}" | head -n1)
@@ -1595,7 +1596,7 @@ jobs:
             exit 1
         fi
 
-        # tachyon-core (slateax + tachyon): sing-box в образе нет, ядро —
+        # tachyon-core (tachyon с sb=feed): sing-box в образе нет, ядро —
         # бинарник в files/ (шаг Download Sing-box), tachyon включён.
         if [ "$SB_MODE" = "tachyon-core" ]; then
             TC_BAD=""
