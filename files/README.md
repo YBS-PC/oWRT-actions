@@ -322,12 +322,11 @@ cp /etc/apk/repositories.d/distfeeds.list.bak /etc/apk/repositories.d/distfeeds.
 
 ## 14. Локальные бинарники из `/root/apps/`
 **Ядро прошивки вместо ядра из резервной копии** (только firstboot). tachyon перечисляет свои ядра в
-`/lib/upgrade/keep.d/tachyon`: `/usr/bin/sing-box`, `/usr/bin/tachyon-core` и метки ядра в `/etc/tachyon`. sysupgrade
+`/lib/upgrade/keep.d/tachyon`: `/usr/bin/sing-box`, собственное ядро tachyon и метки ядра в `/etc/tachyon`. sysupgrade
 кладёт такие файлы в резервную копию, даже если они из прошивки, и после прошивки с сохранением настроек старое ядро
-восстанавливалось в overlay поверх нового. Поэтому каждый из файлов `/usr/bin/sing-box`, `/usr/bin/tachyon-core`,
-`/etc/tachyon/tachyon-core-variant` и `/etc/tachyon/tachyon-core-version`, который есть в образе (`/rom`) и
+восстанавливалось в overlay поверх нового. Поэтому каждый из этих файлов (ядра и метки), который есть в образе (`/rom`) и
 восстановлен в overlay, заменяется файлом из образа (ссылка — ссылкой); совпадающий не трогается. Чего в образе нет
-(например tachyon-core, поставленный на роутере), остаётся. В образе с tachyon-core без sing-box (tachyon с `sb=feed`)
+(например ядро tachyon, поставленное на роутере), остаётся. В образе с ядром tachyon без sing-box (tachyon с `sb=feed`)
 `/usr/bin/sing-box` из копии удаляется. Путь, указанный в `/etc/sysupgrade.conf`, не трогается. Патч 002
 (`patches/feeds/tachyon`) убирает `/usr/bin/sing-box` из списка tachyon, но копию делает ещё прежняя прошивка, а
 tachyon, обновлённый на роутере из релиза автора, приносит прежний список. sing-box из `/root/apps` (таблица ниже)
