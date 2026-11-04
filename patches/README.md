@@ -93,7 +93,7 @@
 | `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`3d5c24f`](https://github.com/yandexru45/netshift/commit/3d5c24f28799502db16e76b6475ce38c7f0def33) | 31.10.2026 |
 | `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`176e27c`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/176e27cb8d9852ce9b30d2e180810b544d8fc9dc) | 03.11.2026 |
 | `feeds/podkop/` | [itdoginfo/podkop](https://github.com/itdoginfo/podkop) | [`c654bf5`](https://github.com/itdoginfo/podkop/commit/c654bf5da75309754e3fb63b9441981db65fff68) | 24.10.2026 |
-| `feeds/tachyon/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) | [`af72053`](https://github.com/Dushnilin/tachyon/commit/af72053c9b898881422c8e818bf2059350e1e52c) | 03.11.2026 |
+| `feeds/tachyon/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) | [`4d20cb7`](https://github.com/Dushnilin/tachyon/commit/4d20cb7d877f1765181753c1d5e669100eb70d7c) | 04.11.2026 |
 | `feeds/trafira/` | [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) | [`15ae0f9`](https://github.com/petrouspetr-pixel/trafira/commit/15ae0f909cbcad0f632245cbc13fb6103dd3cce0) | 30.10.2026 |
 | `packages/luci-app-commands/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`75a306d`](https://github.com/openwrt/luci/commit/75a306df84a020c57a631ef5b4c02ace56d93387) | 15.10.2026 |
 | `packages/luci-app-filemanager/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`e969939`](https://github.com/openwrt/luci/commit/e969939b49167516e219d465df8030d98d443d67) | 31.10.2026 |
@@ -389,15 +389,14 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
 
 ### tachyon — `feeds/tachyon/` (2)
 
-Вариант `tachyon`, фид [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) (1.7.11).
-В образ идёт sing-box из поля `sb`. Ядро
-[tachyon-core](https://github.com/Dushnilin/tachyon-core) с v0.1.3
-нельзя распространять в составе образа прошивки, поэтому оно кладётся в
-образ только у slateax, а артефакт этой сборки шифруется паролем из
-секрета `ARTIFACT_PASSWORD`. На остальных устройствах его ставит на
-роутере установщик самого tachyon.
+Вариант `tachyon`, фид [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) (1.7.12).
+С `sb=feed` (по умолчанию) в образ идёт ядро
+[tachyon-core](https://github.com/Dushnilin/tachyon-core). С v0.1.3 его
+нельзя распространять в составе образа прошивки, поэтому артефакт такой
+сборки шифруется паролем из секрета `ARTIFACT_PASSWORD`. С другим
+значением `sb` в образ идёт выбранное ядро, артефакт не шифруется.
 
-Патчи сняты с коммита [`af72053`](https://github.com/Dushnilin/tachyon/commit/af72053c9b898881422c8e818bf2059350e1e52c) от 03.11.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`4d20cb7`](https://github.com/Dushnilin/tachyon/commit/4d20cb7d877f1765181753c1d5e669100eb70d7c) от 04.11.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Удаление пакета.** Скрипт удаления tachyon написан на ucode, а
   сборка OpenWrt выполняет его как shell (apk — в своём скрипте удаления,
