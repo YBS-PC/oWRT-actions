@@ -786,8 +786,7 @@ jobs:
             rm -rf "$TC_UNPACK" ./files/usr/bin/sing-box
             printf 'tachyon-core\n' > ./files/etc/tachyon/tachyon-core-variant
             printf '%s\n' "${SB_TAG#v}" > ./files/etc/tachyon/tachyon-core-version
-            echo "SB_DOWNLOADED_TAG=$SB_TAG" >> "$GITHUB_ENV"
-            echo "SB_DOWNLOADED_REPO=$SB_REPO" >> "$GITHUB_ENV"
+            # SB_DOWNLOADED_* не пишем: их читает только проверка homeproxy, а GITHUB_ENV виден в логе каждого шага.
             echo "=========================================="
             echo "       [CORE DOWNLOAD SUMMARY]            "
             echo "=========================================="
