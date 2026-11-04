@@ -69,11 +69,12 @@ on:
           - 'latest'
 
       sb:
-        description: 'sing-box * (feed — из фида, у tachyon — ядро по умолчанию; иначе — скачать версию sing-box или иное ядро)'
+        description: 'Ядро * (default — рекомендуемое для варианта, feed — sing-box из фида, иначе — скачать выбранное)'
         required: true
         type: choice
-        default: 'feed'
+        default: 'default'
         options:
+          - 'default'
           - 'no'
           - 'feed'
           - '1.12.x'
@@ -178,7 +179,7 @@ env:
   TRAFIRA_FEED: "trafira https://github.com/petrouspetr-pixel/trafira.git;main"
 
   # Фид tachyon, конфиг /etc/config/tachyon; версия — из тегов (TACHYON_VERSION).
-  # tachyon с sb=feed — его ядро по умолчанию в образе (артефакт шифруется); с другим sb — выбранное ядро.
+  # tachyon с sb=default — его ядро по умолчанию в образе (артефакт шифруется); с другим sb — выбранное ядро.
   TACHYON_FEED: "tachyon https://github.com/Dushnilin/tachyon.git;main"
 
   # Фид netshift (форк podkop), конфиг /etc/config/netshift; версия — из тегов (NETSHIFT_VERSION).
@@ -210,7 +211,7 @@ jobs:
 
 
           # Поля строки матрицы: agh (no|feed|latest), sb (no|feed|1.12.x..latest|extended|podkop-engine[-full]|
-          # forkop-base|-full|-tiny; tiny и default ставит сам setup), ytb, zz, patches, feeds (true — фиды репозитория
+          # forkop-base|-full|-tiny|tiny; default setup заменяет ядром варианта, остаётся только у tachyon), ytb, zz, patches, feeds (true — фиды репозитория
           # пакетов), base (use_base_commit). В combo значения заданы ниже, поля формы не действуют.
           # slateax и ax59u — «тонкие»: sing-box-tiny из фида (у forkop — сборка tiny ядра).
           TINY_TARGETS="slateax ax59u"
@@ -219,7 +220,7 @@ jobs:
           # entry <target> <variant> <agh> <sb> <ytb> <zz> <patches> <feeds>: приводит выбор к тому, что вариант допускает
           # (имя артефакта не врёт); изменения пишутся в NOTES.
           entry() {
-            local t="$1" v="$2" agh="$3" sb="$4" ytb="$5" zz="$6" pt="$7" fd="$8" orig sb0="$4"
+            local t="$1" v="$2" agh="$3" sb="$4" ytb="$5" zz="$6" pt="$7" fd="$8" orig
             # vname — имя для людей; fk — фид forkop (forkop-mod внутри сборки — тот же вариант forkop).
             local vname="$v" fk=""
             case "$v" in
@@ -234,6 +235,17 @@ jobs:
               forkop) [ "$fk" = "forkop" ] || ytb=false ;;
             esac
             [ "$v" = "crystal_clear" ] && zz=false
+            # sb=default — рекомендуемое ядро варианта (на slateax/ax59u ниже станет tiny). У tachyon остаётся
+            # default: его ядро по умолчанию, артефакт шифруется (шаг Encrypt).
+            if [ "$sb" = "default" ]; then
+              case "$v" in
+                homeproxy) sb=feed ;;
+                podkop)    sb=podkop-engine ;;
+                tachyon)   ;;
+                forkop)    [ "$fk" = "forkop" ] && sb=forkop-base || sb=extended ;;
+                *)         sb=extended ;;
+              esac
+            fi
             case "$v" in
               homeproxy|rehomeproxy|podkop|netshift) [ "$sb" = "no" ] && sb=feed ;;
             esac
@@ -254,15 +266,8 @@ jobs:
             fi
             case " $TINY_TARGETS " in
               *" $t "*) case "$v" in homeproxy|rehomeproxy|podkop|netshift|forkop|trafira|tachyon)
-                case "$sb" in no) ;; forkop-*) sb=forkop-tiny ;; *) sb=tiny ;; esac ;; esac ;;
+                case "$sb" in no|default) ;; forkop-*) sb=forkop-tiny ;; *) sb=tiny ;; esac ;; esac ;;
             esac
-            # tachyon с sb=feed — sb=default (его ядро по умолчанию) на любом устройстве, артефакт шифруется
-            # (шаг Encrypt). Другое значение sb — выбранное ядро без шифрования.
-            if [ "$v" = "tachyon" ] && [ "$sb0" = "feed" ]; then
-              sb=default
-            elif [ "$sb" = "default" ]; then
-              sb=feed
-            fi
             if [ "$orig" != "agh=$agh sb=$sb ytb=$ytb zz=$zz" ]; then
               NOTES="${NOTES}${t}/${vname}: ${orig} -> agh=$agh sb=$sb ytb=$ytb zz=$zz\n"
             fi
@@ -279,7 +284,7 @@ jobs:
             # Пресет combo. Поля entry: устройство вариант agh sb ytb zz patches feeds.
             # Запасные строки: $(entry nanopi-r6s homeproxy latest latest true true false true) — без патчей;
             # $(entry nanopi-r6s podkop latest podkop-engine-full true true true true).
-            json="{\"include\":[$(entry nanopi-r6s homeproxy latest extended true true true true),$(entry nanopi-r6s podkop latest podkop-engine true true true true),$(entry nanopi-r6s netshift latest extended true true true true),$(entry nanopi-r6s forkop latest forkop-base true true true true),$(entry nanopi-r6s trafira latest extended false true true true),$(entry nanopi-r6s tachyon latest feed false true true true),$(entry rb5009 clear no no false true true true),$(entry rb5009 switch no no false true true true)]}"
+            json="{\"include\":[$(entry nanopi-r6s homeproxy latest extended true true true true),$(entry nanopi-r6s podkop latest podkop-engine true true true true),$(entry nanopi-r6s netshift latest extended true true true true),$(entry nanopi-r6s forkop latest forkop-base true true true true),$(entry nanopi-r6s trafira latest extended false true true true),$(entry nanopi-r6s tachyon latest default false true true true),$(entry rb5009 clear no no false true true true),$(entry rb5009 switch no no false true true true)]}"
           else
             # Все устройства из config/conf/ — при добавлении нового дописать сюда.
             targets="nanopi-r6s nanopi-r5s rb5009 slateax ax59u brume2"
@@ -313,10 +318,10 @@ jobs:
           echo "$json" | jq -r '.include[] | "  \(.target) / \(.vname) / agh=\(.agh) / sb=\(.sb) / ytb=\(.ytb) / zz=\(.zz) / patches=\(.patches) / feeds=\(if .feeds then "repo" else "tag" end)"'
           echo "=========================================="
           if [ -n "$NOTES" ]; then
-            echo "Выбор формы приведён к возможностям варианта/устройства:"
+            echo "Выбор формы уточнён по варианту и устройству (default — ядро варианта):"
             printf '%b' "$NOTES" | sed 's/^/  /'
             printf '%b' "$NOTES" | while IFS= read -r n; do
-              [ -n "$n" ] && echo "::notice title=Выбор скорректирован::$n"
+              [ -n "$n" ] && echo "::notice title=Выбор уточнён::$n"
             done
           fi
 
@@ -363,7 +368,7 @@ jobs:
           # Сборка с sb=default без секрета ARTIFACT_PASSWORD не начинается.
           if echo "$json" | jq -e '[.include[] | select(.sb == "default")] | length > 0' >/dev/null; then
             if [ "$HAS_ARTIFACT_PASSWORD" != "true" ]; then
-              echo "::error title=Нет секрета ARTIFACT_PASSWORD::Сборка tachyon с sb=feed кладёт в образ ядро по умолчанию, и её артефакт шифруется паролем из секрета репозитория ARTIFACT_PASSWORD. Секрет не задан: Settings → Secrets and variables → Actions → New repository secret."
+              echo "::error title=Нет секрета ARTIFACT_PASSWORD::Сборка tachyon с sb=default кладёт в образ своё ядро по умолчанию, и её артефакт шифруется паролем из секрета репозитория ARTIFACT_PASSWORD. Секрет не задан: Settings → Secrets and variables → Actions → New repository secret."
               exit 1
             fi
             echo "::notice title=Зашифрованный артефакт::Сборки с sb=default выкладываются одним архивом 7z, зашифрованным паролем из секрета ARTIFACT_PASSWORD (AES-256, имена файлов тоже скрыты)."
@@ -502,6 +507,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         M_SB: ${{ matrix.sb }}
         M_TARGET: ${{ matrix.target }}
+        M_VARIANT: ${{ matrix.variant }}
       run: |
         SB_VERSION_CHOICE="$M_SB"
         SB_TAG=""
@@ -737,8 +743,12 @@ jobs:
             echo "=========================================="
             exit 0
         elif [ "$SB_VERSION_CHOICE" == "default" ]; then
-            # Ядро tachyon по умолчанию (sb=default): статический бинарник из tar.gz релиза, сверка по SHA256SUMS,
+            # sb=default (остаётся только у tachyon) — его ядро по умолчанию: статический бинарник из tar.gz релиза, сверка по SHA256SUMS,
             # в files/ — бинарник и метки /etc/tachyon как после установки со страницы tachyon. Бинарник не печатается.
+            if [ "$M_VARIANT" != "tachyon" ]; then
+                echo "::error title=sb=default::У варианта $M_VARIANT значение default должен был заменить job setup"
+                exit 1
+            fi
             SB_REPO="Dushnilin/tachyon-core"
             TC_PKGARCH=$(sed -n 's/.*CONFIG_TARGET_ARCH_PACKAGES="\([^"]*\)".*/\1/p' "./config/conf/${M_TARGET}" | head -n1)
             # Архитектура пакетов OpenWrt → имя сборки ядра (так же выбирает сам tachyon)
@@ -1003,7 +1013,7 @@ jobs:
             feed) SUM_SB="пакет из фида" ;;
             tiny) SUM_SB="sing-box-tiny из фида (тонкое устройство)" ;;
             podkop-engine*) SUM_SB="пакет из фида + ${{ matrix.sb }} (бинарник, init-скрипты и failsafe)" ;;
-            default) SUM_SB="нет, вместо него ядро по умолчанию (артефакт зашифрован)" ;;
+            default) SUM_SB="нет, вместо него ядро tachyon по умолчанию (артефакт зашифрован)" ;;
             *)    SUM_SB="пакет из фида + бинарник ${{ matrix.sb }}" ;;
         esac
         [ "${{ matrix.ytb }}" = "true" ] && SUM_YTB="да" || SUM_YTB="нет"
@@ -1594,7 +1604,7 @@ jobs:
             exit 1
         fi
 
-        # sb=default (tachyon с sb=feed): sing-box в образе нет, ядро —
+        # sb=default (tachyon): sing-box в образе нет, ядро —
         # бинарник в files/ (шаг Download Sing-box), tachyon включён.
         if [ "$SB_MODE" = "default" ]; then
             TC_BAD=""
