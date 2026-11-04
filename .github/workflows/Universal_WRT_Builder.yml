@@ -69,7 +69,7 @@ on:
           - 'latest'
 
       sb:
-        description: 'sing-box * (feed — из фида, у tachyon — ядро tachyon-core; иначе — скачать версию sing-box или иное ядро)'
+        description: 'sing-box * (feed — из фида, у tachyon — ядро по умолчанию; иначе — скачать версию sing-box или иное ядро)'
         required: true
         type: choice
         default: 'feed'
@@ -178,7 +178,7 @@ env:
   TRAFIRA_FEED: "trafira https://github.com/petrouspetr-pixel/trafira.git;main"
 
   # Фид tachyon, конфиг /etc/config/tachyon; версия — из тегов (TACHYON_VERSION).
-  # tachyon с sb=feed — ядро tachyon-core в образе (артефакт шифруется); с другим sb — выбранное ядро.
+  # tachyon с sb=feed — его ядро по умолчанию в образе (артефакт шифруется); с другим sb — выбранное ядро.
   TACHYON_FEED: "tachyon https://github.com/Dushnilin/tachyon.git;main"
 
   # Фид netshift (форк podkop), конфиг /etc/config/netshift; версия — из тегов (NETSHIFT_VERSION).
@@ -210,7 +210,7 @@ jobs:
 
 
           # Поля строки матрицы: agh (no|feed|latest), sb (no|feed|1.12.x..latest|extended|podkop-engine[-full]|
-          # forkop-base|-full|-tiny; tiny и tachyon-core ставит сам setup), ytb, zz, patches, feeds (true — фиды репозитория
+          # forkop-base|-full|-tiny; tiny и default ставит сам setup), ytb, zz, patches, feeds (true — фиды репозитория
           # пакетов), base (use_base_commit). В combo значения заданы ниже, поля формы не действуют.
           # slateax и ax59u — «тонкие»: sing-box-tiny из фида (у forkop — сборка tiny ядра).
           TINY_TARGETS="slateax ax59u"
@@ -256,11 +256,11 @@ jobs:
               *" $t "*) case "$v" in homeproxy|rehomeproxy|podkop|netshift|forkop|trafira|tachyon)
                 case "$sb" in no) ;; forkop-*) sb=forkop-tiny ;; *) sb=tiny ;; esac ;; esac ;;
             esac
-            # tachyon с sb=feed (по умолчанию) — ядро tachyon-core на любом устройстве, артефакт шифруется
+            # tachyon с sb=feed — sb=default (его ядро по умолчанию) на любом устройстве, артефакт шифруется
             # (шаг Encrypt). Другое значение sb — выбранное ядро без шифрования.
             if [ "$v" = "tachyon" ] && [ "$sb0" = "feed" ]; then
-              sb=tachyon-core
-            elif [ "$sb" = "tachyon-core" ]; then
+              sb=default
+            elif [ "$sb" = "default" ]; then
               sb=feed
             fi
             if [ "$orig" != "agh=$agh sb=$sb ytb=$ytb zz=$zz" ]; then
@@ -360,13 +360,13 @@ jobs:
             echo "::warning title=${t}: netshift без патчей::Без patches/feeds/netshift ссылки socks5 с ':' в логине или пароле дают нерабочий узел, ссылки с транспортом http пропускаются, а на OpenWrt 24.10 (jq 1.7) не создаются узлы с TLS/Reality и не работают подписки (001); DNS-запросы SRV/PTR/TXT к доменам из списков остаются без ответа (002). Включите apply_patches."
           done
 
-          # Сборка с tachyon-core без секрета ARTIFACT_PASSWORD не начинается.
-          if echo "$json" | jq -e '[.include[] | select(.sb == "tachyon-core")] | length > 0' >/dev/null; then
+          # Сборка с sb=default без секрета ARTIFACT_PASSWORD не начинается.
+          if echo "$json" | jq -e '[.include[] | select(.sb == "default")] | length > 0' >/dev/null; then
             if [ "$HAS_ARTIFACT_PASSWORD" != "true" ]; then
-              echo "::error title=Нет секрета ARTIFACT_PASSWORD::Сборка tachyon с sb=feed кладёт в образ ядро tachyon-core, и её артефакт шифруется паролем из секрета репозитория ARTIFACT_PASSWORD. Секрет не задан: Settings → Secrets and variables → Actions → New repository secret."
+              echo "::error title=Нет секрета ARTIFACT_PASSWORD::Сборка tachyon с sb=feed кладёт в образ ядро по умолчанию, и её артефакт шифруется паролем из секрета репозитория ARTIFACT_PASSWORD. Секрет не задан: Settings → Secrets and variables → Actions → New repository secret."
               exit 1
             fi
-            echo "::notice title=Зашифрованный артефакт::Сборки с sb=tachyon-core выкладываются одним архивом 7z, зашифрованным паролем из секрета ARTIFACT_PASSWORD (AES-256, имена файлов тоже скрыты)."
+            echo "::notice title=Зашифрованный артефакт::Сборки с sb=default выкладываются одним архивом 7z, зашифрованным паролем из секрета ARTIFACT_PASSWORD (AES-256, имена файлов тоже скрыты)."
           fi
 
           echo "matrix<<EOF" >> $GITHUB_OUTPUT
@@ -736,13 +736,12 @@ jobs:
                 ./files/lib/upgrade/keep.d/podkop-engine* -maxdepth 1 2>/dev/null | xargs ls -ld
             echo "=========================================="
             exit 0
-        elif [ "$SB_VERSION_CHOICE" == "tachyon-core" ]; then
-            # tachyon-core (tachyon с sb=feed): статический бинарник из tar.gz релиза, сверка по SHA256SUMS,
+        elif [ "$SB_VERSION_CHOICE" == "default" ]; then
+            # Ядро tachyon по умолчанию (sb=default): статический бинарник из tar.gz релиза, сверка по SHA256SUMS,
             # в files/ — бинарник и метки /etc/tachyon как после установки со страницы tachyon. Бинарник не печатается.
             SB_REPO="Dushnilin/tachyon-core"
             TC_PKGARCH=$(sed -n 's/.*CONFIG_TARGET_ARCH_PACKAGES="\([^"]*\)".*/\1/p' "./config/conf/${M_TARGET}" | head -n1)
-            # Архитектура пакетов OpenWrt → имя сборки ядра (как в
-            # tachyon_core_arch_suffix() самого tachyon)
+            # Архитектура пакетов OpenWrt → имя сборки ядра (так же выбирает сам tachyon)
             case "$TC_PKGARCH" in
                 aarch64*)          TC_ARCH=aarch64 ;;
                 arm_arm1176*)      TC_ARCH=armv6 ;;
@@ -751,13 +750,13 @@ jobs:
                 mips_*)            TC_ARCH=mips ;;
                 x86_64)            TC_ARCH=x86_64 ;;
                 riscv64*)          TC_ARCH=riscv64 ;;
-                *) echo "::error title=tachyon-core::Нет сборки ядра для архитектуры '${TC_PKGARCH:-?}' (config/conf/${M_TARGET})"; exit 1 ;;
+                *) echo "::error title=Ядро по умолчанию::Нет сборки ядра для архитектуры '${TC_PKGARCH:-?}' (config/conf/${M_TARGET})"; exit 1 ;;
             esac
             SB_TAG=$(git ls-remote --tags --refs "https://github.com/${SB_REPO}.git" 2>/dev/null \
                 | awk '{print $2}' | sed 's|refs/tags/||' \
                 | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
             if [ -z "$SB_TAG" ]; then
-                echo "::error title=tachyon-core::Не найден ни один релиз ${SB_REPO} (теги vX.Y.Z)"
+                echo "::error title=Ядро по умолчанию::Не найден ни один релиз ядра (теги vX.Y.Z)"
                 exit 1
             fi
             TC_BIN="tachyon-core-${TC_ARCH}-${SB_TAG}"
@@ -765,20 +764,20 @@ jobs:
             TC_UNPACK=$(mktemp -d)
             if ! curl -fsSL --retry 3 -o "$TC_UNPACK/tc.tar.gz" "$SB_URL" || [ ! -s "$TC_UNPACK/tc.tar.gz" ] \
                     || ! tar -xzf "$TC_UNPACK/tc.tar.gz" -C "$TC_UNPACK" || [ ! -f "$TC_UNPACK/$TC_BIN" ]; then
-                echo "::error title=tachyon-core::Не удалось скачать или распаковать ${TC_BIN}.tar.gz (${SB_TAG})"
+                echo "::error title=Ядро по умолчанию::Не удалось скачать или распаковать архив ядра (${SB_TAG}, ${TC_ARCH})"
                 rm -rf "$TC_UNPACK"
                 exit 1
             fi
             if ! bash ./sh/verify-sha256.sh "$TC_UNPACK/$TC_BIN" "$SB_REPO" "$SB_TAG" "$TC_BIN" \
                     "https://github.com/${SB_REPO}/releases/download/${SB_TAG}/SHA256SUMS"; then
-                echo "::error title=tachyon-core::${TC_BIN}: сумма SHA-256 не совпала"
+                echo "::error title=Ядро по умолчанию::Сумма SHA-256 ядра не совпала (${SB_TAG}, ${TC_ARCH})"
                 rm -rf "$TC_UNPACK"
                 exit 1
             fi
             # Только статический бинарник или под musl: под glibc на OpenWrt не запустится
             SB_INTERP=$(readelf -l "$TC_UNPACK/$TC_BIN" 2>/dev/null | sed -n 's/.*interpreter: \(.*\)]/\1/p')
             if [ -n "$SB_INTERP" ] && [[ "$SB_INTERP" != *ld-musl* ]]; then
-                echo "::error title=tachyon-core не для musl::${TC_BIN} собран под $SB_INTERP"
+                echo "::error title=Ядро не для musl::Ядро ${SB_TAG} собрано под $SB_INTERP"
                 rm -rf "$TC_UNPACK"
                 exit 1
             fi
@@ -792,7 +791,7 @@ jobs:
             echo "=========================================="
             echo "       [CORE DOWNLOAD SUMMARY]            "
             echo "=========================================="
-            echo "Core           : tachyon-core ${SB_TAG} (${TC_ARCH})"
+            echo "Core           : по умолчанию ${SB_TAG} (${TC_ARCH})"
             echo "Linkage        : ${SB_INTERP:-static}"
             echo "Artifact       : будет зашифрован (ARTIFACT_PASSWORD)"
             echo "=========================================="
@@ -1005,7 +1004,7 @@ jobs:
             feed) SUM_SB="пакет из фида" ;;
             tiny) SUM_SB="sing-box-tiny из фида (тонкое устройство)" ;;
             podkop-engine*) SUM_SB="пакет из фида + ${{ matrix.sb }} (бинарник, init-скрипты и failsafe)" ;;
-            tachyon-core) SUM_SB="нет, вместо него tachyon-core из релиза (артефакт зашифрован)" ;;
+            default) SUM_SB="нет, вместо него ядро по умолчанию (артефакт зашифрован)" ;;
             *)    SUM_SB="пакет из фида + бинарник ${{ matrix.sb }}" ;;
         esac
         [ "${{ matrix.ytb }}" = "true" ] && SUM_YTB="да" || SUM_YTB="нет"
@@ -1514,7 +1513,7 @@ jobs:
             echo 'CONFIG_PACKAGE_luci-i18n-trafira-ru=y' >> ./.config
 
         elif [ "$VARIANT" == "tachyon" ]; then
-            # Зависимости tachyon уже в WRT.config, конфликтующих пакетов там нет; ядро — sing-box или tachyon-core.
+            # Зависимости tachyon уже в WRT.config, конфликтующих пакетов там нет; ядро — sing-box или своё по умолчанию.
             echo 'CONFIG_PACKAGE_tachyon=y' >> ./.config
             echo 'CONFIG_PACKAGE_luci-app-tachyon=y' >> ./.config
             echo 'CONFIG_PACKAGE_luci-i18n-tachyon-ru=y' >> ./.config
@@ -1596,15 +1595,15 @@ jobs:
             exit 1
         fi
 
-        # tachyon-core (tachyon с sb=feed): sing-box в образе нет, ядро —
+        # sb=default (tachyon с sb=feed): sing-box в образе нет, ядро —
         # бинарник в files/ (шаг Download Sing-box), tachyon включён.
-        if [ "$SB_MODE" = "tachyon-core" ]; then
+        if [ "$SB_MODE" = "default" ]; then
             TC_BAD=""
             grep -q '^CONFIG_PACKAGE_tachyon=y' .config || TC_BAD="$TC_BAD tachyon не включён;"
             grep -Eq '^CONFIG_PACKAGE_sing-box(-tiny)?=y' .config && TC_BAD="$TC_BAD включён sing-box или sing-box-tiny;"
-            [ -x files/usr/bin/tachyon-core ] || TC_BAD="$TC_BAD нет files/usr/bin/tachyon-core;"
+            [ -x files/usr/bin/tachyon-core ] || TC_BAD="$TC_BAD нет бинарника ядра в files/;"
             if [ -n "$TC_BAD" ]; then
-                echo "::error title=tachyon и tachyon-core::После make defconfig:$TC_BAD"
+                echo "::error title=tachyon и ядро по умолчанию::После make defconfig:$TC_BAD"
                 grep -E '^CONFIG_PACKAGE_(tachyon|luci-app-tachyon|sing-box[a-z-]*)=' .config || true
                 exit 1
             fi
@@ -2120,9 +2119,9 @@ jobs:
       if: ${{ always() }}
       run: echo "date=$(date +'%Y.%m.%d-%H%M')" >> $GITHUB_OUTPUT
     
-    - name: Encrypt artifact (tachyon-core)
-      # sb=tachyon-core: bin/ — в 7z (AES-256, скрытые имена) с паролем ARTIFACT_PASSWORD, открытый bin удаляется.
-      if: ${{ always() && matrix.sb == 'tachyon-core' }}
+    - name: Encrypt artifact
+      # sb=default: bin/ — в 7z (AES-256, скрытые имена) с паролем ARTIFACT_PASSWORD, открытый bin удаляется.
+      if: ${{ always() && matrix.sb == 'default' }}
       env:
         ART_PW: ${{ secrets.ARTIFACT_PASSWORD }}
       run: |
@@ -2132,7 +2131,7 @@ jobs:
         [ -d bin ] || exit 0
         if [ -z "$ART_PW" ]; then
             rm -rf bin
-            echo "::error title=Нет секрета ARTIFACT_PASSWORD::Артефакт с tachyon-core не выложен: нечем зашифровать"
+            echo "::error title=Нет секрета ARTIFACT_PASSWORD::Артефакт с ядром по умолчанию не выложен: нечем зашифровать"
             exit 1
         fi
         if ! command -v 7z >/dev/null 2>&1; then
@@ -2140,14 +2139,14 @@ jobs:
         fi
         if ! command -v 7z >/dev/null 2>&1; then
             rm -rf bin
-            echo "::error title=Нет 7z::Артефакт с tachyon-core не выложен: нечем зашифровать"
+            echo "::error title=Нет 7z::Артефакт с ядром по умолчанию не выложен: нечем зашифровать"
             exit 1
         fi
         if 7z a -t7z -mhe=on -mx=1 -p"$ART_PW" bin-enc/firmware.7z bin >/dev/null; then
             echo ">>> Артефакт зашифрован: $(du -h bin-enc/firmware.7z | cut -f1)"
         else
             rm -rf bin bin-enc
-            echo "::error title=7z::Не удалось зашифровать артефакт с tachyon-core"
+            echo "::error title=7z::Не удалось зашифровать артефакт с ядром по умолчанию"
             exit 1
         fi
         rm -rf bin
@@ -2159,9 +2158,9 @@ jobs:
       uses: actions/upload-artifact@v7
       with:
         # Имя: все параметры сборки и дата (до минуты), чтобы имена в combo не совпадали.
-        name: ${{ matrix.target }}_${{ inputs.source }}_${{ inputs.branch }}_${{ matrix.vname }}_${{ matrix.patches && 'patches' || 'nopatches' }}_agh-${{ matrix.agh }}_sb-${{ matrix.sb }}_${{ matrix.ytb && 'ytb' || 'noytb' }}_${{ matrix.zz && 'zz' || 'nozz' }}${{ matrix.feeds && '_feeds-repo' || '_feeds-tag' }}${{ matrix.base && '_app-base' || '' }}${{ matrix.sb == 'tachyon-core' && '_7z-encrypted' || '' }}_${{ steps.get_date.outputs.date }}
-        # sb=tachyon-core — только зашифрованный архив (шаг Encrypt)
-        path: ${{ matrix.sb == 'tachyon-core' && 'openwrt/bin-enc' || 'openwrt/bin' }}
+        name: ${{ matrix.target }}_${{ inputs.source }}_${{ inputs.branch }}_${{ matrix.vname }}_${{ matrix.patches && 'patches' || 'nopatches' }}_agh-${{ matrix.agh }}_sb-${{ matrix.sb }}_${{ matrix.ytb && 'ytb' || 'noytb' }}_${{ matrix.zz && 'zz' || 'nozz' }}${{ matrix.feeds && '_feeds-repo' || '_feeds-tag' }}${{ matrix.base && '_app-base' || '' }}${{ matrix.sb == 'default' && '_7z-encrypted' || '' }}_${{ steps.get_date.outputs.date }}
+        # sb=default — только зашифрованный архив (шаг Encrypt)
+        path: ${{ matrix.sb == 'default' && 'openwrt/bin-enc' || 'openwrt/bin' }}
         # На ранней ошибке (до создания bin/) не валим джоб красным "no files".
         if-no-files-found: warn
         # Артефакт живёт сутки; старые запуски убирает и Cleanup.yml по расписанию.
