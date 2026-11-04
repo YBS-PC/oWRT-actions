@@ -57,8 +57,8 @@
   прошивки.
 
 Секреты workflow: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`,
-`ARTIFACT_PASSWORD` (пароль 7z для артефакта сборки с ядром tachyon-core,
-slateax + tachyon) и `GITHUB_TOKEN`. Используются только через `secrets.*`.
+`ARTIFACT_PASSWORD` (пароль 7z для артефакта сборки с ядром tachyon-core:
+tachyon с `sb=feed`) и `GITHUB_TOKEN`. Используются только через `secrets.*`.
 Образ с бинарником, который нельзя распространять (tachyon-core), открыто
 не выкладывается: только зашифрованный архив.
 
@@ -98,6 +98,7 @@ slateax + tachyon) и `GITHUB_TOKEN`. Используются только че
 |---|---|
 | `.github/workflows/Universal_WRT_Builder.yml` | сборка: job `setup` (матрица), `build`, `notify` (итог в Telegram) |
 | `.github/workflows/Cleanup.yml` | удаление старых запусков и артефактов |
+| `.github/workflows/Cleanup_All.yml` | удаление всех завершённых запусков (только вручную) |
 | `sh/WRT-part1.sh` … `part3.sh` | шаги сборки: подготовка, фиды и `.config`, сторонние пакеты и патчи |
 | `sh/feeds-from-repo.sh`, `patch-drift.sh`, `verify-sha256.sh` | фиды, сверка патчей с исходниками, проверка загрузок |
 | `config/WRT.config`, `config/conf/<устройство>` | общий и посекционный `.config`; правила записи — `config/config_rules.txt` |
