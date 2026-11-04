@@ -280,7 +280,7 @@ if [ "$MODE" = "firstboot" ]; then
             log_err "Не удалось вернуть $_core прошивки вместо файла из резервной копии"
         fi
     done
-    # Образ с ядром tachyon без sing-box (tachyon с sb=feed): sing-box из
+    # Образ с ядром tachyon без sing-box (tachyon с sb=default): sing-box из
     # резервной копии прежней прошивки — лишние мегабайты во флеше, а с
     # меткой прежнего ядра tachyon взял бы его вместо ядра из образа.
     if [ -f /rom/usr/bin/tachyon-core ] && [ ! -e /rom/usr/bin/sing-box ] && [ ! -L /rom/usr/bin/sing-box ] \
