@@ -1,0 +1,453 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 5 Nov 2026 18:00:00 +0000
+Subject: [PATCH] commands: highlight plain output
+
+Output without colors of its own was one grey text: an error line in a
+long log, an address or a value had to be found by reading every line.
+
+The output window gets the switch "Highlight" (on by default, kept in
+the browser). For lines that have no terminal colors of their own:
+
+- a line with an error or a warning is tinted red or yellow. The level
+  the line states wins over its words: zz1-like logs ([ERR], [WARN],
+  [INFO]), syslog (daemon.err, kern.warn, user.info), "ERROR:" or
+  "WARNING:" at the start. Otherwise words decide: error, failed,
+  denied, unreachable, timed out, not found, invalid, ..., and their
+  Russian forms. "0 errors", "no errors", "warnings: 0", "ignoring
+  errors", JSON keys ("error": null) and key=value names (error_log=)
+  do not make a line an error;
+- the buttons "Errors: N" and "Warnings: N" count such lines on the
+  screen and scroll to the next one, outlining it;
+- error, warning and OK words, IPv4, IPv6 and MAC addresses, URLs,
+  sizes, rates, durations, percents, dates and times, quoted strings
+  and the key of key=value / "Key: value" / "key": get colors.
+
+Lines with colors of their own are left as they are. The text itself
+and "Copy" do not change; "Save" now writes the output without terminal
+escape codes too, as "Copy" does (before, a colored output was saved
+with them). Lines longer than 2000 characters are not split. Every chunk of output is now a block of its own, so the
+browser lays out only the new chunk: without it 20000 highlighted lines
+took 6 s instead of 0.7 s to show.
+
+Requires: 003-run-and-settings-pages 004-russian-translation
+
+Checked in Chromium with luci-base 25.12, themes bootstrap and
+proton2025 (light and dark), 1280 and 390 pixels wide: zz1 log,
+logread, uci show, ip addr, ping, ubus JSON, output with its own
+colors, false positives and 20000 lines (1.6 MB): counts, jumps,
+switch off and on, no horizontal scroll, same height of the output as
+without highlighting, selection copies the same text. The classifier
+on 3800 lines of real zz1 logs marks only real errors and warnings;
+400 crafted lines of 2000 characters take 0.1 s.
+---
+diff --git a/htdocs/luci-static/resources/view/commands/dashboard.js b/htdocs/luci-static/resources/view/commands/dashboard.js
+index 5a25d0d..64dadd8 100644
+--- a/htdocs/luci-static/resources/view/commands/dashboard.js
++++ b/htdocs/luci-static/resources/view/commands/dashboard.js
+@@ -82,6 +82,24 @@ pre.cmd-out { margin: 0; padding: .6em .7em; min-height: 6em; max-height: 62vh;
+ 	font-size: 12px; line-height: 1.35; background: #1e1e1e; color: #d4d4d4; border-radius: 4px;
+ 	white-space: pre; tab-size: 8; -webkit-text-size-adjust: 100%; }
+ pre.cmd-out.wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
++pre.cmd-out { position: relative; }
++pre.cmd-out > .cmd-blk { display: block; }
++.cmd-out-tools .cmd-jump { margin: 0; padding: 0 .6em; font-size: inherit; line-height: 1.8; }
++.cmd-jump::before { content: ""; display: inline-block; width: .6em; height: .6em; border-radius: 50%; margin-right: .4em; }
++.cmd-jump.err::before { background: #e5534b; } .cmd-jump.warn::before { background: #d4a72c; }
++pre.cmd-out.hl .cmd-hl-line { -webkit-box-decoration-break: clone; box-decoration-break: clone; border-radius: 2px; }
++pre.cmd-out.hl .cmd-hl-err { background: rgba(241,76,76,.18); }
++pre.cmd-out.hl .cmd-hl-warn { background: rgba(229,192,123,.15); }
++pre.cmd-out .cmd-flash { outline: 2px solid #ffd33d; outline-offset: 1px; }
++pre.cmd-out.hl .cmd-h-err { color: #ff6e6e; font-weight: bold; }
++pre.cmd-out.hl .cmd-h-warn { color: #e5c07b; font-weight: bold; }
++pre.cmd-out.hl .cmd-h-ok { color: #23d18b; font-weight: bold; }
++pre.cmd-out.hl .cmd-h-addr { color: #4ec9b0; }
++pre.cmd-out.hl .cmd-h-url { color: #6cb6ff; text-decoration: underline; }
++pre.cmd-out.hl .cmd-h-num { color: #d7ba7d; }
++pre.cmd-out.hl .cmd-h-time { color: #8b949e; }
++pre.cmd-out.hl .cmd-h-str { color: #ce9178; }
++pre.cmd-out.hl .cmd-h-key { color: #9cdcfe; }
+ @media (max-width: 600px) { pre.cmd-out { max-height: 52vh; } }
+ .cmd-modal .right { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .4em; margin-top: .6em; }
+ .cmd-modal .right .btn { margin: 0; }
+@@ -116,6 +134,169 @@ function storage(key, value) {
+ 	return null;
+ }
+ 
++/*
++ * Highlighting of plain output lines (lines without terminal colors of
++ * their own). A line with an error or a warning is tinted and counted;
++ * error, warning and OK words, addresses, URLs, sizes, times, quoted
++ * strings and the key of "key=value" / "Key: value" get colors. The
++ * colors show while the output window has the class "hl".
++ */
++const HL_MAX = 2000;   /* longer lines are shown as they are */
++
++/* "no errors", "errors: 0", "без ошибок" do not make a line an error */
++const HL_QUIET = /\b(?:no|0|zero|without|ignor(?:e|es|ing))\s+(?:errors?|failures?|failed|warnings?)\b|\b(?:errors?|failures?|failed|warnings?)[^\n:=]{0,20}[:=]\s*0(?![\d.])|без\s+(?:ошибок|предупреждений)|(?:ошибок|предупреждений)[^\n:=]{0,20}[:=]?\s*0(?![\d.])/gi;
++
++/*
++ * The level the line states itself wins over its words: "[INFO] ... не
++ * найден" is not an error. zz1 and similar logs ([ERR], [WARN], [INFO]),
++ * syslog (daemon.err, user.info), "ERROR:" / "WARNING:" at the start.
++ */
++const HL_LEVEL = /\[(INFO|OK|DONE|PASS|DEBUG|NOTE|NOTICE|ERR|ERROR|FAIL|FAILED|FATAL|CRIT|WARN|WARNING)\]|\b(?:kern|user|mail|daemon|auth|authpriv|syslog|lpr|news|uucp|cron|ftp|local\d)\.(emerg|alert|crit|err|warn|warning|notice|info|debug)\b|^\s*(INFO|DEBUG|NOTICE|ERROR|FATAL|WARNING|WARN)\b:?/i;
++
++const HL_WORD = {
++	err: '\\[(?:ERR|ERROR|FAIL|FAILED|FATAL|CRIT)\\]|!!!+|errors?|err|fail(?:s|ed|ure|ures)?|fatal|critical|crit|emerg|panic|abort(?:ed)?|denied|refused|unreachable|timed? ?out|not found|no such file or directory|cannot|can\'t|unable to|invalid|segmentation fault|traceback|ошибк[а-яё]*|ошибок|не удал[а-яё]*|отказ(?:ано|а|ом)?|недоступ[а-яё]*|не найден[а-яё]*|невозможн[а-яё]*|сбой|сбоя',
++	warn: '\\[(?:WARN|WARNING)\\]|warn(?:ing|ings)?|deprecated|retrying|degraded|предупрежд[а-яё]*|внимание|устарел[а-яё]*',
++	ok: '\\[(?:OK|DONE|PASS)\\]|ok|success(?:ful(?:ly)?)?|succeeded|done|passed|connected|running|active|успешно|готово|выполнено|работает|запущен[а-яё]*'
++};
++
++const HL_LINE_ERR = new RegExp('(?:^|[^\\wа-яё/-])(?:' + HL_WORD.err + ')(?![\\wа-яё-]|\\.\\w)', 'i');
++const HL_LINE_WARN = new RegExp('(?:^|[^\\wа-яё/-])(?:' + HL_WORD.warn + ')(?![\\wа-яё-]|\\.\\w)', 'i');
++
++/* keys are names, not messages: "error": null, error_log=... */
++const HL_KEYS = /"(?:[^"\\\n]|\\.)*"\s*:|^\s*[A-Za-z_][\w.@\[\]-]*=/g;
++
++const HL_TOKEN = new RegExp([
++	'(https?://[^\\s\'"<>]+)',                                                     /* 1 URL */
++	'([0-9a-f]{2}(?:[:-][0-9a-f]{2}){5})',                                          /* 2 MAC */
++	'(\\d{4}-\\d{2}-\\d{2}(?:[ T]\\d{2}:\\d{2}(?::\\d{2}(?:[.,]\\d+)?)?)?|\\d{1,2}:\\d{2}:\\d{2}(?:[.,]\\d+)?)', /* 3 date, time */
++	'((?:\\d{1,3}\\.){3}\\d{1,3}(?:/\\d{1,2})?(?::\\d{1,5})?)',                       /* 4 IPv4 */
++	'((?:[0-9a-f]{0,4}:){2,7}[0-9a-f]{0,4}(?:/\\d{1,3})?)',                           /* 5 IPv6 */
++	'(\\d+(?:[.,]\\d+)?\\s?(?:%|[KMGTP]i?B|bytes|[kKMG]?bit/s|[kKMG]?bps|[kKMG]?B/s|ms|µs|us|ns|sec|min|dBm|°C|[kKMG]Hz|s|m|h|d))', /* 6 value */
++	'(' + HL_WORD.err + ')',                                                       /* 7 */
++	'(' + HL_WORD.warn + ')',                                                      /* 8 */
++	'(' + HL_WORD.ok + ')',                                                        /* 9 */
++	'("(?:[^"\\\\\\n]|\\\\.){0,300}"|\'[^\'\\n]{0,300}\')'                              /* 10 quoted string */
++].join('|'), 'gi');
++
++const HL_CLASS = [ null, 'url', 'addr', 'time', 'addr', 'addr', 'num', 'err', 'warn', 'ok', 'str' ];
++
++const HL_KEY_ASSIGN = /^(\s*)([A-Za-z_][\w.@\[\]-]*)(?==)/;
++const HL_KEY_COLON = /^(\s*)([A-Za-z][\w()\/.-]*(?: [\w()\/.-]+){0,2})(?=:(?:\s|$))/;
++const HL_NOT_KEY = /^(?:errors?|warn(?:ing)?s?|fatal|critical|failed|ошибка|предупреждение)$/i;
++
++/* error / warn line, or null */
++function hlKind(text) {
++	if (text.length > HL_MAX)
++		return null;
++
++	const lv = HL_LEVEL.exec(text);
++
++	if (lv) {
++		const l = (lv[1] || lv[2] || lv[3]).toLowerCase();
++
++		return /^(?:err|error|fail|failed|fatal|crit|emerg|alert)$/.test(l) ? 'err' : (/^warn/.test(l) ? 'warn' : null);
++	}
++
++	text = text.replace(HL_KEYS, ' ').replace(HL_QUIET, ' ');
++
++	return HL_LINE_ERR.test(text) ? 'err' : (HL_LINE_WARN.test(text) ? 'warn' : null);
++}
++
++function hlValid(n, t, prev, next) {
++	const word = /[\wа-яё]/i;
++
++	switch (n) {
++	case 1:
++		return true;
++
++	case 2: case 3: case 4: case 6:
++		return !/[\w.:\/-]/.test(prev) && !word.test(next) && !/^[.:]\d/.test(next + '0');
++
++	case 5:
++		return !/[\w.:\/-]/.test(prev) && !/[\w:]/.test(next)
++			&& /[0-9a-f]/i.test(t) && (t.match(/::/g) || []).length <= 1
++			&& (/::|[a-f]/i.test(t) || (t.match(/:/g) || []).length >= 5);
++
++	case 7: case 8: case 9:
++		if (t.charAt(0) == '[' || t.charAt(0) == '!')
++			return true;
++
++		return !/[\wа-яё\/-]/i.test(prev) && !/[\wа-яё-]/i.test(next);
++
++	case 10:
++		return t.charAt(0) == '"' || !word.test(prev);
++	}
++
++	return false;
++}
++
++/* append the text of a line to node, split into colored tokens */
++function hlText(node, text) {
++	const add = (t, cls) => node.appendChild(cls ? E('span', { 'class': 'cmd-h-' + cls }, t) : document.createTextNode(t));
++
++	if (text.length > HL_MAX) {
++		add(text);
++		return;
++	}
++
++	let last = 0;
++	const key = HL_KEY_ASSIGN.exec(text) || HL_KEY_COLON.exec(text);
++
++	if (key && !HL_NOT_KEY.test(key[2].trim()) && !/\d\.\d/.test(key[2])) {
++		if (key[1])
++			add(key[1]);
++
++		add(key[2], 'key');
++		last = key[0].length;
++	}
++
++	/* words inside "no errors", "ошибок: 0" stay plain */
++	const quiet = [];
++
++	for (const q of text.matchAll(HL_QUIET))
++		quiet.push([ q.index, q.index + q[0].length ]);
++
++	const re = HL_TOKEN;
++	let m;
++
++	re.lastIndex = last;
++
++	while ((m = re.exec(text)) != null) {
++		let n = 1;
++
++		while (m[n] === undefined)
++			n++;
++
++		let t = m[0];
++		const at = m.index;
++
++		/* the end of a sentence is not a part of a URL */
++		if (n == 1)
++			t = t.replace(/[.,;:!?)\]}'"]+$/, '');
++
++		if (!hlValid(n, t, text.charAt(at - 1), text.charAt(at + t.length))) {
++			re.lastIndex = at + 1;
++			continue;
++		}
++
++		if (at > last)
++			add(text.slice(last, at));
++
++		let cls = HL_CLASS[n];
++
++		if (n == 10 && /^\s*:/.test(text.slice(at + t.length)))
++			cls = 'key';   /* "key": value */
++		else if (n >= 7 && n <= 9 && quiet.some(([ a, b ]) => at >= a && at < b))
++			cls = null;
++
++		add(t, cls);
++		last = re.lastIndex = at + t.length;
++	}
++
++	if (last < text.length)
++		add(text.slice(last));
++}
++
+ /*
+  * Output renderer: plain text with the parts of a terminal that command
+  * output uses — SGR colors, \r (progress lines redraw themselves), \b and
+@@ -140,6 +321,8 @@ const Terminal = L.Class.extend({
+ 		this.dropped = 0;
+ 		this.text = [];        /* plain text of finished lines, for "Copy" */
+ 		this.textlen = 0;
++		this.errs = 0;         /* finished lines with an error / a warning on the screen */
++		this.warns = 0;
+ 	},
+ 
+ 	style() {
+@@ -243,13 +426,29 @@ const Terminal = L.Class.extend({
+ 		}
+ 	},
+ 
++	/* returns 'err' / 'warn' for a plain line with an error / a warning */
+ 	renderLine(frag, segs) {
++		if (segs.length && segs.every(s => !s[1] && !s[2])) {
++			const text = segs.map(s => s[0]).join('');
++			const kind = hlKind(text);
++			const node = kind ? E('span', { 'class': 'cmd-hl-line cmd-hl-' + kind }) : frag;
++
++			if (kind)
++				frag.appendChild(node);
++
++			hlText(node, text);
++
++			return kind;
++		}
++
+ 		for (const [ text, cls, st ] of segs) {
+ 			if (!cls && !st)
+ 				frag.appendChild(document.createTextNode(text));
+ 			else
+ 				frag.appendChild(E('span', { 'class': cls || null, 'style': st || null }, text));
+ 		}
++
++		return null;
+ 	},
+ 
+ 	/* feed a chunk of output; returns true when something changed */
+@@ -270,7 +469,7 @@ const Terminal = L.Class.extend({
+ 
+ 		const frag = document.createDocumentFragment();
+ 		const plain = [];
+-		let chars = 0;
++		let chars = 0, errs = 0, warns = 0;
+ 		const re = /\x1b\[([0-9;?]*)([@-~])|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-_]|\r\n|\r|\n|\x08|\x07|[^\x1b\r\n\x08\x07]+/g;
+ 		let m;
+ 
+@@ -281,7 +480,13 @@ const Terminal = L.Class.extend({
+ 				if (this.cr)
+ 					this.cr = false;
+ 
+-				this.renderLine(frag, this.line);
++				const kind = this.renderLine(frag, this.line);
++
++				if (kind == 'err')
++					errs++;
++				else if (kind == 'warn')
++					warns++;
++
+ 				frag.appendChild(document.createTextNode('\n'));
+ 
+ 				const s = this.line.map(x => x[0]).join('');
+@@ -312,10 +517,12 @@ const Terminal = L.Class.extend({
+ 		}
+ 
+ 		if (frag.childNodes.length) {
+-			const block = E('span', {}, [ frag ]);
++			const block = E('span', { 'class': 'cmd-blk' }, [ frag ]);
+ 			this.pre.insertBefore(block, this.cur);
+-			this.blocks.push([ block, chars ]);
++			this.blocks.push([ block, chars, errs, warns ]);
+ 			this.chars += chars;
++			this.errs += errs;
++			this.warns += warns;
+ 			this.text.push(plain.join(''));
+ 			this.textlen += chars;
+ 			this.trim();
+@@ -330,10 +537,12 @@ const Terminal = L.Class.extend({
+ 	/* keep the screen light: the oldest blocks go when there are too many */
+ 	trim() {
+ 		while (this.blocks.length > 1 && (this.chars > MAX_CHARS || this.blocks.length > MAX_BLOCKS)) {
+-			const [ block, chars ] = this.blocks.shift();
++			const [ block, chars, errs, warns ] = this.blocks.shift();
+ 
+ 			block.remove();
+ 			this.chars -= chars;
++			this.errs -= errs;
++			this.warns -= warns;
+ 			this.dropped += chars;
+ 		}
+ 
+@@ -660,13 +869,57 @@ return view.extend({
+ 		window.clearTimeout(this.outTimer);
+ 
+ 		const session = { id: id, job: j.job, offset: 0, closed: false };
+-		const pre = E('pre', { 'class': 'cmd-out' + (storage('wrap') !== false ? ' wrap' : ''), 'tabindex': '0' });
++		const pre = E('pre', { 'class': 'cmd-out' + (storage('wrap') !== false ? ' wrap' : '') + (storage('hl') !== false ? ' hl' : ''), 'tabindex': '0' });
+ 		const term = new Terminal(pre);
+ 		const note = E('div', { 'class': 'cmd-out-note', 'hidden': '' });
+ 		const state = E('span');
+ 		const follow = E('input', { 'type': 'checkbox', 'checked': '' });
+ 		const wrap = E('input', { 'type': 'checkbox', 'checked': (storage('wrap') !== false) ? '' : null,
+ 			'change': ev => { pre.classList.toggle('wrap', ev.target.checked); storage('wrap', ev.target.checked); } });
++		const hl = E('input', { 'type': 'checkbox', 'checked': (storage('hl') !== false) ? '' : null,
++			'change': ev => { pre.classList.toggle('hl', ev.target.checked); storage('hl', ev.target.checked); counts(); } });
++
++		/* the next line with an error / a warning below the top of the window, then from the start */
++		const jump = kind => {
++			const lines = pre.querySelectorAll('.cmd-hl-' + kind);
++			const third = Math.round(pre.clientHeight / 3);
++			/* after a jump: below that line; after scrolling: from the top of the window */
++			const top = (session.jumpTop === pre.scrollTop && session.jumpEl && session.jumpEl.isConnected)
++				? session.jumpEl.offsetTop : pre.scrollTop - 1;
++			let el = null;
++
++			for (const l of lines) {
++				if (l.offsetTop > top) {
++					el = l;
++					break;
++				}
++			}
++
++			el = el || lines[0];
++
++			if (!el)
++				return;
++
++			follow.checked = false;
++			session.autoscroll = true;
++			pre.scrollTop = Math.max(0, el.offsetTop - third);
++			session.jumpTop = pre.scrollTop;
++			session.jumpEl = el;
++			el.classList.add('cmd-flash');
++			window.setTimeout(() => el.classList.remove('cmd-flash'), 1200);
++		};
++
++		const btnErr = E('button', { 'class': 'btn cbi-button cmd-jump err', 'hidden': '', 'title': _('Go to the next line with an error'),
++			'click': ev => jump('err') });
++		const btnWarn = E('button', { 'class': 'btn cbi-button cmd-jump warn', 'hidden': '', 'title': _('Go to the next line with a warning'),
++			'click': ev => jump('warn') });
++
++		const counts = () => {
++			btnErr.hidden = !hl.checked || !term.errs;
++			btnWarn.hidden = !hl.checked || !term.warns;
++			btnErr.textContent = _('Errors: %d').format(term.errs);
++			btnWarn.textContent = _('Warnings: %d').format(term.warns);
++		};
+ 
+ 		const btnStop = E('button', { 'class': 'btn cbi-button-negative', 'hidden': '',
+ 			'click': ui.createHandlerFn(this, () => callStop(session.job).catch(() => {})) }, _('Stop'));
+@@ -694,7 +947,10 @@ return view.extend({
+ 			]),
+ 			E('div', { 'class': 'cmd-out-tools' }, [
+ 				E('label', {}, [ wrap, _('Wrap long lines') ]),
+-				E('label', {}, [ follow, _('Follow output') ])
++				E('label', {}, [ follow, _('Follow output') ]),
++				E('label', { 'title': _('Colors errors, warnings, addresses and values in output that has no colors of its own') }, [ hl, _('Highlight') ]),
++				btnErr,
++				btnWarn
+ 			]),
+ 			note,
+ 			pre,
+@@ -724,6 +980,7 @@ return view.extend({
+ 
+ 				if (changed) {
+ 					term.feed(st.data);
++					counts();
+ 
+ 					if (follow.checked) {
+ 						session.autoscroll = true;
+@@ -826,7 +1083,9 @@ return view.extend({
+ 			const d = new Date();
+ 			const pad = n => (n < 10 ? '0' : '') + n;
+ 			const stamp = '%d%s%s-%s%s%s'.format(d.getFullYear(), pad(d.getMonth() + 1), pad(d.getDate()), pad(d.getHours()), pad(d.getMinutes()), pad(d.getSeconds()));
+-			const url = URL.createObjectURL(new Blob([ parts.join('') ], { type: 'text/plain;charset=utf-8' }));
++			/* the file gets the text without terminal escape codes, as "Copy" does */
++			const text = parts.join('').replace(/\x1b\[[0-9;?]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-_]/g, '');
++			const url = URL.createObjectURL(new Blob([ text ], { type: 'text/plain;charset=utf-8' }));
+ 			const a = E('a', { 'href': url, 'download': '%s-%s.txt'.format(name, stamp), 'style': 'display:none' });
+ 
+ 			document.body.appendChild(a);
+diff --git a/po/ru/commands-ext.po b/po/ru/commands-ext.po
+index 116aab4..87446ff 100644
+--- a/po/ru/commands-ext.po
++++ b/po/ru/commands-ext.po
+@@ -162,3 +162,21 @@ msgstr "В секундах; дольше команда не работает,
+ 
+ msgid "no limit"
+ msgstr "без предела"
++
++msgid "Highlight"
++msgstr "Подсветка"
++
++msgid "Colors errors, warnings, addresses and values in output that has no colors of its own"
++msgstr "Выделяет цветом ошибки, предупреждения, адреса и значения в выводе без собственных цветов"
++
++msgid "Errors: %d"
++msgstr "Ошибки: %d"
++
++msgid "Warnings: %d"
++msgstr "Предупреждения: %d"
++
++msgid "Go to the next line with an error"
++msgstr "К следующей строке с ошибкой"
++
++msgid "Go to the next line with a warning"
++msgstr "К следующей строке с предупреждением"
+-- 
+2.43.0
+
