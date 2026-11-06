@@ -93,7 +93,7 @@
 | `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`3d5c24f`](https://github.com/yandexru45/netshift/commit/3d5c24f28799502db16e76b6475ce38c7f0def33) | 31.10.2026 |
 | `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`3247e14`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/3247e147669bb2d9e4a6398222f7cb1a98fd13f0) | 06.11.2026 |
 | `feeds/podkop/` | [itdoginfo/podkop](https://github.com/itdoginfo/podkop) | [`c654bf5`](https://github.com/itdoginfo/podkop/commit/c654bf5da75309754e3fb63b9441981db65fff68) | 24.10.2026 |
-| `feeds/tachyon/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) | [`841e2f5`](https://github.com/Dushnilin/tachyon/commit/841e2f5ea416fb6755bcc237780a0685907bdd88) | 05.11.2026 |
+| `feeds/tachyon/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) | [`67d4b9d`](https://github.com/Dushnilin/tachyon/commit/67d4b9d3c4b6adafd8e8f060d4da1ede56c18407) | 06.11.2026 |
 | `feeds/trafira/` | [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) | [`16d06e8`](https://github.com/petrouspetr-pixel/trafira/commit/16d06e87a2618b4a34d5e6797eee4b76715e8deb) | 04.11.2026 |
 | `packages/luci-app-commands/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`75a306d`](https://github.com/openwrt/luci/commit/75a306df84a020c57a631ef5b4c02ace56d93387) | 15.10.2026 |
 | `packages/luci-app-filemanager/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`e969939`](https://github.com/openwrt/luci/commit/e969939b49167516e219d465df8030d98d443d67) | 31.10.2026 |
@@ -395,7 +395,7 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
 С другим значением `sb` в образ идёт выбранное ядро, артефакт не
 шифруется.
 
-Патчи сняты с коммита [`841e2f5`](https://github.com/Dushnilin/tachyon/commit/841e2f5ea416fb6755bcc237780a0685907bdd88) от 05.11.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`67d4b9d`](https://github.com/Dushnilin/tachyon/commit/67d4b9d3c4b6adafd8e8f060d4da1ede56c18407) от 06.11.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Удаление пакета.** Скрипт удаления tachyon написан на ucode, а
   сборка OpenWrt выполняет его как shell (apk — в своём скрипте удаления,
