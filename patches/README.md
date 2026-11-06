@@ -87,13 +87,13 @@
 | Папка | Репозиторий | Коммит | Дата коммита |
 |---|---|---|---|
 | `feeds/forkop/` | [ushan0v/forkop](https://github.com/ushan0v/forkop) | [`129d303`](https://github.com/ushan0v/forkop/commit/129d303e6cc879e9edc4e13c50b1f37637e69554) | 02.11.2026 |
-| `feeds/forkopmod/` | [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) | [`aa05cf9`](https://github.com/Gavr1024/forkop-mod/commit/aa05cf939f12fc3f30df394c4fa64916895377e0) | 28.10.2026 |
+| `feeds/forkopmod/` | [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) | [`4e8e177`](https://github.com/Gavr1024/forkop-mod/commit/4e8e177c36dfe114354820b213c534d9a82204cc) | 06.11.2026 |
 | `feeds/internetdetector/` | [gSpotx2f/luci-app-internet-detector](https://github.com/gSpotx2f/luci-app-internet-detector) | [`e265fcc`](https://github.com/gSpotx2f/luci-app-internet-detector/commit/e265fcc8a9d9fd359f29fd0188ab2da3ce1438fa) | 09.10.2026 |
 | `feeds/luciappxray/` | [yichya/luci-app-xray](https://github.com/yichya/luci-app-xray) | [`4d5a6fd`](https://github.com/yichya/luci-app-xray/commit/4d5a6fd7fc4d2fbbcd7f70f1319da06b91ec1d56) | 22.09.2026 |
 | `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`3d5c24f`](https://github.com/yandexru45/netshift/commit/3d5c24f28799502db16e76b6475ce38c7f0def33) | 31.10.2026 |
-| `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`1a1bb44`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/1a1bb44f2a5f811b17e5f28917f5112abed0c5fa) | 05.11.2026 |
+| `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`3247e14`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/3247e147669bb2d9e4a6398222f7cb1a98fd13f0) | 06.11.2026 |
 | `feeds/podkop/` | [itdoginfo/podkop](https://github.com/itdoginfo/podkop) | [`c654bf5`](https://github.com/itdoginfo/podkop/commit/c654bf5da75309754e3fb63b9441981db65fff68) | 24.10.2026 |
-| `feeds/tachyon/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) | [`5735e30`](https://github.com/Dushnilin/tachyon/commit/5735e304698ea226cac28c6ce5fba2581786ced5) | 05.11.2026 |
+| `feeds/tachyon/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) | [`841e2f5`](https://github.com/Dushnilin/tachyon/commit/841e2f5ea416fb6755bcc237780a0685907bdd88) | 05.11.2026 |
 | `feeds/trafira/` | [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) | [`16d06e8`](https://github.com/petrouspetr-pixel/trafira/commit/16d06e87a2618b4a34d5e6797eee4b76715e8deb) | 04.11.2026 |
 | `packages/luci-app-commands/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`75a306d`](https://github.com/openwrt/luci/commit/75a306df84a020c57a631ef5b4c02ace56d93387) | 15.10.2026 |
 | `packages/luci-app-filemanager/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`e969939`](https://github.com/openwrt/luci/commit/e969939b49167516e219d465df8030d98d443d67) | 31.10.2026 |
@@ -187,17 +187,17 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
 
 ### forkop-mod — `feeds/forkopmod/` (1)
 
-Вариант `forkop-mod`, фид [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) (1.0.14).
+Вариант `forkop-mod`, фид [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) (1.0.15).
 
-Патчи сняты с коммита [`aa05cf9`](https://github.com/Gavr1024/forkop-mod/commit/aa05cf939f12fc3f30df394c4fa64916895377e0) от 28.10.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`4e8e177`](https://github.com/Gavr1024/forkop-mod/commit/4e8e177c36dfe114354820b213c534d9a82204cc) от 06.11.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Ошибки «left-hand side is not a function» и удаление через
-  apk.** В 14 местах функции перенесены выше места, где их вызывают
+  apk.** В 13 местах функции перенесены выше места, где их вызывают
   (ещё три, в генераторе sing-box, автор исправил сам в 1.0.11, uci_core
-  в проверке конфига — в 1.0.14). Без этого падают проверка стратегий
-  ByeDPI и проверка обновления списков при старте, режим «ответ DNS:
-  route», задержки узлов группы Xray в диагностике, а также части
-  интерфейса и службы. Скрипт удаления
+  в проверке конфига — в 1.0.14, режим «ответ DNS: route» — в 1.0.15).
+  Без этого падают проверка стратегий ByeDPI и проверка обновления
+  списков при старте, задержки узлов группы Xray в диагностике, а также
+  части интерфейса и службы. Скрипт удаления
   переписан, чтобы `apk del` работал. *Всегда.*
 
 ### internet-detector — `feeds/internetdetector/` (3)
@@ -326,7 +326,7 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
 
 Вариант `passwall`, фид [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2).
 
-Патчи сняты с коммита [`1a1bb44`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/1a1bb44f2a5f811b17e5f28917f5112abed0c5fa) от 05.11.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`3247e14`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/3247e147669bb2d9e4a6398222f7cb1a98fd13f0) от 06.11.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Соединения после перезапуска.** Пока passwall2 перезапускается,
   правил нет, и новые соединения из сети уходят напрямую. После запуска
@@ -389,13 +389,13 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
 
 ### tachyon — `feeds/tachyon/` (2)
 
-Вариант `tachyon`, фид [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) (1.7.14).
+Вариант `tachyon`, фид [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) (1.7.15).
 С `sb=default` (по умолчанию) в образ идёт ядро tachyon по умолчанию, и
 артефакт такой сборки шифруется паролем из секрета `ARTIFACT_PASSWORD`.
 С другим значением `sb` в образ идёт выбранное ядро, артефакт не
 шифруется.
 
-Патчи сняты с коммита [`5735e30`](https://github.com/Dushnilin/tachyon/commit/5735e304698ea226cac28c6ce5fba2581786ced5) от 05.11.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`841e2f5`](https://github.com/Dushnilin/tachyon/commit/841e2f5ea416fb6755bcc237780a0685907bdd88) от 05.11.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Удаление пакета.** Скрипт удаления tachyon написан на ucode, а
   сборка OpenWrt выполняет его как shell (apk — в своём скрипте удаления,
