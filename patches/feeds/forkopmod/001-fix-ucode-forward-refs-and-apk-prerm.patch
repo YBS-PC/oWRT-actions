@@ -1,19 +1,21 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
-Date: Fri, 30 Oct 2026 12:00:00 +0000
-Subject: [PATCH] forkop-mod 1.0.14: вызовы ucode-функций до объявления и
- prerm для apk
+Date: Fri, 6 Nov 2026 12:00:00 +0000
+Subject: [PATCH] =?UTF-8?q?forkop-mod=201.0.15:=20=D0=B2=D1=8B=D0=B7=D0=BE?=
+ =?UTF-8?q?=D0=B2=D1=8B=20ucode-=D1=84=D1=83=D0=BD=D0=BA=D1=86=D0=B8=D0=B9?=
+ =?UTF-8?q?=20=D0=B4=D0=BE=20=D0=BE=D0=B1=D1=8A=D1=8F=D0=B2=D0=BB=D0=B5?=
+ =?UTF-8?q?=D0=BD=D0=B8=D1=8F=20=D0=B8=20prerm=20=D0=B4=D0=BB=D1=8F=20apk?=
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
 
 ucode связывает имя функции в момент её объявления. Если функция A
 вызывает функцию B, объявленную ниже в том же файле, A получает null и
-падает с «left-hand side is not a function». В 1.0.14 таких мест 14.
+падает с «left-hand side is not a function». В 1.0.15 таких мест 13.
 Три места в singbox/generator.uc (исключённые устройства и восстановление
 входа OpenConnect) автор исправил сам в 1.0.11, uci_core в
-config/validator.uc — в 1.0.14; остальные на месте, и в 1.0.14 добавились
-два новых:
+config/validator.uc — в 1.0.14, dns_action_server_tag в
+singbox/generator.uc — в 1.0.15; остальные на месте:
 
   providers/byedpi/strategy_test.uc
                          status_view — проверка стратегий ByeDPI
@@ -25,10 +27,8 @@ config/validator.uc — в 1.0.14; остальные на месте, и в 1.0
   components/action.uc   install_sing_box_extended (взаимная рекурсия:
                          предварительное объявление let)
   server/service.uc      safe_filename_string
-  singbox/generator.uc   dns_action_server_tag — новый в 1.0.14 режим
-                         «ответ DNS: route» (push_dns_route_resolve)
   diagnostics/runtime.uc remember_probe_delay — задержки узлов группы
-                         Xray (remember_group_probe), новое в 1.0.14
+                         Xray (remember_group_probe)
 
 Проверено на файлах 1.0.13: «strategy_test.uc start» запускает
 проверку стратегий и падает на ответе («access to undeclared variable
@@ -41,25 +41,20 @@ status_view» в start_test) вместо {"success": true, "message":
 Функции перенесены без изменения кода (list_update_if_missing —
 ниже list_update_if_due, start_test — ниже status_view). После патча
 вызовов до объявления нет (кроме filter() в routing/list_cache.uc — это
-встроенная функция ucode). Проверено на 1.0.14 с ucode 8592205 (как в
-OpenWrt 25.12): все 72 модуля компилируются (ucode -c); вызовы
-push_dns_route_resolve() из singbox/generator.uc и remember_group_probe()
-из diagnostics/runtime.uc автора падают с «left-hand side is not a
-function», с патчем отрабатывают.
+встроенная функция ucode). Проверено на 1.0.15 с ucode 8592205 (как в
+OpenWrt 25.12): все 73 модуля компилируются (ucode -c).
 
 prerm: с apk (OpenWrt 25.12+) тело Package/forkop/prerm встраивается в
 общий /bin/sh-скрипт pre-deinstall, поэтому ucode-код там — синтаксическая
 ошибка, и «apk del forkop» падал. Переписан на POSIX sh, логика прежняя.
 
-Тесты проекта (1.0.14, ucode 8592205): без патча проходят 59 из 80, с
-патчем 58; провалы те же (тесты автора расходятся с кодом), кроме
-package_lifecycle — он требует ucode в prerm, именно это и исправлено.
+Тесты проекта (1.0.15, ucode 8592205): без патча проходят 79 из 81, с
+патчем 78; провалы те же, кроме package_lifecycle — он требует ucode в
+prerm, именно это и исправлено.
 
-Заменяет 001 для 1.0.13: в 1.0.14 автор сам перенёс uci_core в
-config/validator.uc (эта часть из патча убрана), сдвинул строки в
-nft/apply.uc, service/initd.uc и service/state.uc и добавил два новых
-вызова до объявления (generator.uc, diagnostics/runtime.uc) — они
-перенесены так же.
+Заменяет 001 для 1.0.14: в 1.0.15 автор сам перенёс
+dns_action_server_tag в singbox/generator.uc (эта часть из патча
+убрана) и сдвинул строки в diagnostics/runtime.uc и service/ui.uc.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01Uo9XQuT7u6ShTYdi2S3Anq
@@ -74,8 +69,7 @@ Claude-Session: https://claude.ai/code/session_01Uo9XQuT7u6ShTYdi2S3Anq
  forkop/files/usr/lib/service/initd.uc         | 28 +++----
  forkop/files/usr/lib/service/state.uc         | 18 ++---
  forkop/files/usr/lib/service/ui.uc            | 42 +++++-----
- forkop/files/usr/lib/singbox/generator.uc     |  8 +-
- 11 files changed, 156 insertions(+), 152 deletions(-)
+ 10 files changed, 152 insertions(+), 148 deletions(-)
 
 diff --git a/forkop/Makefile b/forkop/Makefile
 index 50b01859..0e165db2 100644
@@ -206,10 +200,10 @@ index 2ee5f877..84844930 100644
      service_state_success([ "run-pending-reload-if-requested", PENDING_RELOAD_FILE, SERVICE_INIT ]);
  }
 diff --git a/forkop/files/usr/lib/diagnostics/runtime.uc b/forkop/files/usr/lib/diagnostics/runtime.uc
-index b6ae012e..d624e0ef 100644
+index 6dfbce10..9f04f86d 100644
 --- a/forkop/files/usr/lib/diagnostics/runtime.uc
 +++ b/forkop/files/usr/lib/diagnostics/runtime.uc
-@@ -2117,6 +2117,27 @@ function clash_proxy_document(base_url, auth, tag) {
+@@ -2144,6 +2144,27 @@ function clash_proxy_document(base_url, auth, tag) {
      }
  }
  
@@ -237,7 +231,7 @@ index b6ae012e..d624e0ef 100644
  function remember_group_probe(base_url, auth, group, body) {
      let parsed = null;
      try {
-@@ -2143,27 +2164,6 @@ function remember_group_probe(base_url, auth, group, body) {
+@@ -2170,27 +2191,6 @@ function remember_group_probe(base_url, auth, group, body) {
      }
  }
  
@@ -526,7 +520,7 @@ index 47f15b90..c779f7db 100644
      if (!ensure_parent_dir(path))
          exit(1);
 diff --git a/forkop/files/usr/lib/service/ui.uc b/forkop/files/usr/lib/service/ui.uc
-index d18a9fa6..9f24b790 100644
+index 0dfaf9a8..ff7cd736 100644
 --- a/forkop/files/usr/lib/service/ui.uc
 +++ b/forkop/files/usr/lib/service/ui.uc
 @@ -290,6 +290,22 @@ function print_service_status_text(running, enabled) {
@@ -564,7 +558,7 @@ index d18a9fa6..9f24b790 100644
  function first_line(path) {
      let data = fs.readfile(as_string(path));
      if (data == null)
-@@ -820,6 +831,11 @@ function action_state_from_dirs() {
+@@ -856,6 +867,11 @@ function action_state_from_dirs() {
      };
  }
  
@@ -576,7 +570,7 @@ index d18a9fa6..9f24b790 100644
  function acquire_dir_lock(lock_dir) {
      lock_dir = as_string(lock_dir);
      let owner_pid = current_pid();
-@@ -855,11 +871,6 @@ function acquire_dir_lock(lock_dir) {
+@@ -891,11 +907,6 @@ function acquire_dir_lock(lock_dir) {
      return false;
  }
  
@@ -588,7 +582,7 @@ index d18a9fa6..9f24b790 100644
  function service_enabled() {
      return file_executable("/etc/rc.d/S99" + SERVICE_NAME);
  }
-@@ -875,17 +886,6 @@ function sing_box_running() {
+@@ -911,17 +922,6 @@ function sing_box_running() {
      ]);
  }
  
@@ -606,32 +600,6 @@ index d18a9fa6..9f24b790 100644
  function forkop_running() {
      return module_success(LIB_DIR + "/service/state.uc", [
          "forkop-stably-running",
-diff --git a/forkop/files/usr/lib/singbox/generator.uc b/forkop/files/usr/lib/singbox/generator.uc
-index 81ab759f..ebc0af5a 100644
---- a/forkop/files/usr/lib/singbox/generator.uc
-+++ b/forkop/files/usr/lib/singbox/generator.uc
-@@ -6366,6 +6366,10 @@ function covering_routed_dns_server(rule) {
-     return found ? server : "";
- }
- 
-+function dns_action_server_tag(section_name) {
-+    return runtime_constants.tag(section_name, "dns-server");
-+}
-+
- function push_dns_route_resolve(config, section, dns_rule) {
-     if (!dns_answer_is_route(section) || engine.is_xray_primary())
-         return;
-@@ -6399,10 +6403,6 @@ function push_dns_action_answer(config, section, dns_rule, rewrite_ttl) {
-     push_dns_matcher_rule(config, dns_rule);
- }
- 
--function dns_action_server_tag(section_name) {
--    return runtime_constants.tag(section_name, "dns-server");
--}
--
- function dns_action_detour_tag(section) {
-     if (!bool_option(section, "dns_detour_enabled", false))
-         return "";
 -- 
 2.43.0
 
