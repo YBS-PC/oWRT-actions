@@ -1,0 +1,1071 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 7 Nov 2026 12:00:00 +0000
+Subject: [PATCH] luci-app-bandix: traffic monitor only
+
+The app is reduced to the traffic monitor: the totals for LAN and WAN,
+the realtime chart (all devices or one, LAN, WAN or both), the device
+list with the current rate and the volume for a period, the usage
+ranking and the traffic timeline. Removed:
+
+- the Connections and DNS pages (menu entries);
+- on the status page: rate limits (global limit, whitelist, schedule
+  rules), traffic quotas, the device settings dialog (hostname, limits,
+  quota), deleting devices one by one or selected, and the
+  Save/Apply/Reset buttons, which do nothing on this page;
+- on the settings page: the update check and install, the feedback
+  link, the push URLs that send data to a remote endpoint, and the
+  connection and DNS sections.
+
+The status page no longer polls the quotas every second and the
+schedule rules every five seconds (each call runs the rpcd script and
+curl on the router), and no longer asks GitHub for updates each time it
+is opened.
+
+rpcd answers only the methods of the monitor (device status, metrics,
+ranking, increments, version, clear data, restart); the others return
+"Method is disabled in this build". The ACL grants reading the monitor
+data and writing only the settings, clear data and restart. Before, the
+read part of the ACL also held methods that change data and
+installUpdate, which downloaded any URL from the request and installed
+it with "apk add --allow-untrusted".
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Uo9XQuT7u6ShTYdi2S3Anq
+---
+ .../resources/view/bandix/index.js            | 369 +-----------------
+ .../resources/view/bandix/settings.js         | 365 -----------------
+ .../root/usr/libexec/rpcd/luci.bandix         |   7 +
+ .../share/luci/menu.d/luci-app-bandix.json    |  16 -
+ .../usr/share/rpcd/acl.d/luci-app-bandix.json |  63 +--
+ 5 files changed, 24 insertions(+), 796 deletions(-)
+
+diff --git a/luci-app-bandix/htdocs/luci-static/resources/view/bandix/index.js b/luci-app-bandix/htdocs/luci-static/resources/view/bandix/index.js
+index 1eb15692..57f3d348 100644
+--- a/luci-app-bandix/htdocs/luci-static/resources/view/bandix/index.js
++++ b/luci-app-bandix/htdocs/luci-static/resources/view/bandix/index.js
+@@ -1722,9 +1722,8 @@ return view.extend({
+                 
+                 .device-card {
+                     display: grid;
+-                    grid-template-columns: 16px minmax(0, 1fr);
++                    grid-template-columns: minmax(0, 1fr);
+                     align-items: start;
+-                    column-gap: 6px;
+                     border: 1px solid rgba(0, 0, 0, 0.1);
+                     border-radius: 8px;
+                     padding: 12px;
+@@ -1740,8 +1739,8 @@ return view.extend({
+                     padding-top: 4px;
+                 }
+ 
+-                .device-card > :not(.device-card-selection) {
+-                    grid-column: 2;
++                .device-card > * {
++                    grid-column: 1;
+                     min-width: 0;
+                 }
+                 
+@@ -3039,10 +3038,7 @@ return view.extend({
+             E('div', {
+                 'class': 'bandix-alert' + (getThemeType() === 'wide' ? ' wide-theme' : '')
+             }, [
+-                E('div', { 'style': 'display: flex; align-items: center; gap: 8px;' }, [
+-                    E('span', { 'style': 'font-size: 1rem;' }, '⚠'),
+-                    E('span', {}, _("Rate limiting only applies to WAN traffic."))
+-                ]),
++                E('div', {}),
+                 E('div', { 'class': 'bandix-badge', 'id': 'device-count' }, _('Online Devices') + ': 0 / 0')
+             ]),
+ 
+@@ -3089,8 +3085,7 @@ return view.extend({
+             E('div', { 'class': 'cbi-section' }, [
+                 E('h3', { 'class': 'history-header', 'style': 'display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px' }, [
+                     E('div', { style: 'display:flex;align-items:center;flex-wrap:wrap;gap:16px' }, [
+-                        E('span', { style: 'white-space:nowrap' }, _('Device List')),
+-                        deviceSelection.toolbar
++                        E('span', { style: 'white-space:nowrap' }, _('Device List'))
+                     ]),
+                     E('div', { 'class': 'device-toolbar' }, [
+                         E('div', { 'class': 'device-group' }, [
+@@ -3109,10 +3104,6 @@ return view.extend({
+                                 E('option', { 'value': 'simple', 'selected': (localStorage.getItem('bandix_device_mode') !== 'detailed') ? 'selected' : null }, _('Simple Mode')),
+                                 E('option', { 'value': 'detailed', 'selected': (localStorage.getItem('bandix_device_mode') === 'detailed') ? 'selected' : null }, _('Detailed Mode'))
+                             ])
+-                        ]),
+-                        E('div', { 'class': 'device-group' }, [
+-                            E('span', { 'class': 'device-group-label' }, _('Global Rate Limit')),
+-                            E('span', { 'class': 'cbi-button cbi-button-action', 'id': 'bandix_whitelist_badge', 'style': 'cursor: pointer; user-select: none;' }, _('Loading...'))
+                         ])
+                     ])
+                 ]),
+@@ -3122,9 +3113,7 @@ return view.extend({
+                             E('tr', {}, [
+                                 E('th', {}, _('Device Info')),
+                                 E('th', {}, _('LAN Traffic')),
+-                                E('th', {}, _('WAN Traffic')),
+-                                E('th', {}, _('Rules / Quota')),
+-                                E('th', {}, _('Actions'))
++                                E('th', {}, _('WAN Traffic'))
+                             ])
+                         ]),
+                         E('tbody', {})
+@@ -5975,8 +5964,7 @@ return view.extend({
+             var timeRange = getTimeRangeForPeriod(devicePeriod);
+ 
+             return Promise.all([
+-                (devicePeriod === 'all') ? callStatus() : callStatus(timeRange.start_ms, timeRange.end_ms),
+-                fetchAllScheduleRules()
++                (devicePeriod === 'all') ? callStatus() : callStatus(timeRange.start_ms, timeRange.end_ms)
+             ]).then(function (results) {
+                 var result = results[0];
+                 var trafficDiv = document.getElementById('traffic-status');
+@@ -6250,9 +6238,7 @@ return view.extend({
+                         E('tr', {}, [
+                             createSortableHeader(_('Device Info'), 'online'),
+                             createSplitHeader(_('LAN Traffic'), 'lan_speed', 'lan_traffic'),
+-                            createSplitHeader(_('WAN Traffic'), 'wan_speed', 'wan_traffic'),
+-                            E('th', {}, _('Rules / Quota')),
+-                            E('th', {}, _('Actions'))
++                            createSplitHeader(_('WAN Traffic'), 'wan_speed', 'wan_traffic')
+                         ])
+                     ]),
+                     E('tbody', {})
+@@ -6282,36 +6268,6 @@ return view.extend({
+                     var isOnline = isDeviceOnline(device);
+                     var deviceQuota = getTrafficQuotaForDevice(device.mac);
+ 
+-                    var buttonText = _('Settings');
+-
+-                    var actionButton = E('button', {
+-                        'class': 'cbi-button cbi-button-action',
+-                        'title': _('Settings')
+-                    }, buttonText);
+-
+-                    actionButton.addEventListener('click', function () {
+-                        showDeviceSettingsModal(device);
+-                    });
+-
+-                    var deleteButton = E('button', {
+-                        'class': 'cbi-button cbi-button-reset',
+-                        'title': _('Delete Device')
+-                    }, '\u2715');
+-                    deleteButton.addEventListener('click', function (e) {
+-                        e.stopPropagation();
+-                        showConfirmDialog(
+-                            _('Delete Device'),
+-                            _('Are you sure you want to delete this device? Traffic history will be removed.'),
+-                            function () {
+-                                callDeleteDevice(device.mac).then(function () {
+-                                    updateDeviceData();
+-                                }).catch(function (err) {
+-                                    ui.addNotification(null, E('p', {}, _('Failed to delete device')), 'error');
+-                                });
+-                            }
+-                        );
+-                    });
+-
+                     // 获取当前显示模式
+                     // 移动端强制使用 SimpleMode
+                     var screenWidth = window.innerWidth || document.documentElement.clientWidth;
+@@ -6370,10 +6326,7 @@ return view.extend({
+                     var row = E('tr', {}, [
+                         // 设备信息
+                         E('td', {}, [
+-                            E('div', { 'class': 'device-info-selection' }, [
+-                                deviceSelection.checkbox(device),
+-                                E('div', { 'class': 'device-info' }, deviceInfoElements)
+-                            ])
++                            E('div', { 'class': 'device-info' }, deviceInfoElements)
+                         ]),
+ 
+                         // LAN 流量
+@@ -6406,153 +6359,6 @@ return view.extend({
+                                     E('span', { 'class': 'traffic-total' }, '(' + formatSize(device.w_rx_b || 0) + ')')
+                                 ])
+                             ])
+-                        ]),
+-
+-                        // 定时限速规则
+-                        (function () {
+-                            var activeRules = getActiveRulesForDevice(device.mac);
+-                            var allDeviceRules = allScheduleRules.filter(function (r) { return r && r.mac === device.mac; });
+-
+-                            var rulesInfo = E('div', { 'class': 'schedule-rules-info' }, []);
+-
+-                            if (allDeviceRules.length === 0) {
+-                                rulesInfo.appendChild(E('div', { 'style': 'font-size: 0.75rem; opacity: 0.6;' }, '-'));
+-                            } else {
+-                                // 显示规则总数
+-                                rulesInfo.appendChild(E('div', {
+-                                    'style': 'font-size: 0.75rem; font-weight: 600; margin-bottom: 4px;'
+-                                }, allDeviceRules.length + ' ' + (allDeviceRules.length === 1 ? _('rule') : _('rules'))));
+-
+-                                // 显示当前生效的规则
+-                                if (activeRules.length > 0) {
+-                                    // 合并多个规则的限制值
+-                                    var mergedLimits = mergeActiveRulesLimits(activeRules);
+-                                    var uploadLimit = mergedLimits.uploadLimit;
+-                                    var downloadLimit = mergedLimits.downloadLimit;
+-
+-                                    // 显示限速值（箭头固定颜色，文字默认颜色）
+-                                    var limitsContainer = E('div', {
+-                                        'style': 'font-size: 0.75rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;'
+-                                    });
+-
+-                                    // 上传限速（橙色箭头）
+-                                    var uploadSpan = E('span', {});
+-                                    uploadSpan.appendChild(E('span', { 'style': 'color: ' + BANDIX_COLOR_UPLOAD + ';' }, '↑'));
+-                                    uploadSpan.appendChild(document.createTextNode(uploadLimit > 0 ? formatByterate(uploadLimit, speedUnit) : _('Unlimited')));
+-                                    limitsContainer.appendChild(uploadSpan);
+-
+-                                    // 下载限速（青色箭头）
+-                                    var downloadSpan = E('span', {});
+-                                    downloadSpan.appendChild(E('span', { 'style': 'color: ' + BANDIX_COLOR_DOWNLOAD + ';' }, '↓'));
+-                                    downloadSpan.appendChild(document.createTextNode(downloadLimit > 0 ? formatByterate(downloadLimit, speedUnit) : _('Unlimited')));
+-                                    limitsContainer.appendChild(downloadSpan);
+-
+-                                    rulesInfo.appendChild(limitsContainer);
+-                                } else {
+-                                    rulesInfo.appendChild(E('div', {
+-                                        'style': 'font-size: 0.75rem; opacity: 0.5;'
+-                                    }, _('No active rule')));
+-                                }
+-                            }
+-
+-                            // PC 端添加鼠标悬浮事件（显示所有规则）- 只要有规则就绑定事件
+-                            var screenWidth = window.innerWidth || document.documentElement.clientWidth;
+-                            if (screenWidth > 768 && allDeviceRules.length > 0) {
+-                                rulesInfo.onmouseenter = function (evt) {
+-                                    var tooltip = document.getElementById('schedule-rules-tooltip');
+-                                    if (!tooltip) return;
+-
+-                                    var html = buildScheduleRulesTooltipHtml(allDeviceRules, activeRules, speedUnit);
+-                                    if (!html) return;
+-
+-                                    tooltip.innerHTML = html;
+-
+-
+-                                    // 先隐藏，设置内容后再显示以计算尺寸
+-                                    tooltip.style.display = 'block';
+-                                    tooltip.style.visibility = 'hidden';
+-                                    tooltip.style.left = '-9999px';
+-                                    tooltip.style.top = '-9999px';
+-
+-                                    // 强制浏览器计算尺寸
+-                                    var tw = tooltip.offsetWidth || 0;
+-                                    var th = tooltip.offsetHeight || 0;
+-
+-                                    if (tw === 0 || th === 0) {
+-                                        tooltip.style.display = 'none';
+-                                        return;
+-                                    }
+-
+-                                    tooltip.style.visibility = 'visible';
+-
+-                                    var padding = 12;
+-                                    var maxX = window.innerWidth - 4;
+-                                    var maxY = window.innerHeight - 4;
+-
+-                                    var rect = evt.currentTarget.getBoundingClientRect();
+-                                    var cx = rect.left + rect.width / 2;
+-                                    var cy = rect.top + rect.height / 2;
+-
+-                                    // 计算位置：优先显示在右侧，如果空间不足则显示在左侧
+-                                    var baseX = cx + padding;
+-                                    var baseY = cy - th / 2;
+-
+-                                    if (baseX + tw > maxX) {
+-                                        baseX = cx - tw - padding;
+-                                    }
+-
+-                                    if (baseY < 4) baseY = 4;
+-                                    if (baseY + th > maxY) baseY = maxY - th - 4;
+-
+-                                    tooltip.style.left = baseX + 'px';
+-                                    tooltip.style.top = baseY + 'px';
+-                                };
+-
+-                                rulesInfo.onmouseleave = function () {
+-                                    var tooltip = document.getElementById('schedule-rules-tooltip');
+-                                    if (tooltip) {
+-                                        tooltip.style.display = 'none';
+-                                        tooltip.style.visibility = 'visible';
+-                                    }
+-                                };
+-
+-                                rulesInfo.onmousemove = function (evt) {
+-                                    var tooltip = document.getElementById('schedule-rules-tooltip');
+-                                    if (!tooltip || tooltip.style.display === 'none') return;
+-
+-                                    var tw = tooltip.offsetWidth || 0;
+-                                    var th = tooltip.offsetHeight || 0;
+-                                    var padding = 12;
+-                                    var maxX = window.innerWidth - 4;
+-                                    var maxY = window.innerHeight - 4;
+-
+-                                    var rect = evt.currentTarget.getBoundingClientRect();
+-                                    var cx = rect.left + rect.width / 2;
+-                                    var cy = rect.top + rect.height / 2;
+-
+-                                    var baseX = cx + padding;
+-                                    var baseY = cy - th / 2;
+-
+-                                    if (baseX + tw > maxX) {
+-                                        baseX = cx - tw - padding;
+-                                    }
+-
+-                                    if (baseY < 4) baseY = 4;
+-                                    if (baseY + th > maxY) baseY = maxY - th - 4;
+-
+-                                    tooltip.style.left = baseX + 'px';
+-                                    tooltip.style.top = baseY + 'px';
+-                                };
+-                            }
+-
+-                            var quotaCell = buildTrafficQuotaCell(device.mac);
+-                            return E('td', {}, quotaCell ? [rulesInfo, quotaCell] : rulesInfo);
+-                        })(),
+-
+-                        // 操作
+-                        E('td', { 'class': 'device-actions' }, [
+-                            actionButton,
+-                            deleteButton
+                         ])
+                     ]);
+ 
+@@ -6560,7 +6366,6 @@ return view.extend({
+ 
+                     // 创建移动端卡片
+                     var card = E('div', { 'class': 'device-card' }, [
+-                        E('div', { 'class': 'device-card-selection' }, [deviceSelection.checkbox(device)]),
+                         // 卡片头部
+                         E('div', { 'class': 'device-card-header' }, [
+                             E('div', { 'class': 'device-card-name' }, [
+@@ -6579,39 +6384,6 @@ return view.extend({
+                                         })()
+                                     ])
+                                 ])
+-                            ]),
+-                            E('div', { 'class': 'device-card-action' }, [
+-                                (function () {
+-                                    var cardActionBtn = E('button', {
+-                                        'class': 'cbi-button cbi-button-action',
+-                                        'title': _('Settings')
+-                                    }, buttonText);
+-                                    cardActionBtn.addEventListener('click', function () {
+-                                        showDeviceSettingsModal(device);
+-                                    });
+-                                    return cardActionBtn;
+-                                })(),
+-                                (function () {
+-                                    var cardDeleteBtn = E('button', {
+-                                        'class': 'cbi-button cbi-button-reset',
+-                                        'title': _('Delete Device')
+-                                    }, '\u2715');
+-                                    cardDeleteBtn.addEventListener('click', function (e) {
+-                                        e.stopPropagation();
+-                                        showConfirmDialog(
+-                                            _('Delete Device'),
+-                                            _('Are you sure you want to delete this device? Traffic history will be removed.'),
+-                                            function () {
+-                                                callDeleteDevice(device.mac).then(function () {
+-                                                    updateDeviceData();
+-                                                }).catch(function (err) {
+-                                                    ui.addNotification(null, E('p', {}, _('Failed to delete device')), 'error');
+-                                                });
+-                                            }
+-                                        );
+-                                    });
+-                                    return cardDeleteBtn;
+-                                })()
+                             ])
+                         ]),
+                         // 卡片主要内容（WAN流量）
+@@ -6633,58 +6405,6 @@ return view.extend({
+                                 ])
+                             ])
+                         ]),
+-                        // 定时限速规则
+-                        (function () {
+-                            var activeRules = getActiveRulesForDevice(device.mac);
+-                            var allDeviceRules = allScheduleRules.filter(function (r) { return r && r.mac === device.mac; });
+-
+-                            if (allDeviceRules.length === 0) {
+-                                return E('div', { 'class': 'device-card-section device-card-rules' }, [
+-                                    E('div', { 'class': 'device-card-section-label' }, _('Schedule Rules')),
+-                                    E('div', { 'class': 'device-card-rules-empty' }, '-')
+-                                ]);
+-                            }
+-
+-                            var rulesContent = E('div', { 'class': 'device-card-rules-content' });
+-
+-                            // 显示规则总数
+-                            rulesContent.appendChild(E('div', {
+-                                'class': 'device-card-rules-count'
+-                            }, allDeviceRules.length + ' ' + (allDeviceRules.length === 1 ? _('rule') : _('rules'))));
+-
+-                            if (activeRules.length > 0) {
+-                                // 合并多个规则的限制值
+-                                var mergedLimits = mergeActiveRulesLimits(activeRules);
+-                                var uploadLimit = mergedLimits.uploadLimit;
+-                                var downloadLimit = mergedLimits.downloadLimit;
+-
+-                                // 显示限速值
+-                                var limitsText = [];
+-                                limitsText.push('↑' + (uploadLimit > 0 ? formatByterate(uploadLimit, speedUnit) : _('Unlimited')));
+-                                limitsText.push('↓' + (downloadLimit > 0 ? formatByterate(downloadLimit, speedUnit) : _('Unlimited')));
+-
+-                                rulesContent.appendChild(E('div', {
+-                                    'class': 'device-card-rules-active-time'
+-                                }, limitsText.join(' ')));
+-                            } else {
+-                                rulesContent.appendChild(E('div', {
+-                                    'class': 'device-card-rules-inactive'
+-                                }, _('No active rule')));
+-                            }
+-
+-                            return E('div', { 'class': 'device-card-section device-card-rules' }, [
+-                                E('div', { 'class': 'device-card-section-label' }, _('Schedule Rules')),
+-                                rulesContent
+-                            ]);
+-                        })(),
+-                        (function () {
+-                            var quotaCell = buildTrafficQuotaCell(device.mac);
+-                            if (!quotaCell) return '';
+-                            return E('div', { 'class': 'device-card-section' }, [
+-                                E('div', { 'class': 'device-card-section-label' }, _('Traffic Quota')),
+-                                quotaCell
+-                            ]);
+-                        })(),
+                         // LAN流量（直接显示，不需要展开/收起）
+                         E('div', { 'class': 'device-card-section', 'style': 'margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(0, 0, 0, 0.1);' }, [
+                             E('div', { 'class': 'device-card-section-label' }, _('LAN Traffic')),
+@@ -7895,35 +7615,10 @@ return view.extend({
+         // 轮询获取数据
+         poll.add(updateDeviceData, 1);
+ 
+-        // 轮询获取定时限速规则（每5秒）
+-        poll.add(function () {
+-            return fetchAllScheduleRules().then(function () {
+-                // 规则更新后，重新渲染表格以显示最新的规则状态
+-                if (window.__bandixRenderTable) {
+-                    window.__bandixRenderTable();
+-                }
+-            });
+-        }, 5000);
+-
+-        // 轮询获取流量配额状态（每1秒）
+-        poll.add(function () {
+-            return fetchAllTrafficQuotas().then(function () {
+-                if (window.__bandixRenderTable) window.__bandixRenderTable();
+-                if (currentQuotaDevice) {
+-                    renderTrafficQuotaForm(getTrafficQuotaForDevice(currentQuotaDevice.mac), quotaFormDirty);
+-                }
+-            });
+-        }, 1);
+-
+         // Traffic Statistics 不再自动刷新，改为手动查询
+ 
+         // 立即执行一次，不等待轮询
+         updateDeviceData();
+-        refreshWhitelistStatus();
+-        fetchAllScheduleRules();
+-        fetchAllTrafficQuotas().then(function () {
+-            if (window.__bandixRenderTable) window.__bandixRenderTable();
+-        });
+ 
+         // 初始化时间范围查询功能
+         setTimeout(function () {
+@@ -8435,46 +8130,10 @@ return view.extend({
+             }, 100);
+         })();
+ 
+-        // 异步检查更新（不阻塞主流程）
+-        (function () {
+-            // 延迟执行，确保页面先完成初始化，更新检查可能需要网络请求
+-            setTimeout(function () {
+-                callCheckUpdate().then(function (result) {
+-                    if (!result) return;
+-
+-                    // 检查是否有更新（luci-app-bandix 或 bandix）
+-                    var hasUpdate = false;
+-                    if (result.luci_has_update === true || result.luci_has_update === '1' || result.luci_has_update === 1) {
+-                        hasUpdate = true;
+-                    }
+-                    if (result.bandix_has_update === true || result.bandix_has_update === '1' || result.bandix_has_update === 1) {
+-                        hasUpdate = true;
+-                    }
+-
+-                    // 显示或隐藏更新提示
+-                    var updateBadge = document.getElementById('bandix-update-badge');
+-                    if (updateBadge) {
+-                        if (hasUpdate) {
+-                            updateBadge.style.display = 'inline-block';
+-                            // 点击跳转到设置页面
+-                            updateBadge.onclick = function () {
+-                                window.location.href = '/cgi-bin/luci/admin/network/bandix/settings';
+-                            };
+-                            updateBadge.title = _('Update available, click to go to settings');
+-                        } else {
+-                            updateBadge.style.display = 'none';
+-                        }
+-                    }
+-                }).catch(function (err) {
+-                    // 静默失败，不影响页面功能
+-                    console.debug('Failed to check update:', err);
+-                });
+-            }, 500);
+-        })();
+-
+-
+-
+-
+         return view;
+-    }
++    },
++
++    handleSaveApply: null,
++    handleSave: null,
++    handleReset: null
+ });
+diff --git a/luci-app-bandix/htdocs/luci-static/resources/view/bandix/settings.js b/luci-app-bandix/htdocs/luci-static/resources/view/bandix/settings.js
+index a80b22a1..1e6e964c 100644
+--- a/luci-app-bandix/htdocs/luci-static/resources/view/bandix/settings.js
++++ b/luci-app-bandix/htdocs/luci-static/resources/view/bandix/settings.js
+@@ -4,7 +4,6 @@
+ 'require ui';
+ 'require uci';
+ 'require rpc';
+-'require bandix.geoip as geoip';
+ 'require tools.widgets as widgets';
+ 
+ 
+@@ -323,290 +322,6 @@ return view.extend({
+ 			return 'luci-app-bandix: ' + luciVersion + ' / bandix: ' + bandixVersion;
+ 		};
+ 
+-		// 添加检查更新按钮
+-		var checkUpdateOption = s.option(form.Button, 'check_update', _('Check for Updates'));
+-		checkUpdateOption.inputtitle = _('Check for Updates');
+-		checkUpdateOption.inputstyle = 'apply';
+-		checkUpdateOption.onclick = function () {
+-			var button = this;
+-			var originalText = button.inputtitle;
+-
+-			// 显示加载状态
+-			button.inputtitle = _('Checking...');
+-			button.disabled = true;
+-
+-			return callCheckUpdate().then(function (result) {
+-				// 恢复按钮状态
+-				button.inputtitle = originalText;
+-				button.disabled = false;
+-
+-				if (!result) {
+-					ui.addNotification(null, E('p', _('Failed to check for updates')), 'error');
+-					return;
+-				}
+-
+-				var messages = [];
+-				var hasUpdate = false;
+-
+-				// 显示调试信息（架构、包管理器和资产数量）
+-				if (result.detected_arch) {
+-					var debugInfo = E('div', {
+-						'style': 'font-size: 0.75rem; color: #6b7280; margin-bottom: 12px; padding: 8px; background: rgba(0,0,0,0.02); border-radius: 4px;'
+-					}, [
+-						E('div', {}, _('Detected Architecture') + ': ' + result.detected_arch),
+-						E('div', {}, _('Package Manager') + ': ' + (result.detected_pkg_manager || _('Unknown'))),
+-						E('div', {}, _('LuCI Assets') + ': ' + (result.luci_asset_count || 0)),
+-						E('div', {}, _('Bandix Assets') + ': ' + (result.bandix_asset_count || 0))
+-					]);
+-					messages.push(debugInfo);
+-				}
+-
+-				// 检查 luci-app-bandix 更新
+-				if (result.luci_has_update === true || result.luci_has_update === '1' || result.luci_has_update === 1) {
+-					hasUpdate = true;
+-					var luciContainer = E('div', { 'style': 'margin-bottom: 20px;' });
+-
+-					var luciMsg = E('p', { 'style': 'font-weight: 600; margin-bottom: 8px;' },
+-						_('LuCI App has update: ') + (result.current_luci_version || _('Unknown')) +
+-						' → ' + (result.latest_luci_version || _('Unknown'))
+-					);
+-					luciContainer.appendChild(luciMsg);
+-
+-					// 显示更新日志（解析 Markdown）
+-					if (result.luci_release_body) {
+-						var changelogDiv = E('div', {
+-							'style': 'background: rgba(0,0,0,0.05); padding: 12px; border-radius: 4px; margin: 8px 0; max-height: 300px; overflow-y: auto; font-size: 0.875rem; line-height: 1.6;'
+-						});
+-						changelogDiv.innerHTML = parseMarkdown(result.luci_release_body);
+-						luciContainer.appendChild(changelogDiv);
+-					}
+-
+-					// 检查是否有错误（找不到匹配格式的包）
+-					if (result.luci_error) {
+-						var errorMsg = E('div', {
+-							'style': 'background: rgba(239, 68, 68, 0.1); color: #dc2626; padding: 10px; border-radius: 4px; margin: 8px 0; font-size: 0.875rem;'
+-						}, result.luci_error);
+-						luciContainer.appendChild(errorMsg);
+-					}
+-
+-					// 添加下载安装按钮（只有在有下载链接时才显示）
+-					if (result.luci_download_url) {
+-						// 创建状态提示区域
+-						var statusDiv = E('div', {
+-							'style': 'margin-top: 8px; padding: 10px; border-radius: 4px; display: none;'
+-						});
+-						luciContainer.appendChild(statusDiv);
+-
+-						var installBtn = E('button', {
+-							'class': 'btn cbi-button-action',
+-							'style': 'margin-top: 8px;',
+-							'click': function () {
+-								var installButton = this;
+-								var originalBtnText = installButton.textContent;
+-
+-								installButton.textContent = _('Installing...');
+-								installButton.disabled = true;
+-
+-								// 显示开始安装的提示
+-								statusDiv.style.display = 'block';
+-								statusDiv.style.background = 'rgba(59, 130, 246, 0.1)';
+-								statusDiv.style.color = '#1e40af';
+-								statusDiv.textContent = _('Starting installation... The page will refresh automatically in 30 seconds.');
+-
+-								// 对于 luci-app-bandix 安装，由于会重启 uhttpd/rpcd 导致连接断开，
+-								// 不等待响应，固定 30 秒后刷新页面，避免刷新过早未完成安装
+-								callInstallUpdate('luci', result.luci_download_url).catch(function (err) {
+-								});
+-
+-								setTimeout(function () {
+-									window.location.reload();
+-								}, 30000);
+-							}
+-						}, _('Download and Install'));
+-						luciContainer.appendChild(installBtn);
+-					}
+-
+-					// 添加手动下载链接
+-					if (result.luci_update_url) {
+-						var manualLink = E('a', {
+-							'href': result.luci_update_url,
+-							'target': '_blank',
+-							'style': 'display: inline-block; margin-left: 8px; margin-top: 8px;'
+-						}, _('Manual Download'));
+-						luciContainer.appendChild(manualLink);
+-					}
+-
+-					messages.push(luciContainer);
+-				} else {
+-					messages.push(E('p', {}, _('LuCI App is up to date: ') + (result.current_luci_version || result.latest_luci_version || _('Unknown'))));
+-				}
+-
+-				// 检查 bandix 更新
+-				if (result.bandix_has_update === true || result.bandix_has_update === '1' || result.bandix_has_update === 1) {
+-					hasUpdate = true;
+-					var bandixContainer = E('div', { 'style': 'margin-bottom: 20px;' });
+-
+-					var bandixMsg = E('p', { 'style': 'font-weight: 600; margin-bottom: 8px;' },
+-						_('Bandix has update: ') + (result.current_bandix_version || _('Unknown')) +
+-						' → ' + (result.latest_bandix_version || _('Unknown'))
+-					);
+-					bandixContainer.appendChild(bandixMsg);
+-
+-					// 显示更新日志（解析 Markdown）
+-					if (result.bandix_release_body) {
+-						var changelogDiv = E('div', {
+-							'style': 'background: rgba(0,0,0,0.05); padding: 12px; border-radius: 4px; margin: 8px 0; max-height: 300px; overflow-y: auto; font-size: 0.875rem; line-height: 1.6;'
+-						});
+-						changelogDiv.innerHTML = parseMarkdown(result.bandix_release_body);
+-						bandixContainer.appendChild(changelogDiv);
+-					}
+-
+-					// 检查是否有错误（找不到匹配格式的包）
+-					if (result.bandix_error) {
+-						var errorMsg = E('div', {
+-							'style': 'background: rgba(239, 68, 68, 0.1); color: #dc2626; padding: 10px; border-radius: 4px; margin: 8px 0; font-size: 0.875rem;'
+-						}, result.bandix_error);
+-						bandixContainer.appendChild(errorMsg);
+-					}
+-
+-					// 添加下载安装按钮（只有在有下载链接时才显示）
+-					if (result.bandix_download_url) {
+-						// 创建状态提示区域
+-						var statusDiv = E('div', {
+-							'style': 'margin-top: 8px; padding: 10px; border-radius: 4px; display: none;'
+-						});
+-						bandixContainer.appendChild(statusDiv);
+-
+-						var installBtn = E('button', {
+-							'class': 'btn cbi-button-action',
+-							'style': 'margin-top: 8px;',
+-							'click': function () {
+-								var installButton = this;
+-								var originalBtnText = installButton.textContent;
+-
+-								installButton.textContent = _('Installing...');
+-								installButton.disabled = true;
+-
+-								// 显示开始安装的提示
+-								statusDiv.style.display = 'block';
+-								statusDiv.style.background = 'rgba(59, 130, 246, 0.1)';
+-								statusDiv.style.color = '#1e40af';
+-								statusDiv.textContent = _('Starting installation...');
+-
+-								return callInstallUpdate('bandix', result.bandix_download_url).then(function (installResult) {
+-									// 判断成功：success 为 true 或 step 为 completed
+-									var isSuccess = installResult && (
+-										installResult.success === true ||
+-										installResult.success === 1 ||
+-										installResult.success === "true" ||
+-										installResult.success === "1" ||
+-										installResult.step === "completed"
+-									);
+-
+-									if (isSuccess) {
+-										installButton.textContent = originalBtnText;
+-										installButton.disabled = false;
+-										// 显示成功提示
+-										var successMsg = _('Bandix updated successfully!');
+-										if (installResult.message) {
+-											successMsg = installResult.message;
+-										}
+-										if (installResult.restart_exit_code !== undefined) {
+-											if (installResult.restart_exit_code === 0) {
+-												successMsg += ' ' + _('Service restarted successfully.');
+-											} else {
+-												successMsg += ' ' + _('Service restart may have failed. Please check manually.');
+-											}
+-										} else {
+-											successMsg += ' ' + _('Please restart the service.');
+-										}
+-										statusDiv.style.background = 'rgba(34, 197, 94, 0.1)';
+-										statusDiv.style.color = '#15803d';
+-										statusDiv.textContent = successMsg + ' ' + _('Page will refresh in 3 seconds.');
+-										// 3秒后刷新页面
+-										setTimeout(function () {
+-											window.location.reload();
+-										}, 3000);
+-									} else {
+-										installButton.textContent = originalBtnText;
+-										installButton.disabled = false;
+-										var errorMsg = installResult && installResult.error ? installResult.error : _('Installation failed');
+-										if (installResult && installResult.step) {
+-											errorMsg = _('Installation failed at step: ') + installResult.step + '. ' + errorMsg;
+-										}
+-										if (installResult && installResult.output) {
+-											// 截取输出信息的前500个字符，避免提示过长
+-											var output = installResult.output;
+-											if (output.length > 500) {
+-												output = output.substring(0, 500) + '...';
+-											}
+-											errorMsg += '\n' + _('Details: ') + output;
+-										}
+-										statusDiv.style.background = 'rgba(239, 68, 68, 0.1)';
+-										statusDiv.style.color = '#dc2626';
+-										statusDiv.innerHTML = errorMsg.replace(/\n/g, '<br>');
+-									}
+-								}).catch(function (err) {
+-									installButton.textContent = originalBtnText;
+-									installButton.disabled = false;
+-									var errorMsg = _('Installation failed: ') + (err.message || err || _('Unknown error'));
+-									statusDiv.style.background = 'rgba(239, 68, 68, 0.1)';
+-									statusDiv.style.color = '#dc2626';
+-									statusDiv.textContent = errorMsg;
+-								});
+-							}
+-						}, _('Download and Install'));
+-						bandixContainer.appendChild(installBtn);
+-					}
+-
+-					// 添加手动下载链接
+-					if (result.bandix_update_url) {
+-						var manualLink = E('a', {
+-							'href': result.bandix_update_url,
+-							'target': '_blank',
+-							'style': 'display: inline-block; margin-left: 8px; margin-top: 8px;'
+-						}, _('Manual Download'));
+-						bandixContainer.appendChild(manualLink);
+-					}
+-
+-					messages.push(bandixContainer);
+-				} else {
+-					messages.push(E('p', {}, _('Bandix is up to date: ') + (result.current_bandix_version || result.latest_bandix_version || _('Unknown'))));
+-				}
+-
+-				// 显示结果（添加关闭按钮）
+-				var title = hasUpdate ? _('Updates Available') : _('No Updates Available');
+-
+-				// 添加红色提示文字（如果有更新）
+-				if (hasUpdate) {
+-					var warningMsg = E('div', {
+-						'style': 'background: rgba(239, 68, 68, 0.1); color: #dc2626; padding: 12px; border-radius: 4px; margin-bottom: 16px; font-weight: 600;'
+-					}, _('Please clear your browser cache manually after updating.'));
+-					messages.unshift(warningMsg);
+-				}
+-
+-				// 创建弹窗内容，包含关闭按钮
+-				var modalContent = E('div', {}, messages);
+-
+-				// 添加关闭按钮
+-				var closeBtn = E('button', {
+-					'class': 'btn',
+-					'style': 'margin-top: 16px;',
+-					'click': ui.hideModal
+-				}, _('Close'));
+-
+-				modalContent.appendChild(closeBtn);
+-
+-				ui.showModal(title, modalContent);
+-			}).catch(function (err) {
+-				// 恢复按钮状态
+-				button.inputtitle = originalText;
+-				button.disabled = false;
+-				ui.addNotification(null, E('p', _('Failed to check for updates: ') + (err.message || err)), 'error');
+-			});
+-		};
+-
+-
+ 		// 添加清空数据按钮
+ 		o = s.option(form.Button, 'clear_data', _('Clear Traffic Data'));
+ 		o.inputtitle = _('Clear Traffic Data');
+@@ -672,15 +387,6 @@ return view.extend({
+ 		};
+ 
+ 
+-		// 添加意见反馈信息
+-		o = s.option(form.Button, 'feedback_info', _('Feedback'));
+-		o.inputtitle = _('Feedback');
+-		o.inputstyle = 'link';
+-		o.onclick = function () {
+-			window.open('https://github.com/timsaya', '_blank');
+-			return false;
+-		};
+-
+ 		// 2. 流量监控设置部分 (traffic)
+ 		s = m.section(form.NamedSection, 'traffic', 'traffic', _('Traffic Monitor Settings'));
+ 		s.description = _('Configure traffic monitoring related parameters');
+@@ -757,20 +463,6 @@ return view.extend({
+ 		o.default = '600';
+ 		o.rmempty = false;
+ 
+-		// 添加流量导出URL选项
+-		o = s.option(form.Value, 'traffic_export_url', _('Traffic Push URL'),
+-			_('Push traffic data to a remote HTTP endpoint (POST JSON). Leave empty to disable.'));
+-		o.datatype = 'string';
+-		o.placeholder = '';
+-		o.rmempty = true;
+-
+-		// 添加设备事件导出URL选项
+-		o = s.option(form.Value, 'traffic_event_url', _('Device Event Push URL'),
+-			_('Push device online/offline events to a remote HTTP endpoint (POST JSON on state change). Leave empty to disable.'));
+-		o.datatype = 'string';
+-		o.placeholder = '';
+-		o.rmempty = true;
+-
+ 		// 添加额外子网选项
+ 		o = s.option(form.Value, 'traffic_additional_subnets', _('Additional Subnets'),
+ 			_('Additional local subnets (comma-separated CIDR notation, e.g. \'192.168.2.0/24,10.0.0.0/8\'). Leave empty to use only interface subnet.'));
+@@ -783,63 +475,6 @@ return view.extend({
+ 		o.default = '0';
+ 		o.rmempty = false;
+ 
+-		// 3. 连接监控设置部分 (connections)
+-		s = m.section(form.NamedSection, 'connections', 'connections', _('Connection Monitor Settings'));
+-		s.description = _('Configure connection monitoring related parameters');
+-		s.addremove = false;
+-
+-		o = s.option(form.Flag, 'enabled', _('Enable Connection Monitoring'),
+-			_('Enable Bandix connection monitoring'));
+-		o.default = '0';
+-		o.rmempty = false;
+-
+-		o = s.option(form.DummyValue, '_geoip_manager', _('IP location database'));
+-		o.renderWidget = function () { return geoip.render(); };
+-
+-		o = s.option(form.Value, 'geoip_dir', _('Database directory'));
+-		o.default = '/usr/share/bandix-geoip';
+-		o.placeholder = '/usr/share/bandix-geoip';
+-		o.datatype = 'directory';
+-		o.rmempty = false;
+-
+-		// 4. DNS监控设置部分 (dns)
+-		s = m.section(form.NamedSection, 'dns', 'dns', _('DNS Monitor Settings'));
+-		s.description = _('Configure DNS monitoring related parameters');
+-		s.addremove = false;
+-
+-		o = s.option(form.Flag, 'enabled', _('Enable DNS Monitoring'),
+-			_('Enable Bandix DNS monitoring'));
+-		o.default = '0';
+-		o.rmempty = false;
+-
+-	// 添加DNS最大记录数选项
+-	o = s.option(form.Value, 'dns_max_records', _('DNS Max Records'),
+-		_('Set the maximum number of DNS query records to keep. Older records will be deleted when this limit is exceeded'));
+-	o.datatype = 'uinteger';
+-	o.placeholder = '10000';
+-	o.default = '10000';
+-	o.rmempty = false;
+-
+-	o = s.option(form.Flag, 'dns_enable_storage', _('Persist DNS Data'),
+-		_('Enable DNS data persistence functionality, data will only be persisted to disk when this option is enabled'));
+-	o.default = '0';
+-	o.rmempty = false;
+-
+-	o = s.option(form.ListValue, 'dns_flush_interval', _('DNS Data Flush Interval'),
+-		_('Set the interval for flushing DNS data to disk'));
+-	o.value('60', _('1 minute'));
+-	o.value('300', _('5 minutes'));
+-	o.value('600', _('10 minutes'));
+-	o.value('900', _('15 minutes'));
+-	o.value('1800', _('30 minutes'));
+-	o.value('3600', _('1 hour'));
+-	o.value('7200', _('2 hours'));
+-	o.value('43200', _('12 hours'));
+-	o.value('86400', _('24 hours'));
+-	o.default = '900';
+-	o.rmempty = false;
+-	o.depends('dns_enable_storage', '1');
+-
+ 	// 将 view 实例关联到 form map，以便在 cfgvalue 中访问
+ 	m.view = this;
+ 
+diff --git a/luci-app-bandix/root/usr/libexec/rpcd/luci.bandix b/luci-app-bandix/root/usr/libexec/rpcd/luci.bandix
+index 7b974332..8925f2a9 100755
+--- a/luci-app-bandix/root/usr/libexec/rpcd/luci.bandix
++++ b/luci-app-bandix/root/usr/libexec/rpcd/luci.bandix
+@@ -1634,6 +1634,13 @@ case "$1" in
+ 	json_cleanup
+ 	;;
+ 	call)
++		# Только монитор трафика: ограничения скорости, квоты, расписания,
++		# соединения, DNS, GeoIP, правка устройств и обновления отключены.
++		case "$2" in
++			getStatus|getMetrics|getMetricsDay|getMetricsWeek|getMetricsMonth|\
++			getTrafficUsageRanking|getTrafficUsageIncrements|getVersion|clearData|restartService) ;;
++			*) make_error "Method is disabled in this build"; exit 0 ;;
++		esac
+ 		case "$2" in
+ 			getStatus)
+ 				start_ms=""
+diff --git a/luci-app-bandix/root/usr/share/luci/menu.d/luci-app-bandix.json b/luci-app-bandix/root/usr/share/luci/menu.d/luci-app-bandix.json
+index d57191fd..dff4231b 100644
+--- a/luci-app-bandix/root/usr/share/luci/menu.d/luci-app-bandix.json
++++ b/luci-app-bandix/root/usr/share/luci/menu.d/luci-app-bandix.json
+@@ -19,22 +19,6 @@
+ 			"path": "bandix/index"
+ 		}
+ 	},
+-	"admin/network/bandix/connection": {
+-		"title": "Connections",
+-		"order": 15,
+-		"action": {
+-			"type": "view",
+-			"path": "bandix/connection"
+-		}
+-	},
+-	"admin/network/bandix/dns": {
+-		"title": "DNS",
+-		"order": 20,
+-		"action": {
+-			"type": "view",
+-			"path": "bandix/dns"
+-		}
+-	},
+ 	"admin/network/bandix/settings": {
+ 		"title": "Settings",
+ 		"order": 25,
+diff --git a/luci-app-bandix/root/usr/share/rpcd/acl.d/luci-app-bandix.json b/luci-app-bandix/root/usr/share/rpcd/acl.d/luci-app-bandix.json
+index f4e88187..793200d2 100644
+--- a/luci-app-bandix/root/usr/share/rpcd/acl.d/luci-app-bandix.json
++++ b/luci-app-bandix/root/usr/share/rpcd/acl.d/luci-app-bandix.json
+@@ -9,26 +9,9 @@
+ 					"getMetricsDay",
+ 					"getMetricsWeek",
+ 					"getMetricsMonth",
+-					"getConnection",
+-					"getConnectionFlows",
+-					"setHostname",
+-					"deleteDevice",
+-					"getDnsQueries",
+-					"getDnsStats",
+-					"getScheduleLimits",
+-					"setScheduleLimit",
+-					"deleteScheduleLimit",
+-					"clearData",
+-					"restartService",
+-					"getVersion",
+-					"getSystemArch",
+-					"checkUpdate",
+-					"installUpdate",
+ 					"getTrafficUsageRanking",
+ 					"getTrafficUsageIncrements",
+-					"getRateLimitWhitelist",
+-					"getTrafficQuotas",
+-					"getGeoipStatus"
++					"getVersion"
+ 				]
+ 			},
+ 			"uci": [
+@@ -38,53 +21,13 @@
+ 		"write": {
+ 			"ubus": {
+ 				"luci.bandix": [
+-					"getStatus",
+-					"getMetrics",
+-					"getMetricsDay",
+-					"getMetricsWeek",
+-					"getMetricsMonth",
+-					"getConnection",
+-					"getConnectionFlows",
+-					"setHostname",
+-					"deleteDevice",
+-					"deleteDevices",
+-					"getDnsQueries",
+-					"getDnsStats",
+-					"getScheduleLimits",
+-					"setScheduleLimit",
+-					"deleteScheduleLimit",
+ 					"clearData",
+-					"restartService",
+-					"getVersion",
+-					"getSystemArch",
+-					"checkUpdate",
+-					"installUpdate",
+-					"getTrafficUsageRanking",
+-					"getTrafficUsageIncrements",
+-					"getRateLimitWhitelist",
+-					"getRateLimitWhitelistEnabled",
+-					"setRateLimitWhitelistEnabled",
+-					"addRateLimitWhitelist",
+-					"deleteRateLimitWhitelist",
+-					"setDefaultRateLimit",
+-					"updateScheduleLimit",
+-					"getTrafficQuotas",
+-					"setTrafficQuota",
+-					"setDirectionalTrafficQuota",
+-					"setTrafficQuotaConfig",
+-					"deleteTrafficQuota",
+-					"getGeoipStatus",
+-					"manageGeoip"
++					"restartService"
+ 				]
+ 			},
+ 			"uci": [
+ 				"bandix"
+-			],
+-			"file": {
+-				"/tmp/bandix-geoip-upload.mmdb": [
+-					"write"
+-				]
+-			}
++			]
+ 		}
+ 	}
+ }
+-- 
+2.43.0
+
