@@ -119,10 +119,10 @@ index ad62f6a0..61413501 100644
    grep -Fq "uses XHTTP transport, but sing-box-extended is not installed" "$WORK_DIR/$fixture-stable.stderr" ||
      fail "explicit $fixture XHTTP failure should explain the extended requirement"
 diff --git a/trafira/files/usr/lib/singbox/generator.uc b/trafira/files/usr/lib/singbox/generator.uc
-index 64c3a147..d02678a3 100644
+index 9f1accd5..47027b43 100644
 --- a/trafira/files/usr/lib/singbox/generator.uc
 +++ b/trafira/files/usr/lib/singbox/generator.uc
-@@ -27,6 +27,9 @@ let runtime_supports_xhttp = true;
+@@ -28,6 +28,9 @@ let runtime_supports_xhttp = true;
  let runtime_sing_box_version = "";
  let runtime_subscription_tags = {};
  let runtime_section_states = {};
@@ -132,7 +132,7 @@ index 64c3a147..d02678a3 100644
  let runtime_response_rulesets = {};
  
  let as_string = common.as_string;
-@@ -176,6 +179,8 @@ function uci_cursor() {
+@@ -177,6 +180,8 @@ function uci_cursor() {
  }
  
  function runtime_generate_unsupported(reason) {
@@ -141,7 +141,7 @@ index 64c3a147..d02678a3 100644
      warn(reason, "\n");
      exit(2);
  }
-@@ -1695,8 +1700,8 @@ function apply_link_transport(outbound, query) {
+@@ -1704,8 +1709,8 @@ function apply_link_transport(outbound, query) {
          optional_query_string(result, "host", as_string(query.host || "") != "" ? query.host : query.sni);
      }
      else {
@@ -152,7 +152,7 @@ index 64c3a147..d02678a3 100644
      }
  
      outbound.transport = result;
-@@ -1995,11 +2000,25 @@ function add_manual_proxy_link(config, state, section_name, manual_index, link,
+@@ -2033,11 +2038,25 @@ function add_manual_proxy_link(config, state, section_name, manual_index, link,
          tag_name = unique_tag(tag_name, taken);
      taken[tag_name] = true;
  
@@ -180,7 +180,7 @@ index 64c3a147..d02678a3 100644
      push(config.outbounds, outbound);
      push(selector_tags, tag_name);
      push(urltest_candidate_tags, tag_name);
-@@ -2198,8 +2217,9 @@ function add_connections_outbound(config, section, taken) {
+@@ -2236,8 +2255,9 @@ function add_connections_outbound(config, section, taken) {
      add_connection_interfaces(config, state, section, taken, selector_tags, urltest_candidate_tags);
      add_connection_json_outbounds(config, state, section, taken, selector_tags, urltest_candidate_tags);
  
@@ -191,7 +191,7 @@ index 64c3a147..d02678a3 100644
  
      if (section_needs_country_is(section)) {
          let previous_state = read_json_file(runtime_subscription.section_cache_path(section_name));
-@@ -2971,6 +2991,35 @@ function unsupported_matcher_key(section) {
+@@ -3009,6 +3029,35 @@ function unsupported_matcher_key(section) {
      return "";
  }
  
@@ -227,7 +227,7 @@ index 64c3a147..d02678a3 100644
  function add_outbound_for_section(config, section, taken, sections) {
      let action = option(section, "action", "");
      let section_name = section[".name"];
-@@ -2981,7 +3030,7 @@ function add_outbound_for_section(config, section, taken, sections) {
+@@ -3019,7 +3068,7 @@ function add_outbound_for_section(config, section, taken, sections) {
          runtime_generate_unsupported("section has unsupported matcher " + unsupported_matcher);
  
      if (connections.is_connections_action(action))
@@ -237,10 +237,10 @@ index 64c3a147..d02678a3 100644
          add_zapret_outbound(config, section, sections);
      else if (action == "zapret2")
 diff --git a/trafira/files/usr/lib/subscription/parser.uc b/trafira/files/usr/lib/subscription/parser.uc
-index 9251a0d6..f0616370 100644
+index 5c6a5cd1..0c7ab657 100644
 --- a/trafira/files/usr/lib/subscription/parser.uc
 +++ b/trafira/files/usr/lib/subscription/parser.uc
-@@ -699,7 +699,9 @@ function add_transport(url) {
+@@ -713,7 +713,9 @@ function add_transport(url) {
          return result;
      }
  
@@ -251,7 +251,7 @@ index 9251a0d6..f0616370 100644
  }
  
  function valid_port(port) {
-@@ -798,6 +800,8 @@ function process_vless(raw, url) {
+@@ -812,6 +814,8 @@ function process_vless(raw, url) {
          outbound.tls = tls_result[0];
  
      let transport = add_transport(url);
@@ -260,7 +260,7 @@ index 9251a0d6..f0616370 100644
      if (transport)
          outbound.transport = transport;
      return outbound;
-@@ -823,6 +827,8 @@ function process_trojan(raw, url) {
+@@ -837,6 +841,8 @@ function process_trojan(raw, url) {
          outbound.tls = tls_result[0];
  
      let transport = add_transport(url);
