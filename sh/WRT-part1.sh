@@ -23,8 +23,21 @@ echo -e "\nsrc-git internetdetector https://github.com/gSpotx2f/luci-app-interne
 # =========================================================
 
 # =========================================================
-echo -e "\nsrc-git bandix https://github.com/timsaya/openwrt-bandix.git" >> feeds.conf.default
-echo -e "\nsrc-git luciappbandix https://github.com/timsaya/luci-app-bandix.git" >> feeds.conf.default
+# bandix: со сборкой с патчами (apply_patches) — с коммита из
+# patches/feeds/<фид>/BASE, на котором сняты патчи; без патчей — последний
+# коммит автора.
+bandix_feed() {   # <фид> <URL>
+    local _c=""
+    [ "$M_PATCHES" = "true" ] && _c=$(grep -m1 -oE '^[0-9a-f]{40}' "$GITHUB_WORKSPACE/patches/feeds/$1/BASE" 2>/dev/null)
+    if [ -n "$_c" ]; then
+        echo -e "\nsrc-git $1 $2^$_c" >> feeds.conf.default
+        echo ">>> [Feeds] $1: коммит ${_c:0:12} из patches/feeds/$1/BASE"
+    else
+        echo -e "\nsrc-git $1 $2" >> feeds.conf.default
+    fi
+}
+bandix_feed bandix https://github.com/timsaya/openwrt-bandix.git
+bandix_feed luciappbandix https://github.com/timsaya/luci-app-bandix.git
 #
 echo -e "\nsrc-git bandixplus https://github.com/timsaya/openwrt-bandix-plus.git" >> feeds.conf.default
 echo -e "\nsrc-git luciappbandixplus https://github.com/timsaya/luci-app-bandix-plus.git" >> feeds.conf.default
