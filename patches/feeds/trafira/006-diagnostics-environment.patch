@@ -816,7 +816,7 @@ index 8bef652b..439f1d99 100755
          check_zapret2_runtime: [ "diagnostics/runtime.uc", "check-zapret2-runtime", 0 ],
          check_byedpi_runtime: [ "diagnostics/runtime.uc", "check-byedpi-runtime", 0 ],
 diff --git a/trafira/files/usr/lib/diagnostics/runtime.uc b/trafira/files/usr/lib/diagnostics/runtime.uc
-index 027aee93..a0e301f2 100644
+index 39fc8550..114485c2 100644
 --- a/trafira/files/usr/lib/diagnostics/runtime.uc
 +++ b/trafira/files/usr/lib/diagnostics/runtime.uc
 @@ -8,6 +8,9 @@ let runtime_dns = require("singbox.dns");
@@ -889,7 +889,7 @@ index 027aee93..a0e301f2 100644
  function check_dns_available() {
      let cfg = settings();
      let dns_type = option(cfg, "dns_type", "");
-@@ -2021,6 +2077,8 @@ else if (mode == "get-server-capabilities")
+@@ -2043,6 +2099,8 @@ else if (mode == "get-server-capabilities")
      exit(get_server_capabilities());
  else if (mode == "check-dns-available")
      exit(check_dns_available());
