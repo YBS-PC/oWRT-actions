@@ -227,6 +227,9 @@ apply_package_patches() {
     local _f _q _tmp _later _still _rev _d _skipf _cond _other _req _missing _sup _feed _fc _base
     local -A _drift _why
 
+    # Список пакетов, к которым лёг хотя бы один патч: по нему zz1 закрепляет
+    # их версию в /etc/apk/world (в официальных фидах LuCI они без наших правок).
+    rm -f ./files/etc/build_patched_pkgs
     for _dir in "$GITHUB_WORKSPACE"/patches/packages/*/; do
         [ -d "$_dir" ] || continue
         _name=$(basename "$_dir")
@@ -344,6 +347,9 @@ apply_package_patches() {
         _failed_names=" $_still"
 
         echo ">>> $_name ($_pkg): применено $_applied, уже было $_present, пропущено $_failed$([ "$_other" -gt 0 ] && echo ", не для этой сборки $_other")"
+        if [ "$_applied" -gt 0 ]; then
+            mkdir -p ./files/etc && echo "$_name" >> ./files/etc/build_patched_pkgs
+        fi
         if [ "$_failed" -gt 0 ]; then
             echo "::warning title=Патчи пакета $_name::Не применены:$_failed_names"
             if [ "${FEED_PATCH_STRICT:-0}" = "1" ]; then
@@ -485,7 +491,6 @@ CLEAR_BLOAT=(
 "luci-app-youtubeUnblock"
 "avahi-nodbus-daemon"
 "libavahi-nodbus-support"
-"bandix"
 )
 
 
