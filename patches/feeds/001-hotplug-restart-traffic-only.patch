@@ -1,0 +1,118 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 7 Nov 2026 12:00:00 +0000
+Subject: [PATCH] bandix: restart when the interface is created again, start
+ the traffic monitor only
+
+bandix attaches its eBPF programs to the monitored interface once, at
+start. When the interface is deleted and created again (network
+restart, a change of the bridge or a VLAN in LuCI), the programs go away
+with the old device: the service keeps running and every device shows
+0 B/s. Checked with bandix 0.12.12 on a bridge: after the bridge was
+created again the rates stayed at 0 while traffic was flowing, and
+after a restart they came back. /etc/hotplug.d/net/90-bandix now
+restarts the running service when the interface from
+bandix.general.iface appears again (ACTION=add). A stopped or disabled
+service is not started.
+
+The init script starts the traffic module only: the connection and DNS
+modules have no pages in this build (see the luci-app-bandix patch), so
+they stay off even when an older /etc/config/bandix enables them. The
+remaining flags read with config_get_bool get the default 0: without it
+a config written before these options existed printed
+"[: : integer expression expected" on every start.
+
+The default config enables the traffic monitor, so the service works
+right after installation; before, it did not start until the option was
+turned on in LuCI.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Uo9XQuT7u6ShTYdi2S3Anq
+---
+ openwrt-bandix/Makefile             |  2 ++
+ openwrt-bandix/files/bandix.config  |  2 +-
+ openwrt-bandix/files/bandix.hotplug | 12 ++++++++++++
+ openwrt-bandix/files/bandix.init    | 12 +++++++-----
+ 4 files changed, 22 insertions(+), 6 deletions(-)
+ create mode 100644 openwrt-bandix/files/bandix.hotplug
+
+diff --git a/openwrt-bandix/Makefile b/openwrt-bandix/Makefile
+index 8cd58fc1..32f6f971 100644
+--- a/openwrt-bandix/Makefile
++++ b/openwrt-bandix/Makefile
+@@ -103,6 +103,8 @@ define Package/$(PKG_NAME)/install
+ 	$(INSTALL_DIR) $(1)/etc/init.d
+ 	$(INSTALL_DIR) $(1)/etc/config
+ 	$(INSTALL_BIN) ./files/bandix.init $(1)/etc/init.d/bandix
++	$(INSTALL_DIR) $(1)/etc/hotplug.d/net
++	$(INSTALL_DATA) ./files/bandix.hotplug $(1)/etc/hotplug.d/net/90-bandix
+ 
+ 	# 安装配置文件
+ 	$(INSTALL_DIR) $(1)/usr/share/bandix
+diff --git a/openwrt-bandix/files/bandix.config b/openwrt-bandix/files/bandix.config
+index a51f5c40..63acdb74 100644
+--- a/openwrt-bandix/files/bandix.config
++++ b/openwrt-bandix/files/bandix.config
+@@ -17,7 +17,7 @@ config bandix 'general'
+ 
+ 
+ config bandix 'traffic'
+-	option enabled '0'
++	option enabled '1'
+ 	option speed_unit 'bytes'
+ 	option offline_timeout '120'
+ 	option traffic_realtime_window '600'
+diff --git a/openwrt-bandix/files/bandix.hotplug b/openwrt-bandix/files/bandix.hotplug
+new file mode 100644
+index 00000000..531c893a
+--- /dev/null
++++ b/openwrt-bandix/files/bandix.hotplug
+@@ -0,0 +1,12 @@
++#!/bin/sh
++# The monitored interface was created again (network restart, bridge or VLAN
++# change). The eBPF programs were attached to the old device and went away with
++# it, so bandix keeps running but counts nothing. Restart it to attach again.
++
++[ "$ACTION" = "add" ] || exit 0
++[ -n "$INTERFACE" ] || exit 0
++[ "$INTERFACE" = "$(uci -q get bandix.general.iface)" ] || exit 0
++pidof bandix >/dev/null 2>&1 || exit 0
++
++logger -t bandix "interface $INTERFACE was created again, restarting bandix"
++/etc/init.d/bandix restart
+diff --git a/openwrt-bandix/files/bandix.init b/openwrt-bandix/files/bandix.init
+index 3af238f7..8e459251 100644
+--- a/openwrt-bandix/files/bandix.init
++++ b/openwrt-bandix/files/bandix.init
+@@ -54,10 +54,10 @@ start_service() {
+ 	config_get netlink_priority 'general' 'netlink_priority'
+ 	config_get tcx_anchor_ingress_id 'general' 'tcx_anchor_ingress_id'
+ 	config_get tcx_anchor_egress_id 'general' 'tcx_anchor_egress_id'
+-	config_get_bool traffic_enabled 'traffic' 'enabled'
++	config_get_bool traffic_enabled 'traffic' 'enabled' '0'
+ 	config_get traffic_realtime_window 'traffic' 'traffic_realtime_window'
+ 	config_get traffic_flush_interval 'traffic' 'traffic_flush_interval'
+-	config_get_bool traffic_enable_storage 'traffic' 'traffic_enable_storage'
++	config_get_bool traffic_enable_storage 'traffic' 'traffic_enable_storage' '0'
+ 	config_get traffic_export_url 'traffic' 'traffic_export_url'
+ 	config_get traffic_event_url 'traffic' 'traffic_event_url'
+ 	config_get traffic_additional_subnets 'traffic' 'traffic_additional_subnets'
+@@ -65,10 +65,12 @@ start_service() {
+ 	config_get_bool traffic_neighbor_flush_enable 'traffic' 'traffic_neighbor_flush_enable' '0'
+ 	config_get traffic_neighbor_flush_interval 'traffic' 'traffic_neighbor_flush_interval' '600'
+ 	config_get geoip_dir 'connections' 'geoip_dir' '/usr/share/bandix-geoip'
+-	config_get_bool connections_enabled 'connections' 'enabled'
+-	config_get_bool dns_enabled 'dns' 'enabled'
++	# Traffic monitor only: the connection and DNS modules have no pages in
++	# this build, so they are not started even if enabled in an old config.
++	connections_enabled=0
++	dns_enabled=0
+ 	config_get dns_max_records 'dns' 'dns_max_records'
+-	config_get_bool dns_enable_storage 'dns' 'dns_enable_storage'
++	config_get_bool dns_enable_storage 'dns' 'dns_enable_storage' '0'
+ 	config_get dns_flush_interval 'dns' 'dns_flush_interval'
+ 	
+ 
+-- 
+2.43.0
+
