@@ -34,7 +34,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
 diff --git a/netshift/files/usr/lib/sing_box_config_facade.sh b/netshift/files/usr/lib/sing_box_config_facade.sh
-index 6e7cc35e..074ecf8b 100644
+index d238531e..641213ac 100644
 --- a/netshift/files/usr/lib/sing_box_config_facade.sh
 +++ b/netshift/files/usr/lib/sing_box_config_facade.sh
 @@ -159,10 +159,14 @@ sing_box_cf_add_proxy_outbound() {
@@ -55,7 +55,7 @@ index 6e7cc35e..074ecf8b 100644
              fi
          fi
          config="$(sing_box_cm_add_socks_outbound \
-@@ -796,6 +800,17 @@ _add_outbound_transport() {
+@@ -818,6 +822,17 @@ _add_outbound_transport() {
              sing_box_cm_set_httpupgrade_transport_for_outbound "$config" "$outbound_tag" "$httpupgrade_path" "$httpupgrade_host"
          )
          ;;
@@ -73,7 +73,7 @@ index 6e7cc35e..074ecf8b 100644
      xhttp | splithttp)
          # `splithttp` is the pre-rename name of the `xhttp` transport (sing-box
          # renamed it). Accept it as an alias and normalize to xhttp downstream:
-@@ -1156,7 +1171,10 @@ sing_box_cf_prepare_subscription_batch() {
+@@ -1178,7 +1193,10 @@ sing_box_cf_prepare_subscription_batch() {
            ] as $kept
          # Assign unique tags using a deterministic dedup pass. $state.used is a
          # set (object) of tags already taken, seeded with the existing config tags.
@@ -85,7 +85,7 @@ index 6e7cc35e..074ecf8b 100644
              {used: ($existing | map({(.): true}) | add // {}), out: []};
              . as $state
              | $kept[$i] as $entry
-@@ -1204,7 +1222,7 @@ sing_box_cf_prepare_subscription_batch() {
+@@ -1226,7 +1244,7 @@ sing_box_cf_prepare_subscription_batch() {
                        else . end
                  )
                }]
@@ -95,10 +95,10 @@ index 6e7cc35e..074ecf8b 100644
              outbounds: [$resolved.out[].outbound],
              tags: [$resolved.out[].tag],
 diff --git a/netshift/files/usr/lib/sing_box_config_manager.sh b/netshift/files/usr/lib/sing_box_config_manager.sh
-index c640255c..d96a45ab 100644
+index d11b7b02..8d13de3d 100644
 --- a/netshift/files/usr/lib/sing_box_config_manager.sh
 +++ b/netshift/files/usr/lib/sing_box_config_manager.sh
-@@ -1525,14 +1525,16 @@ sing_box_cm_set_tls_for_outbound() {
+@@ -1530,14 +1530,16 @@ sing_box_cm_set_tls_for_outbound() {
                              }
                          } else {} end)
                          + (if $reality_public_key != "" then {
@@ -119,3 +119,4 @@ index c640255c..d96a45ab 100644
                  }
 -- 
 2.43.0
+
