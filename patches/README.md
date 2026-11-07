@@ -90,11 +90,11 @@
 | `feeds/forkopmod/` | [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) | [`4e8e177`](https://github.com/Gavr1024/forkop-mod/commit/4e8e177c36dfe114354820b213c534d9a82204cc) | 06.11.2026 |
 | `feeds/internetdetector/` | [gSpotx2f/luci-app-internet-detector](https://github.com/gSpotx2f/luci-app-internet-detector) | [`e265fcc`](https://github.com/gSpotx2f/luci-app-internet-detector/commit/e265fcc8a9d9fd359f29fd0188ab2da3ce1438fa) | 09.10.2026 |
 | `feeds/luciappxray/` | [yichya/luci-app-xray](https://github.com/yichya/luci-app-xray) | [`4d5a6fd`](https://github.com/yichya/luci-app-xray/commit/4d5a6fd7fc4d2fbbcd7f70f1319da06b91ec1d56) | 22.09.2026 |
-| `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`3d5c24f`](https://github.com/yandexru45/netshift/commit/3d5c24f28799502db16e76b6475ce38c7f0def33) | 31.10.2026 |
-| `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`3247e14`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/3247e147669bb2d9e4a6398222f7cb1a98fd13f0) | 06.11.2026 |
+| `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`0c8a895`](https://github.com/yandexru45/netshift/commit/0c8a89535a897b43b50b15c3f0c8991df242bb24) | 07.11.2026 |
+| `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`7d6b5bc`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/7d6b5bc75185956c8cbed7a6c8c07065a04d5059) | 07.11.2026 |
 | `feeds/podkop/` | [itdoginfo/podkop](https://github.com/itdoginfo/podkop) | [`c654bf5`](https://github.com/itdoginfo/podkop/commit/c654bf5da75309754e3fb63b9441981db65fff68) | 24.10.2026 |
-| `feeds/tachyon/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) | [`dc20cad`](https://github.com/Dushnilin/tachyon/commit/dc20cad11ed6f383544e150f43e82b234966c364) | 07.11.2026 |
-| `feeds/trafira/` | [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) | [`16d06e8`](https://github.com/petrouspetr-pixel/trafira/commit/16d06e87a2618b4a34d5e6797eee4b76715e8deb) | 04.11.2026 |
+| `feeds/tachyon/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) | [`e170062`](https://github.com/Dushnilin/tachyon/commit/e17006286d0ba4d3dad08be95ffcb1501301653f) | 07.11.2026 |
+| `feeds/trafira/` | [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) | [`b7bfab2`](https://github.com/petrouspetr-pixel/trafira/commit/b7bfab28b34734f49f2456cf892729bed8c379e7) | 07.11.2026 |
 | `packages/luci-app-commands/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`75a306d`](https://github.com/openwrt/luci/commit/75a306df84a020c57a631ef5b4c02ace56d93387) | 15.10.2026 |
 | `packages/luci-app-filemanager/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`e969939`](https://github.com/openwrt/luci/commit/e969939b49167516e219d465df8030d98d443d67) | 31.10.2026 |
 | `packages/luci-app-homeproxy/` | [immortalwrt/homeproxy](https://github.com/immortalwrt/homeproxy) | [`fadaa67`](https://github.com/immortalwrt/homeproxy/commit/fadaa676104f59ff6ace480a780a258d846d0aec) | 02.10.2026 |
@@ -310,7 +310,7 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
 
 Вариант `netshift`, фид [yandexru45/netshift](https://github.com/yandexru45/netshift).
 
-Патчи сняты с коммита [`3d5c24f`](https://github.com/yandexru45/netshift/commit/3d5c24f28799502db16e76b6475ce38c7f0def33) от 31.10.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`0c8a895`](https://github.com/yandexru45/netshift/commit/0c8a89535a897b43b50b15c3f0c8991df242bb24) от 07.11.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Разбор ссылок.** Правильно читаются логин и пароль socks5 со
   спецсимволами и ссылки VLESS/Trojan с транспортом http (ссылки без
@@ -326,7 +326,7 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
 
 Вариант `passwall`, фид [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2).
 
-Патчи сняты с коммита [`3247e14`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/3247e147669bb2d9e4a6398222f7cb1a98fd13f0) от 06.11.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`7d6b5bc`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/7d6b5bc75185956c8cbed7a6c8c07065a04d5059) от 07.11.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Соединения после перезапуска.** Пока passwall2 перезапускается,
   правил нет, и новые соединения из сети уходят напрямую. После запуска
@@ -389,13 +389,13 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
 
 ### tachyon — `feeds/tachyon/` (2)
 
-Вариант `tachyon`, фид [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) (1.7.16).
+Вариант `tachyon`, фид [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) (1.7.17).
 С `sb=default` (по умолчанию) в образ идёт ядро tachyon по умолчанию, и
 артефакт такой сборки шифруется паролем из секрета `ARTIFACT_PASSWORD`.
 С другим значением `sb` в образ идёт выбранное ядро, артефакт не
 шифруется.
 
-Патчи сняты с коммита [`dc20cad`](https://github.com/Dushnilin/tachyon/commit/dc20cad11ed6f383544e150f43e82b234966c364) от 07.11.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`e170062`](https://github.com/Dushnilin/tachyon/commit/e17006286d0ba4d3dad08be95ffcb1501301653f) от 07.11.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Удаление пакета.** Скрипт удаления tachyon написан на ucode, а
   сборка OpenWrt выполняет его как shell (apk — в своём скрипте удаления,
@@ -416,9 +416,9 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
 
 ### trafira — `feeds/trafira/` (6)
 
-Вариант `trafira`, фид [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) (3.2.1).
+Вариант `trafira`, фид [petrouspetr-pixel/trafira](https://github.com/petrouspetr-pixel/trafira) (3.2.2).
 
-Патчи сняты с коммита [`16d06e8`](https://github.com/petrouspetr-pixel/trafira/commit/16d06e87a2618b4a34d5e6797eee4b76715e8deb) от 04.11.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`b7bfab2`](https://github.com/petrouspetr-pixel/trafira/commit/b7bfab28b34734f49f2456cf892729bed8c379e7) от 07.11.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001 удалён.** Вызовы ucode до объявления в установщике sing-box
   автор исправил сам в 3.1.11 (с тестами).
