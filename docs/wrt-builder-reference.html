@@ -911,7 +911,7 @@
       <li><b>Инициализация.</b> Логирование, определение версии ядра, архитектуры, модели роутера и текущего варианта сборки.</li>
       <li><b>База.</b> Часовой пояс (Europe/Moscow), очистка строки FullCone, сохранение system.</li>
       <li><b>Пакетный менеджер.</b> Определение apk/opkg, чистка репозиториев, добавление репозитория kmods (по версии ядра), customfeeds; ключи <code>/root/apps/*.pem</code> ставятся в <code>/etc/apk/keys/</code>.</li>
-      <li><b>Локальные бинари.</b> sing-box, AdGuardHome и speedtest из <code>/root/apps/</code> ставятся в <code>/usr/bin</code>. Затем пакеты <code>sing-box</code> и <code>adguardhome</code>, у которых <code>/usr/bin/sing-box version</code> или <code>AdGuardHome --version</code> не совпадает с версией пакета (бинарник скачан при сборке или взят из <code>/root/apps/</code>), закрепляются на установленной версии: apk — строкой <code>имя=версия</code> в <code>/etc/apk/world</code> (так же OpenWrt закрепляет <code>kernel</code>, <code>libc</code>, <code>base-files</code>), opkg — флагом <code>hold</code>. <code>apk upgrade</code> и кнопка «Обновить» в LuCI их не трогают, остальные пакеты обновляются как обычно. Совпадает версия — пакет не закрепляется. Снять: <code>apk add sing-box</code> (opkg: <code>opkg flag user sing-box</code>).</li>
+      <li><b>Локальные бинари.</b> sing-box, AdGuardHome и speedtest из <code>/root/apps/</code> ставятся в <code>/usr/bin</code>. Затем пакеты <code>sing-box</code> и <code>adguardhome</code>, у которых <code>/usr/bin/sing-box version</code> или <code>AdGuardHome --version</code> не совпадает с версией пакета (бинарник скачан при сборке или взят из <code>/root/apps/</code>), закрепляются на установленной версии: apk — строкой <code>имя=версия</code> в <code>/etc/apk/world</code> (так же OpenWrt закрепляет <code>kernel</code>, <code>libc</code>, <code>base-files</code>), opkg — флагом <code>hold</code>. <code>apk upgrade</code> и кнопка «Обновить» в LuCI их не трогают, остальные пакеты обновляются как обычно. Совпадает версия — пакет не закрепляется. Снять: <code>apk add sing-box</code> (opkg: <code>opkg flag user sing-box</code>). Так же закрепляются пакеты из <code>patches/packages</code>, к которым при сборке лёг хотя бы один патч (список — <code>/etc/build_patched_pkgs</code>), вместе с русским переводом: в официальных фидах LuCI они без наших правок.</li>
       <li><b>homeproxy</b> (если установлен): <code>dns_hijacked=1</code>, bypass-цепочка nftables; Clash API включается опциями UCI (патч 010), init создаёт пустые файлы include fw4 (патч 011): если пакет собран без патчей или обновлён из фида, zz1 вписывает в генератор и init тот же код, что и патчи, а если доработки уже есть — файлы не трогает; Clash API на <code>:9090</code> и панель YACD (догружается cron-ом, пункт меню в LuCI). Без homeproxy — удаляются его nft-файл и include-секции firewall.</li>
       <li><b>Наборы адресов fw4.</b> Всегда создаются <code>dpi_ips</code>, <code>bypass_ips</code>, <code>bypass_local</code> (с <code>loadfile</code> в <code>/etc/luci-uploads/</code>).</li>
       <li><b>Прокси под вариант.</b> passwall2 — базовые настройки на first boot; xray — на first boot заводские правила luci-app-xray заменяются региональными (GeoIP и geosite для прямых соединений, свой Fast DNS), если их не меняли вручную; forkop-mod, trafira, podkop и netshift — <code>exclude_ntp=1</code> (NTP мимо прокси; в forkop 2.x опции нет), а при youtubeUnblock ещё <code>disable_quic=1</code>. v2rayA не настраивается.</li>
@@ -935,13 +935,13 @@
           <tr><th scope="row">Прошивка без сохранения настроек</th><td data-l="Режим"><b>firstboot</b></td><td data-l="Почему"><p>Чистая система, признака нет.</p></td></tr>
           <tr><th scope="row">Прошивка с сохранением настроек</th><td data-l="Режим"><b>firstboot</b></td><td data-l="Почему"><p>Признак в <code>/etc</code> не сохраняется. Старые конфиги возвращаются <b>до</b> запуска zz1, и он работает поверх них.</p></td></tr>
           <tr><th scope="row">Чистая прошивка + «Восстановить» из бэкапа</th><td data-l="Режим"><b>firstboot</b>, затем бэкап</td><td data-l="Почему"><p>zz1 отрабатывает на чистых конфигах, потом бэкап их перезаписывает (hostname и customfeeds вернутся свои). После смены варианта так делать нельзя: вернутся настройки AGH и прочее от старого варианта.</p></td></tr>
-          <tr><th scope="row">Ручной запуск копии скрипта (например, после <code>apk upgrade</code>)</th><td data-l="Режим"><b>maintenance</b></td><td data-l="Почему"><p>Признак уже создан прошлым запуском на этой прошивке.</p></td></tr>
+          <tr><th scope="row">Ручной запуск копии скрипта <code>/root/setup.sh</code> (например, после <code>apk upgrade</code>)</th><td data-l="Режим"><b>maintenance</b></td><td data-l="Почему"><p>Признак уже создан прошлым запуском на этой прошивке.</p></td></tr>
         </tbody>
       </table>
     </div>
 
     <h3>Что отличается</h3>
-    <p class="small muted">От режима зависят только эти пять мест — всё остальное выполняется одинаково.</p>
+    <p class="small muted">От режима зависят только эти шесть мест — всё остальное выполняется одинаково.</p>
     <div class="card tscroll">
       <table class="pt stack">
         <thead><tr><th style="width:26%">Шаг</th><th style="width:44%">firstboot</th><th>maintenance</th></tr></thead>
@@ -951,6 +951,7 @@
           <tr><th scope="row">hostname и <code>uhttpd.defaults.commonname</code></th><td data-l="firstboot"><span class="cond">ставятся по шаблону</span>: <code>R6S-oWRT</code>, <code>R6S-iWRT</code>; для switch — <code>RB5009-switch</code></td><td data-l="maintenance"><span class="yes">не трогаются</span></td></tr>
           <tr><th scope="row">passwall2 (вариант <code>passwall</code>)</th><td data-l="firstboot"><span class="cond">настраивается</span> DNS (<code>dns_redirect=0</code>) и включается</td><td data-l="maintenance"><span class="yes">не трогается</span>, кроме исправления старого <code>remote_dns=127.0.0.1:53</code> на <code>1.1.1.1</code> и удаления опций passwall 1</td></tr>
           <tr><th scope="row">Режим коммутатора (вариант <code>switch</code>)</th><td data-l="firstboot"><span class="cond">перестраивается сеть</span>: удаляются lan/wan/wan6, все порты в мост <code>br-lan</code> (DHCP-клиент), отключаются DHCP и odhcpd, переписывается firewall</td><td data-l="maintenance"><span class="yes">не трогается</span></td></tr>
+          <tr><th scope="row">Копия скрипта <code>/root/setup.sh</code></th><td data-l="firstboot"><span class="cond">записывается</span> из этой прошивки, прежняя копия (если отличалась) — в <code>/root/setup.sh.bak</code></td><td data-l="maintenance"><span class="yes">не трогается</span></td></tr>
         </tbody>
       </table>
     </div>
@@ -960,7 +961,7 @@
     <ul class="steps plain">
       <li><b>Система:</b> часовой пояс; строка FullCone удаляется (и <code>fullcone=1</code> возвращается, если модуль есть в ядре); TCP BBR в <code>sysctl.conf</code>.</li>
       <li><b>Пакетный менеджер:</b> архитектура apk, очистка <code>distfeeds.list</code> от лишних фидов, строка kmods под текущее ядро (копия <code>distfeeds.list.bak</code> делается один раз); ключи <code>/root/apps/*.pem</code>.</li>
-      <li><b>Локальные бинарники:</b> sing-box, AdGuardHome, speedtest из <code>/root/apps</code>; закрепление <code>sing-box</code> и <code>adguardhome</code> с подменённым бинарником (уже закреплён — без изменений).</li>
+      <li><b>Локальные бинарники:</b> sing-box, AdGuardHome, speedtest из <code>/root/apps</code>; закрепление <code>sing-box</code> и <code>adguardhome</code> с подменённым бинарником и пакетов, собранных с патчами (уже закреплён — без изменений).</li>
       <li><b>homeproxy:</b> <code>dns_hijacked</code> (при AGH), Clash API (опции UCI; без патча 010 код патча вписывается в генератор и init) и YACD (заглушка — только если панели ещё нет), без патча 011 — его код вписывается в init, <code>bypass_homeproxy_ips.nft</code>. Без homeproxy — удаление его хвостов.</li>
       <li><b>Firewall:</b> наборы <code>dpi_ips</code>, <code>bypass_ips</code>, <code>bypass_local</code> (создаются, если их нет), правка <code>ruleset.uc</code> для flow offload.</li>
       <li><b>youtubeUnblock:</b> правила nft очереди с меткой и номером из его настроек (или их удаление, если пакета нет).</li>
