@@ -10,7 +10,7 @@ usr/bin/: Структура внутри files должна точно повт
 | Режим | Когда | Лог |
 |-------|-------|-----|
 | `firstboot` | первая загрузка после прошивки (нет `/etc/zz1_setup_completed`), в том числе после прошивки с сохранением настроек | `/root/setup_log.txt` |
-| `maintenance` | ручной запуск сохранённой копии, например после `apk upgrade` | `/root/setup_log_maintenance.txt` |
+| `maintenance` | ручной запуск копии `/root/setup.sh`, например после `apk upgrade` | `/root/setup_log_maintenance.txt` |
 
 Пометка **(firstboot)** ниже означает, что пункт выполняется только на первой загрузке.
 В обоих режимах скрипт в конце создаёт `/etc/zz1_setup_completed` и перезагружает роутер через 120 секунд.
@@ -357,6 +357,12 @@ podkop-engine) и AdGuard Home (`agh` = latest), как и бинарники и
 apk add sing-box && apk upgrade          # opkg: opkg flag user sing-box && opkg upgrade sing-box
 ```
 
+**Закрепление пакетов, собранных с патчами.** Пакеты из `patches/packages` (`luci-app-commands`,
+`luci-app-filemanager`, `luci-app-homeproxy` …) есть и в официальных фидах LuCI OpenWrt / ImmortalWrt, но без наших
+правок: `apk upgrade` поставил бы версию автора, и правки пропали бы до следующей прошивки. Сборка записывает в
+`/etc/build_patched_pkgs` пакеты, к которым лёг хотя бы один патч; zz1 закрепляет их установленные версии (и
+русский перевод `luci-i18n-<имя>-ru`, если он стоит) так же, как выше. Снять: `apk add <пакет>`.
+
 ## 15. `/etc/banner`
 - Бэкап `/etc/banner.bak` (один раз)
 - `W I R E L E S S` заменяется на `N E T W O R K`
@@ -386,6 +392,7 @@ cp /etc/banner.bak /etc/banner
 | `/etc/zz1_setup_completed` | всегда | lock-файл, признак режима maintenance (в бэкап и при прошивке не сохраняется) |
 | `/root/setup_log.txt` | firstboot | лог выполнения скрипта |
 | `/root/setup_log_maintenance.txt` | maintenance | лог выполнения скрипта |
+| `/root/setup.sh` | firstboot | копия скрипта из этой прошивки для режима maintenance; прежняя, если отличалась, — `/root/setup.sh.bak` |
 | `/etc/banner.bak` | всегда | бэкап оригинального баннера |
 | `/etc/luci-uploads/*.txt` | всегда | пустые loadfile для ipset |
 | `/opt/AdGuardHome/` | если AGH есть | директория для данных |
