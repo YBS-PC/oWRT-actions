@@ -4,11 +4,12 @@ Date: Sun, 4 Oct 2026 19:18:46 +0000
 Subject: [PATCH 2/2] netshift: DNS - SRV/PTR/TXT past FakeIP, diagnostics for
  servers with a port
 
-- FakeIP answers only A/AAAA. The FakeIP DNS rule now carries
-  query_type A/AAAA, so other query types for the same domains (SRV,
-  PTR, TXT, MX ...) go on to the DNS sections, the pool and the final
-  server. Before, sing-box answered nothing and clients waited for a
-  timeout (checked with sing-box 1.12.22 and 1.14.2).
+- FakeIP answers only A/AAAA. Both FakeIP DNS rules (the one for the
+  lists and the one for the service domains) now carry query_type
+  A/AAAA, so other query types for the same domains (SRV, PTR, TXT,
+  MX ...) go on to the DNS sections, the pool and the final server.
+  Before, sing-box answered nothing and clients waited for a timeout
+  (checked with sing-box 1.12.22, 1.14.2 and 1.14.4).
 - check_dns_available: a server "host:port[/path]" or "[v6]:port" is
   passed to dig as @host -p port. "@host:port" never resolves, so the
   diagnostics reported such a DNS/bootstrap server as unavailable
@@ -22,10 +23,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01Uo9XQuT7u6ShTYdi2S3Anq
 ---
 diff --git a/netshift/files/usr/bin/netshift b/netshift/files/usr/bin/netshift
-index 88f085d..d45acf8 100755
+index dc8614b..b050b6d 100755
 --- a/netshift/files/usr/bin/netshift
 +++ b/netshift/files/usr/bin/netshift
-@@ -5394,6 +5394,10 @@ sing_box_configure_dns() {
+@@ -5497,6 +5497,10 @@ sing_box_configure_dns() {
      config_foreach configure_ipv6_real_dns_rule "section"
      config=$(sing_box_cm_add_dns_route_rule "$config" "$SB_FAKEIP_DNS_SERVER_TAG" "$SB_FAKEIP_DNS_RULE_TAG")
      config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_FAKEIP_DNS_RULE_TAG" "rewrite_ttl" "$rewrite_ttl")
@@ -34,9 +35,17 @@ index 88f085d..d45acf8 100755
 +    # pool, final server) instead of being left without an answer.
 +    config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_FAKEIP_DNS_RULE_TAG" "query_type" '["A","AAAA"]')
      service_domains=$(comma_string_to_json_array "$FAKEIP_TEST_DOMAIN,$CHECK_PROXY_IP_DOMAIN")
-     config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_FAKEIP_DNS_RULE_TAG" "domain" "$service_domains")
+     # The service domains have a rule of their own, apart from the rule-sets: since sing-box 1.14 a
+     # rule-set of several rules (the community list "discord") next to "domain" in one rule is an
+@@ -5505,6 +5509,7 @@ sing_box_configure_dns() {
+     # (prune_fakeip_dns_rule_without_lists) when none is.
+     config=$(sing_box_cm_add_dns_route_rule "$config" "$SB_FAKEIP_DNS_SERVER_TAG" "$SB_FAKEIP_SERVICE_DNS_RULE_TAG")
+     config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_FAKEIP_SERVICE_DNS_RULE_TAG" "rewrite_ttl" "$rewrite_ttl")
++    config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_FAKEIP_SERVICE_DNS_RULE_TAG" "query_type" '["A","AAAA"]')
+     config=$(sing_box_cm_patch_dns_route_rule "$config" "$SB_FAKEIP_SERVICE_DNS_RULE_TAG" "domain" "$service_domains")
  
-@@ -8391,28 +8395,48 @@ check_dns_available() {
+     # After the FakeIP rule: a domain that is also in a proxy/VPN list stays on its
+@@ -8582,28 +8587,48 @@ check_dns_available() {
          display_dns_server="dns.nextdns.io/$masked_path"
      fi
  
@@ -90,7 +99,7 @@ index 88f085d..d45acf8 100755
              dns_status=1
          fi
      else
-@@ -8431,7 +8455,9 @@ check_dns_available() {
+@@ -8622,7 +8647,9 @@ check_dns_available() {
  
      # Check bootstrap DNS server
      if [ -n "$bootstrap_dns_server" ]; then
