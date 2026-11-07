@@ -40,7 +40,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01Uo9XQuT7u6ShTYdi2S3Anq
 ---
 diff --git a/trafira/files/usr/lib/components/action.uc b/trafira/files/usr/lib/components/action.uc
-index 80c64899..f7010675 100644
+index d56ce001..8b53cd86 100644
 --- a/trafira/files/usr/lib/components/action.uc
 +++ b/trafira/files/usr/lib/components/action.uc
 @@ -692,6 +692,164 @@ function pkg_remove_sing_box_conflict(package_name) {
@@ -208,7 +208,7 @@ index 80c64899..f7010675 100644
  function run_logged_pkg_remove_sing_box_conflict(package_name, description) {
      if (rollback_package && rollback_package.apk_transition) {
          let transition = rollback_package.apk_transition;
-@@ -1554,11 +1712,6 @@ function rollback_archive_field(path, field) {
+@@ -1557,11 +1715,6 @@ function rollback_archive_field(path, field) {
      return "";
  }
  
@@ -220,7 +220,7 @@ index 80c64899..f7010675 100644
  function rollback_ipk_unpacked_bytes(path) {
      // OpenWrt producers have used both bytes and KiB for Installed-Size.
      // Measure the actual archive as a lower bound instead of trusting that unit.
-@@ -1804,15 +1957,6 @@ function stage_previous_sing_box_package(variant, action, verified_core_only) {
+@@ -1807,15 +1960,6 @@ function stage_previous_sing_box_package(variant, action, verified_core_only) {
      return rollback_package != null;
  }
  
@@ -236,7 +236,7 @@ index 80c64899..f7010675 100644
  function restore_rollback_apk_world() {
      if (!is_apk() || rollback_apk_world == null)
          return true;
-@@ -2032,150 +2176,6 @@ function ram_prepare_failure(stage, error) {
+@@ -2035,150 +2179,6 @@ function ram_prepare_failure(stage, error) {
  // Package-core transitions must not expose unchanged dependencies to apk del's
  // orphan cleanup. Exact installed pins and core conflicts go into ONE offline
  // add transaction. Keep the pins until any same-version core reinstall finishes.
