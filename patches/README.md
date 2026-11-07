@@ -86,9 +86,11 @@
 
 | Папка | Репозиторий | Коммит | Дата коммита |
 |---|---|---|---|
+| `feeds/bandix/` | [timsaya/openwrt-bandix](https://github.com/timsaya/openwrt-bandix) | [`0760d1f`](https://github.com/timsaya/openwrt-bandix/commit/0760d1f5b52d1a2317dfd171ab00fe6543a9a0c4) | 27.10.2026 |
 | `feeds/forkop/` | [ushan0v/forkop](https://github.com/ushan0v/forkop) | [`129d303`](https://github.com/ushan0v/forkop/commit/129d303e6cc879e9edc4e13c50b1f37637e69554) | 02.11.2026 |
 | `feeds/forkopmod/` | [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) | [`4e8e177`](https://github.com/Gavr1024/forkop-mod/commit/4e8e177c36dfe114354820b213c534d9a82204cc) | 06.11.2026 |
 | `feeds/internetdetector/` | [gSpotx2f/luci-app-internet-detector](https://github.com/gSpotx2f/luci-app-internet-detector) | [`e265fcc`](https://github.com/gSpotx2f/luci-app-internet-detector/commit/e265fcc8a9d9fd359f29fd0188ab2da3ce1438fa) | 09.10.2026 |
+| `feeds/luciappbandix/` | [timsaya/luci-app-bandix](https://github.com/timsaya/luci-app-bandix) | [`108369b`](https://github.com/timsaya/luci-app-bandix/commit/108369b8da05f01296a3ed0210a2ab60809712e5) | 27.10.2026 |
 | `feeds/luciappxray/` | [yichya/luci-app-xray](https://github.com/yichya/luci-app-xray) | [`4d5a6fd`](https://github.com/yichya/luci-app-xray/commit/4d5a6fd7fc4d2fbbcd7f70f1319da06b91ec1d56) | 22.09.2026 |
 | `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`0c8a895`](https://github.com/yandexru45/netshift/commit/0c8a89535a897b43b50b15c3f0c8991df242bb24) | 07.11.2026 |
 | `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`7d6b5bc`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/7d6b5bc75185956c8cbed7a6c8c07065a04d5059) | 07.11.2026 |
@@ -125,7 +127,7 @@
 
 ## Патчи по пакетам
 
-Всего 63 патча для 14 пакетов. Номер — порядок применения. Ссылки
+Всего 65 патчей для 16 пакетов. Номер — порядок применения. Ссылки
 вида `#98` / `PR #103` — обсуждение и предложенное исправление в
 репозитории автора.
 
@@ -145,6 +147,26 @@
 Опции есть только в прошивке, собранной с патчами. Если потом поставить
 пакет без патчей, опция пропадёт из интерфейса, а её значение просто
 останется в файле настроек и ни на что не повлияет.
+
+### bandix — `feeds/bandix/` (1)
+
+Служба `bandix` из фида [timsaya/openwrt-bandix](https://github.com/timsaya/openwrt-bandix)
+(bandix 0.12.12) — во всех сборках, кроме `crystal_clear` и `switch`.
+Сборка с патчами берёт фид с коммита из `BASE` (`sh/WRT-part1.sh`), без
+патчей — с последнего коммита автора.
+
+Патчи сняты с коммита [`0760d1f`](https://github.com/timsaya/openwrt-bandix/commit/0760d1f5b52d1a2317dfd171ab00fe6543a9a0c4) от 27.10.2026 (файл `BASE`): на нём серия ложится точно.
+
+- **001. Перезапуск после пересоздания интерфейса, только монитор
+  трафика.** bandix подключает свои программы eBPF к интерфейсу один раз,
+  при запуске. После перезапуска сети или правки моста и VLAN интерфейс
+  создаётся заново, программы пропадают вместе со старым, и служба
+  работает, но у всех устройств 0 B/s. `/etc/hotplug.d/net/90-bandix`
+  перезапускает работающую службу, когда её интерфейс появляется снова.
+  Скрипт запуска включает только модуль трафика: соединения и DNS не
+  запускаются и при старом конфиге, где они включены. Флаги без значения
+  в старом конфиге больше не дают ошибок оболочки при запуске. В
+  конфиге по умолчанию монитор трафика включён. *Всегда.*
 
 ### forkop — `feeds/forkop/` (2)
 
@@ -294,6 +316,30 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
     записи) останавливает экземпляры и запускает их снова (в режиме
     «Web UI only») или перезапускает службу.
   - Русский перевод новых строк. *Всегда.*
+
+### luci-app-bandix — `feeds/luciappbandix/` (1)
+
+Интерфейс `luci-app-bandix` (Сеть → Bandix) из фида
+[timsaya/luci-app-bandix](https://github.com/timsaya/luci-app-bandix) —
+вместе со службой `bandix`, коммит выбирается так же.
+
+Патчи сняты с коммита [`108369b`](https://github.com/timsaya/luci-app-bandix/commit/108369b8da05f01296a3ed0210a2ab60809712e5) от 27.10.2026 (файл `BASE`): на нём серия ложится точно.
+
+- **001. Только монитор трафика.** Остаются итоги LAN и WAN, график
+  скорости в реальном времени (все устройства или одно), список
+  устройств с текущей скоростью и объёмом за период, рейтинг
+  использования и временная шкала. Убраны страницы «Соединения» и DNS,
+  ограничения скорости, квоты, расписания, окно настроек устройства (имя,
+  ограничения, квота), удаление устройств и кнопки «Сохранить» на
+  странице статуса; в настройках — проверка и установка обновлений,
+  ссылка обратной связи, отправка данных на внешние адреса и разделы
+  соединений и DNS. Страница больше не опрашивает квоты каждую секунду и
+  расписания каждые 5 секунд и не обращается к GitHub при открытии. rpcd
+  отвечает только на методы монитора; ACL разрешает чтение данных
+  монитора, настройки, очистку данных и перезапуск. Раньше в правах на
+  чтение были методы, которые меняют данные, и установка пакета по любому
+  адресу (`apk add --allow-untrusted`). Вернуть убранное можно только
+  сборкой без патчей. *Всегда.*
 
 ### luci-app-xray — `feeds/luciappxray/` (1)
 
