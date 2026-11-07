@@ -356,11 +356,7 @@ fi
 #   apk add sing-box          (строка в world снова без версии)
 #   opkg flag user sing-box
 pin_replaced() {   # <пакет> <версия бинарника>
-    if command -v apk >/dev/null 2>&1; then
-        _ver=$(apk list --manifest "$1" 2>/dev/null | awk -v n="$1" '$1 == n {print $2; exit}')
-    else
-        _ver=$(opkg status "$1" 2>/dev/null | sed -n 's/^Version: //p')
-    fi
+    _ver=$(installed_ver "$1")
     if [ -z "$_ver" ]; then
         log_info "$1: пакет не установлен — закреплять нечего"
         return 0
@@ -374,23 +370,37 @@ pin_replaced() {   # <пакет> <версия бинарника>
         log_ok "$1 $_ver: бинарник из пакета, закреплять не нужно"
         return 0
     fi
+    pin_world "$1" "$_ver" "бинарник $2"
+}
+
+# pin_world <пакет> <версия> <причина> — закрепить пакет на версии
+pin_world() {
     if ! command -v apk >/dev/null 2>&1; then
-        run_cmd "Закрепление $1 $_ver (бинарник $2)" opkg flag hold "$1"
+        run_cmd "Закрепление $1 $2 ($3)" opkg flag hold "$1"
         return
     fi
     _world=/etc/apk/world
-    if grep -qxF "$1=$_ver" "$_world" 2>/dev/null; then
-        log_ok "$1 уже закреплён на $_ver (бинарник $2)"
+    if grep -qxF "$1=$2" "$_world" 2>/dev/null; then
+        log_ok "$1 уже закреплён на $2 ($3)"
         return 0
     fi
     # Прежняя строка пакета (без версии, с другой версией или тегом) уходит
     awk -v n="$1" '{ d = $0; sub(/[<>=~@].*/, "", d); if (d != n) print }' "$_world" > "$_world.zz1" \
-        && echo "$1=$_ver" >> "$_world.zz1" && cat "$_world.zz1" > "$_world"
+        && echo "$1=$2" >> "$_world.zz1" && cat "$_world.zz1" > "$_world"
     _rc=$?; rm -f "$_world.zz1"
     if [ $_rc -eq 0 ]; then
-        log_ok "$1 закреплён на $_ver в $_world (бинарник $2)"
+        log_ok "$1 закреплён на $2 в $_world ($3)"
     else
         log_err "$1: не удалось закрепить в $_world (exit: $_rc)"
+    fi
+}
+
+# installed_ver <пакет> — версия установленного пакета или пусто
+installed_ver() {
+    if command -v apk >/dev/null 2>&1; then
+        apk list --manifest "$1" 2>/dev/null | awk -v n="$1" '$1 == n {print $2; exit}'
+    else
+        opkg status "$1" 2>/dev/null | sed -n 's/^Version: //p'
     fi
 }
 
@@ -399,6 +409,20 @@ pin_replaced() {   # <пакет> <версия бинарника>
 # Сборка из фида: «AdGuard Home, version 0.107.79», релиз — «… v0.107.79»
 [ -x /usr/bin/AdGuardHome ] && pin_replaced adguardhome \
     "$(/usr/bin/AdGuardHome --version 2>/dev/null | awk 'NR == 1 {sub(/^v/, "", $NF); print $NF}')"
+
+# Пакеты, собранные с патчами из patches/packages (список пишет сборка):
+# в официальных фидах LuCI OpenWrt и ImmortalWrt они без наших правок, и
+# apk upgrade поставил бы версию автора. Закрепляются вместе с русским
+# переводом. Снять закрепление: apk add <пакет> (opkg flag user <пакет>).
+if [ -s /etc/build_patched_pkgs ]; then
+    while read -r _pkg; do
+        [ -n "$_pkg" ] || continue
+        for _p in "$_pkg" "luci-i18n-${_pkg#luci-app-}-ru"; do
+            _ver=$(installed_ver "$_p" </dev/null)
+            [ -n "$_ver" ] && pin_world "$_p" "$_ver" "собран с патчами" </dev/null
+        done
+    done < /etc/build_patched_pkgs
+fi
 
 # homeproxy
 if [ -f "/etc/init.d/homeproxy" ]; then
@@ -1465,6 +1489,26 @@ if [ "$CUR_YEAR" -ge 2025 ] && [ "$CUR_YEAR" -le 2050 ]; then
     fi
 else
     log_info "Часы не синхронизированы ($CUR_YEAR) — фикс mtime пропущен"
+fi
+
+# Копия скрипта для режима maintenance (ручной запуск, например после
+# apk upgrade): на первой загрузке — из этой прошивки. Папка /root часто
+# сохраняется через sysupgrade.conf, и без этого после прошивки оставалась
+# бы копия от прежней сборки. Прежняя копия, если отличалась, — в .bak.
+ZZ1_SELF="/etc/uci-defaults/zz1-final-offline-setup.sh"
+ZZ1_COPY="/root/setup.sh"
+if [ "$MODE" = "firstboot" ] && [ -f "$ZZ1_SELF" ]; then
+    if [ -f "$ZZ1_COPY" ] && cmp -s "$ZZ1_SELF" "$ZZ1_COPY"; then
+        log_ok "$ZZ1_COPY совпадает с этой прошивкой"
+    else
+        [ -f "$ZZ1_COPY" ] && cp -p "$ZZ1_COPY" "$ZZ1_COPY.bak"
+        if cp "$ZZ1_SELF" "$ZZ1_COPY.zz1" && chmod 755 "$ZZ1_COPY.zz1" && mv -f "$ZZ1_COPY.zz1" "$ZZ1_COPY"; then
+            log_ok "Копия скрипта для maintenance: $ZZ1_COPY"
+        else
+            rm -f "$ZZ1_COPY.zz1"
+            log_err "Не удалось сохранить копию скрипта в $ZZ1_COPY"
+        fi
+    fi
 fi
 
 touch "$LOCK_FILE"
