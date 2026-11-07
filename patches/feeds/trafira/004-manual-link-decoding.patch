@@ -174,10 +174,10 @@ index c8330029..becd529b 100644
      query_params
  };
 diff --git a/trafira/files/usr/lib/singbox/generator.uc b/trafira/files/usr/lib/singbox/generator.uc
-index 3f396716..64c3a147 100644
+index f67561a9..9f1accd5 100644
 --- a/trafira/files/usr/lib/singbox/generator.uc
 +++ b/trafira/files/usr/lib/singbox/generator.uc
-@@ -50,6 +50,8 @@ let url_strip_fragment_value = runtime_url.strip_fragment;
+@@ -51,6 +51,8 @@ let url_strip_fragment_value = runtime_url.strip_fragment;
  let url_host = runtime_url.host;
  let url_port = runtime_url.port;
  let url_userinfo = runtime_url.userinfo;
@@ -186,7 +186,7 @@ index 3f396716..64c3a147 100644
  let url_path = runtime_url.path;
  let url_query_params = runtime_url.query_params;
  
-@@ -1715,19 +1717,19 @@ function manual_socks_outbound(link, tag_name) {
+@@ -1724,19 +1726,19 @@ function manual_socks_outbound(link, tag_name) {
          version: scheme == "socks4" || scheme == "socks4a" ? "4" : "5"
      };
      if (scheme == "socks5") {
@@ -210,7 +210,7 @@ index 3f396716..64c3a147 100644
      let body = substr(raw, 5);
      let question = index(body, "?");
      let query_string = "";
-@@ -1744,7 +1746,7 @@ function manual_shadowsocks_outbound(link, tag_name) {
+@@ -1753,7 +1755,7 @@ function manual_shadowsocks_outbound(link, tag_name) {
          hostport = substr(body, at + 1);
      }
      else {
@@ -219,7 +219,7 @@ index 3f396716..64c3a147 100644
          if (decoded == null)
              runtime_generate_unsupported("manual Shadowsocks proxy link is invalid");
          at = rindex(decoded, "@");
-@@ -1754,7 +1756,7 @@ function manual_shadowsocks_outbound(link, tag_name) {
+@@ -1763,7 +1765,7 @@ function manual_shadowsocks_outbound(link, tag_name) {
          hostport = substr(decoded, at + 1);
      }
  
@@ -228,7 +228,7 @@ index 3f396716..64c3a147 100644
      if (!shadowsocks_userinfo_valid(userinfo)) {
          let decoded = base64_decode_value(userinfo);
          if (decoded == null)
-@@ -1969,7 +1971,10 @@ function manual_link_outbound(link, tag_name) {
+@@ -1983,7 +1985,10 @@ function manual_link_outbound_value(link, tag_name) {
      if (scheme == "vmess")
          return manual_vmess_outbound(link, tag_name);
  
@@ -241,10 +241,10 @@ index 3f396716..64c3a147 100644
      if (scheme == "socks4" || scheme == "socks4a" || scheme == "socks5")
          return manual_socks_outbound(link, tag_name);
 diff --git a/trafira/files/usr/lib/subscription/parser.uc b/trafira/files/usr/lib/subscription/parser.uc
-index bd1c1720..9251a0d6 100644
+index ad2ff05c..5c6a5cd1 100644
 --- a/trafira/files/usr/lib/subscription/parser.uc
 +++ b/trafira/files/usr/lib/subscription/parser.uc
-@@ -408,6 +408,16 @@ function urldecode(value) {
+@@ -422,6 +422,16 @@ function urldecode(value) {
      });
  }
  
@@ -261,7 +261,7 @@ index bd1c1720..9251a0d6 100644
  let fragment_prefix_decode_cache = {};
  let fragment_decode_cache = {};
  let query_parse_cache = {};
-@@ -523,10 +533,12 @@ function parse_url(url) {
+@@ -537,10 +547,12 @@ function parse_url(url) {
      let slash_pos = index(rest, "/");
      let authority = slash_pos >= 0 ? substr(rest, 0, slash_pos) : rest;
      let userinfo = "";
@@ -275,7 +275,7 @@ index bd1c1720..9251a0d6 100644
          hostport = substr(authority, at_pos + 1);
      }
  
-@@ -534,6 +546,7 @@ function parse_url(url) {
+@@ -548,6 +560,7 @@ function parse_url(url) {
      return {
          scheme: scheme,
          userinfo: userinfo,
@@ -283,7 +283,7 @@ index bd1c1720..9251a0d6 100644
          host: host_port[0] || "",
          port: host_port[1],
          query: parse_query(query),
-@@ -820,16 +833,18 @@ function process_socks(raw, url) {
+@@ -834,16 +847,18 @@ function process_socks(raw, url) {
          return null;
  
      let username = "", password = "";
@@ -307,7 +307,7 @@ index bd1c1720..9251a0d6 100644
          }
      }
  
-@@ -897,7 +912,7 @@ function process_shadowsocks(raw) {
+@@ -911,7 +926,7 @@ function process_shadowsocks(raw) {
          hostport = substr(decoded, at_pos + 1);
      }
  
