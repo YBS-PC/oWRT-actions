@@ -775,7 +775,7 @@ EOF
 fi
 
 # Версия sing-box — вне вариантных блоков: бинарник ставится и в podkop,
-# netshift, forkop, trafira, tachyon, passwall, где homeproxy нет.
+# netshift, forkop, tachyon, passwall, где homeproxy нет.
 if [ -x /usr/bin/sing-box ]; then
     SB_version=$(/usr/bin/sing-box version 2>/dev/null | sed -n '1s/.*version v\{0,1\}\([0-9][0-9.]*\).*/\1/p')
     [ -n "$SB_version" ] && log_ok "Версия sing-box: $SB_version" || log_info "sing-box есть, версию определить не удалось"
@@ -1026,7 +1026,7 @@ EOF
     run_cmd "Каталог журнала в песочнице adguardhome" uci commit adguardhome
     # --- Upstream DNS в AGH yaml ------------------------------------------
     # Зависит от варианта сборки:
-    #   forkop, trafira, tachyon, podkop, netshift → 127.0.0.42:53 (DNS inbound
+    #   forkop, tachyon, podkop, netshift → 127.0.0.42:53 (DNS inbound
     #                     их sing-box)
     #   xray            → 127.0.0.1:5300 (DNS-вход Xray luci-app-xray: FakeDNS,
     #                     Fast/Secure DNS и правила доменов работают в нём)
@@ -1045,7 +1045,7 @@ EOF
     # их трогать нельзя. Повтор нужного адреса в списке не оставляется.
     AGH_YAML="/etc/adguardhome/adguardhome.yaml"
     case "$CURRENT_VARIANT" in
-        forkop|trafira|tachyon|podkop|netshift) _AGH_EXPECTED='127.0.0.42:53' ;;
+        forkop|tachyon|podkop|netshift) _AGH_EXPECTED='127.0.0.42:53' ;;
         xray)          _AGH_EXPECTED='127.0.0.1:5300' ;;
         passwall|v2raya) _AGH_EXPECTED='127.0.0.1:54' ;;
         *)             _AGH_EXPECTED='127.0.0.1:5333' ;;
@@ -1107,7 +1107,7 @@ EOF
             && log_ok "forkop 2.x: intercept_device_dns=0 (AGH видит клиентов), unmatched_dns_mode=router"
     elif [ "$_AGH_EXPECTED" = '127.0.0.42:53' ]; then
         # Сами они перенастраивают dnsmasq на 127.0.0.42 (dont_touch_dhcp=0), а хозяин :53 — AGH.
-        # tachyon перехватывает DNS только устройств со своей секцией; trafira — с Alice Mode.
+        # tachyon перехватывает DNS только устройств со своей секцией.
         uci -q set "$CURRENT_VARIANT".settings.dont_touch_dhcp='1' 2>/dev/null \
             && uci commit "$CURRENT_VARIANT" 2>/dev/null \
             && log_ok "$CURRENT_VARIANT: dont_touch_dhcp=1 (AGH остаётся хозяином на :53)"
@@ -1156,11 +1156,11 @@ if ls "$LUCI_CTRL_SRC"/*.lua >/dev/null 2>&1; then
     fi
 fi
 
-# forkop/trafira/tachyon/podkop/netshift: NTP мимо прокси. Штатная опция вставляет «udp dport
+# forkop/tachyon/podkop/netshift: NTP мимо прокси. Штатная опция вставляет «udp dport
 # 123 return» в цепочку mangle их nft-таблицы (у forkop и в mangle_output).
 # Иначе NTP к адресам из списков прокси уходил бы в TPROXY — та же проблема,
 # что была с ntpd на homeproxy.
-for _pk in forkop trafira tachyon podkop netshift; do
+for _pk in forkop tachyon podkop netshift; do
     [ -f "/etc/config/$_pk" ] || continue
     # forkop 2.x: опции нет, NTP-серверы роутера он сам резолвит через
     # bootstrap DNS, а трафик роутера в секции не берёт без пункта «Система»
@@ -1177,7 +1177,7 @@ for _pk in forkop trafira tachyon podkop netshift; do
     fi
 done
 
-# forkop/trafira/tachyon/podkop/netshift + youtubeUnblock: QUIC мимо sing-box не пускаем.
+# forkop/tachyon/podkop/netshift + youtubeUnblock: QUIC мимо sing-box не пускаем.
 # Эти пакеты отдают доменам из своих списков (и из секций «Исключение» — в
 # netshift они тоже идут через FakeIP) адреса FakeIP 198.18.0.0/15. Правило
 # youtubeUnblock «ip daddr @dpi_ips udp dport 443 reject» видит только настоящие
@@ -1186,10 +1186,10 @@ done
 # ставит в sing-box правило reject для QUIC на входе tproxy: браузер сразу
 # переходит на TCP, который youtubeUnblock обрабатывает. HTTP/3 при этом не
 # используется и для остальных соединений через sing-box.
-# Без youtubeUnblock (forkop-mod, trafira и tachyon — у них свой Zapret; forkop 2.x —
+# Без youtubeUnblock (forkop-mod и tachyon — у них свой Zapret; forkop 2.x —
 # если youtubeUnblock не выбран) опцию не трогаем.
 if [ -x /usr/bin/youtubeUnblock ]; then
-    for _pk in forkop trafira tachyon podkop netshift; do
+    for _pk in forkop tachyon podkop netshift; do
         [ -f "/etc/config/$_pk" ] || continue
         if [ "$(uci -q get "$_pk".settings.disable_quic)" = "1" ]; then
             log_ok "$_pk: disable_quic уже включён"
