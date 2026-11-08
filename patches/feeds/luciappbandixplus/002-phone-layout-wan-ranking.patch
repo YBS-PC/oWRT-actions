@@ -1,0 +1,1762 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 8 Nov 2026 12:00:00 +0000
+Subject: [PATCH] luci-app-bandix-plus: phone layout, WAN direction, ranking
+ over all interfaces, Russian translation
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+On screens up to 768 px the status page left the device table to the
+theme, which stacked every cell of a row on its own line without
+labels; the usage ranking items overlapped; the query panels took most
+of a screen each. Rates in the interface cards were cut to "2.8..." on
+the desktop too, and the device table cut the MAC and IPv4 columns.
+
+Now:
+
+- interface cards keep the whole rate and volume (they wrap instead of
+  being cut) and are titled Upload / Download like the device list
+  ("Inbound" / "Outbound" before); the zone badge and the "(zone)"
+  suffix in the interface selects are shown only when the zone is known
+  (not "unknown");
+- the counters of an interface are ingress and egress: on a LAN
+  interface ingress is what devices upload, on a WAN interface it is
+  what is downloaded from outside. For interfaces in a firewall zone
+  named wan* the card, the realtime chart and the traffic timeline swap
+  the two directions, so Upload and Download mean the same on every
+  card (a WAN interface in the list then shows the total internet
+  traffic);
+- the desktop device table sizes its columns by content and scrolls
+  sideways when it does not fit;
+- on narrow screens the device list is a list of cards: the name (or
+  the address), the interface and the address, the upload and download
+  rate with the volume for the period under it; detailed mode adds the
+  MAC, extra IPv4, IPv6 and the last seen time; offline devices are
+  dimmed. A Sort select (address, rate, volume, name, interface) is
+  shown above the cards; the desktop table keeps sorting by its
+  headers;
+- filters show the label and the select in one row; date fields, the
+  Query/Reset buttons and the period presets use two columns; ranking
+  items keep the rank, the name and the volumes in one block; the
+  timeline totals are three columns;
+- the usage ranking has "All interfaces" (default): one request per
+  monitored interface, merged and sorted by volume; every item shows its
+  interface;
+- the hostname "-" from the API is replaced by the address in the
+  ranking and in the device selects; the chart point counter reads
+  "Points: N";
+- status.css is requested with a new version so that browsers do not
+  keep the old file.
+
+The Russian translation is rewritten for the strings that remain on
+the pages: upload and download were both translated as "загрузка",
+Reset as "перезагрузить", and some strings were machine-translated
+out of context.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Uo9XQuT7u6ShTYdi2S3Anq
+---
+ .../resources/bandix_plus/status.css          | 427 ++++++++++
+ .../resources/view/bandix_plus/index.js       | 175 +++-
+ luci-app-bandix-plus/po/ru/bandix_plus.po     | 762 +++++-------------
+ 3 files changed, 792 insertions(+), 572 deletions(-)
+
+diff --git a/luci-app-bandix-plus/htdocs/luci-static/resources/bandix_plus/status.css b/luci-app-bandix-plus/htdocs/luci-static/resources/bandix_plus/status.css
+index 68379916..92c3f1d2 100644
+--- a/luci-app-bandix-plus/htdocs/luci-static/resources/bandix_plus/status.css
++++ b/luci-app-bandix-plus/htdocs/luci-static/resources/bandix_plus/status.css
+@@ -2399,3 +2399,430 @@
+   margin: 0;
+   min-width: 0;
+ }
++
++
++/* Numbers are never cut: the rate and the volume wrap instead */
++.bplus-page .overview-hero-speed__total-wrap {
++  display: flex;
++  flex-wrap: wrap;
++  align-items: baseline;
++  gap: 0 6px;
++  overflow: visible;
++}
++
++.bplus-page .overview-hero-speed__total {
++  overflow: visible;
++  text-overflow: clip;
++}
++
++.bplus-page .overview-hero-speed__cum {
++  justify-self: start;
++  text-align: left;
++}
++
++.bplus-page .overview-hero-speed__split-row {
++  display: flex;
++  flex-wrap: wrap;
++  gap: 0 6px;
++}
++
++.bplus-page .overview-hero-speed__split-rate {
++  overflow: visible;
++  text-overflow: clip;
++}
++
++/* Desktop device table: columns take their content width, the table scrolls */
++.bplus-page .table-wrapper {
++  overflow-x: auto;
++}
++
++.bplus-page .bplus-table--devices {
++  table-layout: auto;
++}
++
++.bplus-page .bplus-table--devices th,
++.bplus-page .bplus-table--devices td {
++  overflow: visible;
++  text-overflow: clip;
++}
++
++.bplus-page .bplus-table--devices th,
++.bplus-page .bplus-table--devices td {
++  padding-left: 10px;
++  padding-right: 10px;
++}
++
++.bplus-page .bplus-table--devices td:nth-child(5) {
++  white-space: normal;
++  word-break: break-all;
++  min-width: 4em;
++}
++
++.bplus-page .bplus-device-cards,
++.bplus-page .bplus-sort-label {
++  display: none !important;
++}
++
++.bplus-page .usage-ranking-meta-iface {
++  font-weight: 600;
++}
++
++@media (max-width: 768px) {
++  .bplus-page .bplus-panel {
++    padding: 12px !important;
++  }
++
++  .bplus-page .bplus-version {
++    display: none;
++  }
++
++  .bplus-page .bplus-panel h2 {
++    font-size: 1.0625rem;
++    line-height: 1.3;
++  }
++
++  /* interface cards */
++  .bplus-page .overview-card {
++    padding: 10px 12px;
++    gap: 8px;
++  }
++
++  .bplus-page .overview-card__head {
++    padding-bottom: 6px;
++  }
++
++  .bplus-page .overview-hero-speed {
++    padding: 8px 10px;
++  }
++
++  .bplus-page .overview-hero-speed__title-row {
++    margin: 0 0 2px;
++  }
++
++  /* realtime chart header */
++  .bplus-page .bplus-trend-title-row {
++    flex-wrap: wrap;
++    gap: 4px 12px;
++  }
++
++  .bplus-page .bplus-trend-title-row .bplus-panel-head {
++    flex: 1 1 100% !important;
++    flex-wrap: wrap;
++    gap: 6px 10px;
++  }
++
++  .bplus-page .bplus-trend-legend {
++    justify-content: flex-start;
++  }
++
++  /* filters: label and select in one row each */
++  .bplus-page .bplus-inline-form {
++    display: grid;
++    grid-template-columns: auto minmax(0, 1fr);
++    align-items: center;
++    gap: 6px 10px;
++  }
++
++  .bplus-page .bplus-inline-form > label {
++    display: contents;
++    font-size: 0.8125rem;
++  }
++
++  .bplus-page .bplus-inline-form .cbi-input-select,
++  .bplus-page .bplus-inline-form .cbi-input-text {
++    width: 100%;
++    min-width: 0;
++  }
++
++  .bplus-page .bplus-panel-head {
++    flex-wrap: wrap;
++    gap: 6px 10px;
++  }
++
++  /* device list: cards instead of the table */
++  .bplus-page .table-wrapper {
++    display: none !important;
++  }
++
++  .bplus-page .bplus-device-cards {
++    display: flex !important;
++    flex-direction: column;
++    gap: 8px;
++    margin-top: 10px;
++  }
++
++  .bplus-page .bplus-sort-label {
++    display: contents !important;
++  }
++
++  .bplus-page .bpc-card {
++    border: 1px solid var(--bplus-border);
++    border-radius: 12px;
++    padding: 10px 12px;
++    background: var(--bplus-card);
++  }
++
++  .bplus-page .bpc-card.is-offline {
++    opacity: 0.65;
++  }
++
++  .bplus-page .bpc-head {
++    display: flex;
++    align-items: center;
++    gap: 8px;
++    min-width: 0;
++  }
++
++  .bplus-page .bpc-dot {
++    flex: 0 0 auto;
++    width: 8px;
++    height: 8px;
++    border-radius: 50%;
++    background: #9ca3af;
++  }
++
++  .bplus-page .bpc-card.is-online .bpc-dot {
++    background: #10b981;
++  }
++
++  .bplus-page .bpc-id {
++    flex: 1;
++    min-width: 0;
++  }
++
++  .bplus-page .bpc-name {
++    font-weight: 600;
++    font-size: 0.9375rem;
++    white-space: nowrap;
++    overflow: hidden;
++    text-overflow: ellipsis;
++  }
++
++  .bplus-page .bpc-sub {
++    font-size: 0.75rem;
++    color: var(--bplus-sub);
++  }
++
++  .bplus-page .bpc-grid {
++    display: grid;
++    grid-template-columns: repeat(2, minmax(0, 1fr));
++    gap: 4px 10px;
++    margin-top: 8px;
++    padding-top: 8px;
++    border-top: 1px solid var(--bplus-border);
++  }
++
++  .bplus-page .bpc-cell {
++    display: flex;
++    flex-wrap: wrap;
++    align-items: baseline;
++    gap: 0 4px;
++    min-width: 0;
++  }
++
++  .bplus-page .bpc-arrow {
++    font-size: 0.75rem;
++    font-weight: 700;
++  }
++
++  .bplus-page .bpc-arrow.up {
++    color: var(--bplus-up);
++  }
++
++  .bplus-page .bpc-arrow.down {
++    color: var(--bplus-down);
++  }
++
++  .bplus-page .bpc-rate {
++    font-weight: 600;
++    font-size: 0.875rem;
++    white-space: nowrap;
++  }
++
++  .bplus-page .bpc-vol {
++    flex-basis: 100%;
++    padding-left: 14px;
++    font-size: 0.6875rem;
++    color: var(--bplus-sub);
++    white-space: nowrap;
++  }
++
++  .bplus-page .bpc-details {
++    display: grid;
++    grid-template-columns: auto minmax(0, 1fr);
++    gap: 2px 10px;
++    margin-top: 8px;
++    padding-top: 8px;
++    border-top: 1px solid var(--bplus-border);
++    font-size: 0.75rem;
++  }
++
++  .bplus-page .bpc-k {
++    color: var(--bplus-sub);
++  }
++
++  .bplus-page .bpc-v {
++    overflow-wrap: anywhere;
++  }
++
++  .bplus-page .bpc-mono {
++    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
++  }
++
++  /* ranking and timeline query panels */
++  .bplus-page .usage-ranking-header {
++    flex-direction: column;
++    align-items: flex-start;
++    gap: 4px;
++  }
++
++  .bplus-page .traffic-increments-query {
++    padding: 10px !important;
++  }
++
++  .bplus-page .usage-ranking-date-range-row {
++    display: grid !important;
++    grid-template-columns: repeat(2, minmax(0, 1fr));
++    align-items: end;
++    gap: 8px !important;
++  }
++
++  .bplus-page .usage-ranking-network-type-wrapper,
++  .bplus-page .usage-ranking-date-picker-wrapper {
++    min-width: 0 !important;
++    width: auto !important;
++    gap: 2px;
++  }
++
++  .bplus-page .usage-ranking-date-separator {
++    display: none !important;
++  }
++
++  .bplus-page .usage-ranking-network-type-wrapper .cbi-input-select,
++  .bplus-page .usage-ranking-date-picker,
++  .bplus-page .usage-ranking-date-picker input {
++    width: 100% !important;
++    min-width: 0 !important;
++    box-sizing: border-box;
++  }
++
++  .bplus-page .usage-ranking-date-picker input {
++    min-height: 36px;
++    font-size: 0.875rem;
++  }
++
++  .bplus-page .usage-ranking-query-actions {
++    grid-column: 1 / -1;
++    display: grid !important;
++    grid-template-columns: repeat(2, minmax(0, 1fr));
++    gap: 6px;
++    width: auto !important;
++    margin: 0 !important;
++  }
++
++  .bplus-page .usage-ranking-query-presets {
++    display: grid !important;
++    grid-template-columns: repeat(2, minmax(0, 1fr));
++    gap: 6px !important;
++  }
++
++  .bplus-page .usage-ranking-query-actions .cbi-button,
++  .bplus-page .usage-ranking-query-presets .cbi-button {
++    width: 100%;
++    min-width: 0;
++    margin: 0 !important;
++    padding: 6px 4px;
++    min-height: 36px;
++    height: auto;
++    font-size: 0.8125rem;
++    line-height: 1.2;
++    white-space: normal;
++    word-break: normal;
++    overflow-wrap: normal;
++    justify-content: center;
++    text-align: center;
++  }
++
++  .bplus-page .usage-ranking-item {
++    display: flex;
++    flex-direction: row;
++    align-items: center;
++    gap: 10px;
++    padding: 8px 10px;
++    height: auto;
++  }
++
++  .bplus-page .usage-ranking-info {
++    display: flex;
++    flex-direction: column;
++    flex: 1;
++    min-width: 0;
++    gap: 2px;
++  }
++
++  .bplus-page .usage-ranking-device,
++  .bplus-page .usage-ranking-stats {
++    position: static;
++    width: 100%;
++    min-width: 0;
++  }
++
++  .bplus-page .usage-ranking-name {
++    white-space: nowrap;
++    overflow: hidden;
++    text-overflow: ellipsis;
++  }
++
++  .bplus-page .usage-ranking-meta {
++    display: flex;
++    flex-wrap: wrap;
++    gap: 0 8px;
++    font-size: 0.6875rem;
++  }
++
++  .bplus-page .usage-ranking-meta > span:nth-child(3),
++  .bplus-page .usage-ranking-meta-total {
++    display: none;
++  }
++
++  .bplus-page .usage-ranking-traffic {
++    display: flex;
++    flex-wrap: wrap;
++    gap: 0 10px;
++    font-size: 0.8125rem;
++  }
++
++  .bplus-page .bplus-histogram-section .traffic-increments-filters {
++    display: grid;
++    grid-template-columns: repeat(2, minmax(0, 1fr));
++    gap: 8px;
++  }
++
++  .bplus-page .bplus-histogram-section .traffic-increments-filter-group {
++    display: flex;
++    flex-direction: column;
++    align-items: stretch;
++    min-width: 0;
++    gap: 2px;
++  }
++
++  .bplus-page .bplus-histogram-section .traffic-increments-filters .cbi-input-select {
++    width: 100%;
++    min-width: 0;
++    height: auto;
++    min-height: 36px;
++    padding-top: 4px;
++    padding-bottom: 4px;
++    line-height: normal;
++  }
++
++  .bplus-page .bplus-histogram-section .traffic-increments-summary {
++    grid-template-columns: repeat(3, minmax(0, 1fr));
++    gap: 6px;
++  }
++
++  .bplus-page .traffic-increments-summary-item {
++    padding: 8px 4px;
++    min-width: 0;
++  }
++}
+diff --git a/luci-app-bandix-plus/htdocs/luci-static/resources/view/bandix_plus/index.js b/luci-app-bandix-plus/htdocs/luci-static/resources/view/bandix_plus/index.js
+index 0b7b6413..6bd176b7 100644
+--- a/luci-app-bandix-plus/htdocs/luci-static/resources/view/bandix_plus/index.js
++++ b/luci-app-bandix-plus/htdocs/luci-static/resources/view/bandix_plus/index.js
+@@ -466,8 +466,33 @@ function msToTimeLabel(tsMs) {
+ 		d.getSeconds().toString().padStart(2, '0');
+ }
+ 
++/**
++ * Counters of an interface are ingress (up_*) and egress (down_*). On a LAN
++ * interface ingress is what devices send; on a WAN interface it is what comes
++ * from outside, so for WAN zones the two directions are swapped for display.
++ */
++function isWanZone(zone) {
++	return /^wan/.test(String(zone || ''));
++}
++
++function swapUpDown(x) {
++	if (!x || typeof x !== 'object') return x;
++	var o = {};
++	Object.keys(x).forEach(function (k) {
++		var m = /^(up|down)_(.*)$/.exec(k);
++		o[m ? (m[1] === 'up' ? 'down_' : 'up_') + m[2] : k] = x[k];
++	});
++	return o;
++}
++
++/** Interface name with its firewall zone, when the zone is known. */
++function ifaceLabel(o) {
++	var zone = o && o.zone != null ? String(o.zone) : '';
++	return o.ifname + (zone && zone !== 'unknown' ? ' (' + zone + ')' : '');
++}
++
+ function formatEntriesPillText(n) {
+-	return String(Math.max(0, asNum(n))) + ' ' + _('entries');
++	return _('Points') + ': ' + String(Math.max(0, asNum(n)));
+ }
+ 
+ function formatScheduleDayLabels(days) {
+@@ -685,7 +710,7 @@ function ensureCss() {
+ 			'id': 'bplus-status-css',
+ 			'rel': 'stylesheet',
+ 			'type': 'text/css',
+-			'href': L.resource('bandix_plus/status.css', '?v=51')
++			'href': L.resource('bandix_plus/status.css', '?v=52')
+ 		}));
+ 	}
+ 	ensureLayoutCss();
+@@ -1005,6 +1030,7 @@ return view.extend({
+ 		for (var i = 0; i < displayList.length; i++) {
+ 			var x = displayList[i] || {};
+ 			var hn = String(x.hostname || '').trim();
++			if (hn === '-') hn = '';
+ 			var mac = String(x.mac || '—');
+ 			var ip4 = Array.isArray(x.ipv4) && x.ipv4.length ? String(x.ipv4[0]) : '';
+ 			var up = asNum(x.up_bytes);
+@@ -1021,6 +1047,7 @@ return view.extend({
+ 					E('div', { 'class': 'usage-ranking-device' }, [
+ 						E('div', { 'class': 'usage-ranking-name' }, [ hn || ip4 || mac ]),
+ 						E('div', { 'class': 'usage-ranking-meta' }, [
++							x.iface ? E('span', { 'class': 'usage-ranking-meta-iface' }, [ String(x.iface) ]) : '',
+ 							E('span', {}, [ ip4 || '—' ]),
+ 							E('span', {}, [ mac ]),
+ 							E('span', { 'class': 'usage-ranking-meta-total' }, [ formatBytes(total) ])
+@@ -1085,7 +1112,7 @@ return view.extend({
+ 		}
+ 		var total = up + down;
+ 		var rangeStr = formatSlashDateTimeRange(start, end);
+-		el.textContent = rangeStr + ' · ↑' + formatBytes(up) + ' · ↓' + formatBytes(down) + ' · ' + formatBytes(total) + ' · ' + String(data.length) + ' ' + _('entries');
++		el.textContent = rangeStr + ' · ↑' + formatBytes(up) + ' · ↓' + formatBytes(down) + ' · ' + formatBytes(total);
+ 		if (this.el.statsSummaryUpVal) this.el.statsSummaryUpVal.textContent = formatBytes(up);
+ 		if (this.el.statsSummaryDownVal) this.el.statsSummaryDownVal.textContent = formatBytes(down);
+ 		if (this.el.statsSummaryTotalVal) this.el.statsSummaryTotalVal.textContent = formatBytes(total);
+@@ -1555,7 +1582,7 @@ return view.extend({
+ 
+ 			if (this.el.overviewCount) {
+ 				this.el.overviewCount.textContent =
+-					String(this.overview.length) + ' ' + _('entries');
++					_('Points') + ': ' + String(this.overview.length);
+ 			}
+ 
+ 			// 趋势图继续按现有逻辑刷新，不影响历史趋势查询。
+@@ -1571,7 +1598,16 @@ return view.extend({
+ 		}, this));
+ 	},
+ 
++	isWanIface: function (name) {
++		for (var i = 0; i < this.overview.length; i++)
++			if (this.overview[i].ifname === name)
++				return isWanZone(this.overview[i].zone);
++		return false;
++	},
++
+ 	trendPointByteRates: function (x) {
++		if (this.isWanIface(this.selectedIface))
++			x = swapUpDown(x);
+ 		var tt = String(this.selectedTrendType || '').trim();
+ 		var u4 = asNum(x.up_v4_bps), u6 = asNum(x.up_v6_bps), d4 = asNum(x.down_v4_bps), d6 = asNum(x.down_v6_bps);
+ 		if (tt === 'ipv4') {
+@@ -1712,6 +1748,10 @@ return view.extend({
+ 			var item = this.overview[i];
+ 			var metrics = item.metrics || {};
+ 			var cumulative = item.cumulative || {};
++			if (isWanZone(item.zone)) {
++				metrics = swapUpDown(metrics);
++				cumulative = swapUpDown(cumulative);
++			}
+ 			var upBps = asNum(metrics.up_v4_bps) + asNum(metrics.up_v6_bps);
+ 			var downBps = asNum(metrics.down_v4_bps) + asNum(metrics.down_v6_bps);
+ 			var cumUp = asNum(cumulative.up_v4_bytes) + asNum(cumulative.up_v6_bytes);
+@@ -1720,7 +1760,7 @@ return view.extend({
+ 			var ifname = String(item.ifname != null ? item.ifname : '') || '';
+ 			var headBits = [ E('div', { 'class': 'overview-card__title' }, [ ifname || '—' ]) ];
+ 			var actions = E('div', { 'class': 'overview-card__actions' });
+-			if (zoneStr) {
++			if (zoneStr && zoneStr !== 'unknown') {
+ 				actions.appendChild(E('div', { 'class': 'overview-card__badges' }, [
+ 					E('span', { 'class': 'overview-pill overview-pill--zone' }, [ zoneStr ])
+ 				]));
+@@ -1730,8 +1770,8 @@ return view.extend({
+ 				E('div', { 'class': 'overview-card__head' }, headBits),
+ 				E('section', { 'class': 'overview-card__block overview-card__block--rate' }, [
+ 					E('div', { 'class': 'overview-hero-pair' }, [
+-					this.overviewHeroSpeed(_('Inbound'), upBps, metrics.up_v4_bps, metrics.up_v6_bps, false, 'up', cumUp, cumulative.up_v4_bytes, cumulative.up_v6_bytes),
+-					this.overviewHeroSpeed(_('Outbound'), downBps, metrics.down_v4_bps, metrics.down_v6_bps, false, 'down', cumDown, cumulative.down_v4_bytes, cumulative.down_v6_bytes)
++					this.overviewHeroSpeed(_('Upload'), upBps, metrics.up_v4_bps, metrics.up_v6_bps, false, 'up', cumUp, cumulative.up_v4_bytes, cumulative.up_v6_bytes),
++					this.overviewHeroSpeed(_('Download'), downBps, metrics.down_v4_bps, metrics.down_v6_bps, false, 'down', cumDown, cumulative.down_v4_bytes, cumulative.down_v6_bytes)
+ 					])
+ 				])
+ 			];
+@@ -1780,7 +1820,7 @@ return view.extend({
+ 			var o = this.overview[i];
+ 			rows.push({
+ 				value: o.ifname,
+-				label: o.ifname + ' (' + (o.zone || '—') + ')'
++				label: ifaceLabel(o)
+ 			});
+ 		}
+ 		if (!hasSameSelectOptions(sel, rows)) {
+@@ -1809,7 +1849,7 @@ return view.extend({
+ 		});
+ 		for (var i = 0; i < list.length; i++) {
+ 			var d = list[i];
+-			var label = (d.hostname || '—') + ' | ' + d.mac;
++			var label = (d.hostname && d.hostname !== '-' ? d.hostname : (d.ipv4 && d.ipv4[0]) || '—') + ' | ' + d.mac;
+ 			rows.push({
+ 				value: d.mac,
+ 				label: label
+@@ -1835,7 +1875,7 @@ return view.extend({
+ 			var o = this.overview[i];
+ 			rows.push({
+ 				value: o.ifname,
+-				label: o.ifname + ' (' + (o.zone || '—') + ')'
++				label: ifaceLabel(o)
+ 			});
+ 		}
+ 		if (!hasSameSelectOptions(sel, rows)) {
+@@ -1855,13 +1895,13 @@ return view.extend({
+ 	renderUsageRankingIfaceOptions: function () {
+ 		var sel = this.el.rankIface;
+ 		if (!sel) return;
+-		var old = sel.value || (this.el.statsIface ? this.el.statsIface.value : '') || this.selectedIface;
+-		var rows = [];
++		var old = sel.value || '*';
++		var rows = [ { value: '*', label: _('All interfaces') } ];
+ 		for (var i = 0; i < this.overview.length; i++) {
+ 			var o = this.overview[i];
+ 			rows.push({
+ 				value: o.ifname,
+-				label: o.ifname + ' (' + (o.zone || '—') + ')'
++				label: ifaceLabel(o)
+ 			});
+ 		}
+ 		if (!hasSameSelectOptions(sel, rows)) {
+@@ -1890,7 +1930,7 @@ return view.extend({
+ 		});
+ 		for (var i = 0; i < list.length; i++) {
+ 			var d = list[i];
+-			sel.appendChild(E('option', { 'value': d.mac }, [ (d.hostname || d.mac) + ' · ' + d.mac ]));
++			sel.appendChild(E('option', { 'value': d.mac }, [ (d.hostname && d.hostname !== '-' ? d.hostname : (d.ipv4 && d.ipv4[0]) || d.mac) + ' · ' + d.mac ]));
+ 		}
+ 		if (old) sel.value = old;
+ 	},
+@@ -2006,8 +2046,14 @@ return view.extend({
+ 			this.el.devicesCount.textContent = _('Online devices') + ': ' + String(online) + ' / ' + String(list.length);
+ 		}
+ 
++		if (this.el.deviceSortSelect) {
++			var sortOpt = this.el.deviceSortSelect.querySelector('option[value="' + this.deviceSortKey + '"]');
++			if (sortOpt) this.el.deviceSortSelect.value = this.deviceSortKey;
++		}
++
+ 		if (!list.length) {
+ 			body.appendChild(E('tr', {}, [ E('td', { 'colspan': '9', 'class': 'bplus-empty' }, [ _('No devices') ]) ]));
++			this.renderDeviceCards([], false);
+ 			return;
+ 		}
+ 
+@@ -2040,6 +2086,59 @@ return view.extend({
+ 			]);
+ 			body.appendChild(tr);
+ 		}
++		this.renderDeviceCards(list, det);
++	},
++
++	/** Phone layout: one card per device; detailed mode adds MAC, IPv6 and last seen. */
++	renderDeviceCards: function (list, det) {
++		var wrap = this.el.deviceCards;
++		if (!wrap) return;
++		var cards = [];
++		if (!list.length)
++			cards.push(E('div', { 'class': 'bplus-empty' }, [ _('No devices') ]));
++		var cell = function (dir, arrow, bps, bytes) {
++			return E('div', { 'class': 'bpc-cell' }, [
++				E('span', { 'class': 'bpc-arrow ' + dir }, [ arrow ]),
++				E('span', { 'class': 'bpc-rate' }, [ formatBpsAsByteRate(bps) ]),
++				E('span', { 'class': 'bpc-vol' }, [ formatBytes(bytes) ])
++			]);
++		};
++		for (var i = 0; i < list.length; i++) {
++			var d = list[i];
++			var met = d.metrics || {};
++			var cum = d.cumulative || {};
++			var host = d.hostname === '-' || d.hostname == null ? '' : String(d.hostname).trim();
++			var ip4 = (d.ipv4 && d.ipv4.length) ? String(d.ipv4[0]) : '';
++			var sub = [ deviceIfaceName(d) || '—' ];
++			if (host && ip4) sub.push(ip4);
++			var parts = [
++				E('div', { 'class': 'bpc-head' }, [
++					E('span', { 'class': 'bpc-dot' }),
++					E('div', { 'class': 'bpc-id' }, [
++						E('div', { 'class': 'bpc-name' }, [ host || ip4 || d.mac || '—' ]),
++						E('div', { 'class': 'bpc-sub' }, [ sub.join(' · ') ])
++					])
++				]),
++				E('div', { 'class': 'bpc-grid' }, [
++					cell('up', '↑', sumUpBps(met), sumUpBytes(cum)),
++					cell('down', '↓', sumDownBps(met), sumDownBytes(cum))
++				])
++			];
++			if (det) {
++				var rows = [
++					E('span', { 'class': 'bpc-k' }, [ 'MAC' ]),
++					E('span', { 'class': 'bpc-v bpc-mono' }, [ d.mac || '—' ])
++				];
++				if (d.ipv4 && d.ipv4.length > 1)
++					rows.push(E('span', { 'class': 'bpc-k' }, [ 'IPv4' ]), E('span', { 'class': 'bpc-v' }, [ d.ipv4.join(', ') ]));
++				if (d.ipv6 && d.ipv6.length)
++					rows.push(E('span', { 'class': 'bpc-k' }, [ 'IPv6' ]), E('span', { 'class': 'bpc-v bpc-mono' }, [ d.ipv6.join(', ') ]));
++				rows.push(E('span', { 'class': 'bpc-k' }, [ _('Last seen') ]), E('span', { 'class': 'bpc-v' }, [ formatDeviceLastSeenMs(d.last_seen_ms) ]));
++				parts.push(E('div', { 'class': 'bpc-details' }, rows));
++			}
++			cards.push(E('div', { 'class': 'bpc-card' + (d.online ? ' is-online' : ' is-offline') }, parts));
++		}
++		dom.content(wrap, cards);
+ 	},
+ 
+ 	drawTrendChart: function () {
+@@ -3519,7 +3618,7 @@ return view.extend({
+ 				this.statsZoomEnabled = false;
+ 				this.statsZoomScale = 1;
+ 				this.statsZoomOffsetX = 0;
+-				this.histogram = res || [];
++				this.histogram = this.isWanIface(iface) ? (res || []).map(swapUpDown) : (res || []);
+ 				this.drawStatsChart();
+ 				this.updateStatsHistogramSummary();
+ 				this.updateStatsHistogramTimeline();
+@@ -3544,7 +3643,9 @@ return view.extend({
+ 		var iface = this.el.rankIface.value;
+ 		var start = dateStartMs(this.el.rankStart.value);
+ 		var end = dateEndMs(this.el.rankEnd.value);
+-		if (!iface) {
++		// '*' — every monitored interface: one request per interface, merged by volume
++		var ifaces = iface === '*' ? this.overview.map(function (o) { return o.ifname; }).filter(Boolean) : [ iface ];
++		if (!iface || !ifaces.length) {
+ 			this.notifyError(_('Please choose an interface'), null);
+ 			return;
+ 		}
+@@ -3556,10 +3657,20 @@ return view.extend({
+ 		var rankTt = this.el.rankTrafficTypeSelect ? (this.el.rankTrafficTypeSelect.value || 'all') : 'all';
+ 		if (rankTt === 'all') rankTt = '';
+ 
+-		callGetUsageRanking(iface, rankTt || 'all', String(start), String(end), '0')
+-			.then(function (r) { return unwrapData(r, []); })
+-			.then(L.bind(function (res) {
+-				this.usageRanking = res || [];
++		Promise.all(ifaces.map(function (name) {
++			return callGetUsageRanking(name, rankTt || 'all', String(start), String(end), '0')
++				.then(function (r) { return unwrapData(r, []); })
++				.then(function (rows) {
++					return (Array.isArray(rows) ? rows : []).map(function (x) {
++						if (x && typeof x === 'object' && !x.iface) x.iface = name;
++						return x;
++					});
++				});
++		}))
++			.then(L.bind(function (parts) {
++				var res = [].concat.apply([], parts);
++				res.sort(function (a, b) { return asNum((b || {}).total_bytes) - asNum((a || {}).total_bytes); });
++				this.usageRanking = res;
+ 				this.renderUsageRanking();
+ 				this.updateRankTimeline();
+ 			}, this))
+@@ -3778,6 +3889,13 @@ return view.extend({
+ 			}, this));
+ 		}
+ 
++		this.el.deviceSortSelect.addEventListener('change', L.bind(function () {
++			var key = this.el.deviceSortSelect.value || 'ipv4';
++			this.deviceSortKey = key;
++			this.deviceSortAsc = (key === 'ipv4' || key === 'host' || key === 'iface');
++			this.renderDevicesTable();
++		}, this));
++
+ 		this.el.deviceBody.addEventListener('click', L.bind(function (ev) {
+ 			var deleteBtn = ev.target.closest('.bplus-device-delete-btn');
+ 			if (deleteBtn && this.el.deviceBody.contains(deleteBtn)) {
+@@ -4015,6 +4133,17 @@ return view.extend({
+ 		]);
+ 		this.el.deviceModeSelect.value = this.deviceDisplayMode;
+ 		this.el.devicesCount = E('span', { 'class': 'meta-pill', 'id': 'bplus-devices-count' }, [ _('Online devices') + ': 0 / 0' ]);
++		// Sorting for the card list; the desktop table sorts by its headers
++		this.el.deviceSortSelect = E('select', { 'class': 'cbi-input-select' }, [
++			E('option', { 'value': 'ipv4' }, [ 'IPv4' ]),
++			E('option', { 'value': 'rate_down' }, [ _('Download Rate') ]),
++			E('option', { 'value': 'rate_up' }, [ _('Upload Rate') ]),
++			E('option', { 'value': 'down_bytes' }, [ _('Download bytes') ]),
++			E('option', { 'value': 'up_bytes' }, [ _('Upload bytes') ]),
++			E('option', { 'value': 'host' }, [ _('Hostname') ]),
++			E('option', { 'value': 'iface' }, [ _('Iface') ])
++		]);
++		this.el.deviceCards = E('div', { 'class': 'bplus-device-cards' });
+ 
+ 		this.el.trendCount = E('span', { 'class': 'meta-pill', 'id': 'bplus-trend-count' }, [ formatEntriesPillText(0) ]);
+ 
+@@ -4559,9 +4688,11 @@ return view.extend({
+ 					E('div', { 'class': 'bplus-inline-form' }, [
+ 						E('label', {}, [ _('Iface'), this.el.devicesIfaceSelect ]),
+ 						E('label', {}, [ _('Period'), this.el.periodSelect ]),
+-						E('label', {}, [ _('Display mode'), this.el.deviceModeSelect ])
++						E('label', {}, [ _('Display mode'), this.el.deviceModeSelect ]),
++						E('label', { 'class': 'bplus-sort-label' }, [ _('Sort'), this.el.deviceSortSelect ])
+ 					]),
+-					E('div', { 'class': 'table-wrapper' }, [ E('table', { 'class': 'table bplus-table bplus-table--devices' }, [ this.el.deviceHead, this.el.deviceBody ]) ])
++					E('div', { 'class': 'table-wrapper' }, [ E('table', { 'class': 'table bplus-table bplus-table--devices' }, [ this.el.deviceHead, this.el.deviceBody ]) ]),
++					this.el.deviceCards
+ 				]),
+ 
+ 				E('section', { 'class': 'bplus-panel bplus-usage-ranking-section' }, [
+diff --git a/luci-app-bandix-plus/po/ru/bandix_plus.po b/luci-app-bandix-plus/po/ru/bandix_plus.po
+index aee512a7..5f2c7f15 100644
+--- a/luci-app-bandix-plus/po/ru/bandix_plus.po
++++ b/luci-app-bandix-plus/po/ru/bandix_plus.po
+@@ -2,694 +2,356 @@
+ msgid ""
+ msgstr "Content-Type: text/plain; charset=UTF-8\n"
+ 
+-msgid "bandix-plus"
+-msgstr "bandix-plus"
+-
+ msgid "Bandix Plus"
+ msgstr "Bandix Plus"
+ 
+-msgid "Rate limit & policy"
+-msgstr "Ограничения скорости и стратегии"
+-
+-msgid "Cumulative: all (live only)"
+-msgstr "Накопление: Все (только текущий курс и накопление в реальном времени)"
+-
+-msgid "Cumulative: today"
+-msgstr "Итого: Сегодня"
+-
+-msgid "Cumulative: this week"
+-msgstr "Совокупно: на этой неделе"
+-
+-msgid "Cumulative: this month"
+-msgstr "Совокупно: в этом месяце"
+-
+-msgid "Cumulative: this year"
+-msgstr "Совокупно: в этом году"
+-
+-msgid "Name / zone"
+-msgstr "Сетевая карта/домен"
+-
+-msgid "Refresh now"
+-msgstr "Обновить сейчас"
+-
+-msgid "Cumulative (bytes) for period"
+-msgstr "Суммарное количество байт за выбранный период времени"
+-
+-msgid "L4 bps (sum v4/v6, both dirs)"
+-msgstr "Общая скорость в направлении L4 (двусторонняя связь v4/v6)"
+-
+-msgid "Cumulative: all (live)"
+-msgstr "Совокупно: все (в реальном времени)"
+-
+-msgid "HTTP API 端口与 bandix-plus --api-bind 的端口段一致，默认 8787。"
+-msgstr ""
+-"Порт на этой странице должен соответствовать порту --api-bind Bandix-plus. "
+-"Значение по умолчанию — 8787."
+-
+-msgid "General"
+-msgstr "Базовый"
+-
+-msgid "Enable traffic persistence storage"
+-msgstr "Включить постоянное хранилище трафика"
+-
+-msgid "Persist traffic histogram/ring data to disk. Disabled by default."
+-msgstr ""
+-"Сохранять данные гистограммы трафика/кольца на диск, по умолчанию отключено."
+-
+-msgid "TC backend"
+-msgstr "Бэкенд TC"
+-
+-msgid "Select TC attach backend."
+-msgstr "Выберите бэкенд подключения TC."
+-
+-msgid ""
+-"Select TC attach backend. Recommendation: use auto by default; tcx is "
+-"preferred on kernel >= 6.6; netlink is safer on older kernels."
+-msgstr ""
+-"Выберите TC, чтобы смонтировать серверную часть. Рекомендация: используйте "
+-"авто по умолчанию; сначала используйте tcx для ядра >= 6.6; используйте "
+-"netlink для старых ядер, что более надежно."
+-
+-msgid "TC netlink priority"
+-msgstr "Приоритет TC netlink"
+-
+-msgid "Only used when backend is netlink. Range: 0..65535 (0 means default)."
+-msgstr ""
+-"Используется только при backend=netlink. Диапазон: 0..65535 (0 — значение по"
+-" умолчанию)."
+-
+-msgid "Netlink priority"
+-msgstr "Приоритет сетевых ссылок"
+-
+-msgid "TCX anchor program id"
+-msgstr "ID якорной программы TCX"
+-
+-msgid "Required when tc_order is before/after."
+-msgstr "Обязательно, когда tc_order равен before/after."
+-
+-msgid "TCX ingress anchor program id"
+-msgstr "Идентификатор входной привязки TCX"
+-
+-msgid "TCX egress anchor program id"
+-msgstr "Идентификатор выходной привязки TCX"
+-
+-msgid ""
+-"Used when tc_order is before/after. Must be a valid ingress program id on "
+-"the same interface."
+-msgstr ""
+-"Используется, когда tc_order находится до/после. Должен быть действительным "
+-"идентификатором входной программы на том же интерфейсе."
+-
+-msgid ""
+-"Used when tc_order is before/after. Must be a valid egress program id on the"
+-" same interface."
+-msgstr ""
+-"Используется, когда tc_order находится до/после. Должен быть действительным "
+-"идентификатором исходящей программы на том же интерфейсе."
+-
+-msgid "Port"
+-msgstr "порт"
++msgid "Status"
++msgstr "Состояние"
+ 
+-msgid "Info"
+-msgstr "информация"
+-
+-msgid "add schedule"
+-msgstr "Добавить план"
+-
+-msgid "set"
+-msgstr "приложение"
+-
+-msgid "set default"
+-msgstr "Установить гостя по умолчанию"
+-
+-msgid "add to whitelist"
+-msgstr "Добавить в белый список"
+-
+-msgid "Online Devices"
+-msgstr "онлайн-устройство"
+-
+-msgid "Online devices"
+-msgstr "онлайн-устройство"
+-
+-msgid "Upload Rate"
+-msgstr "Скорость восходящей линии связи"
+-
+-msgid "Download Rate"
+-msgstr "Скорость нисходящей линии связи"
+-
+-msgid "Upload bytes"
+-msgstr "Восходящие байты"
++msgid "Settings"
++msgstr "Настройки"
+ 
+-msgid "Download bytes"
+-msgstr "Нисходящий байт"
++msgid "Unknown"
++msgstr "Неизвестно"
+ 
+-msgid "Display mode"
+-msgstr "режим отображения"
++msgid "bandix-plus is not running. Charts and tables are hidden until the service is up."
++msgstr "Служба bandix-plus не запущена. Графики и таблицы появятся, когда она заработает."
+ 
+-msgid "Simple Mode"
+-msgstr "Простой режим"
++msgid "Interface Overview"
++msgstr "Интерфейсы"
+ 
+-msgid "Detailed Mode"
+-msgstr "подробный режим"
++msgid "Rate unit"
++msgstr "Единицы скорости"
+ 
+ msgid "Upload"
+-msgstr "загрузить"
++msgstr "Отдача"
+ 
+ msgid "Download"
+-msgstr "скачать"
+-
+-msgid "Inbound"
+-msgstr "Входящий"
+-
+-msgid "Outbound"
+-msgstr "исходящий"
+-
+-msgid "Y axis: B/s (bps÷8). Wheel zooms; hover for values."
+-msgstr ""
+-"Вертикальная ось — байт/секунда (бит/с÷8). Используйте колесо прокрутки, "
+-"чтобы увеличить масштаб окна времени, и наведите указатель мыши, чтобы "
+-"увидеть значение."
+-
+-msgid "Today"
+-msgstr "сегодня"
+-
+-msgid "This Week"
+-msgstr "На этой неделе"
++msgstr "Загрузка"
+ 
+-msgid "Last Week"
+-msgstr "на прошлой неделе"
+-
+-msgid "This Month"
+-msgstr "в этом месяце"
+-
+-msgid "Last Month"
+-msgstr "в прошлом месяце"
+-
+-msgid "Last 7 Days"
+-msgstr "последние 7 дней"
+-
+-msgid "Last 30 Days"
+-msgstr "Последние 30 дней"
+-
+-msgid "Last 90 Days"
+-msgstr "Последние 90 дней"
+-
+-msgid "Last Year"
+-msgstr "в прошлом году"
+-
+-msgid "Histogram"
+-msgstr "Гистограмма"
+-
+-msgid "Query"
+-msgstr "Запрос"
++msgid "No data"
++msgstr "Нет данных"
+ 
+-msgid "Start Date"
+-msgstr "Дата начала"
++msgid "Trend samples"
++msgstr "Скорость в реальном времени"
+ 
+-msgid "End Date"
+-msgstr "дата окончания"
++msgid "Points"
++msgstr "Точек"
+ 
+-msgid "Reset"
+-msgstr "перезагрузить"
++msgid "Iface"
++msgstr "Интерфейс"
+ 
+-msgid "Aggregation:"
+-msgstr "Метод агрегирования:"
++msgid "Device MAC"
++msgstr "Устройство"
+ 
+-msgid "Device:"
+-msgstr "оборудование:"
++msgid "Traffic Type"
++msgstr "Протокол"
+ 
+-msgid "entries"
+-msgstr "полоска"
++msgid "All"
++msgstr "Все"
+ 
+-msgid "Iface"
+-msgstr "интерфейс"
++msgid "All Devices"
++msgstr "Все устройства"
+ 
+ msgid "All devices"
+ msgstr "Все устройства"
+ 
+-msgid "IPv4"
+-msgstr "IPv4"
+-
+-msgid "IPv6"
+-msgstr "IPv6"
+-
+-msgid "Upload Statistics"
+-msgstr "Восходящая статистика"
+-
+-msgid "Download Statistics"
+-msgstr "Нисходящая статистика"
+-
+-msgid "Average"
+-msgstr "средний"
+-
+-msgid "Maximum"
+-msgstr "максимум"
+-
+-msgid "Minimum"
+-msgstr "самый маленький"
++msgid "All interfaces"
++msgstr "Все интерфейсы"
+ 
+-msgid "P95"
+-msgstr "P95"
++msgid "No trend data"
++msgstr "Нет данных для графика"
+ 
+ msgid "Total Upload"
+-msgstr "общая загрузка"
++msgstr "Отдано всего"
+ 
+ msgid "Total Download"
+-msgstr "общее количество загрузок"
++msgstr "Загружено всего"
+ 
+-msgid "Total"
+-msgstr "все"
+-
+-msgid "No data"
+-msgstr "Данных пока нет"
+-
+-msgid "Interface Overview"
+-msgstr "Обзор интерфейса"
+-
+-msgid "Traffic Timeline"
+-msgstr "График движения трафика"
+-
+-msgid "Device List"
+-msgstr "Список устройств"
+-
+-msgid "All interfaces already have rules"
+-msgstr "У всех интерфейсов уже есть правила"
+-
+-msgid "Rule already exists for iface"
+-msgstr "Правила для этого интерфейса уже существуют"
+-
+-msgid "Total Upload Usage"
+-msgstr "Общий объем загрузки"
+-
+-msgid "Total Download Usage"
+-msgstr "общее количество загрузок"
+-
+-msgid "Total Usage"
+-msgstr "все"
+-
+-msgid "Set iface limit"
+-msgstr "Ограничение скорости интерфейса"
+-
+-msgid "Tip: 0 means unlimited"
+-msgstr "Совет: 0 означает отсутствие ограничений."
++msgid "Other Rates"
++msgstr "Другие скорости"
+ 
+-msgid "Trend samples"
+-msgstr "Тенденции трафика в реальном времени"
++msgid "Cumulative"
++msgstr "Накоплено"
+ 
+-msgid "Device MAC"
+-msgstr "Выберите устройство"
++msgid "Uploaded"
++msgstr "Отдано"
+ 
+-msgid "Traffic Type"
+-msgstr "тип протокола"
++msgid "Downloaded"
++msgstr "Загружено"
+ 
+-msgid "Guest control"
+-msgstr "Гостевой контроль"
++msgid "Total Uploaded"
++msgstr "Всего отдано"
+ 
+-msgid "Guest rules"
+-msgstr "Правила для гостей"
++msgid "Total Downloaded"
++msgstr "Всего загружено"
+ 
+ msgid "IPv4 Upload"
+-msgstr "загрузка IPv4"
++msgstr "IPv4, отдача"
+ 
+ msgid "IPv4 Download"
+-msgstr "IPv4 скачать"
++msgstr "IPv4, загрузка"
+ 
+ msgid "IPv6 Upload"
+-msgstr "загрузка IPv6"
++msgstr "IPv6, отдача"
+ 
+ msgid "IPv6 Download"
+-msgstr "IPv6 скачать"
+-
+-msgid "Whitelist"
+-msgstr "белый список"
++msgstr "IPv6, загрузка"
+ 
+-msgid "Actions"
+-msgstr "действовать"
+-
+-msgid "Guest rule"
+-msgstr "Правила для гостей"
+-
+-msgid "Schedule rules"
+-msgstr "Правила ограничения скорости по времени"
+-
+-msgid "Set hostname for this device."
+-msgstr "Установить имя хоста"
+-
+-msgid "Scheduled rate limits"
+-msgstr "Правила ограничения скорости"
+-
+-msgid "No scheduled rules yet; click Add rule."
+-msgstr "Правил нет, нажмите Добавить"
+-
+-msgid "Add rule"
+-msgstr "Добавить правила"
+-
+-msgid "Select MAC"
+-msgstr "Выберите устройство"
+-
+-msgid "Limit Rule"
+-msgstr "Правила ограничения скорости"
++msgid "Device List"
++msgstr "Устройства"
+ 
+-msgid "No rule"
+-msgstr "Никаких правил"
++msgid "Online devices"
++msgstr "В сети"
+ 
+-msgid "Active"
+-msgstr "Вступает в силу"
++msgid "Period"
++msgstr "Период"
+ 
+-msgid "Inactive"
+-msgstr "Не эффективен"
++msgid "Today"
++msgstr "Сегодня"
+ 
+-msgid "Update schedule"
+-msgstr "Обновить правила"
++msgid "This Week"
++msgstr "Эта неделя"
+ 
+-msgid "Loading..."
+-msgstr "загрузка..."
++msgid "This Month"
++msgstr "Этот месяц"
+ 
+-msgid "Loading in chunks, please wait... (%d/%d)"
+-msgstr "Загрузка частями, подождите... (%d/%d)"
++msgid "This Year"
++msgstr "Этот год"
+ 
+-msgid "Runtime options for openwrt-bandix-plus service."
+-msgstr "Параметры времени выполнения службы openwrt-bandix-plus."
++msgid "Display mode"
++msgstr "Режим"
+ 
+-msgid "This page edits /etc/config/bandix_plus general options."
+-msgstr ""
+-"На этой странице редактируется общий раздел файла /etc/config/bandix_plus."
++msgid "Simple Mode"
++msgstr "Простой"
+ 
+-msgid "Enable traffic collection"
+-msgstr "Включить сбор трафика"
++msgid "Detailed Mode"
++msgstr "Подробный"
+ 
+-msgid "When disabled, bandix-plus service will not start."
+-msgstr "Служба Bandix-Plus не запускается при выключении."
++msgid "Sort"
++msgstr "Сортировка"
+ 
+-msgid "Interface to monitor"
+-msgstr "Интерфейс мониторинга"
++msgid "Hostname"
++msgstr "Имя"
+ 
+-msgid "Select one or more interfaces to monitor."
+-msgstr "Выберите один или несколько сетевых интерфейсов для мониторинга."
++msgid "MAC"
++msgstr "MAC"
+ 
+-msgid "Log level"
+-msgstr "Log level"
++msgid "Upload Rate"
++msgstr "Скорость ↑"
+ 
+-msgid "TC order"
+-msgstr "Последовательность монтажа ТК"
++msgid "Download Rate"
++msgstr "Скорость ↓"
+ 
+-msgid "Host"
+-msgstr "адрес прослушивания"
++msgid "Upload bytes"
++msgstr "Отдано"
+ 
+-msgid "Data directory"
+-msgstr "каталог данных"
++msgid "Download bytes"
++msgstr "Загружено"
+ 
+-msgid "Service"
+-msgstr "Служить"
++msgid "No devices"
++msgstr "Устройств нет"
+ 
+-msgid "Restart bandix-plus (init if present)"
+-msgstr ""
+-"Перезапустите Bandix-Plus (через init, если есть скрипт инициализации)"
++msgid "Last seen"
++msgstr "Последний раз в сети"
+ 
+-msgid "Add"
+-msgstr "добавить в"
++msgid "Failed to refresh device list"
++msgstr "Не удалось обновить список устройств"
+ 
+-msgid "Cancel"
+-msgstr "Отмена"
++msgid "Failed to refresh status"
++msgstr "Не удалось обновить состояние"
+ 
+-msgid "Close"
+-msgstr "закрытие"
++msgid "Failed to refresh trend"
++msgstr "Не удалось обновить график"
+ 
+-msgid "Delete"
+-msgstr "удалить"
++msgid "Device Usage Ranking"
++msgstr "Рейтинг устройств по объёму"
+ 
+-msgid "Edit"
+-msgstr "редактировать"
++msgid "Traffic Timeline"
++msgstr "Объём по времени"
+ 
+-msgid "Save"
+-msgstr "сохранять"
++msgid "Start Date"
++msgstr "Начало"
+ 
+-msgid "Unlimited"
+-msgstr "Безлимитный"
++msgid "End Date"
++msgstr "Конец"
+ 
+-msgid "Rate unit"
+-msgstr "единица тарифа"
++msgid "Query"
++msgstr "Показать"
+ 
+-msgid "Mon"
+-msgstr "в понедельник"
++msgid "Reset"
++msgstr "Сбросить"
+ 
+-msgid "Tue"
+-msgstr "Вторник"
++msgid "Last Week"
++msgstr "Прошлая неделя"
+ 
+-msgid "Wed"
+-msgstr "Среда"
++msgid "Last Month"
++msgstr "Прошлый месяц"
+ 
+-msgid "Thu"
+-msgstr "Четверг"
++msgid "Last 7 Days"
++msgstr "Последние 7 дней"
+ 
+-msgid "Fri"
+-msgstr "Пятница"
++msgid "Last 30 Days"
++msgstr "Последние 30 дней"
+ 
+-msgid "Sat"
+-msgstr "Суббота"
++msgid "Last 90 Days"
++msgstr "Последние 90 дней"
+ 
+-msgid "Sun"
+-msgstr "Воскресенье"
++msgid "Last Year"
++msgstr "Последний год"
+ 
+ msgid "Show Top %d"
+-msgstr "Показать только первые имена %d"
++msgstr "Показать первые %d"
+ 
+ msgid "Show All"
+ msgstr "Показать все"
+ 
+ msgid "Showing all %d devices"
+-msgstr "Показаны все устройства %d"
++msgstr "Показаны все устройства: %d"
+ 
+ msgid "Showing top %d of %d devices"
+-msgstr "Показаны %d устройств (всего %d)"
+-
+-msgid "Failed to refresh status"
+-msgstr "Не удалось обновить статус"
+-
+-msgid "Failed to refresh trend"
+-msgstr "Не удалось обновить данные тренда."
+-
+-msgid "Failed to refresh rate-limit data"
+-msgstr "Не удалось обновить данные об ограничении скорости."
+-
+-msgid "Failed to save guest rule"
+-msgstr "Не удалось сохранить гостевые правила."
+-
+-msgid "Failed to delete schedule"
+-msgstr "Не удалось удалить запланированные правила."
+-
+-msgid "Failed to delete iface limit"
+-msgstr "Не удалось удалить ограничение скорости интерфейса."
+-
+-msgid "Failed to delete guest default"
+-msgstr "Не удалось удалить правила по умолчанию для гостей."
+-
+-msgid "Failed to remove whitelist entry"
+-msgstr "Не удалось удалить запись из белого списка."
++msgstr "Показано %d из %d устройств"
+ 
+-msgid "Failed to submit schedule"
+-msgstr "Не удалось отправить правила синхронизации."
+-
+-msgid "Failed to save iface limit"
+-msgstr "Не удалось сохранить ограничение скорости интерфейса."
+-
+-msgid "Failed to query statistics"
+-msgstr "Не удалось запросить статистику"
+-
+-msgid "Failed to query usage ranking"
+-msgstr "Не удалось запросить рейтинг использования."
+-
+-msgid "Failed to save hostname"
+-msgstr "Не удалось сохранить имя хоста"
+-
+-msgid "All interfaces"
+-msgstr "Все интерфейсы"
++msgid "Aggregation:"
++msgstr "Шаг:"
+ 
+-msgid "All Devices"
+-msgstr "Все оборудование"
++msgid "Hourly"
++msgstr "По часам"
+ 
+-msgid "All"
+-msgstr "все"
++msgid "Daily"
++msgstr "По дням"
+ 
+-msgid "Hostname"
+-msgstr "имя хоста"
++msgid "Device:"
++msgstr "Устройство:"
+ 
+-msgid "MAC"
+-msgstr "MAC"
++msgid "Total Upload Usage"
++msgstr "Отдано всего"
+ 
+-msgid "No devices"
+-msgstr "Еще нет оборудования"
++msgid "Total Download Usage"
++msgstr "Загружено всего"
+ 
+-msgid "Settings"
+-msgstr "настраивать"
++msgid "Total Usage"
++msgstr "Всего"
+ 
+-msgid "Other Rates"
+-msgstr "Другие тарифы"
++msgid "No statistics data"
++msgstr "Нет статистики"
+ 
+-msgid "Cumulative"
+-msgstr "общий итог"
++msgid "Upload Statistics"
++msgstr "Отдача"
+ 
+-msgid "Uploaded"
+-msgstr "Загружено"
++msgid "Download Statistics"
++msgstr "Загрузка"
+ 
+-msgid "Downloaded"
+-msgstr "Скачано"
++msgid "Average"
++msgstr "Среднее"
+ 
+-msgid "Total Uploaded"
+-msgstr "Всего загрузить"
++msgid "P95"
++msgstr "P95"
+ 
+-msgid "Total Downloaded"
+-msgstr "Всего скачать"
++msgid "Maximum"
++msgstr "Максимум"
+ 
+-msgid "(empty)"
+-msgstr "(нулевой)"
++msgid "Minimum"
++msgstr "Минимум"
+ 
+-msgid "Enabled"
+-msgstr "Включено"
++msgid "Please choose an interface"
++msgstr "Выберите интерфейс"
+ 
+-msgid "Disabled"
+-msgstr "Неполноценный"
++msgid "Invalid date range"
++msgstr "Неверный диапазон дат"
+ 
+-msgid "Invalid MAC address"
+-msgstr "Invalid MAC address"
++msgid "Loading..."
++msgstr "Загрузка..."
+ 
+-msgid "Add schedule rule"
+-msgstr "Add schedule rule"
++msgid "Loading in chunks, please wait... (%d/%d)"
++msgstr "Загрузка по частям, подождите... (%d/%d)"
+ 
+-msgid "Edit schedule rule"
+-msgstr "Edit schedule rule"
++msgid "Failed to query statistics"
++msgstr "Не удалось получить статистику"
+ 
+-msgid "Device hostname"
+-msgstr "Имя хоста устройства"
++msgid "Failed to query usage ranking"
++msgstr "Не удалось получить рейтинг"
+ 
+-msgid "Delete schedule rule"
+-msgstr "Удалить правила тайминга"
++msgid "Runtime options for openwrt-bandix-plus service."
++msgstr "Параметры службы bandix-plus."
+ 
+-msgid "Are you sure you want to delete this schedule rule?"
+-msgstr "Вы уверены, что хотите удалить это запланированное правило?"
++msgid "General"
++msgstr "Основные"
+ 
+-msgid "Open a device from the device table and use Settings to manage rules."
+-msgstr ""
+-"Откройте устройство из списка устройств и управляйте правилами через "
+-"«Настройки»."
++msgid "This page edits /etc/config/bandix_plus general options."
++msgstr "Общие параметры из /etc/config/bandix_plus."
+ 
+-msgid "Delete iface limit?"
+-msgstr ""
+-"Вы уверены, что хотите удалить ограничение скорости на этом интерфейсе?"
++msgid "Enable traffic collection"
++msgstr "Сбор трафика"
+ 
+-msgid "Delete guest default?"
+-msgstr "Вы уверены, что хотите удалить правило по умолчанию для гостей?"
++msgid "When disabled, bandix-plus service will not start."
++msgstr "Если выключено, служба bandix-plus не запускается."
+ 
+-msgid "Remove this whitelist entry?"
+-msgstr "Вы уверены, что хотите удалить эту запись из белого списка?"
++msgid "Interface to monitor"
++msgstr "Интерфейсы"
+ 
+-msgid "Invalid days"
+-msgstr "Неверный выбор дня недели."
++msgid "Select one or more interfaces to monitor."
++msgstr "Один или несколько интерфейсов, трафик которых считается."
+ 
+-msgid "No device context"
+-msgstr "Нет контекста устройства"
++msgid "Log level"
++msgstr "Уровень журнала"
+ 
+-msgid "Iface and MAC are required"
+-msgstr "Нужно заполнить интерфейс и MAC"
++msgid "TC backend"
++msgstr "Способ подключения TC"
+ 
+-msgid "Please choose an interface"
+-msgstr "Пожалуйста, выберите интерфейс"
++msgid "Select TC attach backend. Recommendation: use auto by default; tcx is preferred on kernel >= 6.6; netlink is safer on older kernels."
++msgstr "Как программы eBPF подключаются к интерфейсу. Обычно auto; tcx — для ядра 6.6 и новее, netlink — для старых ядер."
+ 
+-msgid "Invalid date range"
+-msgstr "Неверный диапазон дат."
++msgid "TC order"
++msgstr "Порядок в цепочке TC"
+ 
+-msgid "No statistics data"
+-msgstr "Статистики пока нет"
++msgid "Netlink priority"
++msgstr "Приоритет netlink"
+ 
+-msgid "No trend data"
+-msgstr "Данных о тенденциях пока нет"
++msgid "Only used when backend is netlink. Range: 0..65535 (0 means default)."
++msgstr "Только для netlink: 0–65535 (0 — по умолчанию)."
+ 
+-msgid "Hourly"
+-msgstr "ежечасно"
++msgid "TCX ingress anchor program id"
++msgstr "ID опорной программы TCX, вход"
+ 
+-msgid "Daily"
+-msgstr "днем"
++msgid "Used when tc_order is before/after. Must be a valid ingress program id on the same interface."
++msgstr "Нужен при порядке before/after: ID программы ingress на том же интерфейсе."
+ 
+-msgid "This Year"
+-msgstr "в этом году"
++msgid "TCX egress anchor program id"
++msgstr "ID опорной программы TCX, выход"
+ 
+-msgid "Device Usage Ranking"
+-msgstr "Рейтинг использования оборудования"
++msgid "Used when tc_order is before/after. Must be a valid egress program id on the same interface."
++msgstr "Нужен при порядке before/after: ID программы egress на том же интерфейсе."
+ 
+-msgid "Period"
+-msgstr "статистический период"
++msgid "Enable traffic persistence storage"
++msgstr "Хранить историю"
+ 
+-msgid "Hostname is required"
+-msgstr "Необходимо заполнить имя хоста"
++msgid "Keep the usage ranking and the traffic timeline across restarts: hourly records are written to the data directory."
++msgstr "Рейтинг и объём по времени сохраняются между перезапусками: записи раз в час в каталог данных."
+ 
+-msgid "Iface is required"
+-msgstr "Нужно заполнить интерфейс"
++msgid "Port"
++msgstr "Порт"
+ 
+-msgid "Feedback"
+-msgstr "Обратная связь"
++msgid "Data directory"
++msgstr "Каталог данных"
+ 
+ msgid "Version"
+ msgstr "Версия"
+ 
+-msgid "Unknown"
+-msgstr "Неизвестно"
+-
+ msgid "Restart Service"
+-msgstr "Перезапустить службу"
++msgstr "Перезапуск"
+ 
+ msgid "Restart Bandix Plus Service"
+-msgstr "Перезапустить службу Bandix Plus"
++msgstr "Перезапустить службу"
+ 
+ msgid "Are you sure you want to restart the Bandix Plus service?"
+-msgstr "Вы уверены, что хотите перезапустить службу Bandix Plus?"
+-
+-msgid "Confirm"
+-msgstr "Подтвердить"
++msgstr "Перезапустить службу Bandix Plus?"
+ 
+ msgid "Failed to restart service: "
+ msgstr "Не удалось перезапустить службу: "
+ 
+-msgid "Check for Updates"
+-msgstr "Проверить обновления"
+-
+-msgid "Checking..."
+-msgstr "Проверка..."
+-
+-msgid "Failed to check for updates"
+-msgstr "Не удалось проверить обновления"
+-
+-msgid "Failed to check LuCI App updates"
+-msgstr "Не удалось проверить обновления приложения LuCI"
+-
+-msgid "LuCI App has update: "
+-msgstr "Для приложения LuCI доступно обновление: "
+-
+-msgid "LuCI App is up to date: "
+-msgstr "Приложение LuCI актуально: "
+-
+-msgid "Failed to check Bandix Plus updates"
+-msgstr "Не удалось проверить обновления Bandix Plus"
+-
+-msgid "Bandix Plus has update: "
+-msgstr "Для Bandix Plus доступно обновление: "
+-
+-msgid "Bandix Plus is up to date: "
+-msgstr "Bandix Plus актуален: "
+-
+-msgid "Updates Available"
+-msgstr "Доступны обновления"
+-
+-msgid "No Updates Available"
+-msgstr "Нет доступных обновлений"
+-
+-msgid "Update Check Failed"
+-msgstr "Не удалось проверить обновления"
+-
+-msgid "Manual Download"
+-msgstr "Ручная загрузка"
+-
+-msgid "Update available"
+-msgstr "Доступно обновление"
++msgid "Confirm"
++msgstr "Подтвердить"
+ 
+-msgid "Update available, click to go to settings"
+-msgstr "Доступно обновление, нажмите, чтобы перейти к настройкам"
++msgid "Cancel"
++msgstr "Отмена"
+-- 
+2.43.0
+

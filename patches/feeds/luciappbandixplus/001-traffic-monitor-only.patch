@@ -1,0 +1,484 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 8 Nov 2026 12:00:00 +0000
+Subject: [PATCH] luci-app-bandix-plus: traffic monitor only
+
+The app is reduced to the traffic monitor: the interface overview with
+the current rate and volume per interface, the realtime chart, the
+device list with the rate and the volume for a period, the usage
+ranking and the traffic timeline. Removed:
+
+- on the status page: interface rate limits (the gear button on the
+  interface cards and the limit lines), the guest control section
+  (default guest limits and the whitelist), the scheduled rate limits
+  and the hostname dialog behind the device Settings button, deleting
+  devices, and the update badge;
+- on the settings page: the update check, the feedback link and the
+  API bind address (the service keeps 127.0.0.1, see the bandix-plus
+  patch).
+
+The status page no longer polls the four rate-limit lists every second
+and no longer asks GitHub for updates when it is opened. The service
+status (apk list, ubus, curl to the API) is read every 10 seconds
+instead of every second; the overview and the realtime chart still
+refresh every second.
+
+rpcd answers only the methods of the monitor (health, snapshot,
+overview, devices, trend, histogram, usage ranking, version, status,
+restart); the others return "Method is disabled in this build". The ACL
+grants reading the monitor data and writing only the settings and the
+service restart. Before, the read part of the ACL also held
+checkUpdate.
+
+Traffic persistence is described and preselected on the settings page:
+without it the usage ranking and the traffic timeline are lost on every
+restart of the service.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Uo9XQuT7u6ShTYdi2S3Anq
+---
+ .../resources/view/bandix_plus/index.js       | 129 ++----------------
+ .../resources/view/bandix_plus/settings.js    | 106 +-------------
+ .../root/usr/libexec/rpcd/luci.bandix_plus    |   9 ++
+ .../rpcd/acl.d/luci-app-bandix-plus.json      |  41 +-----
+ 4 files changed, 27 insertions(+), 258 deletions(-)
+
+diff --git a/luci-app-bandix-plus/htdocs/luci-static/resources/view/bandix_plus/index.js b/luci-app-bandix-plus/htdocs/luci-static/resources/view/bandix_plus/index.js
+index 39c70c2b..0b7b6413 100644
+--- a/luci-app-bandix-plus/htdocs/luci-static/resources/view/bandix_plus/index.js
++++ b/luci-app-bandix-plus/htdocs/luci-static/resources/view/bandix_plus/index.js
+@@ -1718,7 +1718,6 @@ return view.extend({
+ 			var cumDown = asNum(cumulative.down_v4_bytes) + asNum(cumulative.down_v6_bytes);
+ 			var zoneStr = item.zone != null ? String(item.zone) : '';
+ 			var ifname = String(item.ifname != null ? item.ifname : '') || '';
+-			var ifaceLimit = ifname ? this.findIfaceLimitByIface(ifname) : null;
+ 			var headBits = [ E('div', { 'class': 'overview-card__title' }, [ ifname || '—' ]) ];
+ 			var actions = E('div', { 'class': 'overview-card__actions' });
+ 			if (zoneStr) {
+@@ -1726,14 +1725,6 @@ return view.extend({
+ 					E('span', { 'class': 'overview-pill overview-pill--zone' }, [ zoneStr ])
+ 				]));
+ 			}
+-			actions.appendChild(E('button', {
+-				'type': 'button',
+-				'class': 'btn cbi-button cbi-button-action bplus-overview-limit-btn',
+-				'data-iface': ifname,
+-				'title': _('Set iface limit'),
+-				'aria-label': _('Set iface limit'),
+-				'disabled': ifname ? null : 'disabled'
+-			}, [ '⚙' ]));
+ 			headBits.push(actions);
+ 			var cardBits = [
+ 				E('div', { 'class': 'overview-card__head' }, headBits),
+@@ -1744,22 +1735,6 @@ return view.extend({
+ 					])
+ 				])
+ 			];
+-			cardBits.push(E('section', { 'class': 'overview-card__block overview-card__block--limit' }, [
+-			E('div', { 'class': 'overview-limit-line' }, [
+-				E('span', { 'class': 'overview-limit-k' }, [ _('Inbound') ]),
+-				E('span', { 'class': 'overview-limit-v' }, [
+-					'IPv4 ' + formatLimitKbpsRate(ifaceLimit ? ifaceLimit.up_v4_kbps : 0) +
+-					' · IPv6 ' + formatLimitKbpsRate(ifaceLimit ? ifaceLimit.up_v6_kbps : 0)
+-				])
+-			]),
+-			E('div', { 'class': 'overview-limit-line' }, [
+-				E('span', { 'class': 'overview-limit-k' }, [ _('Outbound') ]),
+-				E('span', { 'class': 'overview-limit-v' }, [
+-					'IPv4 ' + formatLimitKbpsRate(ifaceLimit ? ifaceLimit.down_v4_kbps : 0) +
+-					' · IPv6 ' + formatLimitKbpsRate(ifaceLimit ? ifaceLimit.down_v6_kbps : 0)
+-				])
+-			])
+-			]));
+ 			var card = E('article', { 'class': 'overview-card' }, cardBits);
+ 			grid.appendChild(card);
+ 		}
+@@ -2018,9 +1993,7 @@ return view.extend({
+ 			sortable(_('Upload Rate'), 'rate_up'),
+ 			sortable(_('Download Rate'), 'rate_down'),
+ 			sortable(_('Upload bytes'), 'up_bytes'),
+-			sortable(_('Download bytes'), 'down_bytes'),
+-			E('th', {}, [ _('Limit Rule') ]),
+-			E('th', {}, [ _('Actions') ])
++			sortable(_('Download bytes'), 'down_bytes')
+ 		]);
+ 		head.appendChild(trh);
+ 
+@@ -2034,7 +2007,7 @@ return view.extend({
+ 		}
+ 
+ 		if (!list.length) {
+-			body.appendChild(E('tr', {}, [ E('td', { 'colspan': '11', 'class': 'bplus-empty' }, [ _('No devices') ]) ]));
++			body.appendChild(E('tr', {}, [ E('td', { 'colspan': '9', 'class': 'bplus-empty' }, [ _('No devices') ]) ]));
+ 			return;
+ 		}
+ 
+@@ -2054,31 +2027,6 @@ return view.extend({
+ 					])
+ 				])
+ 				: E('td', { 'class': 'bplus-host' }, [ hostText ]);
+-			var ruleTd = (function () {
+-				var st = self.deviceScheduleRuleStatus(d);
+-				var pillCls = st.count <= 0 ? 'is-none' : (st.active ? 'is-active' : 'is-inactive');
+-				var pillTxt = st.count <= 0 ? _('No rule') : (st.active ? _('Active') : _('Inactive'));
+-				var header = E('div', { 'class': 'bplus-device-rule-head' }, [
+-					E('span', { 'class': 'bplus-device-rule-pill ' + pillCls }, [ pillTxt ]),
+-					E('span', { 'class': 'bplus-device-rule-count' }, [ String(st.count) ])
+-				]);
+-				if (st.count <= 0)
+-					return E('td', { 'class': 'bplus-device-rule-cell' }, [ header ]);
+-				var details = [];
+-				for (var ri = 0; ri < st.rules.length; ri++) {
+-					var rule = st.rules[ri];
+-					details.push(E('div', { 'class': 'bplus-device-rule-detail' }, [
+-						E('div', { 'class': 'bplus-device-rule-time' }, [ self.deviceScheduleRuleTimeText(rule) ]),
+-						E('div', { 'class': 'bplus-device-rule-speed' }, [ self.deviceScheduleRuleSpeedText(rule) ])
+-					]));
+-				}
+-				var pop = E('div', { 'class': 'bplus-device-rule-popover' }, details);
+-				return E('td', { 'class': 'bplus-device-rule-cell' }, [
+-					E('div', { 'class': 'bplus-device-rule-stack' }, [ header, pop ])
+-				]);
+-			})();
+-			if (preserveRuleCells && preservedRuleTdByKey[rowKey])
+-				ruleTd = preservedRuleTdByKey[rowKey];
+ 			var tr = E('tr', { 'class': d.online ? 'is-online' : 'is-offline', 'data-device-row-key': rowKey }, [
+ 				E('td', {}, [ deviceIfaceName(d) || '—' ]),
+ 				hostTd,
+@@ -2088,23 +2036,7 @@ return view.extend({
+ 				deviceTableRateTd(met, true, det),
+ 				deviceTableRateTd(met, false, det),
+ 				deviceTableBytesTd(cum, true, det),
+-				deviceTableBytesTd(cum, false, det),
+-				ruleTd,
+-				E('td', { 'class': 'bplus-device-actions' }, [
+-					E('button', {
+-						'type': 'button',
+-						'class': 'btn cbi-button cbi-button-action bplus-device-settings-btn',
+-						'data-bplus-mac': d.mac || '',
+-						'data-bplus-iface': deviceIfaceName(d) || ''
+-					}, [ _('Settings') ]),
+-					' ',
+-					E('button', {
+-						'type': 'button',
+-						'class': 'btn cbi-button cbi-button-remove bplus-device-delete-btn',
+-						'data-bplus-mac': d.mac || '',
+-						'data-bplus-iface': deviceIfaceName(d) || ''
+-					}, [ _('Delete') ])
+-				])
++				deviceTableBytesTd(cum, false, det)
+ 			]);
+ 			body.appendChild(tr);
+ 		}
+@@ -4583,8 +4515,7 @@ return view.extend({
+ 					E('div', { 'class': 'bplus-panel-head' }, [
+ 						E('div', { 'class': 'bplus-overview-title' }, [
+ 							E('h2', [ _('Interface Overview') ]),
+-							this.el.versionInfo,
+-							this.el.updateBadge
++							this.el.versionInfo
+ 						]),
+ 						E('div', { 'class': 'bplus-overview-head-tools' }, [
+ 							this.el.rateUnitToggle
+@@ -4738,21 +4669,6 @@ return view.extend({
+ 					E('div', { 'class': 'bplus-chart-wrap' }, [ this.el.statsCanvas, this.el.statsTooltip ]),
+ 					this.el.statsLegend,
+ 					this.el.statsSummary
+-				]),
+-
+-				E('section', { 'class': 'bplus-panel' }, [
+-					E('div', { 'class': 'bplus-panel-head' }, [
+-						E('h2', {}, [ _('Guest control') ])
+-					]),
+-					E('div', { 'class': 'policy-grid' }, [
+-						E('article', { 'class': 'policy-card' }, [
+-							E('div', { 'class': 'guest-policy-toolbar' }, [
+-								E('span', { 'class': 'bplus-subline' }, [ _('Guest rules') ]),
+-								E('div', { 'class': 'guest-policy-actions' }, [ this.el.guestPolicyAddRuleBtn ])
+-							]),
+-							this.el.guestRulesPane
+-						])
+-					])
+ 				])
+ 			]);
+ 
+@@ -4769,18 +4685,6 @@ return view.extend({
+ 		this.initState(load);
+ 		var viewNode = this.buildView();
+ 		this.setRateUnitMode(this.rateUnitMode, false);
+-		if (this.el.scheduleHubOverlay && this.el.scheduleHubOverlay.parentNode !== this.root)
+-			this.root.appendChild(this.el.scheduleHubOverlay);
+-		if (this.el.scheduleRuleOverlay && this.el.scheduleRuleOverlay.parentNode !== this.root)
+-			this.root.appendChild(this.el.scheduleRuleOverlay);
+-		if (this.el.scheduleDeleteConfirmOverlay && this.el.scheduleDeleteConfirmOverlay.parentNode !== this.root)
+-			this.root.appendChild(this.el.scheduleDeleteConfirmOverlay);
+-		if (this.el.deviceDeleteConfirmOverlay && this.el.deviceDeleteConfirmOverlay.parentNode !== this.root)
+-			this.root.appendChild(this.el.deviceDeleteConfirmOverlay);
+-		if (this.el.ifaceLimitOverlay && this.el.ifaceLimitOverlay.parentNode !== this.root)
+-			this.root.appendChild(this.el.ifaceLimitOverlay);
+-		if (this.el.guestRuleOverlay && this.el.guestRuleOverlay.parentNode !== this.root)
+-			this.root.appendChild(this.el.guestRuleOverlay);
+ 		this.setThemeClass();
+ 		this.bindEvents();
+ 
+@@ -4796,30 +4700,17 @@ return view.extend({
+ 			if (this.el.statsIface && this.el.statsIface.value) this.queryStats();
+ 			if (this.el.rankIface && this.el.rankIface.value) this.queryUsageRanking();
+ 		}, this));
+-		this.refreshRateData(false);
+ 		this.applyRankPreset('today');
+ 		this.applyStatsPreset('today');
+ 
+-		setTimeout(L.bind(function () {
+-			callCheckUpdate().then(bplusJson).then(L.bind(function (result) {
+-				if (!result || !this.el.updateBadge) return;
+-				var hasLuciUpdate = result.luci_has_update === true ||
+-					result.luci_has_update === 1 || result.luci_has_update === '1';
+-				var hasCoreUpdate = result.bandix_plus_has_update === true ||
+-					result.bandix_plus_has_update === 1 || result.bandix_plus_has_update === '1';
+-				this.el.updateBadge.style.display = hasLuciUpdate || hasCoreUpdate ? 'inline-block' : 'none';
+-			}, this)).catch(function (err) {
+-				console.debug('Failed to check Bandix Plus updates:', err);
+-			});
+-		}, this), 500);
+-
++			// Traffic monitor only: no rate-limit data; service status every 10 s
++			this.statusPollTick = 0;
+ 			poll.add(L.bind(function () {
+ 				this.setThemeClass();
+-				return Promise.all([
+-					this.refreshServiceStatus(),
+-					this.refreshLive(false),
+-					this.refreshRateData(false)
+-				]);
++				var jobs = [ this.refreshLive(false) ];
++				if (++this.statusPollTick % 10 === 0)
++					jobs.push(this.refreshServiceStatus());
++				return Promise.all(jobs);
+ 		}, this), 1);
+ 
+ 		return viewNode;
+diff --git a/luci-app-bandix-plus/htdocs/luci-static/resources/view/bandix_plus/settings.js b/luci-app-bandix-plus/htdocs/luci-static/resources/view/bandix_plus/settings.js
+index f3b398e4..003b7531 100644
+--- a/luci-app-bandix-plus/htdocs/luci-static/resources/view/bandix_plus/settings.js
++++ b/luci-app-bandix-plus/htdocs/luci-static/resources/view/bandix_plus/settings.js
+@@ -8,7 +8,6 @@
+ 
+ var callRestartService = rpc.declare({ object: 'luci.bandix_plus', method: 'restartService', expect: {} });
+ var callGetVersion = rpc.declare({ object: 'luci.bandix_plus', method: 'getVersion', expect: {} });
+-var callCheckUpdate = rpc.declare({ object: 'luci.bandix_plus', method: 'checkUpdate', expect: {} });
+ 
+ return view.extend({
+ 	load: function () {
+@@ -99,13 +98,8 @@ return view.extend({
+ 		o.depends({ tc_backend: 'tcx', tc_order: 'before' });
+ 		o.depends({ tc_backend: 'tcx', tc_order: 'after' });
+ 
+-		o = s.option(form.Flag, 'traffic_enable_storage', _('Enable traffic persistence storage'), _('Persist traffic histogram/ring data to disk. Disabled by default.'));
+-		o.default = '0';
+-		o.rmempty = false;
+-
+-		o = s.option(form.Value, 'host', _('Host'));
+-		o.placeholder = '127.0.0.1';
+-		o.default = '127.0.0.1';
++		o = s.option(form.Flag, 'traffic_enable_storage', _('Enable traffic persistence storage'), _('Keep the usage ranking and the traffic timeline across restarts: hourly records are written to the data directory.'));
++		o.default = '1';
+ 		o.rmempty = false;
+ 
+ 		o = s.option(form.Value, 'port', _('Port'));
+@@ -126,94 +120,6 @@ return view.extend({
+ 			return 'luci-app-bandix-plus: ' + luciVersion + ' / bandix-plus: ' + bandixPlusVersion;
+ 		};
+ 
+-		o = s.option(form.Button, 'check_update', _('Check for Updates'));
+-		o.inputtitle = _('Check for Updates');
+-		o.inputstyle = 'apply';
+-		o.onclick = function () {
+-			var button = this;
+-			var originalTitle = button.inputtitle;
+-			button.inputtitle = _('Checking...');
+-			button.disabled = true;
+-
+-			return callCheckUpdate().then(function (result) {
+-				button.inputtitle = originalTitle;
+-				button.disabled = false;
+-
+-				if (!result) {
+-					ui.addNotification(null, E('p', _('Failed to check for updates')), 'error');
+-					return;
+-				}
+-
+-				var messages = [];
+-				var hasUpdate = false;
+-				var hasError = false;
+-
+-				if (result.luci_error) {
+-					hasError = true;
+-					messages.push(E('p', { 'class': 'alert-message error' }, _('Failed to check LuCI App updates')));
+-				}
+-				else if (result.luci_has_update === true || result.luci_has_update === 1 || result.luci_has_update === '1') {
+-					hasUpdate = true;
+-					messages.push(E('p', { 'style': 'font-weight: 600;' },
+-						_('LuCI App has update: ') + result.current_luci_version + ' → ' + result.latest_luci_version));
+-					if (result.luci_release_body) {
+-						messages.push(E('div', {
+-							'style': 'white-space: pre-wrap; max-height: 240px; overflow-y: auto; padding: 10px; margin: 8px 0; background: rgba(0,0,0,0.05); border-radius: 4px;'
+-						}, result.luci_release_body));
+-					}
+-					if (result.luci_update_url) {
+-						messages.push(E('a', {
+-							'href': result.luci_update_url,
+-							'target': '_blank',
+-							'rel': 'noopener noreferrer'
+-						}, _('Manual Download')));
+-					}
+-				}
+-				else {
+-					messages.push(E('p', {}, _('LuCI App is up to date: ') +
+-						(result.current_luci_version || result.latest_luci_version || _('Unknown'))));
+-				}
+-
+-				if (result.bandix_plus_error) {
+-					hasError = true;
+-					messages.push(E('p', { 'class': 'alert-message error' }, _('Failed to check Bandix Plus updates')));
+-				}
+-				else if (result.bandix_plus_has_update === true || result.bandix_plus_has_update === 1 || result.bandix_plus_has_update === '1') {
+-					hasUpdate = true;
+-					messages.push(E('p', { 'style': 'font-weight: 600; margin-top: 16px;' },
+-						_('Bandix Plus has update: ') + result.current_bandix_plus_version + ' → ' + result.latest_bandix_plus_version));
+-					if (result.bandix_plus_release_body) {
+-						messages.push(E('div', {
+-							'style': 'white-space: pre-wrap; max-height: 240px; overflow-y: auto; padding: 10px; margin: 8px 0; background: rgba(0,0,0,0.05); border-radius: 4px;'
+-						}, result.bandix_plus_release_body));
+-					}
+-					if (result.bandix_plus_update_url) {
+-						messages.push(E('a', {
+-							'href': result.bandix_plus_update_url,
+-							'target': '_blank',
+-							'rel': 'noopener noreferrer'
+-						}, _('Manual Download')));
+-					}
+-				}
+-				else {
+-					messages.push(E('p', {}, _('Bandix Plus is up to date: ') +
+-						(result.current_bandix_plus_version || result.latest_bandix_plus_version || _('Unknown'))));
+-				}
+-
+-				messages.push(E('div', { 'class': 'right', 'style': 'margin-top: 16px;' }, [
+-					E('button', { 'class': 'btn', 'click': ui.hideModal }, _('Close'))
+-				]));
+-
+-				var title = hasUpdate ? _('Updates Available') :
+-					(hasError ? _('Update Check Failed') : _('No Updates Available'));
+-				ui.showModal(title, messages);
+-			}).catch(function (err) {
+-				button.inputtitle = originalTitle;
+-				button.disabled = false;
+-				ui.addNotification(null, E('p', _('Failed to check for updates') + ': ' + err.message), 'error');
+-			});
+-		};
+-
+ 		o = s.option(form.Button, 'restart_service', _('Restart Service'));
+ 		o.inputtitle = _('Restart Bandix Plus Service');
+ 		o.inputstyle = 'apply';
+@@ -243,14 +149,6 @@ return view.extend({
+ 			]);
+ 		};
+ 
+-		o = s.option(form.Button, 'feedback_info', _('Feedback'));
+-		o.inputtitle = _('Feedback');
+-		o.inputstyle = 'link';
+-		o.onclick = function () {
+-			window.open('https://github.com/timsaya', '_blank');
+-			return false;
+-		};
+-
+ 		return m.render();
+ 	},
+ 
+diff --git a/luci-app-bandix-plus/root/usr/libexec/rpcd/luci.bandix_plus b/luci-app-bandix-plus/root/usr/libexec/rpcd/luci.bandix_plus
+index df17d87e..e952c3fe 100755
+--- a/luci-app-bandix-plus/root/usr/libexec/rpcd/luci.bandix_plus
++++ b/luci-app-bandix-plus/root/usr/libexec/rpcd/luci.bandix_plus
+@@ -244,6 +244,15 @@ case "$1" in
+ 		json_cleanup
+ 		;;
+ 	call)
++		# Traffic monitor only: rate limits, guest rules, device deletion,
++		# hostnames and the update check are not served
++		case "$2" in
++			getHealth|getSnapshot|getOverview|getDevices|getTrend|getHistogram|getUsageRanking|getVersion|getStatus|restartService) ;;
++			*)
++				printf '%s\n' '{"ok":false,"data":null,"error":"Method is disabled in this build"}'
++				exit 0
++				;;
++		esac
+ 		BASE="$(bplus_base)"
+ 		case "$2" in
+ 			getHealth) bplus_get "$BASE/api/health" ;;
+diff --git a/luci-app-bandix-plus/root/usr/share/rpcd/acl.d/luci-app-bandix-plus.json b/luci-app-bandix-plus/root/usr/share/rpcd/acl.d/luci-app-bandix-plus.json
+index dc99586e..3de57c39 100644
+--- a/luci-app-bandix-plus/root/usr/share/rpcd/acl.d/luci-app-bandix-plus.json
++++ b/luci-app-bandix-plus/root/usr/share/rpcd/acl.d/luci-app-bandix-plus.json
+@@ -11,52 +11,23 @@
+ 					"getTrend",
+ 					"getHistogram",
+ 					"getUsageRanking",
+-					"getPolicy",
+-					"getSchedules",
+-					"getIfaceLimits",
+-					"getGuestDefaults",
+-					"getGuestWhitelist",
+ 					"getVersion",
+-					"checkUpdate",
+ 					"getStatus"
+ 				]
+ 			},
+-			"uci": [ "bandix_plus" ]
++			"uci": [
++				"bandix_plus"
++			]
+ 		},
+ 		"write": {
+ 			"ubus": {
+ 				"luci.bandix_plus": [
+-					"getHealth",
+-					"getSnapshot",
+-					"getOverview",
+-					"getDevices",
+-					"getTrend",
+-					"getHistogram",
+-					"getUsageRanking",
+-					"getPolicy",
+-					"getSchedules",
+-					"getIfaceLimits",
+-					"getGuestDefaults",
+-					"getGuestWhitelist",
+-					"getVersion",
+-					"checkUpdate",
+-					"getStatus",
+-					"deleteDevice",
+-					"createSchedule",
+-					"updateSchedule",
+-					"deleteSchedule",
+-					"setIfaceLimit",
+-					"deleteIfaceLimit",
+-					"setGuestDefault",
+-					"setGuestDefaultEnabled",
+-					"deleteGuestDefault",
+-					"addGuestWhitelist",
+-					"removeGuestWhitelist",
+-					"setDeviceHostname",
+ 					"restartService"
+ 				]
+ 			},
+-			"uci": [ "bandix_plus" ]
++			"uci": [
++				"bandix_plus"
++			]
+ 		}
+ 	}
+ }
+-- 
+2.43.0
+
