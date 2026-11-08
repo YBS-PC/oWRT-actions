@@ -1,0 +1,771 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 8 Nov 2026 12:00:00 +0000
+Subject: [PATCH] luci-app-bandix: phone layout of the status page
+
+On screens up to 768 px the status page showed the device list as
+cards with every value on its own line, ignored the display mode
+("Detailed Mode" was forced to "Simple Mode" there) and left about
+270 of 390 px for the content because of the nested section paddings.
+The query panels of the ranking and the timeline took most of a screen
+each, and the timeline canvas was drawn 300 px high in a 250 px box, so
+its time labels covered the totals under it.
+
+On narrow screens now:
+
+- the sections use smaller paddings; LAN, WAN and Total are three
+  columns;
+- the legend of the realtime chart goes under its title, the device and
+  type selects are in one row;
+- the device list has Period, Display mode and a Sort select (online
+  status, WAN or LAN rate or volume; the desktop table keeps sorting by
+  its headers and does not show this select);
+- a device card shows the name (or the address), the address and the
+  connection type, and a grid with WAN and LAN: the rate up and down
+  with the volume for the period under it. Detailed mode adds IPv4, MAC,
+  LAN IPv6 and the last seen time. Offline devices are dimmed;
+- date fields go in two columns, the network type and the Query/Reset
+  buttons in their own rows, the period presets in two columns;
+- a ranking item keeps the rank, the name and the totals in one block;
+- the timeline filters are in one row, the canvas takes the height of
+  its box and narrower margins, the totals are three columns. The
+  filter selects lose the 8 px vertical padding: with a theme that
+  fixes the select height (bootstrap on a phone: 30 px, 16 px font) it
+  left no room for the text, and Safari cut it.
+
+The timeline left margin now fits the widest Y label, not only the top
+and zero ones (an intermediate label was cut on narrow screens); the
+hover check uses the margins the chart was drawn with. The desktop
+layout (wider than 768 px) does not change.
+
+New strings are translated to Russian.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Uo9XQuT7u6ShTYdi2S3Anq
+---
+ .../resources/view/bandix/index.js            | 633 ++++++++++++++++--
+ luci-app-bandix/po/ru/bandix.po               |  15 +
+ 2 files changed, 584 insertions(+), 64 deletions(-)
+
+diff --git a/luci-app-bandix/htdocs/luci-static/resources/view/bandix/index.js b/luci-app-bandix/htdocs/luci-static/resources/view/bandix/index.js
+index 57f3d348..1445a984 100644
+--- a/luci-app-bandix/htdocs/luci-static/resources/view/bandix/index.js
++++ b/luci-app-bandix/htdocs/luci-static/resources/view/bandix/index.js
+@@ -2972,6 +2972,480 @@ return view.extend({
+ 				}
+ 			}
+ 
++			/* Phone layout: less nesting padding, compact cards and controls */
++			@media (min-width: 769px) {
++				.device-sort-group {
++					display: none !important;
++				}
++			}
++
++			@media (max-width: 768px) {
++				.bandix-container > .cbi-section {
++					padding: 12px !important;
++					margin: 0 0 12px 0 !important;
++				}
++
++				.bandix-container > .cbi-section > h3 {
++					margin: 0 0 10px 0 !important;
++					padding: 0 !important;
++					font-size: 1.0625rem !important;
++					line-height: 1.3;
++				}
++
++				.bandix-title {
++					font-size: 1.25rem;
++				}
++
++				.bandix-alert {
++					padding: 6px 0;
++				}
++
++				.bandix-alert > div:first-child:empty {
++					display: none;
++				}
++
++				/* LAN / WAN / Total: three columns */
++				.bandix-container .stats-grid {
++					grid-template-columns: repeat(3, minmax(0, 1fr));
++					gap: 8px;
++					margin-bottom: 12px;
++				}
++
++				.bandix-container .stats-grid > .cbi-section {
++					padding: 10px 8px !important;
++					min-width: 0;
++				}
++
++				.bandix-container .stats-card-title {
++					font-size: 0.6875rem;
++					margin: 0 0 6px 0;
++					letter-spacing: 0;
++					overflow-wrap: anywhere;
++				}
++
++				.bandix-container .stats-card-info-icon {
++					display: none !important;
++				}
++
++				.bandix-container .stats-grid > .cbi-section > div:last-child {
++					gap: 6px !important;
++				}
++
++				.bandix-container .stats-grid > .cbi-section > div:last-child > div {
++					flex-wrap: wrap;
++					gap: 0 3px !important;
++					min-width: 0;
++				}
++
++				.bandix-container .stats-grid > .cbi-section > div:last-child > div > span:nth-child(2) {
++					font-size: 0.875rem !important;
++					white-space: nowrap;
++				}
++
++				.bandix-container .stats-grid > .cbi-section > div:last-child > div > span:nth-child(3) {
++					flex-basis: 100%;
++					margin-left: 0 !important;
++					font-size: 0.6875rem !important;
++					white-space: nowrap;
++				}
++
++				/* Realtime chart */
++				#history-card > h3 {
++					flex-wrap: wrap;
++					gap: 4px 12px;
++				}
++
++				#history-card .history-legend {
++					width: auto;
++					margin: 0;
++					padding: 0;
++					justify-content: flex-start;
++					gap: 12px;
++				}
++
++				#history-card .legend-item {
++					font-size: 0.75rem;
++					font-weight: 400;
++					white-space: nowrap;
++				}
++
++				.bandix-container .history-controls {
++					display: grid;
++					grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
++					grid-template-rows: auto auto;
++					grid-auto-flow: column;
++					gap: 2px 8px;
++					padding: 0 0 8px 0;
++				}
++
++				.bandix-container .history-controls .form-label {
++					margin: 0 !important;
++					font-size: 0.75rem;
++					opacity: 0.75;
++				}
++
++				#history-zoom-level {
++					display: none !important;
++				}
++
++				.bandix-container .history-card-body {
++					padding: 0;
++				}
++
++				#history-canvas {
++					height: 220px;
++				}
++
++				/* Device list header: period, mode, sort; label and select per row */
++				.bandix-container h3.history-header {
++					flex-direction: column;
++					align-items: stretch !important;
++					gap: 8px !important;
++				}
++
++				.bandix-container .device-toolbar {
++					display: grid;
++					grid-template-columns: auto minmax(0, 1fr);
++					align-items: center;
++					gap: 6px 10px;
++					width: 100%;
++				}
++
++				.bandix-container .device-toolbar .device-group {
++					display: contents;
++				}
++
++				.bandix-container .device-toolbar .device-group-label {
++					font-size: 0.8125rem;
++					font-weight: 400;
++					white-space: nowrap;
++				}
++
++				.bandix-container .device-toolbar .cbi-input-select {
++					width: 100%;
++					min-width: 0;
++					font-size: 0.875rem;
++				}
++
++				/* Device cards */
++				.bandix-container .device-list-cards {
++					display: flex;
++					flex-direction: column;
++					gap: 8px;
++				}
++
++				.bandix-container .device-card {
++					display: block;
++					margin: 0 !important;
++					padding: 10px 12px;
++				}
++
++				.bandix-container .device-card.dc-offline {
++					opacity: 0.65;
++				}
++
++				.dc-head {
++					display: flex;
++					align-items: center;
++					gap: 8px;
++					min-width: 0;
++				}
++
++				.dc-head .device-status {
++					flex: 0 0 auto;
++				}
++
++				.dc-id {
++					flex: 1;
++					min-width: 0;
++				}
++
++				.dc-name {
++					font-weight: 600;
++					font-size: 0.9375rem;
++					white-space: nowrap;
++					overflow: hidden;
++					text-overflow: ellipsis;
++				}
++
++				.dc-sub {
++					display: flex;
++					align-items: center;
++					flex-wrap: wrap;
++					gap: 2px 6px;
++					font-size: 0.75rem;
++					opacity: 0.7;
++				}
++
++				.dc-sub .device-connection-type {
++					margin-right: 0;
++				}
++
++				.dc-grid {
++					display: grid;
++					grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
++					align-items: baseline;
++					gap: 4px 10px;
++					margin-top: 8px;
++					padding-top: 8px;
++					border-top: 1px solid rgba(127, 127, 127, 0.2);
++				}
++
++				.dc-label {
++					font-size: 0.6875rem;
++					font-weight: 600;
++					opacity: 0.6;
++				}
++
++				.dc-cell {
++					display: flex;
++					flex-wrap: wrap;
++					align-items: baseline;
++					gap: 0 4px;
++					min-width: 0;
++				}
++
++				.dc-arrow {
++					font-size: 0.75rem;
++					font-weight: 700;
++				}
++
++				.dc-arrow.upload {
++					color: ${BANDIX_COLOR_UPLOAD};
++				}
++
++				.dc-arrow.download {
++					color: ${BANDIX_COLOR_DOWNLOAD};
++				}
++
++				.dc-rate {
++					font-weight: 600;
++					font-size: 0.875rem;
++					white-space: nowrap;
++				}
++
++				.dc-vol {
++					font-size: 0.6875rem;
++					opacity: 0.65;
++					white-space: nowrap;
++				}
++
++				.dc-cell .dc-vol {
++					flex-basis: 100%;
++					padding-left: 14px;
++				}
++
++				.dc-details {
++					display: grid;
++					grid-template-columns: auto minmax(0, 1fr);
++					gap: 2px 10px;
++					margin-top: 8px;
++					padding-top: 8px;
++					border-top: 1px solid rgba(127, 127, 127, 0.2);
++					font-size: 0.75rem;
++				}
++
++				.dc-k {
++					opacity: 0.6;
++				}
++
++				.dc-v {
++					overflow-wrap: anywhere;
++				}
++
++				.dc-mono {
++					font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
++				}
++
++				.dc-last {
++					grid-column: 1 / -1;
++					margin-top: 2px;
++				}
++
++				.dc-last strong {
++					white-space: nowrap;
++				}
++
++				.dc-last .dc-vol {
++					display: block;
++				}
++
++				/* Ranking and timeline */
++				.bandix-container .traffic-stats-container {
++					gap: 12px;
++					margin-top: 0;
++				}
++
++				.bandix-container .traffic-stats-section {
++					padding: 10px;
++				}
++
++				.bandix-container .usage-ranking-header {
++					margin-bottom: 8px;
++				}
++
++				.bandix-container .usage-ranking-query,
++				.bandix-container .traffic-increments-query {
++					padding: 10px !important;
++					margin-bottom: 10px;
++				}
++
++				.bandix-container .usage-ranking-date-range-row {
++					display: grid !important;
++					grid-template-columns: repeat(2, minmax(0, 1fr));
++					align-items: end;
++					gap: 8px !important;
++					margin-bottom: 8px;
++				}
++
++				.bandix-container .usage-ranking-date-picker-wrapper,
++				.bandix-container .usage-ranking-network-type-wrapper {
++					min-width: 0 !important;
++					width: auto;
++					gap: 2px;
++				}
++
++				.bandix-container .usage-ranking-date-picker,
++				.bandix-container .usage-ranking-date-picker input,
++				.bandix-container .usage-ranking-network-type-wrapper .cbi-input-select {
++					width: 100%;
++					min-width: 0;
++					box-sizing: border-box;
++				}
++
++				.bandix-container .usage-ranking-date-picker input {
++					min-height: 36px;
++					font-size: 0.875rem;
++				}
++
++				.bandix-container .usage-ranking-network-type-wrapper,
++				.bandix-container .usage-ranking-query-actions {
++					grid-column: 1 / -1;
++				}
++
++				.bandix-container .usage-ranking-query-actions {
++					display: grid !important;
++					grid-template-columns: repeat(2, minmax(0, 1fr));
++					align-items: stretch;
++					gap: 6px;
++					width: auto;
++					margin: 0;
++				}
++
++				.bandix-container .usage-ranking-query-actions .cbi-button,
++				.bandix-container .usage-ranking-query-presets .cbi-button {
++					width: 100%;
++					min-width: 0;
++					margin: 0 !important;
++					padding: 6px 4px;
++					min-height: 36px;
++					height: auto;
++					font-size: 0.8125rem;
++					line-height: 1.2;
++					white-space: normal;
++					word-break: normal;
++					overflow-wrap: normal;
++					justify-content: center;
++					text-align: center;
++				}
++
++				.bandix-container .usage-ranking-query-presets {
++					display: grid !important;
++					grid-template-columns: repeat(2, minmax(0, 1fr));
++					gap: 6px !important;
++				}
++
++				.bandix-container .usage-ranking-item {
++					flex-direction: row;
++					align-items: center;
++					gap: 10px;
++					padding: 8px 10px;
++				}
++
++				.bandix-container .usage-ranking-info {
++					flex: 1;
++					min-width: 0;
++					gap: 2px;
++				}
++
++				.bandix-container .usage-ranking-name {
++					white-space: nowrap;
++					overflow: hidden;
++					text-overflow: ellipsis;
++				}
++
++				.bandix-container .usage-ranking-stats {
++					flex-direction: row;
++					align-items: center;
++					justify-content: space-between;
++					gap: 8px;
++				}
++
++				.bandix-container .usage-ranking-traffic {
++					width: auto;
++				}
++
++				.bandix-container .usage-ranking-percentage {
++					width: auto;
++					font-size: 0.9375rem;
++					text-align: right;
++				}
++
++				.bandix-container .traffic-increments-filters {
++					display: grid;
++					grid-template-columns: repeat(2, minmax(0, 1fr));
++					gap: 8px;
++					margin-bottom: 8px;
++				}
++
++				.bandix-container .traffic-increments-filter-group {
++					min-width: 0;
++					gap: 2px;
++				}
++
++				/* the theme fixes select height (30 px with a 16 px font on phones);
++				   the 8 px vertical padding above left no room for the text */
++				.bandix-container .traffic-increments-filters .cbi-input-select {
++					height: auto;
++					min-height: 36px;
++					padding-top: 4px;
++					padding-bottom: 4px;
++					line-height: normal;
++				}
++
++				.bandix-container .traffic-increments-chart {
++					height: 230px;
++				}
++
++				.bandix-container .traffic-increments-summary {
++					grid-template-columns: repeat(3, minmax(0, 1fr));
++					gap: 6px;
++				}
++
++				.bandix-container .traffic-increments-summary-item {
++					padding: 8px 4px;
++					min-width: 0;
++				}
++			}
++
++			@media (max-width: 400px) {
++				.bandix-container .stats-grid {
++					gap: 6px;
++				}
++
++				.bandix-container .stats-grid > .cbi-section {
++					padding: 8px 6px !important;
++				}
++
++				.bandix-container .stats-grid > .cbi-section > div:last-child > div > span:nth-child(2) {
++					font-size: 0.8125rem !important;
++				}
++
++				.bandix-container .usage-ranking-query-presets .cbi-button {
++					font-size: 0.75rem;
++				}
++			}
++
+         `;
+             return css;
+         }
+@@ -3104,6 +3578,19 @@ return view.extend({
+                                 E('option', { 'value': 'simple', 'selected': (localStorage.getItem('bandix_device_mode') !== 'detailed') ? 'selected' : null }, _('Simple Mode')),
+                                 E('option', { 'value': 'detailed', 'selected': (localStorage.getItem('bandix_device_mode') === 'detailed') ? 'selected' : null }, _('Detailed Mode'))
+                             ])
++                        ]),
++                        // Sorting for the card list; the desktop table sorts by its headers
++                        E('div', { 'class': 'device-group device-sort-group' }, [
++                            E('span', { 'class': 'device-group-label' }, _('Sort')),
++                            E('select', { 'class': 'cbi-input-select', 'id': 'bandix_device_sort_select' }, [
++                                ['online', _('Online Status')],
++                                ['wan_speed', _('WAN speed')],
++                                ['wan_traffic', _('WAN usage')],
++                                ['lan_speed', _('LAN speed')],
++                                ['lan_traffic', _('LAN usage')]
++                            ].map(function (o) {
++                                return E('option', { 'value': o[0], 'selected': ((localStorage.getItem('bandix_sort_by') || 'online') === o[0]) ? 'selected' : null }, o[1]);
++                            }))
+                         ])
+                     ])
+                 ]),
+@@ -3372,6 +3859,17 @@ return view.extend({
+             });
+         }
+ 
++        var deviceSortSelect = view.querySelector('#bandix_device_sort_select');
++        if (deviceSortSelect) {
++            deviceSortSelect.addEventListener('change', function () {
++                currentSortBy = this.value;
++                currentSortOrder = false;
++                localStorage.setItem('bandix_sort_by', currentSortBy);
++                localStorage.setItem('bandix_sort_order', 'false');
++                updateDeviceData();
++            });
++        }
++
+         var whitelistBadge = view.querySelector('#bandix_whitelist_badge');
+         if (whitelistBadge) {
+             whitelistBadge.addEventListener('click', function () {
+@@ -6269,10 +6767,7 @@ return view.extend({
+                     var deviceQuota = getTrafficQuotaForDevice(device.mac);
+ 
+                     // 获取当前显示模式
+-                    // 移动端强制使用 SimpleMode
+-                    var screenWidth = window.innerWidth || document.documentElement.clientWidth;
+-                    var isMobileScreen = screenWidth <= 768;
+-                    var deviceMode = isMobileScreen ? 'simple' : (localStorage.getItem('bandix_device_mode') || 'simple');
++                    var deviceMode = localStorage.getItem('bandix_device_mode') || 'simple';
+                     var isDetailedMode = deviceMode === 'detailed';
+ 
+                     var uplinkChBadges = buildDeviceUplinkChBadges(device);
+@@ -6364,64 +6859,67 @@ return view.extend({
+ 
+                     tbody.appendChild(row);
+ 
+-                    // 创建移动端卡片
+-                    var card = E('div', { 'class': 'device-card' }, [
+-                        // 卡片头部
+-                        E('div', { 'class': 'device-card-header' }, [
+-                            E('div', { 'class': 'device-card-name' }, [
+-                                E('span', { 'class': 'device-status ' + (isOnline ? 'online' : 'offline') }),
+-                                E('div', {}, [
+-                                    E('div', { 'style': 'font-weight: 600;' }, device.host || '-'),
+-                                    E('div', { 'class': 'device-card-ip' }, [
+-                                        device.conn ? E('span', {
+-                                            'class': 'device-connection-type',
+-                                            'title': device.conn === 'wifi' ? _('Wireless') : (device.conn === 'router' ? _('Router') : _('Wired'))
+-                                        }, getConnectionTypeIcon(device.conn)) : '',
+-                                        device.ip4,
+-                                        (function () {
+-                                            var badges = buildDeviceUplinkChBadges(device);
+-                                            return badges.length ? E('span', { 'class': 'device-uplink-badges' }, badges) : '';
+-                                        })()
+-                                    ])
+-                                ])
+-                            ])
+-                        ]),
+-                        // 卡片主要内容（WAN流量）
+-                        E('div', { 'class': 'device-card-content' }, [
+-                            // WAN流量
+-                            E('div', { 'class': 'device-card-section' }, [
+-                                E('div', { 'class': 'device-card-section-label' }, _('WAN Traffic')),
+-                                E('div', { 'class': 'device-card-traffic' }, [
+-                                    E('div', { 'class': 'device-card-traffic-row' }, [
+-                                        E('span', { 'style': 'color: ' + BANDIX_COLOR_UPLOAD + '; font-size: 0.75rem; font-weight: bold;' }, '↑'),
+-                                        E('span', { 'style': 'font-weight: 600;' }, formatByterate(device.w_tx_r || 0, speedUnit)),
+-                                        E('span', { 'style': 'font-size: 0.75rem; opacity: 0.7;' }, '(' + formatSize(device.w_tx_b || 0) + ')')
+-                                    ]),
+-                                    E('div', { 'class': 'device-card-traffic-row' }, [
+-                                        E('span', { 'style': 'color: ' + BANDIX_COLOR_DOWNLOAD + '; font-size: 0.75rem; font-weight: bold;' }, '↓'),
+-                                        E('span', { 'style': 'font-weight: 600;' }, formatByterate(device.w_rx_r || 0, speedUnit)),
+-                                        E('span', { 'style': 'font-size: 0.75rem; opacity: 0.7;' }, '(' + formatSize(device.w_rx_b || 0) + ')')
+-                                    ])
+-                                ])
++                    // Phone card: name and address, WAN/LAN rate and volume grid,
++                    // MAC, IPv6 and last seen time in detailed mode
++                    var cardCell = function (dir, arrow, rate, bytes) {
++                        return E('div', { 'class': 'dc-cell' }, [
++                            E('span', { 'class': 'dc-arrow ' + dir }, arrow),
++                            E('span', { 'class': 'dc-rate' }, formatByterate(rate || 0, speedUnit)),
++                            E('span', { 'class': 'dc-vol' }, formatSize(bytes || 0))
++                        ]);
++                    };
++                    var cardSub = [];
++                    if (device.conn) {
++                        cardSub.push(E('span', {
++                            'class': 'device-connection-type',
++                            'title': device.conn === 'wifi' ? _('Wireless') : (device.conn === 'router' ? _('Router') : _('Wired'))
++                        }, getConnectionTypeIcon(device.conn)));
++                    }
++                    if (device.host && device.ip4) {
++                        cardSub.push(E('span', {}, device.ip4));
++                    }
++                    if (uplinkChBadges.length) {
++                        cardSub.push(E('span', { 'class': 'device-uplink-badges' }, buildDeviceUplinkChBadges(device)));
++                    }
++                    var cardParts = [
++                        E('div', { 'class': 'dc-head' }, [
++                            E('span', { 'class': 'device-status ' + (isOnline ? 'online' : 'offline') }),
++                            E('div', { 'class': 'dc-id' }, [
++                                E('div', { 'class': 'dc-name' }, device.host || device.ip4 || device.mac || '-'),
++                                cardSub.length ? E('div', { 'class': 'dc-sub' }, cardSub) : ''
+                             ])
+                         ]),
+-                        // LAN流量（直接显示，不需要展开/收起）
+-                        E('div', { 'class': 'device-card-section', 'style': 'margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(0, 0, 0, 0.1);' }, [
+-                            E('div', { 'class': 'device-card-section-label' }, _('LAN Traffic')),
+-                            E('div', { 'class': 'device-card-traffic' }, [
+-                                E('div', { 'class': 'device-card-traffic-row' }, [
+-                                    E('span', { 'style': 'color: ' + BANDIX_COLOR_UPLOAD + '; font-size: 0.75rem; font-weight: bold;' }, '↑'),
+-                                    E('span', { 'style': 'font-weight: 600;' }, formatByterate(device.l_tx_r || 0, speedUnit)),
+-                                    E('span', { 'style': 'font-size: 0.75rem; opacity: 0.7;' }, '(' + formatSize(device.l_tx_b || 0) + ')')
+-                                ]),
+-                                E('div', { 'class': 'device-card-traffic-row' }, [
+-                                    E('span', { 'style': 'color: ' + BANDIX_COLOR_DOWNLOAD + '; font-size: 0.75rem; font-weight: bold;' }, '↓'),
+-                                    E('span', { 'style': 'font-weight: 600;' }, formatByterate(device.l_rx_r || 0, speedUnit)),
+-                                    E('span', { 'style': 'font-size: 0.75rem; opacity: 0.7;' }, '(' + formatSize(device.l_rx_b || 0) + ')')
+-                                ])
+-                            ])
++                        E('div', { 'class': 'dc-grid' }, [
++                            E('span', { 'class': 'dc-label' }, 'WAN'),
++                            cardCell('upload', '↑', device.w_tx_r, device.w_tx_b),
++                            cardCell('download', '↓', device.w_rx_r, device.w_rx_b),
++                            E('span', { 'class': 'dc-label' }, 'LAN'),
++                            cardCell('upload', '↑', device.l_tx_r, device.l_tx_b),
++                            cardCell('download', '↓', device.l_rx_r, device.l_rx_b)
+                         ])
+-                    ]);
++                    ];
++                    if (isDetailedMode) {
++                        var cardIPv6 = filterLanIPv6(device.ip6);
++                        var detailRows = [
++                            E('span', { 'class': 'dc-k' }, 'IPv4'),
++                            E('span', { 'class': 'dc-v' }, device.ip4 || '-'),
++                            E('span', { 'class': 'dc-k' }, 'MAC'),
++                            E('span', { 'class': 'dc-v dc-mono' }, device.mac || '-')
++                        ];
++                        if (cardIPv6.length > 0) {
++                            detailRows.push(
++                                E('span', { 'class': 'dc-k' }, 'IPv6'),
++                                E('span', { 'class': 'dc-v dc-mono' }, cardIPv6.join(', '))
++                            );
++                        }
++                        detailRows.push(E('div', { 'class': 'dc-last' }, [
++                            _('Last Online') + ': ',
++                            E('strong', {}, formatLastOnlineTime(device.last)),
++                            device.last > 0 ? E('span', { 'class': 'dc-vol' }, ' ' + formatLastOnlineExactTime(device.last)) : ''
++                        ]));
++                        cardParts.push(E('div', { 'class': 'dc-details' }, detailRows));
++                    }
++                    var card = E('div', { 'class': 'device-card' + (isOnline ? '' : ' dc-offline') }, cardParts);
+ 
+                     cardsContainer.appendChild(card);
+                 });
+@@ -7068,7 +7566,7 @@ return view.extend({
+ 
+             var dpr = window.devicePixelRatio || 1;
+             var cssWidth = canvas.parentElement.offsetWidth || 600;
+-            var cssHeight = 300;
++            var cssHeight = canvas.parentElement.offsetHeight || 300;
+ 
+             canvas.style.width = cssWidth + 'px';
+             canvas.style.height = cssHeight + 'px';
+@@ -7104,8 +7602,14 @@ return view.extend({
+             var zeroLabelText = formatSize(0);
+             var maxLabelWidth = Math.max(ctx.measureText(maxLabelText).width, ctx.measureText(zeroLabelText).width);
+ 
+-            var padding = { top: 20, right: 20, bottom: 40, left: 80 };
+-            padding.left = Math.max(padding.left, Math.ceil(maxLabelWidth) + 30); // 确保右侧时间不被裁剪
++            // intermediate grid labels can be wider than the max and zero ones
++            for (var li = 1; li < 4; li++) {
++                maxLabelWidth = Math.max(maxLabelWidth, ctx.measureText(formatSize(maxValue * li / 4)).width);
++            }
++            var narrow = width < 500;
++            var padding = narrow ? { top: 16, right: 8, bottom: 36, left: 40 } : { top: 20, right: 20, bottom: 40, left: 80 };
++            padding.left = Math.max(padding.left, Math.ceil(maxLabelWidth) + (narrow ? 14 : 30)); // 确保右侧时间不被裁剪
++            canvas.__bandixPadding = padding;
+             var chartWidth = width - padding.left - padding.right;
+             var chartHeight = height - padding.top - padding.bottom;
+ 
+@@ -7381,8 +7885,9 @@ return view.extend({
+                 var y = e.clientY - rect.top;
+ 
+                 // 检查鼠标是否在图表区域内
+-                if (x < padding.left || x > rect.width - padding.right ||
+-                    y < padding.top || y > rect.height - padding.bottom) {
++                var pad = canvas.__bandixPadding || padding;
++                if (x < pad.left || x > rect.width - pad.right ||
++                    y < pad.top || y > rect.height - pad.bottom) {
+                     // 清除悬浮索引并重新绘制图表以清除虚线
+                     delete canvas.__bandixIncrementsHoverIndex;
+                     var info = canvas.__bandixIncrements;
+diff --git a/luci-app-bandix/po/ru/bandix.po b/luci-app-bandix/po/ru/bandix.po
+index e24b3a82..39599204 100644
+--- a/luci-app-bandix/po/ru/bandix.po
++++ b/luci-app-bandix/po/ru/bandix.po
+@@ -1578,3 +1578,18 @@ msgstr "Совпадения на странице"
+ 
+ msgid "No matching connections on this page"
+ msgstr "На этой странице нет подходящих соединений"
++
++msgid "Sort"
++msgstr "Сортировка"
++
++msgid "WAN speed"
++msgstr "Скорость WAN"
++
++msgid "WAN usage"
++msgstr "Объём WAN"
++
++msgid "LAN speed"
++msgstr "Скорость LAN"
++
++msgid "LAN usage"
++msgstr "Объём LAN"
+-- 
+2.43.0
+
