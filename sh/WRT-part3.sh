@@ -734,9 +734,17 @@ if [ "$VARIANT" == "clear" ]; then
                 ;;
         esac
     done
-    # echo "CONFIG_PACKAGE_bandix-plus=y" >> ./.config
-    # echo "CONFIG_PACKAGE_luci-app-bandix-plus=y" >> ./.config
-    # echo "CONFIG_PACKAGE_luci-i18n-bandix-plus-ru=y" >> ./.config
+    # Монитор трафика — bandix-plus вместо bandix: считает несколько интерфейсов
+    # сразу (VLAN и WAN); какие — выбирает zz1 (files/README.md, раздел 11).
+    sed -i '/bandix/Id' ./.config
+    for PKG in bandix luci-app-bandix luci-i18n-bandix-ru; do
+        echo "# CONFIG_PACKAGE_${PKG} is not set" >> ./.config
+    done
+    {
+        echo "CONFIG_PACKAGE_bandix-plus=y"
+        echo "CONFIG_PACKAGE_luci-app-bandix-plus=y"
+        echo "CONFIG_PACKAGE_luci-i18n-bandix-plus-ru=y"
+    } >> ./.config
     sed -i '/CONFIG_PACKAGE_kmod-tcp-bbr=y/d' ./.config
     sed -i '/CONFIG_TCP_CONG_BBR=y/d' ./.config
     echo "# BBR disabled for clear build"
