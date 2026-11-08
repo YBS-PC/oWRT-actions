@@ -87,10 +87,12 @@
 | Папка | Репозиторий | Коммит | Дата коммита |
 |---|---|---|---|
 | `feeds/bandix/` | [timsaya/openwrt-bandix](https://github.com/timsaya/openwrt-bandix) | [`0760d1f`](https://github.com/timsaya/openwrt-bandix/commit/0760d1f5b52d1a2317dfd171ab00fe6543a9a0c4) | 27.10.2026 |
+| `feeds/bandixplus/` | [timsaya/openwrt-bandix-plus](https://github.com/timsaya/openwrt-bandix-plus) | [`fba9704`](https://github.com/timsaya/openwrt-bandix-plus/commit/fba9704300f2900451e00a1645e11b1f179204b8) | 21.10.2026 |
 | `feeds/forkop/` | [ushan0v/forkop](https://github.com/ushan0v/forkop) | [`129d303`](https://github.com/ushan0v/forkop/commit/129d303e6cc879e9edc4e13c50b1f37637e69554) | 02.11.2026 |
 | `feeds/forkopmod/` | [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) | [`4e8e177`](https://github.com/Gavr1024/forkop-mod/commit/4e8e177c36dfe114354820b213c534d9a82204cc) | 06.11.2026 |
 | `feeds/internetdetector/` | [gSpotx2f/luci-app-internet-detector](https://github.com/gSpotx2f/luci-app-internet-detector) | [`e265fcc`](https://github.com/gSpotx2f/luci-app-internet-detector/commit/e265fcc8a9d9fd359f29fd0188ab2da3ce1438fa) | 09.10.2026 |
 | `feeds/luciappbandix/` | [timsaya/luci-app-bandix](https://github.com/timsaya/luci-app-bandix) | [`108369b`](https://github.com/timsaya/luci-app-bandix/commit/108369b8da05f01296a3ed0210a2ab60809712e5) | 27.10.2026 |
+| `feeds/luciappbandixplus/` | [timsaya/luci-app-bandix-plus](https://github.com/timsaya/luci-app-bandix-plus) | [`c4f002f`](https://github.com/timsaya/luci-app-bandix-plus/commit/c4f002f74f3a0f4aeb79fb5d35f5a7bbd3392a1f) | 21.10.2026 |
 | `feeds/luciappxray/` | [yichya/luci-app-xray](https://github.com/yichya/luci-app-xray) | [`4d5a6fd`](https://github.com/yichya/luci-app-xray/commit/4d5a6fd7fc4d2fbbcd7f70f1319da06b91ec1d56) | 22.09.2026 |
 | `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`0c8a895`](https://github.com/yandexru45/netshift/commit/0c8a89535a897b43b50b15c3f0c8991df242bb24) | 07.11.2026 |
 | `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`0d5a169`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/0d5a1697a926a34e661ecd0e67b0c038f9f42c4e) | 08.11.2026 |
@@ -126,7 +128,7 @@
 
 ## Патчи по пакетам
 
-Всего 60 патчей для 15 пакетов. Номер — порядок применения. Ссылки
+Всего 63 патча для 17 пакетов. Номер — порядок применения. Ссылки
 вида `#98` / `PR #103` — обсуждение и предложенное исправление в
 репозитории автора.
 
@@ -150,7 +152,8 @@
 ### bandix — `feeds/bandix/` (1)
 
 Служба `bandix` из фида [timsaya/openwrt-bandix](https://github.com/timsaya/openwrt-bandix)
-(bandix 0.12.12) — во всех сборках, кроме `crystal_clear` и `switch`.
+(bandix 0.12.12) — во всех сборках, кроме `clear` (там bandix-plus),
+`crystal_clear` и `switch`.
 Сборка с патчами берёт фид с коммита из `BASE` (`sh/WRT-part1.sh`), без
 патчей — с последнего коммита автора.
 
@@ -166,6 +169,32 @@
   запускаются и при старом конфиге, где они включены. Флаги без значения
   в старом конфиге больше не дают ошибок оболочки при запуске. В
   конфиге по умолчанию монитор трафика включён. *Всегда.*
+
+### bandix-plus — `feeds/bandixplus/` (1)
+
+Служба `bandix-plus` из фида [timsaya/openwrt-bandix-plus](https://github.com/timsaya/openwrt-bandix-plus)
+(bandix-plus 0.1.3) — только в `clear`: считает трафик нескольких
+интерфейсов сразу (мосты и VLAN локальных сетей, WAN). Какие интерфейсы
+считать, при первой загрузке выбирает zz1 (`files/README.md`, раздел 11).
+Сборка с патчами берёт фид с коммита из `BASE` (`sh/WRT-part1.sh`), без
+патчей — с последнего коммита автора.
+
+Патчи сняты с коммита [`fba9704`](https://github.com/timsaya/openwrt-bandix-plus/commit/fba9704300f2900451e00a1645e11b1f179204b8) от 21.10.2026 (файл `BASE`): на нём серия ложится точно.
+
+- **001. Запуск без отсутствующих интерфейсов, перезапуск при их
+  появлении, API только на 127.0.0.1, история по умолчанию.** bandix-plus
+  завершается, если любого интерфейса из списка нет (WAN по PPPoE до
+  подключения, ещё не созданный VLAN), и после трёх перезапусков procd
+  монитор не работал совсем. Скрипт запуска передаёт только существующие
+  интерфейсы, а `/etc/hotplug.d/net/90-bandix-plus` перезапускает службу,
+  когда интерфейс из списка появляется (в том числе после пересоздания:
+  программы eBPF подключаются один раз, и пересозданный интерфейс без
+  перезапуска не считается — проверено на bandix-plus 0.1.3). Несколько
+  событий подряд дают один перезапуск. HTTP API без авторизации, в нём
+  есть и методы, которые меняют данные: служба слушает только
+  127.0.0.1, что бы ни стояло в опции host. Хранение истории включено по
+  умолчанию: без него рейтинг и объём по времени пропадают при каждом
+  перезапуске. *Всегда.*
 
 ### forkop — `feeds/forkop/` (2)
 
@@ -353,6 +382,36 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
   шкалы берёт высоту контейнера (раньше на телефоне наезжал на итоги), а
   левое поле считается по самой широкой подписи оси. Раскладка шире
   768 px не меняется. Русский перевод новых строк. *Всегда.*
+
+### luci-app-bandix-plus — `feeds/luciappbandixplus/` (2)
+
+Интерфейс `luci-app-bandix-plus` (Сеть → Bandix Plus) из фида
+[timsaya/luci-app-bandix-plus](https://github.com/timsaya/luci-app-bandix-plus) — вместе со службой
+`bandix-plus` (только `clear`), коммит выбирается так же.
+
+Патчи сняты с коммита [`c4f002f`](https://github.com/timsaya/luci-app-bandix-plus/commit/c4f002f74f3a0f4aeb79fb5d35f5a7bbd3392a1f) от 21.10.2026 (файл `BASE`): на нём серия ложится точно.
+
+- **001. Только монитор трафика.** Остаются карточки интерфейсов со
+  скоростью и объёмом, график в реальном времени, список устройств,
+  рейтинг и объём по времени. Убраны ограничения скорости интерфейсов,
+  гостевые ограничения с белым списком, расписания ограничений и окно
+  имени устройства, удаление устройств, проверка обновлений, ссылка
+  обратной связи и поле адреса API в настройках. Страница больше не
+  опрашивает четыре списка ограничений каждую секунду и не обращается к
+  GitHub; состояние службы (apk list, ubus, curl) — раз в 10 секунд, а не
+  каждую секунду. rpcd отвечает только на методы монитора, ACL разрешает
+  чтение данных, настройки и перезапуск. *Всегда.*
+- **002. Раскладка для телефона, направление WAN, рейтинг по всем
+  интерфейсам, русский перевод.** Числа в карточках интерфейсов больше
+  не обрезаются, таблица устройств на компьютере не режет MAC и адреса.
+  На экране до 768 px устройства — карточками со скоростью и объёмом
+  отдачи и загрузки (подробный режим добавляет MAC, IPv6 и время в
+  сети), над ними выбор сортировки; панели запроса и рейтинг компактнее.
+  Счётчики интерфейса — вход и выход: на WAN вход — это загрузка, поэтому
+  для зоны wan направления меняются местами в карточке, на графике и в
+  объёме по времени. В рейтинге — «Все интерфейсы» (по умолчанию).
+  Русский перевод переписан: «отдача» и «загрузка» раньше обе были
+  «загрузкой», Reset — «перезагрузить». *Всегда.*
 
 ### luci-app-xray — `feeds/luciappxray/` (1)
 
