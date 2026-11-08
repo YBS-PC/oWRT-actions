@@ -23,7 +23,7 @@ echo -e "\nsrc-git internetdetector https://github.com/gSpotx2f/luci-app-interne
 # =========================================================
 
 # =========================================================
-# bandix: со сборкой с патчами (apply_patches) — с коммита из
+# bandix и bandix-plus: со сборкой с патчами (apply_patches) — с коммита из
 # patches/feeds/<фид>/BASE, на котором сняты патчи; без патчей — последний
 # коммит автора.
 bandix_feed() {   # <фид> <URL>
@@ -38,9 +38,8 @@ bandix_feed() {   # <фид> <URL>
 }
 bandix_feed bandix https://github.com/timsaya/openwrt-bandix.git
 bandix_feed luciappbandix https://github.com/timsaya/luci-app-bandix.git
-#
-echo -e "\nsrc-git bandixplus https://github.com/timsaya/openwrt-bandix-plus.git" >> feeds.conf.default
-echo -e "\nsrc-git luciappbandixplus https://github.com/timsaya/luci-app-bandix-plus.git" >> feeds.conf.default
+bandix_feed bandixplus https://github.com/timsaya/openwrt-bandix-plus.git
+bandix_feed luciappbandixplus https://github.com/timsaya/luci-app-bandix-plus.git
 # =========================================================
 
 # =========================================================
