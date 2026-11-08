@@ -1201,6 +1201,36 @@ if [ -x /usr/bin/youtubeUnblock ]; then
     done
 fi
 
+# bandix-plus (clear): какие интерфейсы считать. Пакет ставит list iface 'br-lan';
+# пока список не меняли, вместо него берутся устройства сетей из зон firewall:
+# мосты и VLAN локальных сетей и WAN (для PPPoE — pppoe-<сеть>). Список,
+# изменённый вручную, не трогается.
+if [ -f /etc/config/bandix_plus ] && [ "$(uci -q get bandix_plus.general.iface)" = "br-lan" ]; then
+    _bxp_devs=""
+    for _net in $(uci -q show firewall | sed -n "s/^firewall\.[^.]*\.network=//p" | tr -d "'"); do
+        case "$(uci -q get network."$_net".proto)" in
+            pppoe) _dev="pppoe-$_net" ;;
+            static|dhcp) _dev=$(uci -q get network."$_net".device) ;;
+            *) continue ;;
+        esac
+        case "$_dev" in ''|@*) continue ;; esac
+        case " $_bxp_devs " in *" $_dev "*) ;; *) _bxp_devs="$_bxp_devs $_dev" ;; esac
+    done
+    if [ -n "$_bxp_devs" ]; then
+        uci -q delete bandix_plus.general.iface
+        for _dev in $_bxp_devs; do
+            uci -q add_list bandix_plus.general.iface="$_dev"
+        done
+        if uci commit bandix_plus; then
+            log_ok "bandix-plus: интерфейсы$_bxp_devs"
+        else
+            log_err "bandix-plus: не удалось записать интерфейсы"
+        fi
+    else
+        log_info "bandix-plus: в зонах firewall нет сетей с устройством, остаётся br-lan"
+    fi
+fi
+
 # SQM: diffserv4 и приоритеты на загрузке — скрипт cake_ctinfo.qos.
 # Он лежит в прошивке (/usr/lib/sqm), в пакет sqm-scripts не входит, поэтому
 # run.sh больше не патчится и apk upgrade sqm-scripts ничего не ломает.
