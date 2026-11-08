@@ -1,0 +1,163 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 8 Nov 2026 12:00:00 +0000
+Subject: [PATCH] bandix-plus: start without missing interfaces, restart when
+ they appear, local API, keep history
+
+bandix-plus exits with "interface not found" when any interface in its
+list does not exist. With a PPPoE WAN in the list (not connected yet at
+boot) or a VLAN created later, the whole monitor stayed down after the
+three procd respawns. The init script now passes only the interfaces
+present in /sys/class/net, logs the missing ones and does not start
+when none is present.
+
+Like bandix, bandix-plus attaches its eBPF programs once. Checked with
+bandix-plus 0.1.3 on two bridges: after one of them was deleted and
+created again the service picked up the new ifindex but counted 0 B/s
+while traffic was flowing; after a restart the counters came back.
+/etc/hotplug.d/net/90-bandix-plus restarts the service when an
+interface from bandix_plus.general.iface appears (ACTION=add), if the
+service is enabled and traffic collection is on. Events that come
+together (network restart, several VLANs) give one restart three
+seconds after the first.
+
+The HTTP API has no authentication and also serves the methods that
+change rate limits and delete devices; the init script now always binds
+it to 127.0.0.1, whatever the host option says (rpcd reaches it there).
+
+Traffic persistence is on by default (config, uci-defaults, init
+default): without it the usage ranking and the traffic timeline are
+lost on every restart, and the hotplug restart above would clear them.
+bandix-plus writes the hourly records and its state files to the data
+directory once an hour and on stop. The log level defaults to info when
+the option is missing (before, an empty --log-level was passed).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Uo9XQuT7u6ShTYdi2S3Anq
+---
+ openwrt-bandix-plus/Makefile                  |  4 +++
+ .../files/99-bandix-plus-defaults             |  2 +-
+ openwrt-bandix-plus/files/bandix-plus.hotplug | 20 +++++++++++++++
+ openwrt-bandix-plus/files/bandix-plus.init    | 25 ++++++++++++++++---
+ openwrt-bandix-plus/files/bandix_plus.config  |  2 +-
+ 5 files changed, 48 insertions(+), 5 deletions(-)
+ create mode 100644 openwrt-bandix-plus/files/bandix-plus.hotplug
+
+diff --git a/openwrt-bandix-plus/Makefile b/openwrt-bandix-plus/Makefile
+index 86b7aa8d..8cffec86 100644
+--- a/openwrt-bandix-plus/Makefile
++++ b/openwrt-bandix-plus/Makefile
+@@ -102,6 +102,10 @@ define Package/$(PKG_NAME)/install
+ 	# 安装 UCI defaults（仅补齐缺失配置项，不覆盖用户已有值）
+ 	$(INSTALL_DIR) $(1)/etc/uci-defaults
+ 	$(INSTALL_BIN) ./files/99-bandix-plus-defaults $(1)/etc/uci-defaults/99-bandix-plus-defaults
++
++	# Restart when a monitored interface is created again or appears late
++	$(INSTALL_DIR) $(1)/etc/hotplug.d/net
++	$(INSTALL_DATA) ./files/bandix-plus.hotplug $(1)/etc/hotplug.d/net/90-bandix-plus
+ 	
+ 	# 配置 sysupgrade 保留列表
+ 	$(INSTALL_DIR) $(1)/lib/upgrade/keep.d
+diff --git a/openwrt-bandix-plus/files/99-bandix-plus-defaults b/openwrt-bandix-plus/files/99-bandix-plus-defaults
+index b448258d..00c6a9d4 100644
+--- a/openwrt-bandix-plus/files/99-bandix-plus-defaults
++++ b/openwrt-bandix-plus/files/99-bandix-plus-defaults
+@@ -11,7 +11,7 @@ uci -q get bandix_plus.general.tc_order >/dev/null 2>&1 || uci -q set bandix_plu
+ uci -q get bandix_plus.general.netlink_priority >/dev/null 2>&1 || uci -q set bandix_plus.general.netlink_priority='0'
+ uci -q get bandix_plus.general.tcx_anchor_ingress_id >/dev/null 2>&1 || uci -q set bandix_plus.general.tcx_anchor_ingress_id=''
+ uci -q get bandix_plus.general.tcx_anchor_egress_id >/dev/null 2>&1 || uci -q set bandix_plus.general.tcx_anchor_egress_id=''
+-uci -q get bandix_plus.general.traffic_enable_storage >/dev/null 2>&1 || uci -q set bandix_plus.general.traffic_enable_storage='0'
++uci -q get bandix_plus.general.traffic_enable_storage >/dev/null 2>&1 || uci -q set bandix_plus.general.traffic_enable_storage='1'
+ uci -q get bandix_plus.general.port >/dev/null 2>&1 || uci -q set bandix_plus.general.port='8787'
+ uci -q get bandix_plus.general.host >/dev/null 2>&1 || uci -q set bandix_plus.general.host='127.0.0.1'
+ uci -q get bandix_plus.general.history_window_minutes >/dev/null 2>&1 || uci -q set bandix_plus.general.history_window_minutes='10'
+diff --git a/openwrt-bandix-plus/files/bandix-plus.hotplug b/openwrt-bandix-plus/files/bandix-plus.hotplug
+new file mode 100644
+index 00000000..45375c8a
+--- /dev/null
++++ b/openwrt-bandix-plus/files/bandix-plus.hotplug
+@@ -0,0 +1,20 @@
++#!/bin/sh
++# Restart bandix-plus when one of its interfaces appears: the eBPF programs
++# stay on a deleted device, and an interface missing at start is skipped.
++[ "$ACTION" = "add" ] || exit 0
++[ -n "$INTERFACE" ] || exit 0
++[ "$(uci -q get bandix_plus.general.enable_traffic)" = "1" ] || exit 0
++/etc/init.d/bandix-plus enabled || exit 0
++case " $(uci -q get bandix_plus.general.iface) " in
++	*" $INTERFACE "*) ;;
++	*) exit 0 ;;
++esac
++# Interfaces often come up together (network restart): one restart for all.
++LOCK=/var/run/bandix-plus.hotplug
++mkdir "$LOCK" 2>/dev/null || exit 0
++(
++	sleep 3
++	rmdir "$LOCK"
++	logger -t bandix-plus "interface $INTERFACE appeared, restarting bandix-plus"
++	/etc/init.d/bandix-plus restart
++) </dev/null >/dev/null 2>&1 &
+diff --git a/openwrt-bandix-plus/files/bandix-plus.init b/openwrt-bandix-plus/files/bandix-plus.init
+index 9299c01d..f9f53929 100644
+--- a/openwrt-bandix-plus/files/bandix-plus.init
++++ b/openwrt-bandix-plus/files/bandix-plus.init
+@@ -34,15 +34,17 @@ start_service() {
+ 
+ 	config_load 'bandix_plus'
+ 	config_get_bool enable_traffic 'general' 'enable_traffic' '1'
+-	config_get log_level 'general' 'log_level'
++	config_get log_level 'general' 'log_level' 'info'
+ 	config_get tc_backend 'general' 'tc_backend' 'auto'
+ 	config_get tc_order 'general' 'tc_order' 'default'
+ 	config_get netlink_priority 'general' 'netlink_priority'
+ 	config_get tcx_anchor_ingress_id 'general' 'tcx_anchor_ingress_id'
+ 	config_get tcx_anchor_egress_id 'general' 'tcx_anchor_egress_id'
+-	config_get_bool traffic_enable_storage 'general' 'traffic_enable_storage' '0'
++	config_get_bool traffic_enable_storage 'general' 'traffic_enable_storage' '1'
+ 	config_get history_window_minutes 'general' 'history_window_minutes' '10'
+-	config_get host 'general' 'host' '127.0.0.1'
++	# The API changes data without authentication: it listens on loopback only,
++	# whatever the host option says (rpcd reaches it on 127.0.0.1).
++	host='127.0.0.1'
+ 	config_get port 'general' 'port' '8787'
+ 	config_get data_dir 'general' 'data_dir' '/usr/share/bandix-plus'
+ 	config_list_foreach 'general' 'iface' append_iface
+@@ -52,6 +54,23 @@ start_service() {
+ 		logger -t bandix-plus "no iface configured"
+ 		return 1
+ 	}
++	# bandix-plus exits when any interface is missing (PPPoE before it connects,
++	# a VLAN not created yet): start with the present ones; the hotplug script
++	# restarts the service when a missing one appears.
++	local present="" missing="" one
++	for one in $IFACES; do
++		if [ -d "/sys/class/net/$one" ]; then
++			present="$present $one"
++		else
++			missing="$missing $one"
++		fi
++	done
++	[ -n "$missing" ] && logger -t bandix-plus "interfaces not present yet:$missing"
++	IFACES="$present"
++	[ -n "$IFACES" ] || {
++		logger -t bandix-plus "none of the configured interfaces is present"
++		return 1
++	}
+ 	case "$port" in
+ 		''|*[!0-9]*)
+ 			logger -t bandix-plus "invalid port: $port"
+diff --git a/openwrt-bandix-plus/files/bandix_plus.config b/openwrt-bandix-plus/files/bandix_plus.config
+index 082091bb..3d341701 100644
+--- a/openwrt-bandix-plus/files/bandix_plus.config
++++ b/openwrt-bandix-plus/files/bandix_plus.config
+@@ -15,6 +15,6 @@ config bandix_plus 'general'
+ 	option netlink_priority '0'
+ 	# option tcx_anchor_ingress_id '12345'
+ 	# option tcx_anchor_egress_id '12346'
+-	option traffic_enable_storage '0'
++	option traffic_enable_storage '1'
+ 	option port '8787'
+ 	option data_dir '/usr/share/bandix-plus'
+-- 
+2.43.0
+
