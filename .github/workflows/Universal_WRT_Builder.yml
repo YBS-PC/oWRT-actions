@@ -33,7 +33,6 @@ on:
           - netshift
           - forkop
           - forkop-mod
-          - trafira
           - tachyon
           - passwall
           - v2raya
@@ -175,9 +174,6 @@ env:
 
   FORKOP_FEED_MOD: "forkopmod https://github.com/Gavr1024/forkop-mod.git;main"
 
-  # Фид trafira, конфиг /etc/config/trafira; версия — из тегов (TRAFIRA_VERSION).
-  TRAFIRA_FEED: "trafira https://github.com/petrouspetr-pixel/trafira.git;main"
-
   # Фид tachyon, конфиг /etc/config/tachyon; версия — из тегов (TACHYON_VERSION).
   # tachyon с sb=default — его ядро по умолчанию в образе (артефакт шифруется); с другим sb — выбранное ядро.
   TACHYON_FEED: "tachyon https://github.com/Dushnilin/tachyon.git;main"
@@ -231,7 +227,7 @@ jobs:
             case "$v" in
               clear|crystal_clear|switch) agh=no; sb=no; ytb=false ;;
               passwall|v2raya|xray)       sb=no ;;
-              trafira|tachyon)            ytb=false ;;
+              tachyon)                    ytb=false ;;
               forkop) [ "$fk" = "forkop" ] || ytb=false ;;
             esac
             [ "$v" = "crystal_clear" ] && zz=false
@@ -265,7 +261,7 @@ jobs:
               case "$sb" in forkop-base|forkop-full|forkop-tiny) sb=feed ;; esac
             fi
             case " $TINY_TARGETS " in
-              *" $t "*) case "$v" in homeproxy|rehomeproxy|podkop|netshift|forkop|trafira|tachyon)
+              *" $t "*) case "$v" in homeproxy|rehomeproxy|podkop|netshift|forkop|tachyon)
                 case "$sb" in no|default) ;; forkop-*) sb=forkop-tiny ;; *) sb=tiny ;; esac ;; esac ;;
             esac
             if [ "$orig" != "agh=$agh sb=$sb ytb=$ytb zz=$zz" ]; then
@@ -284,7 +280,7 @@ jobs:
             # Пресет combo. Поля entry: устройство вариант agh sb ytb zz patches feeds.
             # Запасные строки: $(entry nanopi-r6s homeproxy latest latest true true false true) — без патчей;
             # $(entry nanopi-r6s podkop latest podkop-engine-full true true true true).
-            json="{\"include\":[$(entry nanopi-r6s homeproxy latest extended true true true true),$(entry nanopi-r6s podkop latest podkop-engine true true true true),$(entry nanopi-r6s netshift latest extended true true true true),$(entry nanopi-r6s forkop latest forkop-base true true true true),$(entry nanopi-r6s trafira latest extended false true true true),$(entry nanopi-r6s tachyon latest default false true true true),$(entry rb5009 clear no no false true true true),$(entry rb5009 switch no no false true true true)]}"
+            json="{\"include\":[$(entry nanopi-r6s homeproxy latest extended true true true true),$(entry nanopi-r6s podkop latest podkop-engine true true true true),$(entry nanopi-r6s netshift latest extended true true true true),$(entry nanopi-r6s forkop latest forkop-base true true true true),$(entry nanopi-r6s tachyon latest default false true true true),$(entry rb5009 clear no no false true true true),$(entry rb5009 switch no no false true true true)]}"
           else
             # Все устройства из config/conf/ — при добавлении нового дописать сюда.
             targets="nanopi-r6s nanopi-r5s rb5009 slateax ax59u brume2"
@@ -345,12 +341,6 @@ jobs:
               *)         FK_WHY="Исправления из patches/feeds/${FK_NAME} не будут применены" ;;
             esac
             echo "::warning title=forkop без патчей::Фид ${FK_NAME} собирается без patches/feeds/${FK_NAME}. ${FK_WHY}. Включите apply_patches."
-          done
-
-          # trafira без патчей: нет правила fw4 для TPROXY и других исправлений.
-          echo "$json" | jq -r '.include[] | select(.variant == "trafira" and .patches == false) | .target' |
-          while read -r t; do
-            echo "::warning title=${t}: trafira без патчей::Без патчей patches/feeds/trafira в прошивке нет правила fw4 для TPROXY — зоны с input=REJECT (гостевые) режут проксируемый трафик (002), ссылка с %40/%23 в пароле trojan или одна битая ссылка не дают trafira запуститься (004, 005), смена ядра sing-box на apk падает с «left-hand side is not a function» (008). Включите apply_patches."
           done
 
           # tachyon без патчей: prerm на ucode (001), keep.d сохраняет /usr/bin/sing-box (002).
@@ -1275,7 +1265,7 @@ jobs:
             case "$VARIANT" in
                 homeproxy)   BASE_DIR=packages/luci-app-homeproxy ;;
                 rehomeproxy) BASE_DIR=packages/luci-app-re-homeproxy ;;
-                podkop|netshift|trafira|tachyon) BASE_DIR=feeds/$VARIANT ;;
+                podkop|netshift|tachyon) BASE_DIR=feeds/$VARIANT ;;
                 forkop)      BASE_DIR=feeds/$M_FK ;;
                 passwall)    BASE_DIR=feeds/passwall2 ;;
                 xray)        BASE_DIR=feeds/luciappxray ;;
@@ -1324,10 +1314,6 @@ jobs:
             elif ! ls "$GITHUB_WORKSPACE/patches/feeds/${FK_NAME}"/*.patch >/dev/null 2>&1; then
                 echo "::warning title=forkop: нет патчей для фида::Для фида ${FK_NAME} нет patches/feeds/${FK_NAME}/*.patch — пакет соберётся без исправлений."
             fi
-        elif [ "$VARIANT" == "trafira" ]; then
-            # Адрес — TRAFIRA_FEED в env; патчи — patches/feeds/trafira (part2).
-            echo ">>> trafira: фид $TRAFIRA_FEED"
-            echo -e "\n$(feed_line "$TRAFIRA_FEED")" >> feeds.conf.default
         elif [ "$VARIANT" == "tachyon" ]; then
             # Адрес — TACHYON_FEED в env; патчи — patches/feeds/tachyon (part2).
             echo ">>> tachyon: фид $TACHYON_FEED"
@@ -1450,7 +1436,7 @@ jobs:
             sed -i '/sing-box/Id' ./.config
         fi
         
-        if [[ "$VARIANT" == "podkop" || "$VARIANT" == "netshift" || "$VARIANT" == "forkop" || "$VARIANT" == "trafira" || "$VARIANT" == "tachyon" || "$VARIANT" == "rehomeproxy" ]]; then
+        if [[ "$VARIANT" == "podkop" || "$VARIANT" == "netshift" || "$VARIANT" == "forkop" || "$VARIANT" == "tachyon" || "$VARIANT" == "rehomeproxy" ]]; then
             # rehomeproxy ставит файлы по путям luci-app-homeproxy: homeproxy убирается.
             echo ">>> Removing HomeProxy for $VARIANT compatibility..."
             sed -i '/homeproxy/d' ./.config
@@ -1514,12 +1500,6 @@ jobs:
             echo 'CONFIG_PACKAGE_forkop=y' >> ./.config
             echo 'CONFIG_PACKAGE_luci-app-forkop=y' >> ./.config
             echo 'CONFIG_PACKAGE_luci-i18n-forkop-ru=y' >> ./.config
-
-        elif [ "$VARIANT" == "trafira" ]; then
-            # Зависимости trafira уже в WRT.config, конфликтующих пакетов там нет.
-            echo 'CONFIG_PACKAGE_trafira=y' >> ./.config
-            echo 'CONFIG_PACKAGE_luci-app-trafira=y' >> ./.config
-            echo 'CONFIG_PACKAGE_luci-i18n-trafira-ru=y' >> ./.config
 
         elif [ "$VARIANT" == "tachyon" ]; then
             # Зависимости tachyon уже в WRT.config, конфликтующих пакетов там нет; ядро — sing-box или своё по умолчанию.
@@ -1637,7 +1617,7 @@ jobs:
         echo "Variant selected: $VARIANT"
         echo "Checking key packages in .config:"
         # Проверяем наличие ключевых пакетов для уверенности
-        grep -E "CONFIG_PACKAGE_(luci-app-homeproxy|sing-box|sing-box-forkop|luci-app-passwall2|luci-app-v2raya|luci-app-xray|xray-core|v2ray-geoip|v2ray-geosite|luci-app-podkop|luci-app-netshift|luci-app-forkop|luci-app-trafira|luci-app-tachyon|luci-app-re-homeproxy)=" .config || echo "None found"
+        grep -E "CONFIG_PACKAGE_(luci-app-homeproxy|sing-box|sing-box-forkop|luci-app-passwall2|luci-app-v2raya|luci-app-xray|xray-core|v2ray-geoip|v2ray-geosite|luci-app-podkop|luci-app-netshift|luci-app-forkop|luci-app-tachyon|luci-app-re-homeproxy)=" .config || echo "None found"
         echo "=========================================="
 
     - name: Telegram — патчи надо обновить
