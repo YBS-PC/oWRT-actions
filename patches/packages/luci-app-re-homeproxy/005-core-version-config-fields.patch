@@ -1,0 +1,291 @@
+From: YBS-PC/oWRT-actions
+Subject: [PATCH] generate_client: поля конфига по версии sing-box в ядре
+
+Генератор форка писал для hiddify-core поля, убранные из новых sing-box.
+hiddify-core 5.x (hiddify-sing-box 1.15) с ними не запускается ни в одном
+режиме, включая режим по умолчанию proxy_banned_ru:
+
+  FATAL decode config: inbounds[1]: legacy inbound fields are deprecated
+  in sing-box 1.11.0 and removed in sing-box 1.13.0
+
+а в режимах bypass_cn, bypass_ir, custom и с секциями proxy_ru_rule — ещё
+download_detour наборов правил, strategy правил DNS, independent_cache и
+store_rdrc (устарели в sing-box 1.14). sing-box 1.14 (в том числе
+extended) в режиме bypass_cn со списком прокси-доменов тоже не
+запускался («Legacy `strategy` DNS rule action option»), в остальных
+режимах выдавал предупреждения об устаревании.
+
+Генератор читает версию sing-box внутри ядра (`sing-box version`,
+`hiddify-core version`). С 1.14:
+- поля sniff у входов не пишутся (сниффинг делает правило `sniff`,
+  которое форк пишет для всех ядер);
+- наборы правил загружаются через http_client.detour вместо
+  download_detour (без выбранного выхода — через route.final, как раньше
+  неявный клиент);
+- правила DNS режимов bypass без strategy, проверка geoip — по ответу
+  DNS (evaluate и match_response, как в homeproxy 006);
+- store_dns вместо store_rdrc, без independent_cache.
+На hiddify-core 4.x (hiddify-sing-box 1.13) и sing-box до 1.14 конфиг
+прежний. Версия неизвестна — конфиг прежний, но без полей sniff у
+входов.
+
+Проверено: конфиги режимов proxy_banned_ru (с секциями proxy_ru_rule
+и списками доменов), global, bypass_cn, bypass_ir, custom (с наборами
+правил и опциями кэша), перехват redirect_tproxy, redirect_tun, tun,
+ByeDPI и Zapret запущены на hiddify-core 5.5.5 и 4.1.0, sing-box
+1.12.25, 1.14.4 и 1.14.3-extended-2.7.3 без ошибок и предупреждений об
+устаревании (кроме `stack` у TUN на hiddify-core 5.5.5: поле устарело в
+sing-box 1.15 и работает до 1.17, а без него ядро взяло бы другой
+сетевой стек, поэтому оно не тронуто); узлы VLESS (REALITY, XHTTP), VMess WS, Trojan gRPC,
+Shadowsocks, Hysteria2, TUIC, SOCKS, WireGuard — на hiddify-core 5.5.5
+и 1.14.3-extended-2.7.3. Набор правил с выходом-узлом на 1.14 качается
+через этот узел.
+---
+diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
+index 1638ca5..6166786 100755
+--- a/root/etc/homeproxy/scripts/generate_client.uc
++++ b/root/etc/homeproxy/scripts/generate_client.uc
+@@ -7,7 +7,7 @@
+ 
+ 'use strict';
+ 
+-import { access, readfile, writefile } from 'fs';
++import { access, popen, readfile, writefile } from 'fs';
+ import { isnan } from 'math';
+ import { connect } from 'ubus';
+ import { cursor } from 'uci';
+@@ -87,7 +87,7 @@ const preferred_core = uci.get(uciconfig, ucimain, 'preferred_core') || 'auto';
+ const have_hiddify = !!access('/usr/bin/hiddify-core');
+ const have_singbox = !!access('/usr/bin/sing-box');
+ 
+-let is_hiddify = false, is_singbox = false;
++let is_hiddify = false, is_singbox = false, core_path = null;
+ if (preferred_core === 'hiddify' && have_hiddify)
+ 	is_hiddify = true;
+ else if (preferred_core === 'singbox' && have_singbox)
+@@ -102,9 +102,40 @@ else {
+ 	if (custom_path && access(custom_path)) {
+ 		is_hiddify = custom_type === 'hiddify';
+ 		is_singbox = !is_hiddify;
++		core_path = custom_path;
+ 	}
+ }
+ 
++/* Version of sing-box inside the active core ("sing-box version 1.14.4",
++ * "hiddify-core version v5.5.5 hiddify-sing-box version 1.15.0-alpha.13"); null when unknown.
++ * - Legacy inbound sniff fields (sniff, sniff_override_destination) are accepted by
++ *   hiddify-core up to hiddify-sing-box 1.13 (hiddify-core 4.x); hiddify-core 5.x refuses
++ *   to start with them ("legacy inbound fields ... removed in sing-box 1.13.0"). The route
++ *   rule `action: 'sniff'` below covers sniffing on every core, so the fields are written
++ *   only for hiddify-sing-box below 1.14.
++ * - Remote rule-sets: `download_detour` is deprecated in sing-box 1.14 and hiddify-core 5.x
++ *   refuses to start with it ("legacy `download_detour` remote rule-set option"). From 1.14
++ *   the same outbound goes to `http_client.detour`.
++ * - DNS: the strategy of a DNS rule, an IP rule-set matched against the answer without
++ *   match_response, independent_cache and store_rdrc are deprecated in 1.14 (see below).
++ * With an unknown version the config is written as before, except the legacy inbound fields. */
++let core_version = null;
++if (is_hiddify || is_singbox) {
++	if (!core_path)
++		core_path = is_hiddify ? '/usr/bin/hiddify-core' : '/usr/bin/sing-box';
++	const fd = popen(`'${core_path}' version 2>/dev/null`);
++	if (fd) {
++		const v = match(fd.read('all') || '', /(^|hiddify-)sing-box version ([0-9]+)\.([0-9]+)/);
++		fd.close();
++		if (v)
++			core_version = [ int(v[2]), int(v[3]) ];
++	}
++}
++const core_since = (major, minor) => core_version != null &&
++	(core_version[0] > major || (core_version[0] === major && core_version[1] >= minor));
++const hiddify_legacy_inbound = is_hiddify && core_version != null && !core_since(1, 14);
++const ruleset_http_client = core_since(1, 14);
++
+ const ipv6_support = uci.get(uciconfig, ucimain, 'ipv6_support') || '0';
+ const byedpi_enabled = uci.get(uciconfig, ucimain, 'byedpi_enabled');
+ /* zapret: a `direct` outbound stamped with routing_mark; nft catches the mark and
+@@ -414,6 +445,11 @@ function utls_unsupported(node) {
+ 	return (node.type in ['hysteria', 'hysteria2', 'tuic', 'naive']) || node.transport === 'quic';
+ }
+ 
++/* Rule-set download through an outbound, sing-box 1.14+ (see core_version above) */
++function ruleset_download(outbound) {
++	return isEmpty(outbound) ? null : { detour: outbound };
++}
++
+ function generate_outbound(node) {
+ 	if (type(node) !== 'object' || isEmpty(node))
+ 		return null;
+@@ -741,7 +777,8 @@ config.dns = {
+ 	strategy: dns_default_strategy,
+ 	disable_cache: strToBool(dns_disable_cache),
+ 	disable_expire: strToBool(dns_disable_cache_expire),
+-	independent_cache: strToBool(dns_independent_cache),
++	/* deprecated in sing-box 1.14: the field is removed */
++	independent_cache: core_since(1, 14) ? null : strToBool(dns_independent_cache),
+ 	client_subnet: dns_client_subnet
+ };
+ 
+@@ -851,16 +888,32 @@ if (!isEmpty(main_node)) {
+ 			});
+ 
+ 		/* Region domains -> region-dns (local) */
++		/* sing-box 1.14+: the strategy of a DNS rule and an IP rule-set matched against the
++		 * answer without match_response are deprecated (hiddify-core 5.x refuses to start
++		 * with them); the guard asks region-dns and keeps its answer when it is in geoip. */
+ 		push(config.dns.rules, {
+ 			rule_set: 'geosite-' + r,
+ 			action: 'route',
+ 			server: 'region-dns',
+-			strategy: 'prefer_ipv6'
++			strategy: core_since(1, 14) ? null : 'prefer_ipv6'
+ 		});
+ 
+ 		/* Optional geoip fallback + non-region guard. CN: list non-exhaustive, catch unlisted
+ 		 * domestic by IP. IR: off -- Iran configs use the simple scheme. */
+-		if (region.guard)
++		if (region.guard && core_since(1, 14)) {
++			push(config.dns.rules, {
++				rule_set: 'geosite-non' + r,
++				invert: true,
++				action: 'evaluate',
++				server: 'region-dns',
++				tag: 'region-dns-answer'
++			});
++			push(config.dns.rules, {
++				match_response: 'region-dns-answer',
++				rule_set: 'geoip-' + r,
++				action: 'respond'
++			});
++		} else if (region.guard)
+ 			push(config.dns.rules, {
+ 				type: 'logical',
+ 				mode: 'and',
+@@ -996,8 +1049,8 @@ push(config.inbounds, {
+ 	listen: '::',
+ 	listen_port: int(mixed_port),
+ 	udp_timeout: strToTime(udp_timeout),
+-	sniff: is_hiddify ? true : null,
+-	sniff_override_destination: is_hiddify ? strToBool(sniff_override) : null,
++	sniff: hiddify_legacy_inbound ? true : null,
++	sniff_override_destination: hiddify_legacy_inbound ? strToBool(sniff_override) : null,
+ 	set_system_proxy: is_hiddify ? false : null,
+ });
+ 
+@@ -1008,8 +1061,8 @@ if (match(proxy_mode, /redirect/))
+ 
+ 		listen: '::',
+ 		listen_port: int(redirect_port),
+-		sniff: is_hiddify ? true : null,
+-		sniff_override_destination: is_hiddify ? strToBool(sniff_override) : null,
++		sniff: hiddify_legacy_inbound ? true : null,
++		sniff_override_destination: hiddify_legacy_inbound ? strToBool(sniff_override) : null,
+ 	});
+ if (match(proxy_mode, /tproxy/))
+ 	push(config.inbounds, {
+@@ -1020,8 +1073,8 @@ if (match(proxy_mode, /tproxy/))
+ 		listen_port: int(tproxy_port),
+ 		network: 'udp',
+ 		udp_timeout: strToTime(udp_timeout),
+-		sniff: is_hiddify ? true : null,
+-		sniff_override_destination: is_hiddify ? strToBool(sniff_override) : null,
++		sniff: hiddify_legacy_inbound ? true : null,
++		sniff_override_destination: hiddify_legacy_inbound ? strToBool(sniff_override) : null,
+ 	});
+ if (match(proxy_mode, /tun/))
+ 	push(config.inbounds, {
+@@ -1035,8 +1088,8 @@ if (match(proxy_mode, /tun/))
+ 		endpoint_independent_nat: strToBool(endpoint_independent_nat),
+ 		udp_timeout: strToTime(udp_timeout),
+ 		stack: tcpip_stack,
+-		sniff: is_hiddify ? true : null,
+-		sniff_override_destination: is_hiddify ? strToBool(sniff_override) : null,
++		sniff: hiddify_legacy_inbound ? true : null,
++		sniff_override_destination: hiddify_legacy_inbound ? strToBool(sniff_override) : null,
+ 	});
+ /* Server inbounds */
+ uci.foreach(uciconfig, uciserver, (cfg) => {
+@@ -1729,7 +1782,8 @@ if (!isEmpty(main_node)) {
+ 						tag: 'hp-ru-refilter-domain',
+ 						format: 'binary',
+ 						url: 'https://github.com/1andrevich/Re-filter-lists/releases/latest/download/ruleset-domain-refilter_domains.srs',
+-						download_detour: ruleset_detour,
++						download_detour: ruleset_http_client ? null : ruleset_detour,
++						http_client: ruleset_http_client ? ruleset_download(ruleset_detour) : null,
+ 						update_interval: '1d'
+ 					});
+ 				if (!has_ruleset('hp-ru-refilter-ip'))
+@@ -1738,7 +1792,8 @@ if (!isEmpty(main_node)) {
+ 						tag: 'hp-ru-refilter-ip',
+ 						format: 'binary',
+ 						url: 'https://github.com/1andrevich/Re-filter-lists/releases/latest/download/ruleset-ip-refilter_ipsum.srs',
+-						download_detour: ruleset_detour,
++						download_detour: ruleset_http_client ? null : ruleset_detour,
++						http_client: ruleset_http_client ? ruleset_download(ruleset_detour) : null,
+ 						update_interval: '1d'
+ 					});
+ 			} else {
+@@ -1748,7 +1803,8 @@ if (!isEmpty(main_node)) {
+ 						tag: 'hp-ru-' + cfg.source,
+ 						format: 'binary',
+ 						url: 'https://github.com/itdoginfo/allow-domains/releases/latest/download/' + replace(cfg.source, '-', '_') + '.srs',
+-						download_detour: ruleset_detour,
++						download_detour: ruleset_http_client ? null : ruleset_detour,
++						http_client: ruleset_http_client ? ruleset_download(ruleset_detour) : null,
+ 						update_interval: '1d'
+ 					});
+ 			}
+@@ -1781,7 +1837,8 @@ if (!isEmpty(main_node)) {
+ 			tag: 'geoip-' + r,
+ 			format: 'binary',
+ 			url: region.geoip,
+-			download_detour: 'direct-out',
++			download_detour: ruleset_http_client ? null : 'direct-out',
++			http_client: ruleset_http_client ? ruleset_download('direct-out') : null,
+ 			update_interval: '1d'
+ 		});
+ 		push(config.route.rule_set, {
+@@ -1789,7 +1846,8 @@ if (!isEmpty(main_node)) {
+ 			tag: 'geosite-' + r,
+ 			format: 'binary',
+ 			url: region.geosite,
+-			download_detour: 'direct-out',
++			download_detour: ruleset_http_client ? null : 'direct-out',
++			http_client: ruleset_http_client ? ruleset_download('direct-out') : null,
+ 			update_interval: '1d'
+ 		});
+ 		if (region.guard)
+@@ -1798,7 +1856,8 @@ if (!isEmpty(main_node)) {
+ 				tag: 'geosite-non' + r,
+ 				format: 'binary',
+ 				url: region.geosite_non,
+-				download_detour: 'direct-out',
++				download_detour: ruleset_http_client ? null : 'direct-out',
++				http_client: ruleset_http_client ? ruleset_download('direct-out') : null,
+ 				update_interval: '1d'
+ 			});
+ 	}
+@@ -1872,7 +1931,9 @@ if (!isEmpty(main_node)) {
+ 			format: cfg.format,
+ 			path: cfg.path,
+ 			url: cfg.url,
+-			download_detour: get_outbound(cfg.outbound),
++			download_detour: ruleset_http_client ? null : get_outbound(cfg.outbound),
++			/* no outbound: the default one, as the implicit HTTP client of sing-box < 1.14 */
++			http_client: (ruleset_http_client && cfg.type === 'remote') ? ruleset_download(get_outbound(cfg.outbound) || config.route.final) : null,
+ 			update_interval: cfg.update_interval
+ 		});
+ 	});
+@@ -1916,8 +1977,10 @@ if (is_selective_mode(routing_mode) || routing_mode === 'custom') {
+ 	config.experimental.cache_file = {
+ 		enabled: true,
+ 		path: RUN_DIR + '/cache.db',
+-		store_rdrc: strToBool(cache_file_store_rdrc),
+-		rdrc_timeout: strToTime(cache_file_rdrc_timeout),
++		/* sing-box 1.14: store_rdrc is deprecated, store_dns keeps the whole DNS cache */
++		store_rdrc: core_since(1, 14) ? null : strToBool(cache_file_store_rdrc),
++		rdrc_timeout: core_since(1, 14) ? null : strToTime(cache_file_rdrc_timeout),
++		store_dns: core_since(1, 14) ? strToBool(cache_file_store_rdrc) : null,
+ 	};
+ }
+ /* Experimental end */
