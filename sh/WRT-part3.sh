@@ -124,8 +124,9 @@ fi
 # (github.com/1andrevich/homeproxy-hiddify), пакет luci-app-re-homeproxy.
 # Ставит файлы по тем же путям, что luci-app-homeproxy (/etc/config/homeproxy,
 # /etc/init.d/homeproxy ...), поэтому homeproxy в этом варианте вырезается
-# (workflow). Ядро — /usr/bin/sing-box из сборки (или hiddify-core /
-# sing-box-extended, которые приложение ставит само во вкладке Core & Tools).
+# (workflow). Ядро — /usr/bin/sing-box из сборки или, с sb=hiddify,
+# /usr/bin/hiddify-core (блок «ВЫБОР КОМПОНЕНТОВ» ниже); другое ядро приложение
+# ставит само во вкладке Core & Tools.
 # =========================================================
 if [ "$VARIANT" == "rehomeproxy" ]; then
     REHP_DIR="./package/luci-app-re-homeproxy"
@@ -448,7 +449,7 @@ echo ">>> [Heavy packages] Тяжелые пакеты отключены."
         # (если sing-box не отключён полем sb; job setup тогда пишет sb=tiny).
         # forkop 2.x — на своём ядре (sb=forkop-tiny), tachyon с sb=default — на
         # своём ядре по умолчанию (sb=default); их ставит блок «ВЫБОР КОМПОНЕНТОВ» ниже.
-        if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "rehomeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "netshift" || "$VARIANT" == "forkop" || "$VARIANT" == "tachyon" ]] && [ "${SB_MODE:-feed}" != "no" ] && [[ "${SB_MODE:-feed}" != forkop-* ]] && [ "${SB_MODE:-feed}" != "default" ]; then
+        if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "rehomeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "netshift" || "$VARIANT" == "forkop" || "$VARIANT" == "tachyon" ]] && [ "${SB_MODE:-feed}" != "no" ] && [[ "${SB_MODE:-feed}" != forkop-* ]] && [ "${SB_MODE:-feed}" != "default" ] && [ "${SB_MODE:-feed}" != "hiddify" ]; then
             echo ">>> [Heavy packages] Sing-box Tiny for $VARIANT compatibility..."
             sed -i '/sing-box/Id' ./.config
             echo '# CONFIG_PACKAGE_sing-box is not set' >> ./.config
@@ -842,6 +843,17 @@ forkop-*)
     drop_pkgs sing-box sing-box sing-box-tiny
     echo 'CONFIG_PACKAGE_sing-box-forkop=y' >> ./.config
     rm -f ./files/usr/bin/sing-box
+    ;;
+hiddify)
+    # rehomeproxy с sb=hiddify: hiddify-core (бинарник в files/ кладёт шаг
+    # Download Sing-box workflow) вместо sing-box; Re:HomeProxy выбирает его сам.
+    echo "   > sing-box: нет, вместо него hiddify-core"
+    drop_pkgs sing-box sing-box sing-box-tiny
+    rm -f ./files/usr/bin/sing-box
+    if [ ! -x ./files/usr/bin/hiddify-core ]; then
+        echo "::error title=hiddify-core::Нет бинарника hiddify-core в files/ (шаг Download Sing-box)"
+        exit 1
+    fi
     ;;
 default)
     # tachyon с sb=default: его ядро по умолчанию (бинарник и метки в files/ кладёт
