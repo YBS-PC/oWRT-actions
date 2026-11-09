@@ -701,17 +701,9 @@ if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "rehomeproxy" || "$VARIANT" == 
     drop_sqm_files
 fi
 
-# tachyon дополнительно без youtubeUnblock (свои Zapret/ByeDPI). forkop-mod
-# (ветка 1.x, тоже с Zapret/ByeDPI) сюда приходит как VARIANT=forkop с ytb=false
-# от job setup и выключается общим блоком YTB ниже; rehomeproxy (свои ByeDPI и
-# Zapret2 из Core & Tools) — так же, ytb=false от job setup; в forkop 2.x Zapret и ByeDPI
-# убраны, youtubeUnblock ему можно.
-if [[ "$VARIANT" == "tachyon" ]]; then
-    sed -i '/youtubeUnblock/Id' ./.config
-    echo "# CONFIG_PACKAGE_youtubeUnblock is not set" >> ./.config
-    echo "# CONFIG_PACKAGE_luci-app-youtubeUnblock is not set" >> ./.config
-    echo "# CONFIG_PACKAGE_luci-i18n-youtubeUnblock-ru is not set" >> ./.config
-fi
+# youtubeUnblock или ByeDPI у tachyon, rehomeproxy и forkop-mod решает поле ytb
+# (job setup): ytb=false — ByeDPI (DPI_MODE=byedpi, блок «ВЫБОР КОМПОНЕНТОВ»
+# ниже), ytb=true — youtubeUnblock без ByeDPI.
 
 # --- ЛОГИКА ДЛЯ ВАРИАНТА 'clear' ---
 if [ "$VARIANT" == "clear" ]; then
@@ -872,6 +864,35 @@ esac
 if [ "$YTB" != "true" ]; then
     echo "   > youtubeUnblock: убираем из прошивки"
     drop_pkgs youtubeUnblock youtubeUnblock luci-app-youtubeUnblock luci-i18n-youtubeUnblock-ru
+fi
+
+# ByeDPI (DPI_MODE=byedpi: tachyon, rehomeproxy, forkop-mod при ytb=false) —
+# пакет byedpi (/usr/bin/ciadpi), который эти приложения ищут как свой модуль.
+# Makefile пакета — из DPITrickster/ByeDPI-OpenWrt (оттуда же модуль берут
+# tachyon и forkop-mod), исходники — hufrea/byedpi; версия — тег, с которого
+# собран последний релиз пакета (.last_release_tag), как в его CI.
+# Отдельную службу пакета выключает /etc/uci-defaults/96_byedpi-module.
+if [ "${DPI_MODE:-no}" = "byedpi" ]; then
+    BYEDPI_DIR="./package/byedpi-openwrt"
+    rm -rf "$BYEDPI_DIR"
+    if ! git clone --depth=1 https://github.com/DPITrickster/ByeDPI-OpenWrt.git "$BYEDPI_DIR" \
+            || [ ! -f "$BYEDPI_DIR/byedpi/Makefile" ]; then
+        echo "::error title=ByeDPI::Не удалось клонировать DPITrickster/ByeDPI-OpenWrt"
+        exit 1
+    fi
+    BYEDPI_TAG=$(head -n 1 "$BYEDPI_DIR/.last_release_tag" 2>/dev/null | tr -d '[:space:]')
+    [[ "$BYEDPI_TAG" =~ ^v[0-9]+(\.[0-9]+)+$ ]] || BYEDPI_TAG=$(git ls-remote --tags --refs https://github.com/hufrea/byedpi.git 2>/dev/null \
+        | awk '{print $2}' | sed 's|refs/tags/||' | grep -E '^v[0-9]+(\.[0-9]+)+$' | sort -V | tail -n1)
+    if [ -z "$BYEDPI_TAG" ] || ! grep -q '@VERSION@' "$BYEDPI_DIR/byedpi/Makefile"; then
+        echo "::error title=ByeDPI::Не определена версия hufrea/byedpi или в Makefile нет @VERSION@"
+        exit 1
+    fi
+    sed -i "s|@VERSION@|${BYEDPI_TAG#v}|" "$BYEDPI_DIR/byedpi/Makefile"
+    echo "   > ByeDPI: пакет byedpi ${BYEDPI_TAG#v} ($(git -C "$BYEDPI_DIR" rev-parse --short HEAD))"
+    sed -i '/CONFIG_PACKAGE_byedpi[=_ ]/d' ./.config
+    echo 'CONFIG_PACKAGE_byedpi=y' >> ./.config
+else
+    rm -f ./files/etc/uci-defaults/96_byedpi-module
 fi
 
 if [ "$ZZ" != "true" ]; then
