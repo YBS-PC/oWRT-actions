@@ -63,7 +63,10 @@ if [ -f ./.config ] && grep -Eq "^CONFIG_PACKAGE_(luci-app-)?zapret=[ym]" ./.con
 else
     echo ">>> [Zapret] Пакет 'zapret' не выбран в конфиге (или закомментирован). Скачивание пропущено."
 fi
-if [ -f ./.config ] && grep -Eq "^CONFIG_PACKAGE_(luci-app-)?zapret2=[ym]" ./.config; then
+if [ "${DPI_MODE:-no}" = "zapret2" ]; then
+    # tachyon, rehomeproxy, forkop-mod с ytb=default: zapret2 — модуль варианта
+    echo ">>> [Zapret2] Модуль варианта (ytb=default): пакет zapret2 ставит блок «ВЫБОР КОМПОНЕНТОВ» ниже."
+elif [ -f ./.config ] && grep -Eq "^CONFIG_PACKAGE_(luci-app-)?zapret2=[ym]" ./.config; then
     echo ">>> [Zapret2] В конфиге включен 'zapret2'. Скачиваем исходники (ветка master)..."
     git clone --depth=1 -b master "$ZAPRET_REPO" ./package/zapret2-openwrt/
 else
@@ -802,7 +805,7 @@ AGH_MODE="${AGH_MODE:-feed}"
 SB_MODE="${SB_MODE:-feed}"
 YTB="${YTB:-true}"
 ZZ="${ZZ:-true}"
-echo ">>> [Компоненты] agh=$AGH_MODE sb=$SB_MODE ytb=$YTB zz=$ZZ"
+echo ">>> [Компоненты] agh=$AGH_MODE sb=$SB_MODE ytb=$YTB dpi=${DPI_MODE:-no} zz=$ZZ"
 
 # drop_pkgs <шаблон для sed> <пакет>... — убрать все строки с шаблоном
 # (без учёта регистра) и явно выключить перечисленные пакеты
