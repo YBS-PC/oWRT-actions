@@ -81,6 +81,7 @@ on:
           - '1.14.x'
           - 'latest'
           - 'extended'
+          - 'hiddify'
           - 'podkop-engine'
           - 'podkop-engine-full'
           - 'forkop-base'
@@ -206,7 +207,7 @@ jobs:
         run: |
 
 
-          # Поля строки матрицы: agh (no|feed|latest), sb (no|feed|1.12.x..latest|extended|podkop-engine[-full]|
+          # Поля строки матрицы: agh (no|feed|latest), sb (no|feed|1.12.x..latest|extended|hiddify|podkop-engine[-full]|
           # forkop-base|-full|-tiny|tiny; default setup заменяет ядром варианта, остаётся только у tachyon), ytb, zz, patches, feeds (true — фиды репозитория
           # пакетов), base (use_base_commit). В combo значения заданы ниже, поля формы не действуют.
           # slateax и ax59u — «тонкие»: sing-box-tiny из фида (у forkop — сборка tiny ядра).
@@ -254,6 +255,8 @@ jobs:
                   *)        sb=feed ;;
                 esac ;;
             esac
+            # hiddify (hiddify-core вместо sing-box) — только для rehomeproxy, остальным feed.
+            [ "$sb" = "hiddify" ] && [ "$v" != "rehomeproxy" ] && sb=feed
             # forkop 2.x — только на sing-box-forkop; остальным forkop-* заменяется на feed.
             if [ "$fk" = "forkop" ]; then
               case "$sb" in forkop-base|forkop-full|forkop-tiny) ;; *) sb=forkop-base ;; esac
@@ -280,7 +283,7 @@ jobs:
             # Пресет combo. Поля entry: устройство вариант agh sb ytb zz patches feeds.
             # Запасные строки: $(entry nanopi-r6s homeproxy latest latest true true false true) — без патчей;
             # $(entry nanopi-r6s podkop latest podkop-engine-full true true true true).
-            json="{\"include\":[$(entry nanopi-r6s homeproxy latest extended true true true true),$(entry nanopi-r6s podkop latest podkop-engine true true true true),$(entry nanopi-r6s netshift latest extended true true true true),$(entry nanopi-r6s forkop latest forkop-base true true true true),$(entry nanopi-r6s tachyon latest default false true true true),$(entry rb5009 clear no no false true true true),$(entry rb5009 switch no no false true true true)]}"
+            json="{\"include\":[$(entry nanopi-r6s homeproxy latest extended true true true true),$(entry nanopi-r6s podkop latest podkop-engine true true true true),$(entry nanopi-r6s netshift latest extended true true true true),$(entry nanopi-r6s forkop latest forkop-base true true true true),$(entry nanopi-r6s tachyon latest default false true true true),$(entry nanopi-r6s rehomeproxy latest hiddify true true true true),$(entry rb5009 clear no no false true true true),$(entry rb5009 switch no no false true true true)]}"
           else
             # Все устройства из config/conf/ — при добавлении нового дописать сюда.
             targets="nanopi-r6s nanopi-r5s rb5009 slateax ax59u brume2"
@@ -327,10 +330,14 @@ jobs:
             echo "::warning title=${t}: homeproxy без патчей (sb=${sbv})::Без патча 006 на sing-box 1.14+ homeproxy пишет устаревший store_rdrc, а в режиме bypass_mainland_china со списком прокси-доменов не запускается. Включите apply_patches или выберите sb=1.12.x."
           done
 
-          # Re:HomeProxy без патча 001 запускается только на sing-box-extended.
+          # Re:HomeProxy без патча 001 запускается только на sing-box-extended, на hiddify-core 5.x — не запускается без 005.
           echo "$json" | jq -r '.include[] | select(.variant == "rehomeproxy" and .patches == false and .sb != "extended") | "\(.target) \(.sb)"' |
           while read -r t sbv; do
-            echo "::warning title=${t}: Re:HomeProxy без патчей (sb=${sbv})::Без патча 001 (patches/packages/luci-app-re-homeproxy) Re:HomeProxy не запускается на обычном sing-box: «detour to an empty direct outbound makes no sense». Включите apply_patches или выберите sb=extended."
+            if [ "$sbv" = "hiddify" ]; then
+              echo "::warning title=${t}: Re:HomeProxy без патчей (sb=hiddify)::Без патча 005 (patches/packages/luci-app-re-homeproxy) Re:HomeProxy пишет поля, которых hiddify-core 5.x не принимает, и ядро не запускается: «legacy inbound fields are deprecated in sing-box 1.11.0 and removed in sing-box 1.13.0». Включите apply_patches."
+            else
+              echo "::warning title=${t}: Re:HomeProxy без патчей (sb=${sbv})::Без патча 001 (patches/packages/luci-app-re-homeproxy) Re:HomeProxy не запускается на обычном sing-box: «detour to an empty direct outbound makes no sense». Включите apply_patches или выберите sb=extended."
+            fi
           done
 
           # forkop без патча 001: prerm на ucode (2.x и 1.x), у forkop-mod — ещё вызовы ucode до объявления.
@@ -732,6 +739,61 @@ jobs:
                 ./files/lib/upgrade/keep.d/podkop-engine* -maxdepth 1 2>/dev/null | xargs ls -ld
             echo "=========================================="
             exit 0
+        elif [ "$SB_VERSION_CHOICE" == "hiddify" ]; then
+            # sb=hiddify (только rehomeproxy): из пакета OpenWrt релиза hiddify/hiddify-core берётся только
+            # бинарник; init-скрипт пакета (своя служба, включена) не нужен — ядро запускает Re:HomeProxy.
+            SB_REPO="hiddify/hiddify-core"
+            HD_ARCH=$(sed -n 's/.*CONFIG_TARGET_ARCH_PACKAGES="\([^"]*\)".*/\1/p' "./config/conf/${M_TARGET}" | head -n1)
+            if [ -z "$HD_ARCH" ]; then
+                echo "::error title=hiddify-core::Не найдена архитектура пакетов в config/conf/${M_TARGET}"
+                exit 1
+            fi
+            SB_TAG=$(git ls-remote --tags --refs "https://github.com/${SB_REPO}.git" 2>/dev/null \
+                | awk '{print $2}' | sed 's|refs/tags/||' \
+                | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
+            if [ -z "$SB_TAG" ]; then
+                echo "::error title=hiddify-core::Не найден ни один релиз ${SB_REPO} (теги vX.Y.Z)"
+                exit 1
+            fi
+            # hiddify-core_5.5.5_aarch64_generic.ipk
+            HD_ASSET="hiddify-core_${SB_TAG#v}_${HD_ARCH}.ipk"
+            SB_URL="https://github.com/${SB_REPO}/releases/download/${SB_TAG}/${HD_ASSET}"
+            HD_UNPACK=$(mktemp -d)
+            if ! curl -fsSL --retry 3 -o "$HD_UNPACK/hd.ipk" "$SB_URL" || [ ! -s "$HD_UNPACK/hd.ipk" ]; then
+                echo "::error title=hiddify-core::Не удалось скачать $SB_URL (нет сборки для $HD_ARCH?)"
+                rm -rf "$HD_UNPACK"
+                exit 1
+            fi
+            if ! bash ./sh/verify-sha256.sh "$HD_UNPACK/hd.ipk" "$SB_REPO" "$SB_TAG" "$HD_ASSET"; then
+                echo "::error title=hiddify-core::$HD_ASSET: сумма SHA-256 не совпала"
+                rm -rf "$HD_UNPACK"
+                exit 1
+            fi
+            if ! tar -xzf "$HD_UNPACK/hd.ipk" -C "$HD_UNPACK" || ! mkdir -p "$HD_UNPACK/data" \
+                    || ! tar -xzf "$HD_UNPACK/data.tar.gz" -C "$HD_UNPACK/data" ./usr/bin/hiddify-core \
+                    || [ ! -s "$HD_UNPACK/data/usr/bin/hiddify-core" ]; then
+                echo "::error title=hiddify-core::$HD_ASSET не распаковался или в нём нет usr/bin/hiddify-core"
+                rm -rf "$HD_UNPACK"
+                exit 1
+            fi
+            SB_INTERP=$(readelf -l "$HD_UNPACK/data/usr/bin/hiddify-core" 2>/dev/null | sed -n 's/.*interpreter: \(.*\)]/\1/p')
+            if [ -n "$SB_INTERP" ] && [[ "$SB_INTERP" != *ld-musl* ]]; then
+                echo "::error title=hiddify-core не для musl::$HD_ASSET собран под $SB_INTERP"
+                rm -rf "$HD_UNPACK"
+                exit 1
+            fi
+            mkdir -p ./files/usr/bin
+            mv -f "$HD_UNPACK/data/usr/bin/hiddify-core" ./files/usr/bin/hiddify-core && chmod 755 ./files/usr/bin/hiddify-core
+            rm -rf "$HD_UNPACK" ./files/usr/bin/sing-box
+            echo "=========================================="
+            echo "       [CORE DOWNLOAD SUMMARY]            "
+            echo "=========================================="
+            echo "Core           : hiddify-core ${SB_TAG} (${HD_ARCH})"
+            echo "Asset          : $HD_ASSET"
+            echo "Linkage        : ${SB_INTERP:-static}"
+            ls -lh ./files/usr/bin/hiddify-core
+            echo "=========================================="
+            exit 0
         elif [ "$SB_VERSION_CHOICE" == "default" ]; then
             # sb=default (остаётся только у tachyon) — его ядро по умолчанию: статический бинарник из tar.gz релиза, сверка по SHA256SUMS,
             # в files/ — бинарник и метки /etc/tachyon как после установки со страницы tachyon. Бинарник не печатается.
@@ -1004,6 +1066,7 @@ jobs:
             tiny) SUM_SB="sing-box-tiny из фида (тонкое устройство)" ;;
             podkop-engine*) SUM_SB="пакет из фида + ${{ matrix.sb }} (бинарник, init-скрипты и failsafe)" ;;
             default) SUM_SB="нет, вместо него ядро tachyon по умолчанию (артефакт зашифрован)" ;;
+            hiddify) SUM_SB="нет, вместо него hiddify-core (бинарник)" ;;
             *)    SUM_SB="пакет из фида + бинарник ${{ matrix.sb }}" ;;
         esac
         [ "${{ matrix.ytb }}" = "true" ] && SUM_YTB="да" || SUM_YTB="нет"
@@ -1594,6 +1657,19 @@ jobs:
             if [ -n "$TC_BAD" ]; then
                 echo "::error title=tachyon и ядро по умолчанию::После make defconfig:$TC_BAD"
                 grep -E '^CONFIG_PACKAGE_(tachyon|luci-app-tachyon|sing-box[a-z-]*)=' .config || true
+                exit 1
+            fi
+        fi
+
+        # sb=hiddify (rehomeproxy): sing-box в образе нет, ядро — hiddify-core в files/.
+        if [ "$SB_MODE" = "hiddify" ]; then
+            HD_BAD=""
+            grep -q '^CONFIG_PACKAGE_luci-app-re-homeproxy=y' .config || HD_BAD="$HD_BAD luci-app-re-homeproxy не включён;"
+            grep -Eq '^CONFIG_PACKAGE_sing-box(-tiny)?=y' .config && HD_BAD="$HD_BAD включён sing-box или sing-box-tiny;"
+            [ -x files/usr/bin/hiddify-core ] || HD_BAD="$HD_BAD нет бинарника hiddify-core в files/;"
+            if [ -n "$HD_BAD" ]; then
+                echo "::error title=Re:HomeProxy и hiddify-core::После make defconfig:$HD_BAD"
+                grep -E '^CONFIG_PACKAGE_(luci-app-re-homeproxy|sing-box[a-z-]*)=' .config || true
                 exit 1
             fi
         fi
