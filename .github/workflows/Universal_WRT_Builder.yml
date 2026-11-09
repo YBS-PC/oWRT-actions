@@ -89,10 +89,14 @@ on:
           - 'forkop-tiny'
 
       ytb:
-        description: 'youtubeUnblock *'
+        description: 'youtubeUnblock * (default — у tachyon, rehomeproxy, forkop-mod вместо него ByeDPI)'
         required: true
-        type: boolean
-        default: true
+        type: choice
+        default: 'default'
+        options:
+          - 'default'
+          - 'true'
+          - 'false'
 
       zz:
         description: 'Скрипт zz1 *'
@@ -208,8 +212,9 @@ jobs:
 
 
           # Поля строки матрицы: agh (no|feed|latest), sb (no|feed|1.12.x..latest|extended|hiddify|podkop-engine[-full]|
-          # forkop-base|-full|-tiny|tiny; default setup заменяет ядром варианта, остаётся только у tachyon), ytb, zz, patches, feeds (true — фиды репозитория
-          # пакетов), base (use_base_commit). В combo значения заданы ниже, поля формы не действуют.
+          # forkop-base|-full|-tiny|tiny; default setup заменяет ядром варианта, остаётся только у tachyon), ytb (default|true|false),
+          # zz, patches, feeds (true — фиды репозитория пакетов), base (use_base_commit); dpi (byedpi|no) выводит setup из ytb.
+          # В combo значения заданы ниже, поля формы не действуют.
           # slateax и ax59u — «тонкие»: sing-box-tiny из фида (у forkop — сборка tiny ядра).
           TINY_TARGETS="slateax ax59u"
           NOTES=""
@@ -228,10 +233,14 @@ jobs:
             case "$v" in
               clear|crystal_clear|switch) agh=no; sb=no; ytb=false ;;
               passwall|v2raya|xray)       sb=no ;;
-              tachyon|rehomeproxy)        ytb=false ;;
-              forkop) [ "$fk" = "forkop" ] || ytb=false ;;
             esac
             [ "$v" = "crystal_clear" ] && zz=false
+            # ytb=default — youtubeUnblock; у tachyon, rehomeproxy и forkop-mod (приложения с модулем ByeDPI) — ByeDPI.
+            # У них ytb=false — тоже ByeDPI, ytb=true — youtubeUnblock без ByeDPI.
+            local dpi=no mod=0
+            case "$v/$fk" in tachyon/*|rehomeproxy/*|forkop/forkopmod) mod=1 ;; esac
+            [ "$ytb" = "default" ] && { [ "$mod" = 1 ] && ytb=false || ytb=true; }
+            [ "$mod" = 1 ] && [ "$ytb" = "false" ] && dpi=byedpi
             # sb=default — рекомендуемое ядро варианта (на slateax/ax59u ниже станет tiny). У tachyon остаётся
             # default: его ядро по умолчанию, артефакт шифруется (шаг Encrypt).
             if [ "$sb" = "default" ]; then
@@ -268,14 +277,14 @@ jobs:
                 case "$sb" in no|default) ;; forkop-*) sb=forkop-tiny ;; *) sb=tiny ;; esac ;; esac ;;
             esac
             if [ "$orig" != "agh=$agh sb=$sb ytb=$ytb zz=$zz" ]; then
-              NOTES="${NOTES}${t}/${vname}: ${orig} -> agh=$agh sb=$sb ytb=$ytb zz=$zz\n"
+              NOTES="${NOTES}${t}/${vname}: ${orig} -> agh=$agh sb=$sb ytb=$ytb zz=$zz dpi=$dpi\n"
             fi
             # Коммит из BASE — только вместе с патчами и только у вариантов с приложением.
             local base=false
             [ "$INPUT_BASE" = "true" ] && [ "$pt" = "true" ] && base=true
             case "$v" in clear|crystal_clear|switch|v2raya) base=false ;; esac
-            printf '{"target":"%s","variant":"%s","vname":"%s","fk":"%s","agh":"%s","sb":"%s","ytb":%s,"zz":%s,"patches":%s,"feeds":%s,"base":%s}' \
-              "$t" "$v" "$vname" "$fk" "$agh" "$sb" "$ytb" "$zz" "$pt" "$fd" "$base"
+            printf '{"target":"%s","variant":"%s","vname":"%s","fk":"%s","agh":"%s","sb":"%s","ytb":%s,"dpi":"%s","zz":%s,"patches":%s,"feeds":%s,"base":%s}' \
+              "$t" "$v" "$vname" "$fk" "$agh" "$sb" "$ytb" "$dpi" "$zz" "$pt" "$fd" "$base"
           }
 
           if [ "$INPUT_TARGET" == "combo" ]; then
@@ -314,7 +323,7 @@ jobs:
           echo "=========================================="
           echo "Mode: $INPUT_TARGET"
           echo "Generated Matrix:"
-          echo "$json" | jq -r '.include[] | "  \(.target) / \(.vname) / agh=\(.agh) / sb=\(.sb) / ytb=\(.ytb) / zz=\(.zz) / patches=\(.patches) / feeds=\(if .feeds then "repo" else "tag" end)"'
+          echo "$json" | jq -r '.include[] | "  \(.target) / \(.vname) / agh=\(.agh) / sb=\(.sb) / ytb=\(.ytb) / dpi=\(.dpi) / zz=\(.zz) / patches=\(.patches) / feeds=\(if .feeds then "repo" else "tag" end)"'
           echo "=========================================="
           if [ -n "$NOTES" ]; then
             echo "Выбор формы уточнён по варианту и устройству (default — ядро варианта):"
@@ -386,7 +395,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
     
-    name: ${{ inputs.source }} ${{ inputs.branch }} [${{ matrix.vname }}] - ${{ matrix.target }} (agh:${{ matrix.agh }}, sb:${{ matrix.sb }}, ytb:${{ matrix.ytb }}, zz:${{ matrix.zz }}, patches:${{ matrix.patches }}, feeds:${{ matrix.feeds && 'repo' || 'tag' }}${{ matrix.base && ', app:base' || '' }})
+    name: ${{ inputs.source }} ${{ inputs.branch }} [${{ matrix.vname }}] - ${{ matrix.target }} (agh:${{ matrix.agh }}, sb:${{ matrix.sb }}, ytb:${{ matrix.ytb }}${{ matrix.dpi != 'no' && format(', dpi:{0}', matrix.dpi) || '' }}, zz:${{ matrix.zz }}, patches:${{ matrix.patches }}, feeds:${{ matrix.feeds && 'repo' || 'tag' }}${{ matrix.base && ', app:base' || '' }})
 
     steps:
     - name: Free up disk space
@@ -1070,6 +1079,7 @@ jobs:
             *)    SUM_SB="пакет из фида + бинарник ${{ matrix.sb }}" ;;
         esac
         [ "${{ matrix.ytb }}" = "true" ] && SUM_YTB="да" || SUM_YTB="нет"
+        [ "${{ matrix.dpi }}" = "byedpi" ] && SUM_YTB="нет, вместо него ByeDPI (пакет byedpi)"
         [ "${{ matrix.zz }}" = "true" ] && SUM_ZZ="да" || SUM_ZZ="нет"
         SUM_AGH="$SUM_AGH$SUM_SRC_NOTE"
         SUM_SB="$SUM_SB$SUM_SRC_NOTE"
@@ -1299,6 +1309,7 @@ jobs:
         AGH_MODE: ${{ matrix.agh }}
         SB_MODE: ${{ matrix.sb }}
         YTB: ${{ matrix.ytb }}
+        DPI_MODE: ${{ matrix.dpi }}
         ZZ: ${{ matrix.zz }}
         M_BASE: ${{ matrix.base }}
         M_FK: ${{ matrix.fk }}
@@ -1311,7 +1322,7 @@ jobs:
         unset PART2_GH_TOKEN
         cd openwrt
 
-        echo ">>> Выбран: Variant=$VARIANT, Target=$CURRENT_MATRIX_TARGET, agh=$AGH_MODE, sb=$SB_MODE, ytb=$YTB, zz=$ZZ"
+        echo ">>> Выбран: Variant=$VARIANT, Target=$CURRENT_MATRIX_TARGET, agh=$AGH_MODE, sb=$SB_MODE, ytb=$YTB, dpi=$DPI_MODE, zz=$ZZ"
 
         mkdir -p files/etc
         date +'%Y-%m-%d' > files/etc/build_date
@@ -1670,6 +1681,19 @@ jobs:
             if [ -n "$HD_BAD" ]; then
                 echo "::error title=Re:HomeProxy и hiddify-core::После make defconfig:$HD_BAD"
                 grep -E '^CONFIG_PACKAGE_(luci-app-re-homeproxy|sing-box[a-z-]*)=' .config || true
+                exit 1
+            fi
+        fi
+
+        # ytb=false у tachyon, rehomeproxy, forkop-mod: ByeDPI вместо youtubeUnblock.
+        if [ "$DPI_MODE" = "byedpi" ]; then
+            BD_BAD=""
+            grep -q '^CONFIG_PACKAGE_byedpi=y' .config || BD_BAD="$BD_BAD byedpi не включён;"
+            grep -q '^CONFIG_PACKAGE_youtubeUnblock=y' .config && BD_BAD="$BD_BAD включён youtubeUnblock;"
+            [ -f files/etc/uci-defaults/96_byedpi-module ] || BD_BAD="$BD_BAD нет files/etc/uci-defaults/96_byedpi-module;"
+            if [ -n "$BD_BAD" ]; then
+                echo "::error title=ByeDPI::После make defconfig:$BD_BAD"
+                grep -E '^CONFIG_PACKAGE_(byedpi|youtubeUnblock)=' .config || true
                 exit 1
             fi
         fi
@@ -2223,7 +2247,7 @@ jobs:
       uses: actions/upload-artifact@v7
       with:
         # Имя: все параметры сборки и дата (до минуты), чтобы имена в combo не совпадали.
-        name: ${{ matrix.target }}_${{ inputs.source }}_${{ inputs.branch }}_${{ matrix.vname }}_${{ matrix.patches && 'patches' || 'nopatches' }}_agh-${{ matrix.agh }}_sb-${{ matrix.sb }}_${{ matrix.ytb && 'ytb' || 'noytb' }}_${{ matrix.zz && 'zz' || 'nozz' }}${{ matrix.feeds && '_feeds-repo' || '_feeds-tag' }}${{ matrix.base && '_app-base' || '' }}${{ matrix.sb == 'default' && '_7z-encrypted' || '' }}_${{ steps.get_date.outputs.date }}
+        name: ${{ matrix.target }}_${{ inputs.source }}_${{ inputs.branch }}_${{ matrix.vname }}_${{ matrix.patches && 'patches' || 'nopatches' }}_agh-${{ matrix.agh }}_sb-${{ matrix.sb }}_${{ matrix.ytb && 'ytb' || (matrix.dpi == 'byedpi' && 'byedpi' || 'noytb') }}_${{ matrix.zz && 'zz' || 'nozz' }}${{ matrix.feeds && '_feeds-repo' || '_feeds-tag' }}${{ matrix.base && '_app-base' || '' }}${{ matrix.sb == 'default' && '_7z-encrypted' || '' }}_${{ steps.get_date.outputs.date }}
         # sb=default — только зашифрованный архив (шаг Encrypt)
         path: ${{ matrix.sb == 'default' && 'openwrt/bin-enc' || 'openwrt/bin' }}
         # На ранней ошибке (до создания bin/) не валим джоб красным "no files".
