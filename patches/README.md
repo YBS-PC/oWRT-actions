@@ -97,7 +97,7 @@
 | `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`0c8a895`](https://github.com/yandexru45/netshift/commit/0c8a89535a897b43b50b15c3f0c8991df242bb24) | 07.11.2026 |
 | `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`0d5a169`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/0d5a1697a926a34e661ecd0e67b0c038f9f42c4e) | 08.11.2026 |
 | `feeds/podkop/` | [itdoginfo/podkop](https://github.com/itdoginfo/podkop) | [`c654bf5`](https://github.com/itdoginfo/podkop/commit/c654bf5da75309754e3fb63b9441981db65fff68) | 24.10.2026 |
-| `feeds/tachyon/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) | [`620c1b8`](https://github.com/Dushnilin/tachyon/commit/620c1b8d2b274573f7713f43509900b7b9c0fd0e) | 08.11.2026 |
+| `feeds/tachyon/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) | [`bf6c8b5`](https://github.com/Dushnilin/tachyon/commit/bf6c8b57464e787f60c11bc03d845182e6fd2b5a) | 09.11.2026 |
 | `packages/luci-app-commands/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`75a306d`](https://github.com/openwrt/luci/commit/75a306df84a020c57a631ef5b4c02ace56d93387) | 15.10.2026 |
 | `packages/luci-app-filemanager/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`e969939`](https://github.com/openwrt/luci/commit/e969939b49167516e219d465df8030d98d443d67) | 31.10.2026 |
 | `packages/luci-app-homeproxy/` | [immortalwrt/homeproxy](https://github.com/immortalwrt/homeproxy) | [`fadaa67`](https://github.com/immortalwrt/homeproxy/commit/fadaa676104f59ff6ace480a780a258d846d0aec) | 02.10.2026 |
@@ -128,7 +128,7 @@
 
 ## Патчи по пакетам
 
-Всего 63 патча для 17 пакетов. Номер — порядок применения. Ссылки
+Всего 64 патча для 17 пакетов. Номер — порядок применения. Ссылки
 вида `#98` / `PR #103` — обсуждение и предложенное исправление в
 репозитории автора.
 
@@ -507,13 +507,13 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
 
 ### tachyon — `feeds/tachyon/` (2)
 
-Вариант `tachyon`, фид [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) (1.7.18).
+Вариант `tachyon`, фид [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) (1.7.20).
 С `sb=default` (по умолчанию) в образ идёт ядро tachyon по умолчанию, и
 артефакт такой сборки шифруется паролем из секрета `ARTIFACT_PASSWORD`.
 С другим значением `sb` в образ идёт выбранное ядро, артефакт не
 шифруется.
 
-Патчи сняты с коммита [`620c1b8`](https://github.com/Dushnilin/tachyon/commit/620c1b8d2b274573f7713f43509900b7b9c0fd0e) от 08.11.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`bf6c8b5`](https://github.com/Dushnilin/tachyon/commit/bf6c8b57464e787f60c11bc03d845182e6fd2b5a) от 09.11.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Удаление пакета.** Скрипт удаления tachyon написан на ucode, а
   сборка OpenWrt выполняет его как shell (apk — в своём скрипте удаления,
@@ -802,7 +802,7 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
   поле не показывается, а в журнале пишется, почему сервер может
   отказать.
 
-### Re:HomeProxy — `packages/luci-app-re-homeproxy/` (4)
+### Re:HomeProxy — `packages/luci-app-re-homeproxy/` (5)
 
 Вариант `rehomeproxy`, пакет [1andrevich/homeproxy-hiddify](https://github.com/1andrevich/homeproxy-hiddify).
 
@@ -820,6 +820,18 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
   автора. *Всегда.*
 - **004. Соединения после перезапуска.** То же, что homeproxy 007.
   *Всегда*, но нужна утилита `conntrack` (в наших сборках есть).
+- **005. Поля конфига по версии ядра.** Генератор форка писал для
+  hiddify-core поля, которые убраны из новых sing-box, и hiddify-core
+  5.x (`sb=hiddify`) не запускался ни в одном режиме. sing-box 1.14 (в
+  том числе extended) не запускался в режиме bypass_cn со списком
+  прокси-доменов и выдавал предупреждения об устаревании. Теперь генератор
+  узнаёт версию sing-box внутри ядра (`sing-box version`, `hiddify-core
+  version`) и с 1.14 пишет поля новым способом: без устаревших полей
+  sniff у входов (их и так заменяет правило `sniff`), загрузка наборов
+  правил через `http_client`, правила DNS режимов bypass без `strategy`
+  (проверка geoip — по ответу DNS, как в homeproxy 006), `store_dns`
+  вместо `store_rdrc`, без `independent_cache`. На hiddify-core 4.x и
+  sing-box до 1.14 конфиг прежний. *Само по условию* (версия ядра).
 
 ### Пользовательские команды — `packages/luci-app-commands/` (5)
 
