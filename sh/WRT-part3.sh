@@ -422,7 +422,7 @@ REMOVE_LIST=(
     "coreutils-du" "coreutils-expand" "coreutils-head" "coreutils-ls"
     "coreutils-md5sum" "coreutils-mkdir" "coreutils-mv" "coreutils-nohup"
     "coreutils-numfmt" "coreutils-paste" "coreutils-rm" "coreutils-sha256sum"
-    "coreutils-sleep" "coreutils-sort" "coreutils-stat" "coreutils-strings"
+    "coreutils-sleep" "coreutils-sort" "coreutils-stat"
     "coreutils-tail" "coreutils-timeout" "coreutils-touch" "coreutils-tr"
     "coreutils-unexpand" "coreutils-uniq" "coreutils-wc"
     # Другие тяжелые утилиты (уже есть в BusyBox)
@@ -535,7 +535,6 @@ CRYSTAL_CLEAR_BLOAT=(
 "coreutils-sleep"
 "coreutils-sort"
 "coreutils-stat"
-"coreutils-strings"
 "coreutils-tail"
 "coreutils-timeout"
 "coreutils-touch"
