@@ -228,7 +228,7 @@ jobs:
             case "$v" in
               clear|crystal_clear|switch) agh=no; sb=no; ytb=false ;;
               passwall|v2raya|xray)       sb=no ;;
-              tachyon)                    ytb=false ;;
+              tachyon|rehomeproxy)        ytb=false ;;
               forkop) [ "$fk" = "forkop" ] || ytb=false ;;
             esac
             [ "$v" = "crystal_clear" ] && zz=false
@@ -283,7 +283,7 @@ jobs:
             # Пресет combo. Поля entry: устройство вариант agh sb ytb zz patches feeds.
             # Запасные строки: $(entry nanopi-r6s homeproxy latest latest true true false true) — без патчей;
             # $(entry nanopi-r6s podkop latest podkop-engine-full true true true true).
-            json="{\"include\":[$(entry nanopi-r6s homeproxy latest extended true true true true),$(entry nanopi-r6s podkop latest podkop-engine true true true true),$(entry nanopi-r6s netshift latest extended true true true true),$(entry nanopi-r6s forkop latest forkop-base true true true true),$(entry nanopi-r6s tachyon latest default false true true true),$(entry nanopi-r6s rehomeproxy latest hiddify true true true true),$(entry rb5009 clear no no false true true true),$(entry rb5009 switch no no false true true true)]}"
+            json="{\"include\":[$(entry nanopi-r6s homeproxy latest extended true true true true),$(entry nanopi-r6s podkop latest podkop-engine true true true true),$(entry nanopi-r6s netshift latest extended true true true true),$(entry nanopi-r6s forkop latest forkop-base true true true true),$(entry nanopi-r6s tachyon latest default false true true true),$(entry nanopi-r6s rehomeproxy latest hiddify false true true true),$(entry rb5009 clear no no false true true true),$(entry rb5009 switch no no false true true true)]}"
           else
             # Все устройства из config/conf/ — при добавлении нового дописать сюда.
             targets="nanopi-r6s nanopi-r5s rb5009 slateax ax59u brume2"
