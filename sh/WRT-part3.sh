@@ -703,7 +703,8 @@ fi
 
 # tachyon дополнительно без youtubeUnblock (свои Zapret/ByeDPI). forkop-mod
 # (ветка 1.x, тоже с Zapret/ByeDPI) сюда приходит как VARIANT=forkop с ytb=false
-# от job setup и выключается общим блоком YTB ниже; в forkop 2.x Zapret и ByeDPI
+# от job setup и выключается общим блоком YTB ниже; rehomeproxy (свои ByeDPI и
+# Zapret2 из Core & Tools) — так же, ytb=false от job setup; в forkop 2.x Zapret и ByeDPI
 # убраны, youtubeUnblock ему можно.
 if [[ "$VARIANT" == "tachyon" ]]; then
     sed -i '/youtubeUnblock/Id' ./.config
