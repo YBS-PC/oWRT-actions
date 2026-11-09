@@ -89,7 +89,7 @@ on:
           - 'forkop-tiny'
 
       ytb:
-        description: 'youtubeUnblock * (default — у tachyon, rehomeproxy, forkop-mod вместо него ByeDPI)'
+        description: 'youtubeUnblock * (default — у tachyon, rehomeproxy, forkop-mod вместо него Zapret2; false — ни того, ни другого)'
         required: true
         type: choice
         default: 'default'
@@ -213,7 +213,7 @@ jobs:
 
           # Поля строки матрицы: agh (no|feed|latest), sb (no|feed|1.12.x..latest|extended|hiddify|podkop-engine[-full]|
           # forkop-base|-full|-tiny|tiny; default setup заменяет ядром варианта, остаётся только у tachyon), ytb (default|true|false),
-          # zz, patches, feeds (true — фиды репозитория пакетов), base (use_base_commit); dpi (byedpi|no) выводит setup из ytb.
+          # zz, patches, feeds (true — фиды репозитория пакетов), base (use_base_commit); dpi (zapret2|no) выводит setup из ytb.
           # В combo значения заданы ниже, поля формы не действуют.
           # slateax и ax59u — «тонкие»: sing-box-tiny из фида (у forkop — сборка tiny ядра).
           TINY_TARGETS="slateax ax59u"
@@ -235,12 +235,15 @@ jobs:
               passwall|v2raya|xray)       sb=no ;;
             esac
             [ "$v" = "crystal_clear" ] && zz=false
-            # ytb=default — youtubeUnblock; у tachyon, rehomeproxy и forkop-mod (приложения с модулем ByeDPI) — ByeDPI.
-            # У них ytb=false — тоже ByeDPI, ytb=true — youtubeUnblock без ByeDPI.
-            local dpi=no mod=0
-            case "$v/$fk" in tachyon/*|rehomeproxy/*|forkop/forkopmod) mod=1 ;; esac
-            [ "$ytb" = "default" ] && { [ "$mod" = 1 ] && ytb=false || ytb=true; }
-            [ "$mod" = 1 ] && [ "$ytb" = "false" ] && dpi=byedpi
+            # ytb=default — youtubeUnblock; у tachyon, rehomeproxy и forkop-mod (приложения с модулем Zapret2) — Zapret2.
+            # ytb=true — youtubeUnblock у всех, ytb=false — ни youtubeUnblock, ни Zapret2.
+            local dpi=no
+            if [ "$ytb" = "default" ]; then
+              case "$v/$fk" in
+                tachyon/*|rehomeproxy/*|forkop/forkopmod) ytb=false; dpi=zapret2 ;;
+                *) ytb=true ;;
+              esac
+            fi
             # sb=default — рекомендуемое ядро варианта (на slateax/ax59u ниже станет tiny). У tachyon остаётся
             # default: его ядро по умолчанию, артефакт шифруется (шаг Encrypt).
             if [ "$sb" = "default" ]; then
@@ -292,7 +295,7 @@ jobs:
             # Пресет combo. Поля entry: устройство вариант agh sb ytb zz patches feeds.
             # Запасные строки: $(entry nanopi-r6s homeproxy latest latest true true false true) — без патчей;
             # $(entry nanopi-r6s podkop latest podkop-engine-full true true true true).
-            json="{\"include\":[$(entry nanopi-r6s homeproxy latest extended true true true true),$(entry nanopi-r6s podkop latest podkop-engine true true true true),$(entry nanopi-r6s netshift latest extended true true true true),$(entry nanopi-r6s forkop latest forkop-base true true true true),$(entry nanopi-r6s tachyon latest default false true true true),$(entry nanopi-r6s rehomeproxy latest hiddify false true true true),$(entry rb5009 clear no no false true true true),$(entry rb5009 switch no no false true true true)]}"
+            json="{\"include\":[$(entry nanopi-r6s homeproxy latest extended true true true true),$(entry nanopi-r6s podkop latest podkop-engine true true true true),$(entry nanopi-r6s netshift latest extended true true true true),$(entry nanopi-r6s forkop latest forkop-base true true true true),$(entry nanopi-r6s tachyon latest default default true true true),$(entry nanopi-r6s rehomeproxy latest hiddify default true true true),$(entry rb5009 clear no no false true true true),$(entry rb5009 switch no no false true true true)]}"
           else
             # Все устройства из config/conf/ — при добавлении нового дописать сюда.
             targets="nanopi-r6s nanopi-r5s rb5009 slateax ax59u brume2"
@@ -1079,7 +1082,7 @@ jobs:
             *)    SUM_SB="пакет из фида + бинарник ${{ matrix.sb }}" ;;
         esac
         [ "${{ matrix.ytb }}" = "true" ] && SUM_YTB="да" || SUM_YTB="нет"
-        [ "${{ matrix.dpi }}" = "byedpi" ] && SUM_YTB="нет, вместо него ByeDPI (пакет byedpi)"
+        [ "${{ matrix.dpi }}" = "zapret2" ] && SUM_YTB="нет, вместо него Zapret2 (пакет zapret2)"
         [ "${{ matrix.zz }}" = "true" ] && SUM_ZZ="да" || SUM_ZZ="нет"
         SUM_AGH="$SUM_AGH$SUM_SRC_NOTE"
         SUM_SB="$SUM_SB$SUM_SRC_NOTE"
@@ -1685,15 +1688,14 @@ jobs:
             fi
         fi
 
-        # ytb=false у tachyon, rehomeproxy, forkop-mod: ByeDPI вместо youtubeUnblock.
-        if [ "$DPI_MODE" = "byedpi" ]; then
-            BD_BAD=""
-            grep -q '^CONFIG_PACKAGE_byedpi=y' .config || BD_BAD="$BD_BAD byedpi не включён;"
-            grep -q '^CONFIG_PACKAGE_youtubeUnblock=y' .config && BD_BAD="$BD_BAD включён youtubeUnblock;"
-            [ -f files/etc/uci-defaults/96_byedpi-module ] || BD_BAD="$BD_BAD нет files/etc/uci-defaults/96_byedpi-module;"
-            if [ -n "$BD_BAD" ]; then
-                echo "::error title=ByeDPI::После make defconfig:$BD_BAD"
-                grep -E '^CONFIG_PACKAGE_(byedpi|youtubeUnblock)=' .config || true
+        # ytb=default у tachyon, rehomeproxy, forkop-mod: Zapret2 вместо youtubeUnblock.
+        if [ "$DPI_MODE" = "zapret2" ]; then
+            Z2_BAD=""
+            grep -q '^CONFIG_PACKAGE_zapret2=y' .config || Z2_BAD="$Z2_BAD zapret2 не включён;"
+            grep -q '^CONFIG_PACKAGE_youtubeUnblock=y' .config && Z2_BAD="$Z2_BAD включён youtubeUnblock;"
+            if [ -n "$Z2_BAD" ]; then
+                echo "::error title=Zapret2::После make defconfig:$Z2_BAD"
+                grep -E '^CONFIG_PACKAGE_(zapret2|luci-app-zapret2|youtubeUnblock)=' .config || true
                 exit 1
             fi
         fi
@@ -2247,7 +2249,7 @@ jobs:
       uses: actions/upload-artifact@v7
       with:
         # Имя: все параметры сборки и дата (до минуты), чтобы имена в combo не совпадали.
-        name: ${{ matrix.target }}_${{ inputs.source }}_${{ inputs.branch }}_${{ matrix.vname }}_${{ matrix.patches && 'patches' || 'nopatches' }}_agh-${{ matrix.agh }}_sb-${{ matrix.sb }}_${{ matrix.ytb && 'ytb' || (matrix.dpi == 'byedpi' && 'byedpi' || 'noytb') }}_${{ matrix.zz && 'zz' || 'nozz' }}${{ matrix.feeds && '_feeds-repo' || '_feeds-tag' }}${{ matrix.base && '_app-base' || '' }}${{ matrix.sb == 'default' && '_7z-encrypted' || '' }}_${{ steps.get_date.outputs.date }}
+        name: ${{ matrix.target }}_${{ inputs.source }}_${{ inputs.branch }}_${{ matrix.vname }}_${{ matrix.patches && 'patches' || 'nopatches' }}_agh-${{ matrix.agh }}_sb-${{ matrix.sb }}_${{ matrix.ytb && 'ytb' || (matrix.dpi == 'zapret2' && 'zapret2' || 'noytb') }}_${{ matrix.zz && 'zz' || 'nozz' }}${{ matrix.feeds && '_feeds-repo' || '_feeds-tag' }}${{ matrix.base && '_app-base' || '' }}${{ matrix.sb == 'default' && '_7z-encrypted' || '' }}_${{ steps.get_date.outputs.date }}
         # sb=default — только зашифрованный архив (шаг Encrypt)
         path: ${{ matrix.sb == 'default' && 'openwrt/bin-enc' || 'openwrt/bin' }}
         # На ранней ошибке (до создания bin/) не валим джоб красным "no files".
