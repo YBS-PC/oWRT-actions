@@ -701,9 +701,9 @@ if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "rehomeproxy" || "$VARIANT" == 
     drop_sqm_files
 fi
 
-# youtubeUnblock или ByeDPI у tachyon, rehomeproxy и forkop-mod решает поле ytb
-# (job setup): ytb=false — ByeDPI (DPI_MODE=byedpi, блок «ВЫБОР КОМПОНЕНТОВ»
-# ниже), ytb=true — youtubeUnblock без ByeDPI.
+# youtubeUnblock или Zapret2 у tachyon, rehomeproxy и forkop-mod решает поле ytb
+# (job setup): default — Zapret2 (DPI_MODE=zapret2, блок «ВЫБОР КОМПОНЕНТОВ»
+# ниже), true — youtubeUnblock, false — ни того, ни другого.
 
 # --- ЛОГИКА ДЛЯ ВАРИАНТА 'clear' ---
 if [ "$VARIANT" == "clear" ]; then
@@ -866,33 +866,26 @@ if [ "$YTB" != "true" ]; then
     drop_pkgs youtubeUnblock youtubeUnblock luci-app-youtubeUnblock luci-i18n-youtubeUnblock-ru
 fi
 
-# ByeDPI (DPI_MODE=byedpi: tachyon, rehomeproxy, forkop-mod при ytb=false) —
-# пакет byedpi (/usr/bin/ciadpi), который эти приложения ищут как свой модуль.
-# Makefile пакета — из DPITrickster/ByeDPI-OpenWrt (оттуда же модуль берут
-# tachyon и forkop-mod), исходники — hufrea/byedpi; версия — тег, с которого
-# собран последний релиз пакета (.last_release_tag), как в его CI.
-# Отдельную службу пакета выключает /etc/uci-defaults/96_byedpi-module.
-if [ "${DPI_MODE:-no}" = "byedpi" ]; then
-    BYEDPI_DIR="./package/byedpi-openwrt"
-    rm -rf "$BYEDPI_DIR"
-    if ! git clone --depth=1 https://github.com/DPITrickster/ByeDPI-OpenWrt.git "$BYEDPI_DIR" \
-            || [ ! -f "$BYEDPI_DIR/byedpi/Makefile" ]; then
-        echo "::error title=ByeDPI::Не удалось клонировать DPITrickster/ByeDPI-OpenWrt"
+# Zapret2 (DPI_MODE=zapret2: tachyon, rehomeproxy, forkop-mod при ytb=default) —
+# пакет zapret2 (nfqws2 и Lua в /opt/zapret2), который эти приложения ищут как
+# свой модуль. Пакет — из 1andrevich/zapret2-openwrt (оттуда его ставит
+# Re:HomeProxy, tachyon — из его копии Dushnilin/zapret2-openwrt): bol-van/zapret2
+# с init-скриптом remittor. Служба пакета в образе не включается (run_on_boot=0
+# в его настройках): nfqws2 запускают сами приложения. LuCI пакета не ставится.
+# Клон remittor/zapret-openwrt из блока Zapret2 выше (если zapret2 включён в
+# WRT.config) убирается: два пакета zapret2 в дереве не нужны.
+if [ "${DPI_MODE:-no}" = "zapret2" ]; then
+    ZAPRET2_DIR="./package/zapret2-module"
+    rm -rf "$ZAPRET2_DIR" ./package/zapret2-openwrt
+    if ! git clone --depth=1 https://github.com/1andrevich/zapret2-openwrt.git "$ZAPRET2_DIR" \
+            || [ ! -f "$ZAPRET2_DIR/zapret2/Makefile" ]; then
+        echo "::error title=Zapret2::Не удалось клонировать 1andrevich/zapret2-openwrt"
         exit 1
     fi
-    BYEDPI_TAG=$(head -n 1 "$BYEDPI_DIR/.last_release_tag" 2>/dev/null | tr -d '[:space:]')
-    [[ "$BYEDPI_TAG" =~ ^v[0-9]+(\.[0-9]+)+$ ]] || BYEDPI_TAG=$(git ls-remote --tags --refs https://github.com/hufrea/byedpi.git 2>/dev/null \
-        | awk '{print $2}' | sed 's|refs/tags/||' | grep -E '^v[0-9]+(\.[0-9]+)+$' | sort -V | tail -n1)
-    if [ -z "$BYEDPI_TAG" ] || ! grep -q '@VERSION@' "$BYEDPI_DIR/byedpi/Makefile"; then
-        echo "::error title=ByeDPI::Не определена версия hufrea/byedpi или в Makefile нет @VERSION@"
-        exit 1
-    fi
-    sed -i "s|@VERSION@|${BYEDPI_TAG#v}|" "$BYEDPI_DIR/byedpi/Makefile"
-    echo "   > ByeDPI: пакет byedpi ${BYEDPI_TAG#v} ($(git -C "$BYEDPI_DIR" rev-parse --short HEAD))"
-    sed -i '/CONFIG_PACKAGE_byedpi[=_ ]/d' ./.config
-    echo 'CONFIG_PACKAGE_byedpi=y' >> ./.config
-else
-    rm -f ./files/etc/uci-defaults/96_byedpi-module
+    echo "   > Zapret2: пакет zapret2 $(sed -n 's/^PKG_VERSION:=//p' "$ZAPRET2_DIR/zapret2/Makefile" | head -n1) ($(git -C "$ZAPRET2_DIR" rev-parse --short HEAD))"
+    sed -i '/CONFIG_PACKAGE_zapret2[=_ ]/d; /CONFIG_PACKAGE_luci-app-zapret2[=_ ]/d; /CONFIG_PACKAGE_luci-i18n-zapret2-/d' ./.config
+    echo 'CONFIG_PACKAGE_zapret2=y' >> ./.config
+    echo '# CONFIG_PACKAGE_luci-app-zapret2 is not set' >> ./.config
 fi
 
 if [ "$ZZ" != "true" ]; then
