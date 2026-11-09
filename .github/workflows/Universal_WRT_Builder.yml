@@ -1719,7 +1719,9 @@ jobs:
         echo "Variant selected: $VARIANT"
         echo "Checking key packages in .config:"
         # Проверяем наличие ключевых пакетов для уверенности
-        grep -E "CONFIG_PACKAGE_(luci-app-homeproxy|sing-box|sing-box-forkop|luci-app-passwall2|luci-app-v2raya|luci-app-xray|xray-core|v2ray-geoip|v2ray-geosite|luci-app-podkop|luci-app-netshift|luci-app-forkop|luci-app-tachyon|luci-app-re-homeproxy)=" .config || echo "None found"
+        grep -E "CONFIG_PACKAGE_(luci-app-homeproxy|sing-box|sing-box-forkop|luci-app-passwall2|luci-app-v2raya|luci-app-xray|xray-core|v2ray-geoip|v2ray-geosite|luci-app-podkop|luci-app-netshift|luci-app-forkop|luci-app-tachyon|luci-app-re-homeproxy|youtubeUnblock|zapret2)=" .config || echo "None found"
+        # Ядро без пакета: hiddify-core кладёт в files/ шаг Download Sing-box (sb=hiddify)
+        [ -x files/usr/bin/hiddify-core ] && echo "files/usr/bin/hiddify-core: $(du -h files/usr/bin/hiddify-core | cut -f1)"
         echo "=========================================="
 
     - name: Telegram — патчи надо обновить
