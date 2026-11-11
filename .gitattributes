@@ -5,6 +5,7 @@
 *.sh            text=auto eol=lf
 *.config        text=auto eol=lf
 config/conf/*   text=auto eol=lf
+config/combo.txt text=auto eol=lf
 files/**        text=auto eol=lf
 depends-ubuntu-* text=auto eol=lf
 *.patch         text=auto eol=lf
