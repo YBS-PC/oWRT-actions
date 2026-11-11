@@ -218,6 +218,8 @@ cat /usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft
 
 Смысл: flow offload включается только после 30 пакетов, давая youtubeUnblock время обработать начало соединения.
 
+forkop-mod после каждой перезагрузки fw4 добавляет к этому правилу в работающем наборе `ct mark 0` (`nft replace rule`); условие `ct original packets ge 30` при этом остаётся только с его патчем 002 (`patches/README.md`).
+
 **Чтобы откатить:**
 ```sh
 sed -i 's/ct original packets ge 30 flow offload @ft/flow offload @ft/' /usr/share/firewall4/templates/ruleset.uc
