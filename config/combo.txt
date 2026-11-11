@@ -1,0 +1,48 @@
+# Сборки режима combo (поле формы target = combo).
+#
+# Одна строка — одна сборка. В строке восемь значений через пробелы:
+#
+#   устройство  вариант  agh  sb  ytb  zz  patches  feeds
+#
+#   устройство  rb5009 | nanopi-r6s | nanopi-r5s | slateax | ax59u | brume2
+#   вариант     homeproxy | rehomeproxy | podkop | netshift | forkop | forkop-mod |
+#               tachyon | passwall | v2raya | xray | clear | crystal_clear | switch
+#   agh         no | feed | latest
+#   sb          default | no | feed | 1.12.x | 1.13.x | 1.14.x | latest | extended |
+#               hiddify | podkop-engine | podkop-engine-full |
+#               forkop-base | forkop-full | forkop-tiny
+#   ytb         default | true | false
+#   zz          true | false    скрипт zz1 в образе
+#   patches     true | false    патчи из patches/
+#   feeds       true | false    true — фиды репозитория пакетов, false — фиды тега
+#
+# Значения те же, что у одноимённых полей формы workflow; что значит каждое —
+# в справочнике docs/wrt-builder-reference.html, раздел «Параметры запуска».
+# default в столбцах sb и ytb — выбор по варианту, как в форме.
+#
+# Как менять:
+#   - выключить сборку — поставить «#» в начале строки, включить — убрать;
+#   - добавить сборку — скопировать строку и поменять значения;
+#   - текст после «#» в конце строки — комментарий, пустые строки пропускаются;
+#   - столбцы можно выравнивать любым числом пробелов.
+#
+# Сочетание, которое вариант или устройство не допускает, job setup заменяет
+# так же, как при одиночной сборке, и показывает замену в журнале и в заметке
+# «Выбор уточнён». Строка с ошибкой (не восемь значений, неизвестное значение,
+# две одинаковые сборки) останавливает запуск в job setup; в сообщении — номер
+# строки. Основной workflow при правке этого файла менять не нужно.
+#
+# устройство  вариант       agh     sb             ytb      zz    patches  feeds
+nanopi-r6s    homeproxy     latest  extended       false    true  true     true
+nanopi-r6s    podkop        latest  podkop-engine  false    true  true     true
+nanopi-r6s    netshift      latest  extended       false    true  true     true
+nanopi-r6s    forkop        latest  forkop-base    false    true  true     true
+nanopi-r6s    tachyon       latest  default        default  true  true     true
+nanopi-r6s    rehomeproxy   latest  hiddify        default  true  true     true
+rb5009        clear         no      no             false    true  true     true
+rb5009        switch        no      no             false    true  true     true
+
+# Запасные строки (выключены):
+#nanopi-r6s   homeproxy     latest  latest              true   true  false  true   # без патчей
+#nanopi-r6s   podkop        latest  podkop-engine-full  true   true  true   true
+#nanopi-r6s   forkop-mod    latest  default             default true true   true
