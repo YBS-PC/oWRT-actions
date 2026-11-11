@@ -80,6 +80,13 @@ uci commit uhttpd
 - `dnsmasq[0].port` меняется с `53` на `54` — dnsmasq уступает порт 53 AdGuardHome
 - Удаляется список `server` у dnsmasq (если был)
 
+**Если AdGuardHome в прошивке нет, а `dnsmasq[0].port` равен `54`** (настройки
+сохранены при прошивке со сборки с AdGuardHome):
+- firstboot — опция `port` удаляется, dnsmasq снова слушает порт 53 (иначе
+  порт 53 никто не обслуживает)
+- maintenance — только запись в лог с командой возврата: другой DNS-сервер
+  на порту 53 мог быть установлен вручную
+
 **Только в режиме `switch` (firstboot):**
 - `lan.ignore = '1'` — отключает выдачу DHCP на LAN
 - `lan.dhcpv6 = 'disabled'`, `lan.ra = 'disabled'`
@@ -130,7 +137,8 @@ rm /usr/lib/lua/luci/controller/adguardhome_net.lua
 **Если установлен (`/etc/init.d/homeproxy`, в том числе Re:HomeProxy):**
 - `/etc/homeproxy/scripts/firewall_post.ut`: строка
   `const dns_hijacked = uci.get('dhcp', '@dnsmasq[0]', 'dns_redirect') || '0'`
-  заменяется на `const dns_hijacked = '1'` — homeproxy не трогает правила dnsmasq
+  заменяется на `const dns_hijacked = '1'` — homeproxy не трогает правила dnsmasq.
+  Только при установленном AdGuardHome; без него строка не меняется
 - Доработки патчей 010 и 011 проверяются по меткам в файлах: если пакет
   собран без патчей или обновлён из фида (zz1 запускают и после
   `apk upgrade`), в файлы вписывается тот же код, что и в патчах; если
@@ -232,7 +240,7 @@ sed -i 's/ct original packets ge 30 flow offload @ft/flow offload @ft/' /usr/sha
     файл переименовывается в `/opt/sqm_custom.conf.migrated`
   - `/etc/nftables.d/10-priority-mangle.nft` создаётся, если его нет: шаблон правил приоритета, все строки закомментированы
   - если модуля `act_ctinfo` нет — запись в лог (приоритеты останутся только на отдаче)
-  - SQM перезапускается, если включён, иначе сервис отключается
+  - SQM перезапускается, если включена хотя бы одна очередь, иначе сервис отключается
 
   **Что делает `cake_ctinfo.qos`.** Это `piece_of_cake.qos` с опциями `diffserv4 dual-srchost` на отдаче и
   `diffserv4 dual-dsthost ingress` на загрузке (опции из LuCI «Qdisc options» идут после и перекрывают их).
