@@ -27,8 +27,22 @@ ingress() {
         qdisc=cake
     fi
 
+    # Входящий трафик интерфейса обрабатывается на handle ffff:. Его занимает
+    # либо qdisc ingress (ставит SQM), либо clsact — его ставит программа с
+    # eBPF на том же интерфейсе (bandix-plus). Второй qdisc рядом с clsact
+    # ядро не создаёт, поэтому при clsact фильтр SQM добавляется к нему; от
+    # прошлого запуска фильтр мог остаться, сначала убираем его.
     SILENT=1 $TC qdisc del dev $IFACE handle ffff: ingress
-    $TC qdisc add dev $IFACE handle ffff: ingress
+    if ! SILENT=1 $TC qdisc add dev $IFACE handle ffff: ingress; then
+        # $TC — обёртка sqm-scripts, её вывод уходит в журнал: читаем через $TC_BINARY
+        if $TC_BINARY qdisc show dev $IFACE 2>/dev/null | grep -q "qdisc clsact"; then
+            sqm_log "На $IFACE уже есть clsact другой программы: фильтр SQM добавляется к нему"
+            ctinfo_filter_del
+        else
+            sqm_error "Не удалось создать qdisc ingress на $IFACE"
+            return 1
+        fi
+    fi
     SILENT=1 $TC qdisc del dev $DEV root
 
     [ "$ZERO_DSCP_INGRESS" -eq "1" ] && INGRESS_CAKE_OPTS="$INGRESS_CAKE_OPTS wash"
@@ -40,12 +54,32 @@ ingress() {
 
     # Перед перенаправлением в ifb восстанавливаем DSCP из ct mark соединения.
     # Не вышло (нет act_ctinfo) — тот же фильтр без ctinfo, как в piece_of_cake.
-    if ! SILENT=1 $TC filter add dev $IFACE parent ffff: protocol all prio 10 u32 \
+    # «ingress» у tc filter — входная сторона и qdisc ingress, и clsact
+    # (с «parent ffff:» при clsact ядро отвечает Invalid argument).
+    if ! SILENT=1 $TC filter add dev $IFACE ingress protocol all prio 10 u32 \
         match u32 0 0 flowid 1:1 \
         action ctinfo dscp 0xfc000000 0x01000000 \
         action mirred egress redirect dev $DEV; then
         sqm_warn "act_ctinfo недоступен (нет kmod-sched-ctinfo): приоритеты на загрузке не восстанавливаются"
-        $TC filter add dev $IFACE parent ffff: protocol all prio 10 u32 \
+        $TC filter add dev $IFACE ingress protocol all prio 10 u32 \
             match u32 0 0 flowid 1:1 action mirred egress redirect dev $DEV
     fi
+}
+
+# Фильтр перенаправления в ifb, который ставит ingress() выше.
+ctinfo_filter_del() {
+    SILENT=1 $TC filter del dev $IFACE ingress protocol all prio 10 u32
+}
+
+# Остановка. При clsact «qdisc del ... ingress» ничего не удаляет, а фильтр,
+# оставшийся после удаления ifb, отбрасывал бы весь входящий трафик:
+# поэтому фильтр снимается отдельно.
+sqm_stop() {
+    if [ "${DOWNLINK}" -ne 0 ]; then
+        ctinfo_filter_del
+        SILENT=1 $TC qdisc del dev $IFACE handle ffff: ingress
+    fi
+    $TC qdisc del dev $IFACE root
+
+    sqm_cleanup
 }
