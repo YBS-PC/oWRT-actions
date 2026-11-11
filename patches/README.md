@@ -89,15 +89,15 @@
 | `feeds/bandix/` | [timsaya/openwrt-bandix](https://github.com/timsaya/openwrt-bandix) | [`0760d1f`](https://github.com/timsaya/openwrt-bandix/commit/0760d1f5b52d1a2317dfd171ab00fe6543a9a0c4) | 27.10.2026 |
 | `feeds/bandixplus/` | [timsaya/openwrt-bandix-plus](https://github.com/timsaya/openwrt-bandix-plus) | [`fba9704`](https://github.com/timsaya/openwrt-bandix-plus/commit/fba9704300f2900451e00a1645e11b1f179204b8) | 21.10.2026 |
 | `feeds/forkop/` | [ushan0v/forkop](https://github.com/ushan0v/forkop) | [`129d303`](https://github.com/ushan0v/forkop/commit/129d303e6cc879e9edc4e13c50b1f37637e69554) | 02.11.2026 |
-| `feeds/forkopmod/` | [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) | [`7b93175`](https://github.com/Gavr1024/forkop-mod/commit/7b9317560737b5c4ddd859fb234b78d4426572fa) | 06.11.2026 |
+| `feeds/forkopmod/` | [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) | [`8baf160`](https://github.com/Gavr1024/forkop-mod/commit/8baf16091148e3f9715a12b2857017e34ed1edef) | 11.11.2026 |
 | `feeds/internetdetector/` | [gSpotx2f/luci-app-internet-detector](https://github.com/gSpotx2f/luci-app-internet-detector) | [`e265fcc`](https://github.com/gSpotx2f/luci-app-internet-detector/commit/e265fcc8a9d9fd359f29fd0188ab2da3ce1438fa) | 09.10.2026 |
 | `feeds/luciappbandix/` | [timsaya/luci-app-bandix](https://github.com/timsaya/luci-app-bandix) | [`108369b`](https://github.com/timsaya/luci-app-bandix/commit/108369b8da05f01296a3ed0210a2ab60809712e5) | 27.10.2026 |
 | `feeds/luciappbandixplus/` | [timsaya/luci-app-bandix-plus](https://github.com/timsaya/luci-app-bandix-plus) | [`c4f002f`](https://github.com/timsaya/luci-app-bandix-plus/commit/c4f002f74f3a0f4aeb79fb5d35f5a7bbd3392a1f) | 21.10.2026 |
 | `feeds/luciappxray/` | [yichya/luci-app-xray](https://github.com/yichya/luci-app-xray) | [`4d5a6fd`](https://github.com/yichya/luci-app-xray/commit/4d5a6fd7fc4d2fbbcd7f70f1319da06b91ec1d56) | 22.09.2026 |
 | `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`0c8a895`](https://github.com/yandexru45/netshift/commit/0c8a89535a897b43b50b15c3f0c8991df242bb24) | 07.11.2026 |
-| `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`24baf7c`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/24baf7cffdb34272adb8f8b31d6ad901596c3f61) | 11.11.2026 |
+| `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`7aeb0aa`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/7aeb0aa4e10246115f6a568b5c69bca122c75794) | 11.11.2026 |
 | `feeds/podkop/` | [itdoginfo/podkop](https://github.com/itdoginfo/podkop) | [`c654bf5`](https://github.com/itdoginfo/podkop/commit/c654bf5da75309754e3fb63b9441981db65fff68) | 24.10.2026 |
-| `feeds/tachyon/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) | [`f221be0`](https://github.com/Dushnilin/tachyon/commit/f221be07b736d9fa28b7bef3bcc05be0f56bad06) | 10.11.2026 |
+| `feeds/tachyon/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) | [`606b200`](https://github.com/Dushnilin/tachyon/commit/606b2007f798ea6aa73da47222677eb399d4c518) | 11.11.2026 |
 | `packages/luci-app-commands/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`75a306d`](https://github.com/openwrt/luci/commit/75a306df84a020c57a631ef5b4c02ace56d93387) | 15.10.2026 |
 | `packages/luci-app-filemanager/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`e969939`](https://github.com/openwrt/luci/commit/e969939b49167516e219d465df8030d98d443d67) | 31.10.2026 |
 | `packages/luci-app-homeproxy/` | [immortalwrt/homeproxy](https://github.com/immortalwrt/homeproxy) | [`fadaa67`](https://github.com/immortalwrt/homeproxy/commit/fadaa676104f59ff6ace480a780a258d846d0aec) | 02.10.2026 |
@@ -128,7 +128,7 @@
 
 ## Патчи по пакетам
 
-Всего 64 патча для 17 пакетов. Номер — порядок применения. Ссылки
+Всего 65 патчей для 17 пакетов. Номер — порядок применения. Ссылки
 вида `#98` / `PR #103` — обсуждение и предложенное исправление в
 репозитории автора.
 
@@ -235,11 +235,11 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
 компонентов убраны; списки скачивает само ядро. Серия 1.x осталась в
 истории git.
 
-### forkop-mod — `feeds/forkopmod/` (1)
+### forkop-mod — `feeds/forkopmod/` (2)
 
-Вариант `forkop-mod`, фид [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) (1.0.15).
+Вариант `forkop-mod`, фид [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) (1.0.16).
 
-Патчи сняты с коммита [`7b93175`](https://github.com/Gavr1024/forkop-mod/commit/7b9317560737b5c4ddd859fb234b78d4426572fa) от 06.11.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`8baf160`](https://github.com/Gavr1024/forkop-mod/commit/8baf16091148e3f9715a12b2857017e34ed1edef) от 11.11.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Ошибки «left-hand side is not a function» и удаление через
   apk.** В 13 местах функции перенесены выше места, где их вызывают
@@ -249,6 +249,13 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
   списков при старте, задержки узлов группы Xray в диагностике, а также
   части интерфейса и службы. Скрипт удаления
   переписан, чтобы `apk del` работал. *Всегда.*
+- **002. Условия правила flow offload сохраняются.** После перезагрузки
+  fw4 forkop-mod добавляет к правилу `flow add @ft` условие `ct mark 0`,
+  но собирал правило заново, и другие условия пропадали: `ct original
+  packets ge 30`, которое ставит zz1 (`files/README.md`), исчезало, и
+  соединения уходили в flowtable с первого пакета. Теперь к правилу
+  добавляется только `ct mark 0`, остальной текст правила прежний.
+  *Всегда.*
 
 ### internet-detector — `feeds/internetdetector/` (3)
 
@@ -444,7 +451,7 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
 
 Вариант `passwall`, фид [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2).
 
-Патчи сняты с коммита [`24baf7c`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/24baf7cffdb34272adb8f8b31d6ad901596c3f61) от 11.11.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`7aeb0aa`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/7aeb0aa4e10246115f6a568b5c69bca122c75794) от 11.11.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Соединения после перезапуска.** Пока passwall2 перезапускается,
   правил нет, и новые соединения из сети уходят напрямую. После запуска
@@ -507,13 +514,13 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
 
 ### tachyon — `feeds/tachyon/` (2)
 
-Вариант `tachyon`, фид [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) (1.7.23).
+Вариант `tachyon`, фид [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) (1.7.25).
 С `sb=default` (по умолчанию) в образ идёт ядро tachyon по умолчанию, и
 артефакт такой сборки шифруется паролем из секрета `ARTIFACT_PASSWORD`.
 С другим значением `sb` в образ идёт выбранное ядро, артефакт не
 шифруется.
 
-Патчи сняты с коммита [`f221be0`](https://github.com/Dushnilin/tachyon/commit/f221be07b736d9fa28b7bef3bcc05be0f56bad06) от 10.11.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`606b200`](https://github.com/Dushnilin/tachyon/commit/606b2007f798ea6aa73da47222677eb399d4c518) от 11.11.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Удаление пакета.** Скрипт удаления tachyon написан на ucode, а
   сборка OpenWrt выполняет его как shell (apk — в своём скрипте удаления,
