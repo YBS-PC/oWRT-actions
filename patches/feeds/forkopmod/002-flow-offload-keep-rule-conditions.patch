@@ -1,0 +1,82 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 11 Nov 2026 12:00:00 +0000
+Subject: [PATCH] flow_offload.uc: сохранять условия правила flow offload
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+nft/flow_offload.uc (1.0.16) после перезагрузки fw4 заменяет правило
+«flow add @ft» в цепочке inet fw4 forward на «ct mark 0 meta l4proto
+{ tcp, udp } flow add @ft», собранное заново. Остальные условия
+правила при этом пропадают: правило, в шаблон которого добавлено
+«ct original packets ge 30» (так делает zz1 этого репозитория,
+files/README.md), после запуска forkop переносит соединения в
+flowtable с первого пакета.
+
+Теперь правило заменяется своим же текстом из «nft -a list» (без
+комментария handle) с «ct mark 0» в начале. Для правила fw4 по
+умолчанию результат прежний; правила, где «ct mark 0» уже есть, по-
+прежнему не трогаются. В тест tests/flow_offload.sh добавлен случай с
+дополнительным условием.
+
+Проверено: tests/flow_offload.sh проходит (без патча новый случай
+падает); замена правила с условиями и счётчиком — на nft 1.0.9 (правило
+со счётчиком вместо flow add: flowtable в тестовом ядре нет).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Uo9XQuT7u6ShTYdi2S3Anq
+---
+ forkop/files/usr/lib/nft/flow_offload.uc | 11 ++++++-----
+ tests/flow_offload.sh                    |  3 +++
+ 2 files changed, 9 insertions(+), 5 deletions(-)
+
+diff --git a/forkop/files/usr/lib/nft/flow_offload.uc b/forkop/files/usr/lib/nft/flow_offload.uc
+index 4bd84ff5..e12aa648 100644
+--- a/forkop/files/usr/lib/nft/flow_offload.uc
++++ b/forkop/files/usr/lib/nft/flow_offload.uc
+@@ -61,14 +61,15 @@ function patch_flow_offload(wait) {
+         let handle = match(line, /# handle ([0-9]+)/);
+         if (!handle)
+             continue;
+-        let named = match(line, /flow (add|offload) @([A-Za-z0-9_]+)/);
+-        let setname = named ? named[2] : "ft";
++        // Правило заменяется тем же текстом с «ct mark 0» в начале: условия,
++        // которые в него добавили (ct original packets ge 30 и т.п.), остаются.
++        let rule = trim(replace(line, /[ \t]*# handle [0-9]+.*$/, ""));
++        if (rule == "")
++            continue;
+         system(command_from_args([
+             nft, "replace", "rule", "inet", "fw4", "forward",
+             "handle", handle[1],
+-            "ct", "mark", "0",
+-            "meta", "l4proto", "{", "tcp,", "udp", "}",
+-            "flow", "add", "@" + setname
++            "ct mark 0 " + rule
+         ]) + " >/dev/null 2>&1");
+     }
+ }
+diff --git a/tests/flow_offload.sh b/tests/flow_offload.sh
+index 70181e27..8be4d8c8 100644
+--- a/tests/flow_offload.sh
++++ b/tests/flow_offload.sh
+@@ -30,6 +30,7 @@ table inet fw4 {
+ 		type filter hook forward priority filter; policy drop;
+ 		meta l4proto { tcp, udp } flow add @ft # handle 45
+ 		ct mark 0 meta l4proto { tcp, udp } flow add @other # handle 46
++		meta l4proto { tcp, udp } ct original packets ge 30 flow add @ft # handle 47
+ 	}
+ }
+ CHAIN
+@@ -44,6 +45,8 @@ PATH="$WORK_DIR/bin:$PATH" NFT_LOG="$WORK_DIR/nft.log" FORKOP_NFT_BIN="$WORK_DIR
+   ucode "$SCRIPT" || fail "flow offload patch should succeed"
+ grep -Fq 'replace rule inet fw4 forward handle 45 ct mark 0 meta l4proto { tcp, udp } flow add @ft' "$WORK_DIR/nft.log" ||
+   fail "unprotected flow add must be limited to unmarked connections"
++grep -Fq 'replace rule inet fw4 forward handle 47 ct mark 0 meta l4proto { tcp, udp } ct original packets ge 30 flow add @ft' "$WORK_DIR/nft.log" ||
++  fail "other conditions of the flow rule must be kept"
+ if grep -Fq 'handle 46' "$WORK_DIR/nft.log"; then
+   fail "an already guarded flow rule must be left alone"
+ fi
+-- 
+2.43.0
+
