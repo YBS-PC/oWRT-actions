@@ -17,5 +17,8 @@ echo 'CONFIG_PACKAGE_losetup=y' >> ./.config
 echo 'CONFIG_PACKAGE_kmod-sfp=y' >> ./.config
 echo 'CONFIG_PACKAGE_kmod-phy-realtek=y' >> ./.config
 echo 'CONFIG_PACKAGE_kmod-phy-marvell=y' >> ./.config
+# irqbalance: прерывания очередей eth0 (mvpp2) закреплены за ядрами драйвером,
+# их affinity не меняется (EPERM), остальные IRQ редкие — служба ничего не делает
+sed -i "/irqbalance/Id" ./.config
 EOF
 )
