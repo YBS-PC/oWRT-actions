@@ -106,6 +106,7 @@
 | `sh/WRT-part1.sh` … `part3.sh` | шаги сборки: подготовка, фиды и `.config`, сторонние пакеты и патчи |
 | `sh/feeds-from-repo.sh`, `patch-drift.sh`, `verify-sha256.sh` | фиды, сверка патчей с исходниками, проверка загрузок |
 | `config/WRT.config`, `config/conf/<устройство>` | общий и посекционный `.config`; правила записи — `config/config_rules.txt` |
+| `config/combo.txt` | сборки режима `combo`: строка — сборка (устройство, вариант, agh, sb, ytb, zz, patches, feeds) |
 | `patches/` | исправления и улучшения сторонних пакетов; как применяются — `patches/README.md` |
 | `files/` | копируется в корень образа (кроме `README.md`) |
 | `files/etc/uci-defaults/zz1-final-offline-setup.sh` | настройка при первой загрузке; справочник — `files/README.md` |
@@ -116,7 +117,7 @@
 `sb`, `ytb`, `zz`, `apply_patches`, `use_base_commit`,
 `stop_outdated_patches`, `feeds_latest`, `exclude_keywords`,
 `commit_hash`, `runner_os`. В режиме `combo` поля со звёздочкой берутся
-из строк матрицы в job `setup`.
+из строк `config/combo.txt` (job `setup` читает файл и строит матрицу).
 
 ## Технические особенности
 
