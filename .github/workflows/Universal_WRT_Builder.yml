@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: 'Устройство (в combo поля с * не учитываются)'
+        description: 'Устройство (combo — сборки из config/combo.txt, поля с * не учитываются)'
         required: true
         default: 'combo'
         type: choice
@@ -194,6 +194,15 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
+      # Список сборок combo; остальной репозиторий job setup не нужен.
+      - name: Checkout combo list
+        if: inputs.target == 'combo'
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout: config/combo.txt
+          sparse-checkout-cone-mode: false
+
       - id: set-matrix
         # Значения — через env, не ${{ }} в тексте run: такой run GitHub собирает в выражение не длиннее 21000.
         env:
@@ -214,7 +223,7 @@ jobs:
           # Поля строки матрицы: agh (no|feed|latest), sb (no|feed|1.12.x..latest|extended|hiddify|podkop-engine[-full]|
           # forkop-base|-full|-tiny|tiny; default setup заменяет ядром варианта, остаётся только у tachyon), ytb (default|true|false),
           # zz, patches, feeds (true — фиды репозитория пакетов), base (use_base_commit); dpi (zapret2|no) выводит setup из ytb.
-          # В combo значения заданы ниже, поля формы не действуют.
+          # В combo значения — из config/combo.txt, поля формы не действуют.
           # slateax и ax59u — «тонкие»: sing-box-tiny из фида (у forkop — сборка tiny ядра).
           TINY_TARGETS="slateax ax59u"
           NOTES=""
@@ -290,15 +299,70 @@ jobs:
               "$t" "$v" "$vname" "$fk" "$agh" "$sb" "$ytb" "$dpi" "$zz" "$pt" "$fd" "$base"
           }
 
+          # Все устройства из config/conf/ — при добавлении нового дописать сюда.
+          targets="nanopi-r6s nanopi-r5s rb5009 slateax ax59u brume2"
+
           if [ "$INPUT_TARGET" == "combo" ]; then
             echo ">>> Generating COMBO matrix..."
-            # Пресет combo. Поля entry: устройство вариант agh sb ytb zz patches feeds.
-            # Запасные строки: $(entry nanopi-r6s homeproxy latest latest true true false true) — без патчей;
-            # $(entry nanopi-r6s podkop latest podkop-engine-full true true true true).
-            json="{\"include\":[$(entry nanopi-r6s homeproxy latest extended false true true true),$(entry nanopi-r6s podkop latest podkop-engine false true true true),$(entry nanopi-r6s netshift latest extended false true true true),$(entry nanopi-r6s forkop latest forkop-base false true true true),$(entry nanopi-r6s tachyon latest default default true true true),$(entry nanopi-r6s rehomeproxy latest hiddify default true true true),$(entry rb5009 clear no no false true true true),$(entry rb5009 switch no no false true true true)]}"
+            # Сборки combo — строки config/combo.txt: устройство вариант agh sb ytb zz patches feeds.
+            # Допустимые значения — те же, что в полях формы выше (при изменении формы поправить и здесь).
+            COMBO_FILE="config/combo.txt"
+            V_VARIANT="homeproxy rehomeproxy clear switch crystal_clear podkop netshift forkop forkop-mod tachyon passwall v2raya xray"
+            V_AGH="no feed latest"
+            V_SB="default no feed 1.12.x 1.13.x 1.14.x latest extended hiddify podkop-engine podkop-engine-full forkop-base forkop-full forkop-tiny"
+            V_YTB="default true false"
+            V_BOOL="true false"
+            in_list() { case " $2 " in *" $1 "*) return 0 ;; esac; return 1; }
+            combo_err() {
+              echo "::error file=$COMBO_FILE,line=$1,title=combo.txt строка $1::$2"
+              ROW_BAD=1; COMBO_BAD=1
+            }
+            if [ ! -f "$COMBO_FILE" ]; then
+              echo "::error title=Нет списка combo::Файл $COMBO_FILE не найден"
+              exit 1
+            fi
+            json_parts=""; seen=""; COMBO_BAD=0; ln=0
+            while IFS= read -r line || [ -n "$line" ]; do
+              ln=$((ln + 1))
+              # «#» и всё после него — комментарий; \r — от загрузки через веб-интерфейс.
+              line="${line%%#*}"; line="${line//$'\r'/}"
+              read -r -a f <<< "$line" || true
+              [ "${#f[@]}" -eq 0 ] && continue
+              ROW_BAD=0
+              if [ "${#f[@]}" -ne 8 ]; then
+                combo_err "$ln" "Нужно 8 значений (устройство вариант agh sb ytb zz patches feeds), в строке ${#f[@]}"
+                continue
+              fi
+              in_list "${f[0]}" "$targets"   || combo_err "$ln" "Неизвестное устройство «${f[0]}». Допустимо: $targets"
+              in_list "${f[1]}" "$V_VARIANT" || combo_err "$ln" "Неизвестный вариант «${f[1]}». Допустимо: $V_VARIANT"
+              in_list "${f[2]}" "$V_AGH"     || combo_err "$ln" "agh=«${f[2]}». Допустимо: $V_AGH"
+              in_list "${f[3]}" "$V_SB"      || combo_err "$ln" "sb=«${f[3]}». Допустимо: $V_SB"
+              in_list "${f[4]}" "$V_YTB"     || combo_err "$ln" "ytb=«${f[4]}». Допустимо: $V_YTB"
+              in_list "${f[5]}" "$V_BOOL"    || combo_err "$ln" "zz=«${f[5]}». Допустимо: $V_BOOL"
+              in_list "${f[6]}" "$V_BOOL"    || combo_err "$ln" "patches=«${f[6]}». Допустимо: $V_BOOL"
+              in_list "${f[7]}" "$V_BOOL"    || combo_err "$ln" "feeds=«${f[7]}». Допустимо: $V_BOOL"
+              [ "$ROW_BAD" = "1" ] && continue
+              # Без подстановки $(...): entry дописывает NOTES, а подоболочка эти изменения потеряла бы.
+              entry "${f[0]}" "${f[1]}" "${f[2]}" "${f[3]}" "${f[4]}" "${f[5]}" "${f[6]}" "${f[7]}" > /tmp/entry.json
+              row=$(cat /tmp/entry.json)
+              # Две одинаковые сборки дали бы одно имя артефакта.
+              case "$seen" in
+                *"|$row|"*) combo_err "$ln" "Такая сборка уже есть выше: ${f[0]} ${f[1]} (после уточнения значений строки совпали)"; continue ;;
+              esac
+              seen="$seen|$row|"
+              [ -n "$json_parts" ] && json_parts="$json_parts,"
+              json_parts="$json_parts$row"
+            done < "$COMBO_FILE"
+            if [ "$COMBO_BAD" = "1" ]; then
+              echo "::error title=Ошибки в списке combo::Исправьте строки $COMBO_FILE, отмеченные выше"
+              exit 1
+            fi
+            if [ -z "$json_parts" ]; then
+              echo "::error title=Список combo пуст::В $COMBO_FILE нет ни одной сборки (все строки закомментированы?)"
+              exit 1
+            fi
+            json="{\"include\":[$json_parts]}"
           else
-            # Все устройства из config/conf/ — при добавлении нового дописать сюда.
-            targets="nanopi-r6s nanopi-r5s rb5009 slateax ax59u brume2"
             if [ "$INPUT_TARGET" == "all" ]; then
               selected=$targets
             else
@@ -329,7 +393,7 @@ jobs:
           echo "$json" | jq -r '.include[] | "  \(.target) / \(.vname) / agh=\(.agh) / sb=\(.sb) / ytb=\(.ytb) / dpi=\(.dpi) / zz=\(.zz) / patches=\(.patches) / feeds=\(if .feeds then "repo" else "tag" end)"'
           echo "=========================================="
           if [ -n "$NOTES" ]; then
-            echo "Выбор формы уточнён по варианту и устройству (default — ядро варианта):"
+            echo "Выбор уточнён по варианту и устройству (default — ядро варианта):"
             printf '%b' "$NOTES" | sed 's/^/  /'
             printf '%b' "$NOTES" | while IFS= read -r n; do
               [ -n "$n" ] && echo "::notice title=Выбор уточнён::$n"
