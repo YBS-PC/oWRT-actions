@@ -1118,6 +1118,20 @@ EOF
     run_cmd "Запуск adguardhome" /etc/init.d/adguardhome start
 else
     log_info "AdGuardHome не найден"
+    # dnsmasq на :54 — настройка для AdGuard Home (блок выше). Она остаётся в
+    # /etc/config/dhcp после прошивки с сохранением настроек на сборку без
+    # AdGuard Home, и порт 53 тогда никто не слушает: у клиентов нет DNS.
+    # На первой загрузке возвращаем порт по умолчанию; при ручном запуске
+    # только сообщаем — другой DNS-сервер на :53 мог быть поставлен вручную.
+    if [ "$(uci -q get dhcp.@dnsmasq[0].port)" = "54" ]; then
+        if [ "$MODE" != "firstboot" ]; then
+            log_info "dnsmasq на порту 54, AdGuard Home нет: вернуть порт 53 — uci delete dhcp.@dnsmasq[0].port; uci commit dhcp"
+        elif uci -q delete dhcp.@dnsmasq[0].port && uci commit dhcp; then
+            log_ok "dnsmasq возвращён на порт 53 (AdGuard Home в прошивке нет)"
+        else
+            log_err "Не удалось вернуть dnsmasq на порт 53"
+        fi
+    fi
 fi
 
 # Свои пункты меню LuCI (Lua-контроллеры) из /root/apps/luci-controllers/.
@@ -1319,8 +1333,8 @@ NFT
         log_ok "$PRIO_NFT уже существует, не трогаем"
     fi
 
-    SQM_ENABLED=$(uci -q get sqm.@queue[0].enabled)
-    if [ "$SQM_ENABLED" = "1" ]; then
+    # Включена хотя бы одна очередь (не только первая в списке)
+    if uci -q show sqm | grep -q "^sqm\.[^.]*\.enabled='1'\$"; then
         run_cmd "Перезапуск SQM" /etc/init.d/sqm restart
     else
         /etc/init.d/sqm disable 2>/dev/null
