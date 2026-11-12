@@ -57,7 +57,8 @@
   `combo`. Без галочки — последний коммит; тогда при остановке журнал и
   Telegram подсказывают коммит из `BASE`.
 
-- **Пакеты из фида LuCI** (`luci-app-commands`, `luci-app-filemanager`)
+- **Пакеты из фида LuCI** (`luci-app-commands`, `luci-app-filemanager`,
+  `luci-theme-bootstrap`)
   собираются с того коммита фида, который взял `feeds update`: с галочкой
   `feeds_latest` — с коммита репозитория пакетов, без неё — с коммита тега.
   Их `BASE` ничего не переключает (галочка `use_base_commit` на них не
@@ -100,6 +101,7 @@
 | `feeds/tachyon/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) | [`606b200`](https://github.com/Dushnilin/tachyon/commit/606b2007f798ea6aa73da47222677eb399d4c518) | 11.11.2026 |
 | `packages/luci-app-commands/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`75a306d`](https://github.com/openwrt/luci/commit/75a306df84a020c57a631ef5b4c02ace56d93387) | 15.10.2026 |
 | `packages/luci-app-filemanager/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`e969939`](https://github.com/openwrt/luci/commit/e969939b49167516e219d465df8030d98d443d67) | 31.10.2026 |
+| `packages/luci-theme-bootstrap/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`b2e0be4`](https://github.com/openwrt/luci/commit/b2e0be4b46ec0fd43394c081fa7c50657af14011) | 11.11.2026 |
 | `packages/luci-app-homeproxy/` | [immortalwrt/homeproxy](https://github.com/immortalwrt/homeproxy) | [`fadaa67`](https://github.com/immortalwrt/homeproxy/commit/fadaa676104f59ff6ace480a780a258d846d0aec) | 02.10.2026 |
 | `packages/luci-app-re-homeproxy/` | [1andrevich/homeproxy-hiddify](https://github.com/1andrevich/homeproxy-hiddify) | [`a9e3596`](https://github.com/1andrevich/homeproxy-hiddify/commit/a9e359679e08b5642ae66b13dbcf647b382a9edc) | 04.07.2026 |
 | `src/youtubeUnblock/` | [Waujito/youtubeUnblock](https://github.com/Waujito/youtubeUnblock) | [`4a223b0`](https://github.com/Waujito/youtubeUnblock/commit/4a223b03508e564dace57c1a7f3fc6bc2636b8cd) | 08.04.2026 |
@@ -128,7 +130,7 @@
 
 ## Патчи по пакетам
 
-Всего 65 патчей для 17 пакетов. Номер — порядок применения. Ссылки
+Всего 68 патчей для 18 пакетов. Номер — порядок применения. Ссылки
 вида `#98` / `PR #103` — обсуждение и предложенное исправление в
 репозитории автора.
 
@@ -388,7 +390,10 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
   шкалы компактнее: даты и быстрые периоды в две колонки. Холст временной
   шкалы берёт высоту контейнера (раньше на телефоне наезжал на итоги), а
   левое поле считается по самой широкой подписи оси. Раскладка шире
-  768 px не меняется. Русский перевод новых строк. *Всегда.*
+  768 px не меняется. Русский перевод новых строк. Из русского каталога
+  убраны строки, которые есть в luci-base (Failure, minutes, Reset,
+  Active): LuCI сводит переводы всех приложений в одну таблицу, каталог
+  `bandix` идёт раньше `base` и подменял их на всех страницах. *Всегда.*
 
 ### luci-app-bandix-plus — `feeds/luciappbandixplus/` (2)
 
@@ -418,7 +423,13 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
   для зоны wan направления меняются местами в карточке, на графике и в
   объёме по времени. В рейтинге — «Все интерфейсы» (по умолчанию).
   Русский перевод переписан: «отдача» и «загрузка» раньше обе были
-  «загрузкой», Reset — «перезагрузить». *Всегда.*
+  «загрузкой», Reset — «перезагрузить». Строки, которые переводит и
+  luci-base, больше не подменяют её перевод на других страницах (LuCI
+  сводит переводы всех приложений в одну таблицу, каталог `bandix_plus`
+  идёт раньше `base`; кнопка загрузки образа в «Операциях с прошивкой»
+  была «Отдача»): Upload и Download как направления трафика переводятся
+  с контекстом `traffic direction`, Status, Hostname, Reset и Log level
+  берутся из luci-base. *Всегда.*
 
 ### luci-app-xray — `feeds/luciappxray/` (1)
 
@@ -1025,6 +1036,33 @@ ImmortalWrt. В OpenWrt 24.10 код другой, серия не ложитс�
 просмотр и поиск); папки загрузить нельзя, только файлы; архив и загрузка
 проходят через `/tmp` (память роутера). После `apk upgrade` пакет с
 новой версией автора заменит пропатченный, как любой пакет из фида.
+
+### Тема Bootstrap — `packages/luci-theme-bootstrap/` (3)
+
+Во всех сборках: тема `luci-theme-bootstrap` из фида LuCI выпуска, OpenWrt
+или ImmortalWrt (в `openwrt-25.12` у обоих один и тот же код темы).
+
+Патчи сняты с коммита [`b2e0be4`](https://github.com/openwrt/luci/commit/b2e0be4b46ec0fd43394c081fa7c50657af14011) ветки `openwrt-25.12` от 11.11.2026 (файл `BASE`).
+Это исправления из `master` (`ee0674f`, `6006b34`, `ec33f41`), в ветку
+выпуска они не перенесены. Пакет из фида выпуска, как и
+`luci-app-commands`: `use_base_commit` на него не действует. На `master`
+исправления уже есть: 002 пропускается, 001 и 003 не ложатся из-за
+соседних правок автора (предупреждение, тема как у автора — с теми же
+исправлениями).
+
+- **001. `data-page` на корневом адресе.** Атрибут страницы строился
+  только из пути запроса. LuCI, открытый по корневому адресу (туда же ведёт
+  вход), получал пустой `data-page`, и правила темы для конкретной
+  страницы (например, раскладка таблиц «Обзора» на телефоне) не
+  действовали, пока страницу не откроют по её собственному адресу.
+  *Всегда.*
+- **002. Индикаторы в шапке на телефоне.** На экране до 854 px индикаторы
+  (автообновление, непринятые изменения) получали 20% ширины шапки и
+  переносились на две-три строки. Теперь они по ширине текста, шапка
+  ниже. *Всегда.*
+- **003. Подвал по ширине шапки.** Шапка и страница — 1180 px, подвал был
+  рассчитан на 940 px и на широком экране начинался на 120 px правее.
+  *Всегда.*
 
 ### youtubeUnblock — `src/youtubeUnblock/` (1)
 
