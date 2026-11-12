@@ -8,6 +8,11 @@ echo 'CONFIG_TARGET_rockchip_armv8=y' >> ./.config
 echo 'CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r5s=y' >> ./.config
 echo 'CONFIG_TARGET_ARCH_PACKAGES="aarch64_generic"' >> ./.config
 echo 'CONFIG_TARGET_ROOTFS_PARTSIZE=512' >> ./.config
+# Раздел 1 (ядро): sysupgrade на rockchip кладёт туда архив сохраняемых
+# настроек (platform_copy_config). При 16 МБ по умолчанию после ядра места
+# мало: больший архив обрезается, и при восстановлении теряются файлы из
+# конца его (отсортированного) списка
+echo 'CONFIG_TARGET_KERNEL_PARTSIZE=64' >> ./.config
 echo 'CONFIG_TARGET_IMAGES_GZIP=y' >> ./.config
 echo 'CONFIG_TARGET_ROOTFS_SQUASHFS=y' >> ./.config
 echo 'CONFIG_PACKAGE_losetup=y' >> ./.config
