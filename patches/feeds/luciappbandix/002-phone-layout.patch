@@ -40,12 +40,20 @@ layout (wider than 768 px) does not change.
 
 New strings are translated to Russian.
 
+LuCI puts the translations of all installed applications into one
+table for the pages (window.TR); for a msgid that several catalogs
+translate, the catalog first in alphabetical order wins, and bandix
+comes before base. The Russian catalog of the package translated
+Failure, minutes, Reset and Active differently from luci-base and
+changed them on every page of LuCI; these entries are removed, the
+pages of bandix use the translation of luci-base.
+
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01Uo9XQuT7u6ShTYdi2S3Anq
 ---
- .../resources/view/bandix/index.js            | 633 ++++++++++++++++--
- luci-app-bandix/po/ru/bandix.po               |  15 +
- 2 files changed, 584 insertions(+), 64 deletions(-)
+ .../luci-static/resources/view/bandix/index.js     | 633 ++++++++++++++++++---
+ luci-app-bandix/po/ru/bandix.po                    |  27 +-
+ 2 files changed, 584 insertions(+), 76 deletions(-)
 
 diff --git a/luci-app-bandix/htdocs/luci-static/resources/view/bandix/index.js b/luci-app-bandix/htdocs/luci-static/resources/view/bandix/index.js
 index 57f3d348..1445a984 100644
@@ -744,10 +752,50 @@ index 57f3d348..1445a984 100644
                      delete canvas.__bandixIncrementsHoverIndex;
                      var info = canvas.__bandixIncrements;
 diff --git a/luci-app-bandix/po/ru/bandix.po b/luci-app-bandix/po/ru/bandix.po
-index e24b3a82..39599204 100644
+index e24b3a82..06b0753e 100644
 --- a/luci-app-bandix/po/ru/bandix.po
 +++ b/luci-app-bandix/po/ru/bandix.po
-@@ -1578,3 +1578,18 @@ msgstr "Совпадения на странице"
+@@ -449,9 +449,6 @@ msgstr "Процент успеха"
+ msgid "Success"
+ msgstr "Успешно"
+ 
+-msgid "Failure"
+-msgstr "Ошибка"
+-
+ msgid "Top Domains"
+ msgstr "Самые запрашиваемые домены"
+ 
+@@ -470,9 +467,6 @@ msgstr "Уникальных устройств"
+ msgid "ms"
+ msgstr "мс"
+ 
+-msgid "minutes"
+-msgstr "минут"
+-
+ msgid "Unknown Device"
+ msgstr "Неизвестное устройство"
+ 
+@@ -1076,9 +1070,6 @@ msgstr "Дата начала"
+ msgid "End Date"
+ msgstr "Дата окончания"
+ 
+-msgid "Reset"
+-msgstr "Сбросить"
+-
+ msgid "Today"
+ msgstr "Сегодня"
+ 
+@@ -1262,9 +1253,6 @@ msgstr "Не настроено"
+ msgid "Blocked"
+ msgstr "Заблокировано"
+ 
+-msgid "Active"
+-msgstr "Активна"
+-
+ msgid "No quota usage data"
+ msgstr "Нет данных об использовании квоты"
+ 
+@@ -1578,3 +1566,18 @@ msgstr "Совпадения на странице"
  
  msgid "No matching connections on this page"
  msgstr "На этой странице нет подходящих соединений"
