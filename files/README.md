@@ -24,7 +24,7 @@ Lock-файл лежит в `/etc`, а не в `/root`: `/root` часто це�
 ## 1. `/etc/config/firewall`
 **Всегда:**
 - Удаляется строка `option fullcone '1'`; если модуль `nft_fullcone` есть в ядре — `defaults.fullcone='1'` ставится обратно
-- Создаются наборы адресов (ipset) fw4, если их ещё нет:
+- Создаются наборы адресов (ipset) fw4, если их ещё нет, — только там, где их используют: все три при установленном youtubeUnblock, `bypass_ips` ещё и при homeproxy:
 
 | Имя | match | loadfile | Назначение |
 |-----|-------|----------|------------|
@@ -34,6 +34,7 @@ Lock-файл лежит в `/etc`, а не в `/root`: `/root` часто це�
 
   Все наборы `family 'ipv4'`. Пустые loadfile-файлы создаются заранее: fw4 читает их на каждом reload.
   Если секция осталась от старой версии скрипта без `loadfile` — он дописывается.
+- Набор, который сборке не нужен (нет youtubeUnblock, для `bypass_ips` — нет и homeproxy), удаляется вместе с пустым loadfile-файлом. Остаётся, если в нём есть адреса (`entry` или непустой loadfile) или на него ссылается правило (`@имя` в `/etc/nftables.d/*.nft`, `/usr/share/nftables.d/*/*.nft`, `option ipset` в fw4); тогда в журнале — почему оставлен.
 
 **Если homeproxy НЕ установлен:**
 - Удаляются include-секции `homeproxy_post`, `homeproxy_forward`, `homeproxy_input` (остаются после sysupgrade с другого варианта)
@@ -242,7 +243,7 @@ sed -i 's/ct original packets ge 30 flow offload @ft/flow offload @ft/' /usr/sha
     файл переименовывается в `/opt/sqm_custom.conf.migrated`
   - `/etc/nftables.d/10-priority-mangle.nft` создаётся, если его нет: шаблон правил приоритета, все строки закомментированы
   - если модуля `act_ctinfo` нет — запись в лог (приоритеты останутся только на отдаче)
-  - SQM перезапускается, если включена хотя бы одна очередь, иначе сервис отключается
+  - SQM перезапускается, если включена хотя бы одна очередь, иначе сервис отключается. Если интерфейса очереди ещё нет (`pppoe-wan` до подключения при первой загрузке), перезапуска для неё нет: SQM запустит hotplug sqm-scripts, когда интерфейс поднимется (в журнале — строка INFO)
 
   **Что делает `cake_ctinfo.qos`.** Это `piece_of_cake.qos` с опциями `diffserv4 dual-srchost` на отдаче и
   `diffserv4 dual-dsthost ingress` на загрузке (опции из LuCI «Qdisc options» идут после и перекрывают их).
@@ -413,7 +414,7 @@ cp /etc/banner.bak /etc/banner
 | `/root/setup_log_maintenance.txt` | maintenance | лог выполнения скрипта |
 | `/root/setup.sh` | firstboot | копия скрипта из этой прошивки для режима maintenance; прежняя, если отличалась, — `/root/setup.sh.bak` |
 | `/etc/banner.bak` | всегда | бэкап оригинального баннера |
-| `/etc/luci-uploads/*.txt` | всегда | пустые loadfile для ipset |
+| `/etc/luci-uploads/*.txt` | при youtubeUnblock или homeproxy | пустые loadfile для ipset |
 | `/opt/AdGuardHome/` | если AGH есть | директория для данных |
 | `/opt/yacd/` | если homeproxy есть | панель YACD (или заглушка) |
 | `/etc/group`, `/etc/passwd` | если AGH есть и записи нет | пользователь и группа adguardhome |
