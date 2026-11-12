@@ -784,9 +784,12 @@ else
 fi
 
 # --- Наборы адресов fw4 -------------------------------------------------------
-# Создаются ВСЕГДА, независимо от варианта сборки. Причина: файлы в
-# /etc/nftables.d/ переживают sysupgrade, и ссылка на несуществующий набор
-# роняет весь fw4 reload. Пустой набор безопаснее отсутствующего.
+# Создаются там, где их используют: все три — при youtubeUnblock, bypass_ips —
+# ещё и при homeproxy (bypass_homeproxy_ips.nft). Без них наборы пустые и
+# ни на что не влияют; такие ненужные наборы удаляются ниже, после блока
+# youtubeUnblock (drop_fw_ipset), — если в них нет адресов и на них не
+# ссылаются свои правила: файлы в /etc/nftables.d/ переживают sysupgrade, и
+# ссылка на несуществующий набор роняет весь fw4 reload.
 #   dpi_ips      — youtubeUnblock: reject UDP/443 и очередь UDP на прочие порты
 #                  (TCP/443 и UDP/443 идут в очередь к любым адресам)
 #                  (наполняет fwlist-dpi.sh)
@@ -822,9 +825,41 @@ add_fw_ipset() {   # <имя> <match> <loadfile|-> <комментарий>
     fi
 }
 
-add_fw_ipset dpi_ips      dest_net /etc/luci-uploads/dpi_ip_list.txt "youtubeUnblock"
-add_fw_ipset bypass_ips   dest_net /etc/luci-uploads/bypass_ips.txt  "Bypass HomeProxy and youtubeUnblock"
-add_fw_ipset bypass_local src_net  -                                 "Bypass youtubeUnblock"
+# drop_fw_ipset <имя> — удалить набор, который этой сборке не нужен. Остаётся,
+# если в нём есть адреса (entry или непустой loadfile: списки заполняют свои
+# скрипты) или на него ссылается правило: nft-файл или option ipset в fw4.
+drop_fw_ipset() {
+    local _name="$1" _sec _file
+    _sec=$(uci show firewall | grep -F ".name='${_name}'" | head -n 1 | cut -d. -f2)
+    [ -n "$_sec" ] && [ "$(uci -q get "firewall.${_sec}")" = "ipset" ] || return 0
+    _file=$(uci -q get "firewall.${_sec}.loadfile")
+    if [ -n "$(uci -q get "firewall.${_sec}.entry")" ] || { [ -n "$_file" ] && [ -s "$_file" ]; }; then
+        log_info "ipset $_name: этой сборке не нужен, но в нём есть адреса — оставлен"
+        return 0
+    fi
+    if grep -qsE "@${_name}([^A-Za-z0-9_]|\$)" /etc/nftables.d/*.nft /usr/share/nftables.d/*/*.nft \
+       || uci show firewall | grep -qE "\.ipset='!?${_name}([ ']|\$)"; then
+        log_info "ipset $_name: этой сборке не нужен, но на него ссылается правило — оставлен"
+        return 0
+    fi
+    uci delete "firewall.${_sec}"
+    FIREWALL_CONFIG_CHANGED=1
+    [ -n "$_file" ] && [ -f "$_file" ] && [ ! -s "$_file" ] && rm -f "$_file"
+    log_ok "ipset $_name удалён: в этой сборке его ничто не использует"
+}
+
+# Те же условия, что у блоков ниже и выше: /usr/bin/youtubeUnblock, /etc/init.d/homeproxy
+YTB_SETS=0; [ -x "/usr/bin/youtubeUnblock" ] && YTB_SETS=1
+BYPASS_SET=$YTB_SETS; [ -f "/etc/init.d/homeproxy" ] && BYPASS_SET=1
+if [ "$YTB_SETS" = 1 ]; then
+    add_fw_ipset dpi_ips      dest_net /etc/luci-uploads/dpi_ip_list.txt "youtubeUnblock"
+fi
+if [ "$BYPASS_SET" = 1 ]; then
+    add_fw_ipset bypass_ips   dest_net /etc/luci-uploads/bypass_ips.txt  "Bypass HomeProxy and youtubeUnblock"
+fi
+if [ "$YTB_SETS" = 1 ]; then
+    add_fw_ipset bypass_local src_net  -                                 "Bypass youtubeUnblock"
+fi
 
 [ "$FIREWALL_CONFIG_CHANGED" = 1 ] && uci commit firewall && log_ok "Firewall сохранён"
 
@@ -932,6 +967,13 @@ else
             rm -f /usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft
     fi
 fi
+
+# Ненужные этой сборке наборы — после удаления 537-youtubeUnblock.nft выше:
+# пока файл есть, он ссылается на наборы
+FIREWALL_CONFIG_CHANGED=0
+[ "$YTB_SETS" = 1 ] || { drop_fw_ipset dpi_ips; drop_fw_ipset bypass_local; }
+[ "$BYPASS_SET" = 1 ] || drop_fw_ipset bypass_ips
+[ "$FIREWALL_CONFIG_CHANGED" = 1 ] && uci commit firewall && log_ok "Firewall сохранён"
 
 # internet-detector
 # Служба выключена: детектор работает в режиме «Web UI only» (mode 2) — rpcd
@@ -1335,7 +1377,19 @@ NFT
 
     # Включена хотя бы одна очередь (не только первая в списке)
     if uci -q show sqm | grep -q "^sqm\.[^.]*\.enabled='1'\$"; then
-        run_cmd "Перезапуск SQM" /etc/init.d/sqm restart
+        # Интерфейса очереди ещё нет (pppoe-wan до подключения при первой
+        # загрузке) — SQM запустит hotplug sqm-scripts, когда он поднимется;
+        # restart сейчас дал бы в журнале «SQM: ERROR: … does currently not exist»
+        SQM_IFACES=""; SQM_MISSING=""
+        for _q in $(uci -q show sqm | sed -n "s/^sqm\.\([^.]*\)\.enabled='1'\$/\1/p"); do
+            _dev=$(uci -q get "sqm.${_q}.interface")
+            [ -n "$_dev" ] || continue
+            if [ -e "/sys/class/net/$_dev" ]; then SQM_IFACES="$SQM_IFACES $_dev"; else SQM_MISSING="$SQM_MISSING $_dev"; fi
+        done
+        if [ -n "$SQM_IFACES" ]; then
+            run_cmd "Перезапуск SQM" /etc/init.d/sqm restart
+        fi
+        [ -z "$SQM_MISSING" ] || log_info "SQM на$SQM_MISSING запустится, когда интерфейс появится (hotplug sqm-scripts)"
     else
         /etc/init.d/sqm disable 2>/dev/null
     fi
