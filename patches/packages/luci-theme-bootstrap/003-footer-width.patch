@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 12:00:00 +0000
+Subject: [PATCH] luci-theme-bootstrap: footer as wide as the header
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The header and the page content are 1180 px wide, the footer was
+padded for 940 px, so on wide screens the footer text started 120 px
+to the right of the header and the content (checked in Chromium at
+1400 px: 230 px instead of 110 px from the left edge).
+
+The same change is in LuCI master.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Uo9XQuT7u6ShTYdi2S3Anq
+---
+ htdocs/luci-static/bootstrap/cascade.css | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/htdocs/luci-static/bootstrap/cascade.css b/htdocs/luci-static/bootstrap/cascade.css
+index c1b214fc..384b1354 100644
+--- a/htdocs/luci-static/bootstrap/cascade.css
++++ b/htdocs/luci-static/bootstrap/cascade.css
+@@ -1371,8 +1371,8 @@ footer {
+ 	font-size: 12px;
+ 	color: var(--text-color-medium);
+ 	/* the redundant properties below work around a csstidy bug */
+-	padding-left: calc((100% - 940px) / 2);
+-	padding-right: calc((100% - 940px) / 2);
++	padding-left: calc((100% - 1180px) / 2);
++	padding-right: calc((100% - 1180px) / 2);
+ }
+ 
+ footer a {
+-- 
+2.43.0
+

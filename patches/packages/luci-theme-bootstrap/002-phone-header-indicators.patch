@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 12:00:00 +0000
+Subject: [PATCH] luci-theme-bootstrap: header indicators on phones
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+On screens up to 854 px the indicators in the header (automatic
+refresh, unsaved changes) were limited to 20% of the header width, so
+every indicator wrapped to two or three lines and the header grew
+higher. Without the flex limit the indicators take the width of their
+text; checked in Chromium at 390 px: the indicator column is 141 px
+instead of 102 px and the header 55 px instead of 67 px high.
+
+The same change is in LuCI master.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Uo9XQuT7u6ShTYdi2S3Anq
+---
+ htdocs/luci-static/bootstrap/mobile.css | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/htdocs/luci-static/bootstrap/mobile.css b/htdocs/luci-static/bootstrap/mobile.css
+index c6d02b22..435e46b4 100644
+--- a/htdocs/luci-static/bootstrap/mobile.css
++++ b/htdocs/luci-static/bootstrap/mobile.css
+@@ -279,7 +279,6 @@ header h3 a, header .brand {
+ 	}
+ 
+ 	header .pull-right {
+-		flex: 0 1 20%;
+ 		display: flex;
+ 		flex-direction: column;
+ 		padding: 0;
+-- 
+2.43.0
+

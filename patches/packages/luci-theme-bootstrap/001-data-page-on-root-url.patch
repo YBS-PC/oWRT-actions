@@ -1,0 +1,40 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 12:00:00 +0000
+Subject: [PATCH] luci-theme-bootstrap: data-page on the root URL
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+data-page on <body> was built from ctx.request_path only. When LuCI is
+opened by its root URL, which is also where the login redirects to,
+the request path is empty and data-page was blank, so the rules of the
+theme for a given page (for example the phone layout of the status
+overview tables in mobile.css) did not apply until the page was opened
+again by its own URL. ctx.path, the resolved route, is used when the
+request path is empty.
+
+The same change is in LuCI master.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Uo9XQuT7u6ShTYdi2S3Anq
+---
+ ucode/template/themes/bootstrap/header.ut | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/ucode/template/themes/bootstrap/header.ut b/ucode/template/themes/bootstrap/header.ut
+index 3486a412..a7bbf298 100644
+--- a/ucode/template/themes/bootstrap/header.ut
++++ b/ucode/template/themes/bootstrap/header.ut
+@@ -45,7 +45,7 @@
+ 		<script src="{{ resource }}/cbi.js"></script>
+ 	</head>
+ 
+-	<body class="lang_{{ dispatcher.lang }} {{ entityencode(striptags(node?.title ?? ''), true) }}" data-page="{{ entityencode(join('-', ctx.request_path), true) }}">
++	<body class="lang_{{ dispatcher.lang }} {{ entityencode(striptags(node?.title ?? ''), true) }}" data-page="{{ entityencode(join('-', length(ctx.request_path) ? ctx.request_path : ctx.path), true) }}">
+ 		{% if (!blank_page): %}
+ 		<header>
+ 			<a class="brand" href="/">{{ striptags(boardinfo.hostname ?? '?') }}</a>
+-- 
+2.43.0
+
