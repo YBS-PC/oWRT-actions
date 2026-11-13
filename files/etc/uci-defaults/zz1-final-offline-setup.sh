@@ -797,37 +797,29 @@ fi
 #                  И обход очереди youtubeUnblock для UDP кроме 443 (наполняет fwlist-bypass.sh)
 #   bypass_local — обход очереди youtubeUnblock по адресу ИСТОЧНИКА, отсюда
 #                  match=src_net, а не dest_net
-# loadfile обязателен: без него набор создаётся пустым и файлы из
-# /etc/luci-uploads/ не читаются никогда — обход молча не работает.
+# Новый набор создаётся без loadfile и без файла: файл включения (loadfile)
+# подключается вручную (LuCI: «Наборы IP-адресов» → «Файл включения»).
+# Существующая секция не меняется: указанный в ней loadfile остаётся.
+# Каталог — для загрузки файлов из LuCI (по умолчанию он в /etc/luci-uploads).
 mkdir -p /etc/luci-uploads
 FIREWALL_CONFIG_CHANGED=0
 
-add_fw_ipset() {   # <имя> <match> <loadfile|-> <комментарий>
-    local _name="$1" _match="$2" _file="$3" _cmt="$4" _sec _h
-    # fw4 читает loadfile при каждом reload; пустой файл безопаснее отсутствующего
-    [ "$_file" != "-" ] && [ ! -f "$_file" ] && : > "$_file"
-    # cut по точкам даёт id секции и для анонимной (@ipset[0]), и для именованной
-    _sec=$(uci show firewall | grep -F ".name='${_name}'" | head -n 1 | cut -d. -f2)
-    if [ -z "$_sec" ]; then
-        _h=$(uci add firewall ipset)
-        uci set firewall."$_h".name="$_name"
-        uci set firewall."$_h".match="$_match"
-        uci set firewall."$_h".family="ipv4"
-        uci set firewall."$_h".comment="$_cmt"
-        [ "$_file" != "-" ] && uci set firewall."$_h".loadfile="$_file"
-        FIREWALL_CONFIG_CHANGED=1
-        log_ok "ipset $_name создан"
-    elif [ "$_file" != "-" ] && [ -z "$(uci -q get "firewall.${_sec}.loadfile")" ]; then
-        # секция осталась от старой версии скрипта — дополняем, не пересоздаём
-        uci set firewall."$_sec".loadfile="$_file"
-        FIREWALL_CONFIG_CHANGED=1
-        log_ok "ipset $_name: добавлен loadfile"
-    fi
+add_fw_ipset() {   # <имя> <match> <комментарий>
+    local _name="$1" _match="$2" _cmt="$3" _h
+    # секция с таким именем уже есть — оставляем как есть
+    uci show firewall | grep -qF ".name='${_name}'" && return 0
+    _h=$(uci add firewall ipset)
+    uci set firewall."$_h".name="$_name"
+    uci set firewall."$_h".match="$_match"
+    uci set firewall."$_h".family="ipv4"
+    uci set firewall."$_h".comment="$_cmt"
+    FIREWALL_CONFIG_CHANGED=1
+    log_ok "ipset $_name создан (без файла включения)"
 }
 
 # drop_fw_ipset <имя> — удалить набор, который этой сборке не нужен. Остаётся,
-# если в нём есть адреса (entry или непустой loadfile: списки заполняют свои
-# скрипты) или на него ссылается правило: nft-файл или option ipset в fw4.
+# если в нём есть адреса (entry или непустой loadfile) или на него ссылается
+# правило: nft-файл или option ipset в fw4. Файл loadfile не удаляется.
 drop_fw_ipset() {
     local _name="$1" _sec _file
     _sec=$(uci show firewall | grep -F ".name='${_name}'" | head -n 1 | cut -d. -f2)
@@ -844,7 +836,6 @@ drop_fw_ipset() {
     fi
     uci delete "firewall.${_sec}"
     FIREWALL_CONFIG_CHANGED=1
-    [ -n "$_file" ] && [ -f "$_file" ] && [ ! -s "$_file" ] && rm -f "$_file"
     log_ok "ipset $_name удалён: в этой сборке его ничто не использует"
 }
 
@@ -852,13 +843,13 @@ drop_fw_ipset() {
 YTB_SETS=0; [ -x "/usr/bin/youtubeUnblock" ] && YTB_SETS=1
 BYPASS_SET=$YTB_SETS; [ -f "/etc/init.d/homeproxy" ] && BYPASS_SET=1
 if [ "$YTB_SETS" = 1 ]; then
-    add_fw_ipset dpi_ips      dest_net /etc/luci-uploads/dpi_ip_list.txt "youtubeUnblock"
+    add_fw_ipset dpi_ips      dest_net "youtubeUnblock"
 fi
 if [ "$BYPASS_SET" = 1 ]; then
-    add_fw_ipset bypass_ips   dest_net /etc/luci-uploads/bypass_ips.txt  "Bypass HomeProxy and youtubeUnblock"
+    add_fw_ipset bypass_ips   dest_net "Bypass HomeProxy and youtubeUnblock"
 fi
 if [ "$YTB_SETS" = 1 ]; then
-    add_fw_ipset bypass_local src_net  -                                 "Bypass youtubeUnblock"
+    add_fw_ipset bypass_local src_net  "Bypass youtubeUnblock"
 fi
 
 [ "$FIREWALL_CONFIG_CHANGED" = 1 ] && uci commit firewall && log_ok "Firewall сохранён"
