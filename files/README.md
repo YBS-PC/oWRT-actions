@@ -26,15 +26,15 @@ Lock-файл лежит в `/etc`, а не в `/root`: `/root` часто це�
 - Удаляется строка `option fullcone '1'`; если модуль `nft_fullcone` есть в ядре — `defaults.fullcone='1'` ставится обратно
 - Создаются наборы адресов (ipset) fw4, если их ещё нет, — только там, где их используют: все три при установленном youtubeUnblock, `bypass_ips` ещё и при homeproxy:
 
-| Имя | match | loadfile | Назначение |
-|-----|-------|----------|------------|
-| `dpi_ips` | `dest_net` | `/etc/luci-uploads/dpi_ip_list.txt` | адреса для youtubeUnblock |
-| `bypass_ips` | `dest_net` | `/etc/luci-uploads/bypass_ips.txt` | исключения: метка `0x64` (мимо homeproxy) и пропуск очереди youtubeUnblock для UDP кроме 443 (порт 443 идёт в очередь всегда) |
-| `bypass_local` | `src_net` | — | пропуск очереди youtubeUnblock по адресу источника |
+| Имя | match | Назначение |
+|-----|-------|------------|
+| `dpi_ips` | `dest_net` | адреса для youtubeUnblock |
+| `bypass_ips` | `dest_net` | исключения: метка `0x64` (мимо homeproxy) и пропуск очереди youtubeUnblock для UDP кроме 443 (порт 443 идёт в очередь всегда) |
+| `bypass_local` | `src_net` | пропуск очереди youtubeUnblock по адресу источника |
 
-  Все наборы `family 'ipv4'`. Пустые loadfile-файлы создаются заранее: fw4 читает их на каждом reload.
-  Если секция осталась от старой версии скрипта без `loadfile` — он дописывается.
-- Набор, который сборке не нужен (нет youtubeUnblock, для `bypass_ips` — нет и homeproxy), удаляется вместе с пустым loadfile-файлом. Остаётся, если в нём есть адреса (`entry` или непустой loadfile) или на него ссылается правило (`@имя` в `/etc/nftables.d/*.nft`, `/usr/share/nftables.d/*/*.nft`, `option ipset` в fw4); тогда в журнале — почему оставлен.
+  Все наборы `family 'ipv4'`. Новый набор создаётся пустым, без `loadfile`: файл включения подключается вручную (LuCI: «Наборы IP-адресов» → «Файл включения»), сам файл скрипт не создаёт.
+  Существующая секция не меняется: указанный в ней `loadfile` остаётся. Создаётся только каталог `/etc/luci-uploads` (туда LuCI загружает файлы).
+- Набор, который сборке не нужен (нет youtubeUnblock, для `bypass_ips` — нет и homeproxy), удаляется. Остаётся, если в нём есть адреса (`entry` или непустой loadfile) или на него ссылается правило (`@имя` в `/etc/nftables.d/*.nft`, `/usr/share/nftables.d/*/*.nft`, `option ipset` в fw4); тогда в журнале — почему оставлен. Файл loadfile не удаляется.
 
 **Если homeproxy НЕ установлен:**
 - Удаляются include-секции `homeproxy_post`, `homeproxy_forward`, `homeproxy_input` (остаются после sysupgrade с другого варианта)
@@ -414,7 +414,7 @@ cp /etc/banner.bak /etc/banner
 | `/root/setup_log_maintenance.txt` | maintenance | лог выполнения скрипта |
 | `/root/setup.sh` | firstboot | копия скрипта из этой прошивки для режима maintenance; прежняя, если отличалась, — `/root/setup.sh.bak` |
 | `/etc/banner.bak` | всегда | бэкап оригинального баннера |
-| `/etc/luci-uploads/*.txt` | при youtubeUnblock или homeproxy | пустые loadfile для ipset |
+| `/etc/luci-uploads/` | всегда | каталог для файлов, загруженных из LuCI (файлы скрипт не создаёт) |
 | `/opt/AdGuardHome/` | если AGH есть | директория для данных |
 | `/opt/yacd/` | если homeproxy есть | панель YACD (или заглушка) |
 | `/etc/group`, `/etc/passwd` | если AGH есть и записи нет | пользователь и группа adguardhome |
