@@ -96,9 +96,9 @@
 | `feeds/luciappbandixplus/` | [timsaya/luci-app-bandix-plus](https://github.com/timsaya/luci-app-bandix-plus) | [`c4f002f`](https://github.com/timsaya/luci-app-bandix-plus/commit/c4f002f74f3a0f4aeb79fb5d35f5a7bbd3392a1f) | 21.10.2026 |
 | `feeds/luciappxray/` | [yichya/luci-app-xray](https://github.com/yichya/luci-app-xray) | [`4d5a6fd`](https://github.com/yichya/luci-app-xray/commit/4d5a6fd7fc4d2fbbcd7f70f1319da06b91ec1d56) | 22.09.2026 |
 | `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`0c8a895`](https://github.com/yandexru45/netshift/commit/0c8a89535a897b43b50b15c3f0c8991df242bb24) | 07.11.2026 |
-| `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`7aeb0aa`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/7aeb0aa4e10246115f6a568b5c69bca122c75794) | 11.11.2026 |
+| `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`dd77a23`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/dd77a236c7ee46b2b3899e1951668fdc88c13c57) | 13.11.2026 |
 | `feeds/podkop/` | [itdoginfo/podkop](https://github.com/itdoginfo/podkop) | [`c654bf5`](https://github.com/itdoginfo/podkop/commit/c654bf5da75309754e3fb63b9441981db65fff68) | 24.10.2026 |
-| `feeds/tachyon/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) | [`606b200`](https://github.com/Dushnilin/tachyon/commit/606b2007f798ea6aa73da47222677eb399d4c518) | 11.11.2026 |
+| `feeds/tachyon/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) | [`ddff5c1`](https://github.com/Dushnilin/tachyon/commit/ddff5c136d7c8c8206c5e6d557d55a5ac5e7ac54) | 13.11.2026 |
 | `packages/luci-app-commands/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`75a306d`](https://github.com/openwrt/luci/commit/75a306df84a020c57a631ef5b4c02ace56d93387) | 15.10.2026 |
 | `packages/luci-app-filemanager/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`e969939`](https://github.com/openwrt/luci/commit/e969939b49167516e219d465df8030d98d443d67) | 31.10.2026 |
 | `packages/luci-theme-bootstrap/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`b2e0be4`](https://github.com/openwrt/luci/commit/b2e0be4b46ec0fd43394c081fa7c50657af14011) | 11.11.2026 |
@@ -462,7 +462,7 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
 
 Вариант `passwall`, фид [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2).
 
-Патчи сняты с коммита [`7aeb0aa`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/7aeb0aa4e10246115f6a568b5c69bca122c75794) от 11.11.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`dd77a23`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/dd77a236c7ee46b2b3899e1951668fdc88c13c57) от 13.11.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Соединения после перезапуска.** Пока passwall2 перезапускается,
   правил нет, и новые соединения из сети уходят напрямую. После запуска
@@ -531,7 +531,7 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
 С другим значением `sb` в образ идёт выбранное ядро, артефакт не
 шифруется.
 
-Патчи сняты с коммита [`606b200`](https://github.com/Dushnilin/tachyon/commit/606b2007f798ea6aa73da47222677eb399d4c518) от 11.11.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`ddff5c1`](https://github.com/Dushnilin/tachyon/commit/ddff5c136d7c8c8206c5e6d557d55a5ac5e7ac54) от 13.11.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Удаление пакета.** Скрипт удаления tachyon написан на ucode, а
   сборка OpenWrt выполняет его как shell (apk — в своём скрипте удаления,
