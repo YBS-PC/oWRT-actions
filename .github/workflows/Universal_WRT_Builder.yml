@@ -824,19 +824,28 @@ jobs:
                 echo "::error title=hiddify-core::Не найдена архитектура пакетов в config/conf/${M_TARGET}"
                 exit 1
             fi
-            SB_TAG=$(git ls-remote --tags --refs "https://github.com/${SB_REPO}.git" 2>/dev/null \
+            HD_TAGS=$(git ls-remote --tags --refs "https://github.com/${SB_REPO}.git" 2>/dev/null \
                 | awk '{print $2}' | sed 's|refs/tags/||' \
-                | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
-            if [ -z "$SB_TAG" ]; then
+                | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -Vr | head -n3)
+            if [ -z "$HD_TAGS" ]; then
                 echo "::error title=hiddify-core::Не найден ни один релиз ${SB_REPO} (теги vX.Y.Z)"
                 exit 1
             fi
+            # Тег появляется раньше пакетов релиза: без пакета берётся предыдущий тег (до трёх).
             # hiddify-core_5.5.5_aarch64_generic.ipk
-            HD_ASSET="hiddify-core_${SB_TAG#v}_${HD_ARCH}.ipk"
-            SB_URL="https://github.com/${SB_REPO}/releases/download/${SB_TAG}/${HD_ASSET}"
             HD_UNPACK=$(mktemp -d)
-            if ! curl -fsSL --retry 3 -o "$HD_UNPACK/hd.ipk" "$SB_URL" || [ ! -s "$HD_UNPACK/hd.ipk" ]; then
-                echo "::error title=hiddify-core::Не удалось скачать $SB_URL (нет сборки для $HD_ARCH?)"
+            SB_TAG=""
+            for HD_T in $HD_TAGS; do
+                HD_ASSET="hiddify-core_${HD_T#v}_${HD_ARCH}.ipk"
+                SB_URL="https://github.com/${SB_REPO}/releases/download/${HD_T}/${HD_ASSET}"
+                if curl -fsSL --retry 3 -o "$HD_UNPACK/hd.ipk" "$SB_URL" && [ -s "$HD_UNPACK/hd.ipk" ]; then
+                    SB_TAG="$HD_T"
+                    break
+                fi
+                echo "::warning title=hiddify-core::Не удалось скачать $SB_URL (пакетов релиза ещё нет или нет сборки для $HD_ARCH), пробую предыдущий тег"
+            done
+            if [ -z "$SB_TAG" ]; then
+                echo "::error title=hiddify-core::Ни в одном из тегов $(echo $HD_TAGS) нет пакета для $HD_ARCH"
                 rm -rf "$HD_UNPACK"
                 exit 1
             fi
