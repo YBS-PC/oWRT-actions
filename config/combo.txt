@@ -37,8 +37,8 @@ nanopi-r6s    homeproxy     latest  extended       false    true  true     true
 nanopi-r6s    podkop        latest  podkop-engine  false    true  true     true
 nanopi-r6s    netshift      latest  extended       false    true  true     true
 nanopi-r6s    forkop        latest  forkop-base    false    true  true     true
-nanopi-r6s    tachyon       latest  default        default  true  true     true
-nanopi-r6s    rehomeproxy   latest  hiddify        default  true  true     true
+nanopi-r6s    tachyon       latest  default        false    true  true     true
+nanopi-r6s    rehomeproxy   latest  hiddify        false    true  true     true
 rb5009        clear         no      no             false    true  true     true
 rb5009        switch        no      no             false    true  true     true
 
