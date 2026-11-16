@@ -285,17 +285,27 @@ chain priority_mangle_prerouting_dscp {
 - **`/etc/config/attendedsysupgrade`**: `server.url` через `uci set` — на OpenWrt `https://sysupgrade.openwrt.org`, на ImmortalWrt `https://sysupgrade.kyarucloud.moe` (адрес из пакета ImmortalWrt; прежний `asu-2.kyarucloud.moe` не отвечает)
 
 ## 12. `/etc/sysctl.conf`
-**Если модуль `tcp_bbr` найден в ядре** — старые строки с этими параметрами удаляются, в конец файла добавляется:
+**Если модуль `tcp_bbr` найден в ядре** — свой прежний блок `# TCP BBR` (строки
+`default_qdisc = fq_codel` или `fq`, `tcp_congestion_control = bbr`) и строки
+`tcp_congestion_control = bbr` вне него удаляются, в конец файла добавляется:
 ```
 # TCP BBR
 net.core.default_qdisc = fq_codel
 net.ipv4.tcp_congestion_control = bbr
 ```
 
-**Чтобы откатить:**
+**Своя строка `net.ipv4.tcp_congestion_control`** с другим значением (вне блока
+или исправленная внутри него) не трогается, и блок тогда не добавляется
+(в журнале — «TCP BBR не включается: … своя строка …»). `/etc/sysctl.conf`
+сохраняется при перепрошивке, поэтому одной строки достаточно навсегда.
+
+**Чтобы отказаться от BBR:** в блоке заменить `bbr` на `cubic` (или вписать
+строку `net.ipv4.tcp_congestion_control = cubic`) и применить:
 ```sh
-sed -i '/# TCP BBR/d; /net\.core\.default_qdisc/d; /net\.ipv4\.tcp_congestion_control/d' /etc/sysctl.conf
+sysctl -w net.ipv4.tcp_congestion_control=cubic
 ```
+В варианте `tachyon` ещё выключить его настройку «TCP BBR»: иначе tachyon
+включает BBR сам.
 
 **Если в ядре есть MPTCP** (`/proc/sys/net/mptcp/enabled`) и в файле ещё нет
 строки `net.mptcp.enabled`, в конец добавляется:
