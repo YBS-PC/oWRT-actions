@@ -1420,11 +1420,34 @@ if [ -f /proc/sys/net/mptcp/enabled ]; then
 fi
 
 # TCP BBR
+# Блок «# TCP BBR» этого скрипта пересоздаётся при каждом запуске: из него
+# убираются строки со своими значениями (default_qdisc = fq_codel или fq,
+# tcp_congestion_control = bbr), а «tcp_congestion_control = bbr» — и вне
+# блока. Строка net.ipv4.tcp_congestion_control с другим значением (например,
+# = cubic, в том числе исправленная внутри блока) не трогается, и блок тогда
+# не добавляется: так от BBR отказываются насовсем — /etc/sysctl.conf
+# сохраняется при перепрошивке.
 if [ -f "/lib/modules/$(uname -r)/tcp_bbr.ko" ] || grep -q bbr /proc/sys/net/ipv4/tcp_available_congestion_control; then
-    sed -i '/# TCP BBR/d; /net\.core\.default_qdisc.*fq/d; /net\.ipv4\.tcp_congestion_control.*bbr/d' /etc/sysctl.conf
+    _SYSCTL_TMP="/tmp/zz1-sysctl.$$"
+    if awk '
+        /^[[:space:]]*#[[:space:]]*TCP BBR[[:space:]]*$/ { blk = 1; next }
+        blk && /^[[:space:]]*-?net[.\/]core[.\/]default_qdisc[[:space:]]*=[[:space:]]*fq(_codel)?[[:space:]]*$/ { next }
+        { blk = 0 }
+        /^[[:space:]]*-?net[.\/]ipv4[.\/]tcp_congestion_control[[:space:]]*=[[:space:]]*bbr[[:space:]]*$/ { next }
+        /^[[:space:]]*$/ { if (pb) next; pb = 1; print; next }
+        { pb = 0; print }
+    ' /etc/sysctl.conf > "$_SYSCTL_TMP" 2>/dev/null; then
+        cat "$_SYSCTL_TMP" > /etc/sysctl.conf
+    fi
+    rm -f "$_SYSCTL_TMP"
     sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' /etc/sysctl.conf
-    echo -e "\n# TCP BBR\nnet.core.default_qdisc = fq_codel\nnet.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.conf
-    log_ok "TCP BBR включён"
+    _CC_OWN=$(sed -n 's/^[[:space:]]*-\{0,1\}net[./]ipv4[./]tcp_congestion_control[[:space:]]*=[[:space:]]*\([^[:space:]#]*\).*/\1/p' /etc/sysctl.conf | tail -n 1)
+    if [ -n "$_CC_OWN" ]; then
+        log_info "TCP BBR не включается: в /etc/sysctl.conf своя строка net.ipv4.tcp_congestion_control = $_CC_OWN"
+    else
+        echo -e "\n# TCP BBR\nnet.core.default_qdisc = fq_codel\nnet.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.conf
+        log_ok "TCP BBR включён"
+    fi
 fi
 
 
