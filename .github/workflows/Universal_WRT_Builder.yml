@@ -2251,34 +2251,52 @@ jobs:
           /workdir/openwrt/staging_dir/${{ steps.tc_key.outputs.tc }}
         key: ${{ steps.tc_key.outputs.key }}
 
-    - name: Save Bootloader files (Deep Search)
+    - name: Save Bootloader files
+      # Справочник: раздел «Конвейер сборки», пункт «Bootloader-файлы».
       run: |
         cd openwrt
-        mkdir -p bin/u-boot-files
-        
-        echo ">>> Starting deep search for Bootloader binaries..."
-        
-        # 1. Прямой поиск специфичных файлов для Rockchip (R5S, R6S)
-        # Мы ищем прямо в папке, где они компилировались (build_dir)
-        find build_dir/target-* -name "idbloader.img" -type f -exec cp -vf {} bin/u-boot-files/ \;
-        find build_dir/target-* -name "u-boot.itb" -type f -exec cp -vf {} bin/u-boot-files/ \;
-        
-        # 2. Прямой поиск для MediaTek (Filogic/SlateAX/AX59U)
-        # Обычно это файлы с расширением .fip или .bin внутри папки u-boot
-        find build_dir/target-* -name "*.fip" -type f -exec cp -vf {} bin/u-boot-files/ \;
-        find build_dir/target-* -name "u-boot.bin" -type f -path "*/u-boot-*" -exec cp -vf {} bin/u-boot-files/ \;
+        OUT=bin/u-boot-files
+        mkdir -p "$OUT"
+        # Rockchip (R5S, R6S): build_dir/target-*/u-boot-<плата>/u-boot-<версия>/. Образ пишет
+        # u-boot-rockchip.bin с сектора 64: idbloader.img там же, u-boot.itb — с сектора 16384.
+        # u-boot.bin без первой ступени (idbloader) отсюда не берётся.
+        for d in build_dir/target-*/u-boot-*/u-boot-*/; do
+            [ -f "${d}u-boot-rockchip.bin" ] || continue
+            b=$(basename "$(dirname "$d")"); b=${b#u-boot-}
+            for f in u-boot-rockchip.bin idbloader.img u-boot.itb; do
+                [ -f "$d$f" ] && cp -vf "$d$f" "$OUT/$b-$f"
+            done
+        done
+        # MediaTek: FIP и u-boot.bin из каталогов сборки (кроме каталогов rockchip)
+        find build_dir/target-* -name "*.fip" -type f -exec cp -vf {} "$OUT"/ \;
+        find build_dir/target-* -name "u-boot.bin" -type f -path "*/u-boot-*" | while read -r f; do
+            [ -f "$(dirname "$f")/u-boot-rockchip.bin" ] || cp -vf "$f" "$OUT"/
+        done
+        if [ -z "$(ls -A "$OUT")" ]; then
+            rmdir "$OUT"
+            echo "Загрузчик в этой сборке не собирается — папки u-boot-files нет."
+            exit 0
+        fi
+        # Суммы и версии: по ним видно, какой это U-Boot и что файл не изменился
+        (
+            cd "$OUT"
+            rm -f SHA256SUMS VERSIONS.txt
+            set -- *
+            sha256sum -- "$@" > SHA256SUMS
+            {
+                echo "# Строка версии U-Boot в каждом файле (SPL — первая ступень)"
+                for f in "$@"; do
+                    v=$(strings -a "$f" | grep -m1 -E '^U-Boot 20[0-9]{2}\.[0-9]{2}' \
+                        || strings -a "$f" | grep -m1 -E '^U-Boot SPL 20[0-9]{2}\.[0-9]{2}' || true)
+                    echo "$f: ${v:-версия не найдена}"
+                done
+            } > VERSIONS.txt
+        )
+        echo "=========================================="
+        ls -lh "$OUT"/
+        cat "$OUT/VERSIONS.txt"
+        echo "=========================================="
 
-        # 3. Дополнительный поиск, если файлы уже переименованы системой
-        # Ищем в папке bin/targets, исключая пакеты (.apk/.ipk)
-        find bin/targets -type f -name "*idbloader.img" -exec cp -vf {} bin/u-boot-files/ \;
-        find bin/targets -type f -name "*u-boot.itb" -exec cp -vf {} bin/u-boot-files/ \;
-        find bin/targets -type f -name "u-boot.elf" -exec cp -vf {} bin/u-boot-files/ \;
-        
-        echo ">>> ------------------------------------------------"
-        echo ">>> SAVED BOOTLOADER FILES:"
-        ls -lh bin/u-boot-files/
-        echo ">>> ------------------------------------------------"
-    
     - name: Generate Date
       id: get_date
       # always(): нужно, чтобы при падении Compile имя артефакта не теряло дату.
