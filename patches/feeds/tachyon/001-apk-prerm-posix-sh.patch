@@ -16,7 +16,7 @@ from PKG_UPGRADE, set by opkg on an upgrade; apk runs pre-deinstall
 only on removal.
 
 diff --git a/tachyon/Makefile b/tachyon/Makefile
-index dbc4809a..43cf3ec5 100644
+index 7079a7a1..0c6f0cc4 100644
 --- a/tachyon/Makefile
 +++ b/tachyon/Makefile
 @@ -41,30 +41,25 @@ endef
