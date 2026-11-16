@@ -1,0 +1,223 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 16 Nov 2026 12:00:00 +0000
+Subject: [PATCH] tcp_bbr: default qdisc fq_codel, restore the system values when off
+
+With tcp_bbr on, apply_tcp_bbr_tuning set net.core.default_qdisc=fq
+(fq_codel only when fq was unavailable). A router mostly forwards
+traffic, and fq has no queue management (CoDel) for it; fq_codel is the
+OpenWrt default. BBR does not need fq for pacing since Linux 4.13: the
+TCP stack paces with any qdisc. The qdisc is now fq_codel, and the
+sch_fq module is no longer loaded; BBR is set as before.
+
+With tcp_bbr off, the function wrote fixed values,
+tcp_congestion_control=cubic and default_qdisc=fq_codel, on every apply.
+This replaced the values set by the system itself, e.g. BBR from
+/etc/sysctl.conf. It now restores what the system sets without tachyon:
+the sysctl init script applies /etc/sysctl.d/*.conf in name order, then
+/etc/sysctl.conf, and the last assignment wins (99-tachyon-bbr.conf is
+skipped); nothing set there gives the kernel default, cubic and
+fq_codel, as before. TACHYON_SYSCTL_CONF_DIR and TACHYON_SYSCTL_CONF
+override the paths for tests.
+
+tests/tcp_bbr_and_hidden.sh: expectations for fq_codel; new cases for
+an fq left by an older build, for the values from sysctl.d and
+sysctl.conf, and for no writes when the system values are in place.
+
+diff --git a/tachyon/files/usr/lib/nft/apply.uc b/tachyon/files/usr/lib/nft/apply.uc
+index e8d9a847..987f18d9 100644
+--- a/tachyon/files/usr/lib/nft/apply.uc
++++ b/tachyon/files/usr/lib/nft/apply.uc
+@@ -4436,21 +4436,83 @@ function tcp_avail_cc_has(path, algo) {
+     return false;
+ }
+ 
++// Value of KEY in one sysctl config file (the last assignment in it), or null.
++// Same syntax as sysctl -p: "key = value", "#" and ";" comments, a leading "-"
++// (ignore errors) before the key, "/" allowed instead of "." in the key.
++function sysctl_conf_value(path, key) {
++    let data = fs.readfile(path);
++    if (data == null)
++        return null;
++    let found = null;
++    for (let line in split(as_string(data), "\n")) {
++        line = trim(line);
++        let first = substr(line, 0, 1);
++        if (line == "" || first == "#" || first == ";")
++            continue;
++        let eq = index(line, "=");
++        if (eq < 1)
++            continue;
++        let name = trim(substr(line, 0, eq));
++        if (substr(name, 0, 1) == "-")
++            name = trim(substr(name, 1));
++        if (replace(name, /\//g, ".") == key)
++            found = trim(substr(line, eq + 1));
++    }
++    return found;
++}
++
++// The value the system itself sets for KEY, without this service: the sysctl
++// init script applies /etc/sysctl.d/*.conf in name order, then /etc/sysctl.conf,
++// so the last assignment wins. Our own conf (own_conf) is skipped. Nothing set
++// there — FALLBACK, the kernel default (OpenWrt: fq_codel, cubic).
++function sysctl_baseline(key, fallback, own_conf) {
++    let dir = as_string(getenv("TACHYON_SYSCTL_CONF_DIR") || "");
++    let conf = as_string(getenv("TACHYON_SYSCTL_CONF") || "");
++    if (!is_sysctl_mock_env()) {
++        if (dir == "")
++            dir = "/etc/sysctl.d";
++        if (conf == "")
++            conf = "/etc/sysctl.conf";
++    }
++    let value = null;
++    let names = dir != "" ? fs.lsdir(dir) : null;
++    if (type(names) == "array") {
++        for (let name in sort(names)) {
++            let path = dir + "/" + name;
++            if (!match(name, /\.conf$/) || path == own_conf || name == "99-tachyon-bbr.conf")
++                continue;
++            let v = sysctl_conf_value(path, key);
++            if (v != null && v != "")
++                value = v;
++        }
++    }
++    if (conf != "") {
++        let v = sysctl_conf_value(conf, key);
++        if (v != null && v != "")
++            value = v;
++    }
++    return value != null ? value : fallback;
++}
++
+ function apply_tcp_bbr_tuning(settings) {
+     let enabled = common.is_tcp_bbr_enabled(settings);
+     let conf_override = as_string(getenv("TACHYON_SYSCTL_BBR_CONF") || "");
+     let conf_path = conf_override != "" ? conf_override : (is_sysctl_mock_env() ? "" : "/etc/sysctl.d/99-tachyon-bbr.conf");
+     let avail_path = as_string(getenv("TACHYON_PROC_TCP_AVAIL_CC") || "/proc/sys/net/ipv4/tcp_available_congestion_control");
+ 
++    // Off: give back what the system sets without tachyon (sysctl config files,
++    // else the kernel default), not fixed cubic + fq_codel.
+     if (!enabled) {
+         if (conf_path != "" && fs.stat(conf_path) != null)
+             fs.unlink(conf_path);
++        let base_cc = sysctl_baseline("net.ipv4.tcp_congestion_control", "cubic", conf_path);
+         let cur_cc = read_sysctl_fast("net.ipv4.tcp_congestion_control");
+-        if (cur_cc != "cubic" && (is_sysctl_mock_env() || fs.stat("/proc/sys/net/ipv4/tcp_congestion_control") != null))
+-            run_args_quiet([ "sysctl", "-w", "net.ipv4.tcp_congestion_control=cubic" ]);
++        if (cur_cc != base_cc && (is_sysctl_mock_env() || fs.stat("/proc/sys/net/ipv4/tcp_congestion_control") != null))
++            run_args_quiet([ "sysctl", "-w", "net.ipv4.tcp_congestion_control=" + base_cc ]);
++        let base_qdisc = sysctl_baseline("net.core.default_qdisc", "fq_codel", conf_path);
+         let cur_qdisc = read_sysctl_fast("net.core.default_qdisc");
+-        if (cur_qdisc != "fq_codel" && (is_sysctl_mock_env() || fs.stat("/proc/sys/net/core/default_qdisc") != null))
+-            run_args_quiet([ "sysctl", "-w", "net.core.default_qdisc=fq_codel" ]);
++        if (cur_qdisc != base_qdisc && (is_sysctl_mock_env() || fs.stat("/proc/sys/net/core/default_qdisc") != null))
++            run_args_quiet([ "sysctl", "-w", "net.core.default_qdisc=" + base_qdisc ]);
+         return;
+     }
+ 
+@@ -4466,14 +4528,13 @@ function apply_tcp_bbr_tuning(settings) {
+         return;
+     }
+ 
+-    run_args_quiet([ "modprobe", "sch_fq" ]);
++    // fq_codel, not fq: a router mostly forwards traffic, and fq has no queue
++    // management (CoDel) for it. BBR does not need fq for pacing since Linux
++    // 4.13, the TCP stack paces itself with any qdisc.
+     let cur_qdisc = read_sysctl_fast("net.core.default_qdisc");
+     let chosen_qdisc = "fq_codel";
+-    if (cur_qdisc == "fq" || run_args_quiet([ "sysctl", "-w", "net.core.default_qdisc=fq" ])) {
+-        chosen_qdisc = "fq";
+-    } else if (cur_qdisc != "fq_codel") {
+-        run_args_quiet([ "sysctl", "-w", "net.core.default_qdisc=fq_codel" ]);
+-    }
++    if (cur_qdisc != chosen_qdisc)
++        run_args_quiet([ "sysctl", "-w", "net.core.default_qdisc=" + chosen_qdisc ]);
+ 
+     let cur_cc = read_sysctl_fast("net.ipv4.tcp_congestion_control");
+     if (cur_cc != "bbr")
+diff --git a/tests/tcp_bbr_and_hidden.sh b/tests/tcp_bbr_and_hidden.sh
+index aa1bcac1..50c3b231 100644
+--- a/tests/tcp_bbr_and_hidden.sh
++++ b/tests/tcp_bbr_and_hidden.sh
+@@ -173,7 +173,7 @@ if (!found_mieru || !captured_state || length(captured_state.urltestCandidateTag
+     die("hidden section/outbound_source must remain in config and urltestCandidateTags\n");
+ ' || fail "hidden section/source must stay active in core outbound generation"
+ 
+-# 4. nft/apply.uc apply_tcp_bbr_tuning mocks (fq, fq_codel fallback, unavailable bbr, disable->cubic)
++# 4. nft/apply.uc apply_tcp_bbr_tuning mocks (fq_codel, unavailable bbr, disable -> system values)
+ mkdir -p "$WORK_DIR/bin"
+ UCI_STATE="$WORK_DIR/uci.state"
+ SYSCTL_LOG="$WORK_DIR/sysctl.log"
+@@ -243,7 +243,7 @@ tachyon.settings.tcp_bbr=$1
+ EOF
+ }
+ 
+-# 4a: tcp_bbr=1, bbr loaded by modprobe tcp_bbr, fq supported
++# 4a: tcp_bbr=1, bbr loaded by modprobe tcp_bbr; qdisc stays fq_codel (no fq)
+ write_bbr_uci "1"
+ echo "load_bbr_on_modprobe" >"$MOCK_MODE_FILE"
+ echo "cubic reno" >"$AVAIL_CC"
+@@ -253,16 +253,23 @@ rm -f "$SYSCTL_LOG" "$MODPROBE_LOG" "$BBR_CONF"
+ 
+ ucode -S -L "$TACHYON_LIB" "$NFT_APPLY_UC" apply-connection-tuning >/dev/null
+ assert_contains "$MODPROBE_LOG" "tcp_bbr" "4a modprobe tcp_bbr"
+-assert_contains "$MODPROBE_LOG" "sch_fq" "4a modprobe sch_fq"
+-assert_contains "$SYSCTL_LOG" "net.core.default_qdisc=fq" "4a qdisc fq"
++assert_not_contains "$MODPROBE_LOG" "sch_fq" "4a no modprobe sch_fq"
++assert_not_contains "$SYSCTL_LOG" "default_qdisc" "4a qdisc already fq_codel"
+ assert_contains "$SYSCTL_LOG" "net.ipv4.tcp_congestion_control=bbr" "4a cc bbr"
+-assert_contains "$BBR_CONF" "net.core.default_qdisc=fq" "4a conf qdisc"
++grep -qx "net.core.default_qdisc=fq_codel" "$BBR_CONF" || fail "4a conf qdisc must be fq_codel"
+ assert_contains "$BBR_CONF" "net.ipv4.tcp_congestion_control=bbr" "4a conf bbr"
+ 
++# 4a2: qdisc fq left by an older build -> switched to fq_codel
++echo "fq" >"$MOCK_CUR_QDISC_FILE"
++rm -f "$SYSCTL_LOG"
++ucode -S -L "$TACHYON_LIB" "$NFT_APPLY_UC" apply-connection-tuning >/dev/null
++grep -qx -- "-w net.core.default_qdisc=fq_codel" "$SYSCTL_LOG" || fail "4a2 qdisc fq -> fq_codel"
++echo "fq_codel" >"$MOCK_CUR_QDISC_FILE"
++
+ # 4b: Flash-wear protection (unchanged conf must not rewrite mtime)
+ touch -d '2020-01-01 00:00:00 UTC' "$BBR_CONF"
+ before_mtime="$(stat -c '%Y' "$BBR_CONF")"
+-echo "fq" >"$MOCK_CUR_QDISC_FILE"
++echo "fq_codel" >"$MOCK_CUR_QDISC_FILE"
+ echo "bbr" >"$MOCK_CUR_CC_FILE"
+ ucode -S -L "$TACHYON_LIB" "$NFT_APPLY_UC" apply-connection-tuning >/dev/null
+ after_mtime="$(stat -c '%Y' "$BBR_CONF")"
+@@ -302,6 +309,34 @@ ucode -S -L "$TACHYON_LIB" "$NFT_APPLY_UC" apply-connection-tuning >/dev/null
+ assert_contains "$SYSCTL_LOG" "net.ipv4.tcp_congestion_control=cubic" "4e restore cubic"
+ assert_contains "$SYSCTL_LOG" "net.core.default_qdisc=fq_codel" "4e restore fq_codel"
+ 
++# 4f: tcp_bbr=0 -> values the system sets itself: /etc/sysctl.d/*.conf in name
++# order, then /etc/sysctl.conf (last wins); our own conf is not a source
++SYSCTL_D="$WORK_DIR/etc/sysctl.d"
++SYSCTL_CONF="$WORK_DIR/etc/sysctl.conf"
++mkdir -p "$SYSCTL_D"
++printf '# comment\nnet.core.default_qdisc = cake\n' >"$SYSCTL_D/10-qdisc.conf"
++printf 'net.core.default_qdisc=fq_codel\nnet.ipv4.tcp_congestion_control=bbr\n' >"$BBR_CONF"
++printf '\n# TCP BBR\nnet.core.default_qdisc = fq\n-net/ipv4/tcp_congestion_control = bbr\n' >"$SYSCTL_CONF"
++export TACHYON_SYSCTL_CONF_DIR="$SYSCTL_D" TACHYON_SYSCTL_CONF="$SYSCTL_CONF"
++echo "fq_codel" >"$MOCK_CUR_QDISC_FILE"
++echo "cubic" >"$MOCK_CUR_CC_FILE"
++rm -f "$SYSCTL_LOG"
++ucode -S -L "$TACHYON_LIB" "$NFT_APPLY_UC" apply-connection-tuning >/dev/null
++[ ! -f "$BBR_CONF" ] || fail "4f 99-tachyon-bbr.conf must be removed when tcp_bbr=0"
++grep -qx -- "-w net.core.default_qdisc=fq" "$SYSCTL_LOG" || fail "4f qdisc from sysctl.conf (last wins over sysctl.d)"
++grep -qx -- "-w net.ipv4.tcp_congestion_control=bbr" "$SYSCTL_LOG" || fail "4f cc from sysctl.conf (\"-\" and \"/\" syntax)"
++
++# 4g: only sysctl.d sets the qdisc; system values already in place -> no writes
++rm -f "$SYSCTL_CONF"
++echo "cake" >"$MOCK_CUR_QDISC_FILE"
++rm -f "$SYSCTL_LOG"
++ucode -S -L "$TACHYON_LIB" "$NFT_APPLY_UC" apply-connection-tuning >/dev/null
++if grep -qE "default_qdisc|tcp_congestion_control" "$SYSCTL_LOG" 2>/dev/null; then
++  fail "4g system values (cake from sysctl.d, kernel cubic) are already set: nothing to write"
++fi
++rm -rf "$SYSCTL_D" "$SYSCTL_CONF"
++unset TACHYON_SYSCTL_CONF_DIR TACHYON_SYSCTL_CONF
++
+ # 5. install.sh ensure_tcp_bbr_best_effort best-effort + flash-safe check
+ (
+   DRY_RUN=0
