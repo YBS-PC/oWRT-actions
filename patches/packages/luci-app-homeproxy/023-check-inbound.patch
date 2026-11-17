@@ -1,0 +1,66 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 17 Nov 2026 12:00:00 +0000
+Subject: [PATCH] feat(client): inbound check-in for checks of single
+ outbounds
+
+A program on the router that checks a single outbound (internet-detector
+with the check "sing-box outbound (Clash API)") gets only the delay from
+the Clash API. Its other requests, such as the public IP, went through
+sing-box by the routing rules, so their result was that of the route to
+the requested host, not of the checked outbound.
+
+The client config now has the inbound check-in: mixed on 127.0.0.1, port
+infra.check_port (5334 by default, 0 - no inbound), one user per
+outbound and endpoint (except block), the user name and password are its
+tag. Rules at the start of the route send a connection of such a user
+through its outbound, before all other rules. The inbound listens on
+the loopback only; the other inbounds and rules are as before.
+
+Checked with sing-box 1.14.3-extended ("sing-box check" of the config
+generated from a real configuration; requests through check-in go out
+through the outbound of the user, through mixed-in by the rules, a wrong
+user or password is refused).
+
+diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
+index ef5be18..4cabea1 100755
+--- a/root/etc/homeproxy/scripts/generate_client.uc
++++ b/root/etc/homeproxy/scripts/generate_client.uc
+@@ -1281,6 +1281,37 @@ if (length(blocked_tags))
+ 			}
+ 		}
+ 
++/* Inbound for checks of single outbounds (internet-detector): mixed on
++ * 127.0.0.1, one user per outbound, the user name is its tag. A
++ * connection of that user goes through that outbound, before the routing
++ * rules. infra.check_port: the port, 0 - no such inbound. */
++const check_port = uci.get(uciconfig, uciinfra, 'check_port') || '5334';
++if (check_port !== '0') {
++	const check_tags = [];
++	for (let o in [...config.outbounds, ...(config.endpoints || [])])
++		if (o?.tag && o.type !== 'block' && !(o.tag in check_tags))
++			push(check_tags, o.tag);
++
++	if (length(check_tags)) {
++		push(config.inbounds, {
++			type: 'mixed',
++			tag: 'check-in',
++			listen: '127.0.0.1',
++			listen_port: int(check_port),
++			users: map(check_tags, (t) => ({ username: t, password: t }))
++		});
++		config.route.rules = [
++			...map(check_tags, (t) => ({
++				inbound: 'check-in',
++				auth_user: [t],
++				action: 'route',
++				outbound: t
++			})),
++			...config.route.rules
++		];
++	}
++}
++
+ system('mkdir -p ' + RUN_DIR);
+ 
+ /* With the evaluate and respond rules sing-box uses its new DNS rule mode,
