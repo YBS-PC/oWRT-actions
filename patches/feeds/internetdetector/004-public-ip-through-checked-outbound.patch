@@ -210,7 +210,7 @@ index df422c1c..7f66199b 100644
  			end
  		end
 diff --git a/luci-app-internet-detector/htdocs/luci-static/resources/view/internet-detector.js b/luci-app-internet-detector/htdocs/luci-static/resources/view/internet-detector.js
-index b427d8fb..b1138f12 100644
+index 7efbf7cc..af7554ae 100644
 --- a/luci-app-internet-detector/htdocs/luci-static/resources/view/internet-detector.js
 +++ b/luci-app-internet-detector/htdocs/luci-static/resources/view/internet-detector.js
 @@ -156,7 +156,7 @@ function idErrorText(code) {
@@ -237,7 +237,7 @@ index b427d8fb..b1138f12 100644
  				'mod_public_ip_provider', _('Provider'),
  				_('Service for determining the public IP address.') + '<br />' +
  				_('In brackets: the network that serves the provider. The address is that of the route to the provider: with routing by addresses of that network it is the address of that route.') + '<br />' +
-+				_('With the check "sing-box outbound (Clash API)" and the Clash API of homeproxy (empty address) the request goes through the outbound that answered the check, by the inbound check-in of homeproxy, not by its routing rules. DNS providers are not used then; the IP version is the one the server of the outbound reaches the provider by: for IPv4 or IPv6 choose a provider with separate addresses for them.') + '<br />' +
++				_('With the check type "sing-box outbound (Clash API)" and an empty Clash API address the request goes through the outbound that answered the check (the inbound check-in of homeproxy); the routing rules of homeproxy do not apply to it. DNS providers are not used then. The IP version is chosen by the server of the outbound: for IPv4 or IPv6 take a provider with separate addresses for them.') + '<br />' +
  				((this.curlExec) ? '' :
  					_('To support HTTP services, you need to install curl.'))
  			);
@@ -266,10 +266,10 @@ index b2314aca..66844a50 100644
  			rows.push(E('div', { 'class': 'id-kv' }, [
  				E('span', {}, _('Reason')), E('b', {}, idErrorText(i.error)) ]));
 diff --git a/luci-app-internet-detector/po/ru/internet-detector.po b/luci-app-internet-detector/po/ru/internet-detector.po
-index c8487542..3a757b3f 100644
+index cb29a368..cadeeaab 100644
 --- a/luci-app-internet-detector/po/ru/internet-detector.po
 +++ b/luci-app-internet-detector/po/ru/internet-detector.po
-@@ -889,3 +889,20 @@ msgstr "узел маршрутизации"
+@@ -901,3 +901,20 @@ msgstr "узел маршрутизации"
  
  msgid "timeout"
  msgstr "таймаут"
@@ -278,15 +278,15 @@ index c8487542..3a757b3f 100644
 +msgstr "Выход"
 +
 +msgid ""
-+"With the check \"sing-box outbound (Clash API)\" and the Clash API of "
-+"homeproxy (empty address) the request goes through the outbound that "
-+"answered the check, by the inbound check-in of homeproxy, not by its routing "
-+"rules. DNS providers are not used then; the IP version is the one the server "
-+"of the outbound reaches the provider by: for IPv4 or IPv6 choose a provider "
-+"with separate addresses for them."
++"With the check type \"sing-box outbound (Clash API)\" and an empty Clash API "
++"address the request goes through the outbound that answered the check (the "
++"inbound check-in of homeproxy); the routing rules of homeproxy do not apply "
++"to it. DNS providers are not used then. The IP version is chosen by the "
++"server of the outbound: for IPv4 or IPv6 take a provider with separate "
++"addresses for them."
 +msgstr ""
-+"При проверке «Выход sing-box (Clash API)» с Clash API homeproxy (пустой "
-+"адрес) запрос идёт через выход, ответивший на проверку, — через вход "
-+"check-in homeproxy, а не по его правилам маршрутизации. DNS-провайдеры при "
-+"этом не используются; версию IP выбирает сервер выхода: для IPv4 или IPv6 "
-+"выбирайте провайдера с отдельными адресами для них."
++"Тип проверки «Выход sing-box (Clash API)» и пустой адрес Clash API: запрос "
++"идёт через выход, который ответил на проверку (вход check-in homeproxy); "
++"правила маршрутизации homeproxy на него не действуют. DNS-провайдеры в этом "
++"случае не используются. Версию IP выбирает сервер выхода: для IPv4 или IPv6 "
++"берите провайдера с отдельными адресами для них."
