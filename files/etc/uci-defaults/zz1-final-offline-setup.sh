@@ -331,7 +331,11 @@ if [ -f /root/apps/sing-box ] && [ ! -f /usr/share/sing-box-forkop/version ]; th
 fi
 
 if [ -f /root/apps/AdGuardHome ]; then
-    [ -x /etc/init.d/adguardhome ] && run_cmd "Остановка AdGuardHome" /etc/init.d/adguardhome stop
+    # stop — только если служба запущена: на первой загрузке её ещё нет, и
+    # stop печатал «Command failed: ubus call service delete … (Not found)»
+    if [ -x /etc/init.d/adguardhome ] && /etc/init.d/adguardhome running >/dev/null 2>&1; then
+        run_cmd "Остановка AdGuardHome" /etc/init.d/adguardhome stop
+    fi
     run_cmd "Копирование AdGuardHome" cp /root/apps/AdGuardHome /usr/bin/AdGuardHome
     run_cmd "Права AdGuardHome" chmod +x /usr/bin/AdGuardHome
     rm /root/apps/AdGuardHome
@@ -1007,7 +1011,10 @@ fi
 # AdGuardHome
 if [ -x "/usr/bin/AdGuardHome" ] && [ -f "/etc/config/adguardhome" ]; then
     log_info "Настройка AdGuardHome"
-    run_cmd "Остановка adguardhome" /etc/init.d/adguardhome stop
+    # stop — только если служба запущена (см. выше про первую загрузку)
+    if /etc/init.d/adguardhome running >/dev/null 2>&1; then
+        run_cmd "Остановка adguardhome" /etc/init.d/adguardhome stop
+    fi
     run_cmd "Отключение adguardhome" /etc/init.d/adguardhome disable
     mkdir -p /opt/AdGuardHome
     run_cmd "chown /opt/AdGuardHome" chown -R root:root /opt/AdGuardHome
