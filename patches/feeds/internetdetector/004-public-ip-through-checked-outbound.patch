@@ -1,0 +1,292 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 17 Nov 2026 12:00:00 +0000
+Subject: [PATCH] internet-detector: public IP through the outbound of the
+ outbound check
+Requires: 001-check-fixes-ip-version-outbound-check 002-public-ip-dns-ipv6-providers 003-luci-new-check-options
+
+With the check "sing-box outbound (Clash API)" the public IP module
+requested the provider with curl from the router. On a router with
+homeproxy such a connection goes through sing-box by the routing rules,
+so the address was the one of the route to the provider, not of the
+outbound that the instance checks.
+
+Now, with the Clash API of homeproxy (empty address of the instance) and
+the inbound check-in in the homeproxy config (patch 023 of homeproxy:
+mixed on 127.0.0.1, user name and password - the tag of an outbound),
+the HTTP request goes through that inbound as the user of the outbound
+that answered the last check: sing-box sends it through this outbound,
+before the routing rules.
+
+- main.lua: the tag of the outbound that answered is kept; its port of
+  check-in is read from /var/run/homeproxy/sing-box-c.json with
+  jsonfilter (again when the file changes); the status file has the
+  field "outbound" (the outbound as it is set in the instance).
+- mod_public_ip: through check-in the interface and the proxy of the
+  instance are not used (the connection is to 127.0.0.1), and neither
+  --ipv4 / --ipv6: the IP version is the one the server of the outbound
+  reaches the provider by (url6 - a host with IPv6 only). A DNS provider
+  (UDP) is not asked then, a warning goes to the log once and the
+  fallback provider is asked. The same address of both IP versions is
+  shown once.
+- LuCI: the row "Outbound" in the status card, a note at the provider.
+
+Without check-in (other Clash API address, homeproxy without patch 023,
+another check type) the requests go as before.
+
+diff --git a/internet-detector/files/usr/lib/lua/internet-detector/main.lua b/internet-detector/files/usr/lib/lua/internet-detector/main.lua
+index cafb8e24..c35f87ba 100644
+--- a/internet-detector/files/usr/lib/lua/internet-detector/main.lua
++++ b/internet-detector/files/usr/lib/lua/internet-detector/main.lua
+@@ -90,6 +90,12 @@ local InternetDetector = {
+ 	lastCheck        = nil,	-- time of the last completed check
+ 	lastError        = nil,	-- reason of the last failed check (shown in LuCI)
+ 	outboundTags     = {},
++	lastOutbound     = nil,	-- outbound check: the outbound that answered (as set)
++	lastOutboundTag  = nil,	-- and its sing-box tag
++	-- homeproxy config with the inbound check-in (patch 023 of homeproxy)
++	homeproxyConfig  = "/var/run/homeproxy/sing-box-c.json",
++	checkInMtime     = nil,
++	checkInPort      = nil,
+ }
+ InternetDetector.configDir      = string.format("/etc/%s", InternetDetector.appName)
+ InternetDetector.modulesDir     = string.format(
+@@ -182,6 +188,9 @@ function InternetDetector:statusJson(inet, instance, t)
+ 	if self.lastCheck then
+ 		lines[#lines + 1] = string.format('"checked":%d', self.lastCheck)
+ 	end
++	if inet == 0 and self.lastOutbound then
++		lines[#lines + 1] = string.format('"outbound":%s', self:jsonString(self.lastOutbound))
++	end
+ 	if inet == 1 and self.lastError then
+ 		lines[#lines + 1] = string.format('"error":%s', self:jsonString(self.lastError))
+ 	end
+@@ -641,6 +650,7 @@ function InternetDetector:checkClashOutbound(tag)
+ 		os.time(), url, retCode, tostring(httpCode), tostring(delay)))
+ 
+ 	if retCode == 0 and httpCode == 200 and delay and delay > 0 then
++		self.lastOutboundTag = tag
+ 		return 0, delay
+ 	end
+ 	if retCode ~= 0 then
+@@ -649,6 +659,42 @@ function InternetDetector:checkClashOutbound(tag)
+ 	return 1, nil, "clash:" .. tostring(httpCode)
+ end
+ 
++-- Requests of the instance (public IP) through the outbound that answered
++-- the check: by the inbound check-in of homeproxy, mixed on 127.0.0.1, user
++-- name and password - the tag of the outbound. Only with homeproxy's Clash
++-- API (empty address) and if its config has this inbound; otherwise nil
++-- and the requests go as before, by the routing rules.
++function InternetDetector:checkInProxy()
++	local sc  = self.serviceConfig
++	local tag = self.lastOutboundTag
++	if sc.check_type ~= 3 or not tag or
++		(sc.clash_api_url and tostring(sc.clash_api_url) ~= "") then
++		return nil
++	end
++	local st = stat.stat(self.homeproxyConfig)
++	if not st then
++		self.checkInMtime, self.checkInPort = nil, nil
++		return nil
++	end
++	if st.st_mtime ~= self.checkInMtime then
++		self.checkInMtime = st.st_mtime
++		self.checkInPort  = nil
++		local fh = io.popen(string.format(
++			"jsonfilter -i %s -e '@.inbounds[@.tag=\"check-in\"].listen_port' 2>/dev/null",
++			self:shellQuote(self.homeproxyConfig)), "r")
++		if fh then
++			self.checkInPort = tonumber((fh:read("*a") or ""):match("^%s*(%d+)"))
++			fh:close()
++		end
++	end
++	if not self.checkInPort then
++		return nil
++	end
++	return string.format(" --proxy %s --proxy-user %s",
++		self:shellQuote(string.format("socks5h://127.0.0.1:%d", self.checkInPort)),
++		self:shellQuote(tag .. ":" .. tag))
++end
++
+ function InternetDetector:exit()
+ 	for _, e in ipairs(self.modules) do
+ 		e:onExit()
+@@ -743,6 +789,9 @@ function InternetDetector:mainLoop()
+ 						inetChecked = true
+ 						self.lastLatency = tonumber(latency)
+ 						self.lastError   = nil
++						if self.serviceConfig.check_type == 3 then
++							self.lastOutbound = addr
++						end
+ 					else
+ 						self.lastError = reason
+ 						attempt = attempt + 1
+diff --git a/internet-detector/files/usr/lib/lua/internet-detector/modules/mod_public_ip.lua b/internet-detector/files/usr/lib/lua/internet-detector/modules/mod_public_ip.lua
+index df422c1c..7f66199b 100644
+--- a/internet-detector/files/usr/lib/lua/internet-detector/modules/mod_public_ip.lua
++++ b/internet-detector/files/usr/lib/lua/internet-detector/modules/mod_public_ip.lua
+@@ -157,8 +157,18 @@ local Module = {
+ 	_IPFalseCounter      = 0,
+ 	_interval            = 600,
+ 	_DNSPackets          = {},
++	_dnsSkipLogged       = false,
+ }
+ 
++-- curl arguments of the inbound check-in of homeproxy (the outbound that
++-- answered the check) or nil
++function Module:checkInProxy()
++	local c = self.config
++	if type(c) == "table" and type(c.checkInProxy) == "function" then
++		return c:checkInProxy()
++	end
++end
++
+ function Module:shellQuote(s)
+ 	return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
+ end
+@@ -479,6 +489,10 @@ end
+ function Module:httpRequest(url, family, headers)
+ 	local retCode, data = 1, nil
+ 	local sc   = self.config.serviceConfig
++	-- Through check-in the IP version is the one the outbound reaches the
++	-- host by (url6 - a host with IPv6 only), the interface and the proxy
++	-- of the instance are not used: the connection is to 127.0.0.1.
++	local checkIn = self:checkInProxy()
+ 	local hdr  = {}
+ 	for _, h in ipairs(headers or {}) do
+ 		hdr[#hdr + 1] = " -H " .. self:shellQuote(h)
+@@ -486,9 +500,9 @@ function Module:httpRequest(url, family, headers)
+ 	local curl = string.format(
+ 		'%s%s%s%s --connect-timeout %d --max-time %d %s%s %s; printf "\\n%%s" "$?"',
+ 		self.curlExec,
+-		(family == 6) and " --ipv6" or " --ipv4",
+-		sc.iface and (" --interface " .. self:shellQuote(sc.iface)) or "",
+-		self.config.proxyString or "",
++		checkIn and "" or ((family == 6) and " --ipv6" or " --ipv4"),
++		(sc.iface and not checkIn) and (" --interface " .. self:shellQuote(sc.iface)) or "",
++		checkIn or self.config.proxyString or "",
+ 		self.timeout,
+ 		self.timeout * 2,
+ 		self.curlParams,
+@@ -561,6 +575,16 @@ end
+ 
+ function Module:requestIP(provider, family)
+ 	local ip
++	if provider.type == "dns" and self:checkInProxy() then
++		-- a DNS request (UDP) can not go through check-in
++		if not self._dnsSkipLogged then
++			self._dnsSkipLogged = true
++			self.syslog("warning", string.format(
++				"%s: %s (DNS) is not used with the outbound check, choose an HTTP provider",
++				self.name, provider.name))
++		end
++		return nil
++	end
+ 	if provider.type == "dns" then
+ 		ip = self:requestIPDNS(provider, family)
+ 	else
+@@ -582,14 +606,19 @@ function Module:requestIP(provider, family)
+ end
+ 
+ -- One request per IP version (the fallback provider if the first one
+--- gives nothing); the addresses joined by ", "
++-- gives nothing); the addresses joined by ", ". Through an outbound the
++-- version is the one its server reaches the provider by, so both requests
++-- can give the same address: it is shown once.
+ function Module:requestIPs()
+-	local ips = {}
++	local ips, seen = {}, {}
+ 	for _, family in ipairs(self._families) do
+ 		for _, provider in ipairs(self._providers) do
+ 			local ip = self:requestIP(provider, family)
+ 			if ip then
+-				ips[#ips + 1] = ip
++				if not seen[ip] then
++					seen[ip]      = true
++					ips[#ips + 1] = ip
++				end
+ 				break
+ 			end
+ 		end
+diff --git a/luci-app-internet-detector/htdocs/luci-static/resources/view/internet-detector.js b/luci-app-internet-detector/htdocs/luci-static/resources/view/internet-detector.js
+index b427d8fb..b1138f12 100644
+--- a/luci-app-internet-detector/htdocs/luci-static/resources/view/internet-detector.js
++++ b/luci-app-internet-detector/htdocs/luci-static/resources/view/internet-detector.js
+@@ -156,7 +156,7 @@ function idErrorText(code) {
+ 	return _('check error');
+ }
+ 
+-// instances: [{ instance, inet, latency, checked, error, mod_public_ip }]
++// instances: [{ instance, inet, latency, outbound, checked, error, mod_public_ip }]
+ function idRenderCards(instances, describe, waiting) {
+ 	let lang = document.documentElement.lang || undefined;
+ 	let cards = [];
+@@ -173,6 +173,10 @@ function idRenderCards(instances, describe, waiting) {
+ 			rows.push(E('div', { 'class': 'id-kv' }, [
+ 				E('span', {}, _('Latency')), E('b', {}, '%s %s'.format(i.latency, _('msec'))) ]));
+ 		};
++		if(i.inet == 0 && i.outbound) {
++			rows.push(E('div', { 'class': 'id-kv' }, [
++				E('span', {}, _('Outbound')), E('b', {}, i.outbound) ]));
++		};
+ 		if(i.inet == 1 && i.error) {
+ 			rows.push(E('div', { 'class': 'id-kv' }, [
+ 				E('span', {}, _('Reason')), E('b', {}, idErrorText(i.error)) ]));
+@@ -1788,6 +1792,7 @@ return view.extend({
+ 				'mod_public_ip_provider', _('Provider'),
+ 				_('Service for determining the public IP address.') + '<br />' +
+ 				_('In brackets: the network that serves the provider. The address is that of the route to the provider: with routing by addresses of that network it is the address of that route.') + '<br />' +
++				_('With the check "sing-box outbound (Clash API)" and the Clash API of homeproxy (empty address) the request goes through the outbound that answered the check, by the inbound check-in of homeproxy, not by its routing rules. DNS providers are not used then; the IP version is the one the server of the outbound reaches the provider by: for IPv4 or IPv6 choose a provider with separate addresses for them.') + '<br />' +
+ 				((this.curlExec) ? '' :
+ 					_('To support HTTP services, you need to install curl.'))
+ 			);
+diff --git a/luci-app-internet-detector/htdocs/luci-static/resources/view/status/include/00_internet.js b/luci-app-internet-detector/htdocs/luci-static/resources/view/status/include/00_internet.js
+index b2314aca..66844a50 100644
+--- a/luci-app-internet-detector/htdocs/luci-static/resources/view/status/include/00_internet.js
++++ b/luci-app-internet-detector/htdocs/luci-static/resources/view/status/include/00_internet.js
+@@ -151,7 +151,7 @@ function idErrorText(code) {
+ 	return _('check error');
+ }
+ 
+-// instances: [{ instance, inet, latency, checked, error, mod_public_ip }]
++// instances: [{ instance, inet, latency, outbound, checked, error, mod_public_ip }]
+ function idRenderCards(instances, describe, waiting) {
+ 	let lang = document.documentElement.lang || undefined;
+ 	let cards = [];
+@@ -168,6 +168,10 @@ function idRenderCards(instances, describe, waiting) {
+ 			rows.push(E('div', { 'class': 'id-kv' }, [
+ 				E('span', {}, _('Latency')), E('b', {}, '%s %s'.format(i.latency, _('msec'))) ]));
+ 		};
++		if(i.inet == 0 && i.outbound) {
++			rows.push(E('div', { 'class': 'id-kv' }, [
++				E('span', {}, _('Outbound')), E('b', {}, i.outbound) ]));
++		};
+ 		if(i.inet == 1 && i.error) {
+ 			rows.push(E('div', { 'class': 'id-kv' }, [
+ 				E('span', {}, _('Reason')), E('b', {}, idErrorText(i.error)) ]));
+diff --git a/luci-app-internet-detector/po/ru/internet-detector.po b/luci-app-internet-detector/po/ru/internet-detector.po
+index c8487542..3a757b3f 100644
+--- a/luci-app-internet-detector/po/ru/internet-detector.po
++++ b/luci-app-internet-detector/po/ru/internet-detector.po
+@@ -889,3 +889,20 @@ msgstr "узел маршрутизации"
+ 
+ msgid "timeout"
+ msgstr "таймаут"
++
++msgid "Outbound"
++msgstr "Выход"
++
++msgid ""
++"With the check \"sing-box outbound (Clash API)\" and the Clash API of "
++"homeproxy (empty address) the request goes through the outbound that "
++"answered the check, by the inbound check-in of homeproxy, not by its routing "
++"rules. DNS providers are not used then; the IP version is the one the server "
++"of the outbound reaches the provider by: for IPv4 or IPv6 choose a provider "
++"with separate addresses for them."
++msgstr ""
++"При проверке «Выход sing-box (Clash API)» с Clash API homeproxy (пустой "
++"адрес) запрос идёт через выход, ответивший на проверку, — через вход "
++"check-in homeproxy, а не по его правилам маршрутизации. DNS-провайдеры при "
++"этом не используются; версию IP выбирает сервер выхода: для IPv4 или IPv6 "
++"выбирайте провайдера с отдельными адресами для них."
