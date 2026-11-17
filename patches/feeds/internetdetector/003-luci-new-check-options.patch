@@ -27,7 +27,7 @@ Requires: 001-check-fixes-ip-version-outbound-check 002-public-ip-dns-ipv6-provi
 - Russian translation of the new strings.
 
 diff --git a/luci-app-internet-detector/htdocs/luci-static/resources/view/internet-detector.js b/luci-app-internet-detector/htdocs/luci-static/resources/view/internet-detector.js
-index 5e0dd2cf..b427d8fb 100644
+index 5e0dd2cf..7efbf7cc 100644
 --- a/luci-app-internet-detector/htdocs/luci-static/resources/view/internet-detector.js
 +++ b/luci-app-internet-detector/htdocs/luci-static/resources/view/internet-detector.js
 @@ -60,6 +60,154 @@ document.head.append(E('style', {'type': 'text/css'},
@@ -483,7 +483,7 @@ index 5e0dd2cf..b427d8fb 100644
 +			let clash = this.clashProxies || {};
 +			o = s.taboption('main', form.Value,
 +				'clash_api_url', _('Clash API address'),
-+				_('Address of the sing-box Clash API controller. If empty, the controller of homeproxy is used (127.0.0.1 instead of 0.0.0.0), otherwise http://127.0.0.1:9090.')
++				_('Address of the Clash API controller of sing-box, for example http://127.0.0.1:9090. Leave it empty for homeproxy: its controller is taken (the option clash_api_controller, 0.0.0.0 becomes 127.0.0.1), and if homeproxy has none, http://127.0.0.1:9090.')
 +			);
 +			o.validate    = this.validateUrl;
 +			o.placeholder = clash.url || 'http://127.0.0.1:9090';
@@ -493,7 +493,7 @@ index 5e0dd2cf..b427d8fb 100644
 +			// clash_api_secret
 +			o = s.taboption('main', form.Value,
 +				'clash_api_secret', _('Clash API secret'),
-+				_('If the address is empty, the secret of homeproxy is used.')
++				_('Leave it empty for homeproxy: with an empty address the secret of homeproxy is taken (the option clash_api_secret).')
 +			);
 +			o.password  = true;
 +			o.depends({ check_type: '3' });
@@ -834,10 +834,10 @@ index f6b4272b..b2314aca 100644
  		return E('div', {
  			'class': 'cbi-section',
 diff --git a/luci-app-internet-detector/po/ru/internet-detector.po b/luci-app-internet-detector/po/ru/internet-detector.po
-index cae6c563..c8487542 100644
+index cae6c563..cb29a368 100644
 --- a/luci-app-internet-detector/po/ru/internet-detector.po
 +++ b/luci-app-internet-detector/po/ru/internet-detector.po
-@@ -745,3 +745,147 @@ msgstr "секунды"
+@@ -745,3 +745,159 @@ msgstr "секунды"
  
  msgid "up-script"
  msgstr "up-script"
@@ -845,8 +845,16 @@ index cae6c563..c8487542 100644
 +msgid "Address family for name resolution and connections."
 +msgstr "Семейство адресов для разрешения имён и подключений."
 +
-+msgid "Address of the sing-box Clash API controller. If empty, the controller of homeproxy is used (127.0.0.1 instead of 0.0.0.0), otherwise http://127.0.0.1:9090."
-+msgstr "Адрес контроллера Clash API sing-box. Если пусто — контроллер homeproxy (127.0.0.1 вместо 0.0.0.0), иначе http://127.0.0.1:9090."
++msgid ""
++"Address of the Clash API controller of sing-box, for example "
++"http://127.0.0.1:9090. Leave it empty for homeproxy: its controller is taken "
++"(the option clash_api_controller, 0.0.0.0 becomes 127.0.0.1), and if "
++"homeproxy has none, http://127.0.0.1:9090."
++msgstr ""
++"Адрес контроллера Clash API sing-box, например http://127.0.0.1:9090. Для "
++"homeproxy оставьте пустым: возьмётся его контроллер (опция "
++"clash_api_controller, 0.0.0.0 заменяется на 127.0.0.1), а если в homeproxy "
++"он не задан — http://127.0.0.1:9090."
 +
 +msgid "Any"
 +msgstr "Любое"
@@ -884,8 +892,12 @@ index cae6c563..c8487542 100644
 +msgid "IPv4 + IPv6"
 +msgstr "IPv4 + IPv6"
 +
-+msgid "If the address is empty, the secret of homeproxy is used."
-+msgstr "Если адрес пуст, используется секрет homeproxy."
++msgid ""
++"Leave it empty for homeproxy: with an empty address the secret of homeproxy "
++"is taken (the option clash_api_secret)."
++msgstr ""
++"Для homeproxy оставьте пустым: при пустом адресе возьмётся секрет homeproxy "
++"(опция clash_api_secret)."
 +
 +msgid "Last check"
 +msgstr "Последняя проверка"
