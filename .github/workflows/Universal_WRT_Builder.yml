@@ -89,7 +89,7 @@ on:
           - 'forkop-tiny'
 
       ytb:
-        description: 'youtubeUnblock / модуль * (default — у rehomeproxy Zapret2, у forkop-mod ByeDPI, у остальных ничего; true — youtubeUnblock везде, кроме crystal_clear и switch; false — ничего)'
+        description: 'youtubeUnblock / модуль * (default — у rehomeproxy Zapret2, у forkop-mod ByeDPI, у остальных ничего; true — youtubeUnblock, zapret2 — Zapret2, byedpi — ByeDPI в любом варианте, кроме crystal_clear и switch; false — ничего)'
         required: true
         type: choice
         default: 'default'
@@ -97,6 +97,8 @@ on:
           - 'default'
           - 'true'
           - 'false'
+          - 'zapret2'
+          - 'byedpi'
 
       zz:
         description: 'Скрипт zz1 *'
@@ -221,7 +223,7 @@ jobs:
 
 
           # Поля строки матрицы: agh (no|feed|latest), sb (no|feed|1.12.x..latest|extended|hiddify|podkop-engine[-full]|
-          # forkop-base|-full|-tiny|tiny; default setup заменяет ядром варианта, остаётся только у tachyon), ytb (default|true|false),
+          # forkop-base|-full|-tiny|tiny; default setup заменяет ядром варианта, остаётся только у tachyon), ytb (default|true|false|zapret2|byedpi),
           # zz, patches, feeds (true — фиды репозитория пакетов), base (use_base_commit); dpi (zapret2|byedpi|no) выводит setup из ytb.
           # В combo значения — из config/combo.txt, поля формы не действуют.
           # slateax и ax59u — «тонкие»: sing-box-tiny из фида (у forkop — сборка tiny ядра).
@@ -245,15 +247,20 @@ jobs:
             esac
             [ "$v" = "crystal_clear" ] && zz=false
             # ytb=default — модуль, который приложение находит само: у rehomeproxy — Zapret2, у forkop-mod —
-            # ByeDPI; у остальных ничего. ytb=true — youtubeUnblock, ytb=false — ничего.
+            # ByeDPI; у остальных ничего. ytb=true — youtubeUnblock, zapret2/byedpi — этот пакет, false — ничего.
             local dpi=no
-            if [ "$ytb" = "default" ]; then
-              ytb=false
-              case "$v/$fk" in
-                rehomeproxy/*)    dpi=zapret2 ;;
-                forkop/forkopmod) dpi=byedpi ;;
-              esac
-            fi
+            case "$ytb" in
+              default)
+                ytb=false
+                case "$v/$fk" in
+                  rehomeproxy/*)    dpi=zapret2 ;;
+                  forkop/forkopmod) dpi=byedpi ;;
+                esac ;;
+              zapret2|byedpi) dpi=$ytb; ytb=false ;;
+            esac
+            # для заметки: ytb так, как его задают в форме (zapret2/byedpi — по dpi)
+            local ytb_res=$ytb
+            [ "$dpi" != "no" ] && ytb_res=$dpi
             # sb=default — рекомендуемое ядро варианта (на slateax/ax59u ниже станет tiny). У tachyon остаётся
             # default: его ядро по умолчанию, артефакт шифруется (шаг Encrypt).
             if [ "$sb" = "default" ]; then
@@ -291,8 +298,8 @@ jobs:
               *" $t "*) case "$v" in homeproxy|rehomeproxy|podkop|netshift|forkop|tachyon)
                 case "$sb" in no|default) ;; forkop-*) sb=forkop-tiny ;; *) sb=tiny ;; esac ;; esac ;;
             esac
-            if [ "$orig" != "agh=$agh sb=$sb ytb=$ytb zz=$zz" ]; then
-              NOTES="${NOTES}${t}/${vname}: ${orig} -> agh=$agh sb=$sb ytb=$ytb zz=$zz dpi=$dpi\n"
+            if [ "$orig" != "agh=$agh sb=$sb ytb=$ytb_res zz=$zz" ]; then
+              NOTES="${NOTES}${t}/${vname}: ${orig} -> agh=$agh sb=$sb ytb=$ytb_res zz=$zz\n"
             fi
             # Коммит из BASE — только вместе с патчами и только у вариантов с приложением.
             local base=false
@@ -313,7 +320,7 @@ jobs:
             V_VARIANT="homeproxy rehomeproxy podkop netshift forkop forkop-mod tachyon passwall xray v2raya clear crystal_clear switch"
             V_AGH="no feed latest"
             V_SB="default no feed 1.12.x 1.13.x 1.14.x latest extended hiddify podkop-engine podkop-engine-full forkop-base forkop-full forkop-tiny"
-            V_YTB="default true false"
+            V_YTB="default true false zapret2 byedpi"
             V_BOOL="true false"
             in_list() { case " $2 " in *" $1 "*) return 0 ;; esac; return 1; }
             combo_err() {
@@ -1158,7 +1165,12 @@ jobs:
             *)    SUM_SB="пакет из фида + бинарник ${{ matrix.sb }}" ;;
         esac
         [ "${{ matrix.ytb }}" = "true" ] && SUM_YTB="да" || SUM_YTB="нет"
-        [ "${{ matrix.dpi }}" = "zapret2" ] && SUM_YTB="нет, вместо него Zapret2 (пакет zapret2)"
+        if [ "${{ matrix.dpi }}" = "zapret2" ]; then
+          case "${{ matrix.vname }}" in
+            rehomeproxy|forkop-mod) SUM_YTB="нет, вместо него Zapret2 (пакет zapret2 для приложения)" ;;
+            *) SUM_YTB="нет, вместо него Zapret2 (пакеты zapret2 и luci-app-zapret2)" ;;
+          esac
+        fi
         [ "${{ matrix.dpi }}" = "byedpi" ] && SUM_YTB="нет, вместо него ByeDPI (пакет byedpi)"
         [ "${{ matrix.zz }}" = "true" ] && SUM_ZZ="да" || SUM_ZZ="нет"
         SUM_AGH="$SUM_AGH$SUM_SRC_NOTE"
@@ -1765,10 +1777,14 @@ jobs:
             fi
         fi
 
-        # ytb=default: у rehomeproxy Zapret2, у forkop-mod ByeDPI вместо youtubeUnblock.
+        # Zapret2 / ByeDPI вместо youtubeUnblock (ytb=default у rehomeproxy, forkop-mod; ytb=zapret2|byedpi).
         if [ "$DPI_MODE" = "zapret2" ] || [ "$DPI_MODE" = "byedpi" ]; then
             Z2_BAD=""
             grep -q "^CONFIG_PACKAGE_${DPI_MODE}=y" .config || Z2_BAD="$Z2_BAD $DPI_MODE не включён;"
+            # LuCI Zapret2 — только там, где nfqws2 не запускает само приложение
+            if [ "$DPI_MODE" = "zapret2" ] && [ "$VARIANT" != "rehomeproxy" ] && [ "$M_FK" != "forkopmod" ]; then
+                grep -q '^CONFIG_PACKAGE_luci-app-zapret2=y' .config || Z2_BAD="$Z2_BAD luci-app-zapret2 не включён;"
+            fi
             grep -q '^CONFIG_PACKAGE_youtubeUnblock=y' .config && Z2_BAD="$Z2_BAD включён youtubeUnblock;"
             if [ -n "$Z2_BAD" ]; then
                 echo "::error title=$DPI_MODE::После make defconfig:$Z2_BAD"
