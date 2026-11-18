@@ -15,9 +15,6 @@ again by its own URL. ctx.path, the resolved route, is used when the
 request path is empty.
 
 The same change is in LuCI master.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01Uo9XQuT7u6ShTYdi2S3Anq
 ---
  ucode/template/themes/bootstrap/header.ut | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)

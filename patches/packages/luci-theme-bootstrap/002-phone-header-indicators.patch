@@ -14,9 +14,6 @@ text; checked in Chromium at 390 px: the indicator column is 141 px
 instead of 102 px and the header 55 px instead of 67 px high.
 
 The same change is in LuCI master.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01Uo9XQuT7u6ShTYdi2S3Anq
 ---
  htdocs/luci-static/bootstrap/mobile.css | 1 -
  1 file changed, 1 deletion(-)

@@ -12,9 +12,6 @@ to the right of the header and the content (checked in Chromium at
 1400 px: 230 px instead of 110 px from the left edge).
 
 The same change is in LuCI master.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01Uo9XQuT7u6ShTYdi2S3Anq
 ---
  htdocs/luci-static/bootstrap/cascade.css | 4 ++--
  1 file changed, 2 insertions(+), 2 deletions(-)
