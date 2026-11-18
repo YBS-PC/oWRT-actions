@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Wed, 11 Nov 2026 12:00:00 +0000
-Subject: [PATCH] forkop-mod 1.0.16: вызовы ucode-функций до объявления и
+Subject: [PATCH] forkop-mod 1.0.17: вызовы ucode-функций до объявления и
  prerm для apk
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -9,7 +9,7 @@ Content-Transfer-Encoding: 8bit
 
 ucode связывает имя функции в момент её объявления. Если функция A
 вызывает функцию B, объявленную ниже в том же файле, A получает null и
-падает с «left-hand side is not a function». В 1.0.16 таких мест 13.
+падает с «left-hand side is not a function». В 1.0.17 таких мест 13.
 Три места в singbox/generator.uc (исключённые устройства и восстановление
 входа OpenConnect) автор исправил сам в 1.0.11, uci_core в
 config/validator.uc — в 1.0.14, dns_action_server_tag в
@@ -40,22 +40,20 @@ status_view» в start_test) вместо {"success": true, "message":
 ниже list_update_if_due, start_test — ниже status_view). После патча
 вызовов до объявления нет (кроме filter() в routing/list_cache.uc: там
 вызов до объявления берёт встроенную filter() ucode с тем же
-результатом). Проверено на 1.0.16 с ucode 8592205 (как в OpenWrt 25.12):
-все 77 модулей компилируются (ucode -c).
+результатом). Проверено на 1.0.17 с ucode 8592205 (как в OpenWrt 25.12):
+все 80 модулей компилируются (ucode -c).
 
 prerm: с apk (OpenWrt 25.12+) тело Package/forkop/prerm встраивается в
 общий /bin/sh-скрипт pre-deinstall, поэтому ucode-код там — синтаксическая
 ошибка, и «apk del forkop» падал. Переписан на POSIX sh, логика прежняя.
 
-Тесты проекта (1.0.16, ucode 8592205): без патча проходят 87 из 88, с
+Тесты проекта (1.0.17, ucode 8592205): без патча проходят 87 из 89, с
 патчем 86; провалы те же, кроме package_lifecycle — он требует ucode в
 prerm, именно это и исправлено.
 
-Перевыпуск для 1.0.16: код патча прежний, у автора изменился
-service/state.uc (сверка по index).
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01Uo9XQuT7u6ShTYdi2S3Anq
+Перевыпуск для 1.0.17: код патча прежний, у автора изменились
+Makefile, components/updates.uc, nft/apply.uc и service/state.uc
+(сверка по index).
 ---
  forkop/Makefile                                    | 12 ++--
  forkop/files/usr/lib/components/action.uc          |  8 ++-
@@ -70,7 +68,7 @@ Claude-Session: https://claude.ai/code/session_01Uo9XQuT7u6ShTYdi2S3Anq
  10 files changed, 152 insertions(+), 148 deletions(-)
 
 diff --git a/forkop/Makefile b/forkop/Makefile
-index 50b01859..0e165db2 100644
+index dbe58820..e405eb05 100644
 --- a/forkop/Makefile
 +++ b/forkop/Makefile
 @@ -40,12 +40,12 @@ define Build/Compile
@@ -126,10 +124,10 @@ index 5210a316..45f91c8c 100644
  function install_package_sing_box(action, tiny) {
      let package_name = tiny ? "sing-box-tiny" : "sing-box";
 diff --git a/forkop/files/usr/lib/components/updates.uc b/forkop/files/usr/lib/components/updates.uc
-index a15fcb3d..03a81d09 100644
+index 98d9d4ad..5d0137f2 100644
 --- a/forkop/files/usr/lib/components/updates.uc
 +++ b/forkop/files/usr/lib/components/updates.uc
-@@ -2495,6 +2495,10 @@ function finish_list_update(ok) {
+@@ -2496,6 +2496,10 @@ function finish_list_update(ok) {
      exit(ok ? 0 : 1);
  }
  
@@ -140,7 +138,7 @@ index a15fcb3d..03a81d09 100644
  function list_update() {
      log_message("Starting lists update", "info");
      if (!list_update_pid_begin())
-@@ -2680,22 +2684,6 @@ function list_update_missing() {
+@@ -2681,22 +2685,6 @@ function list_update_missing() {
      exit(ok ? 0 : 1);
  }
  
@@ -163,7 +161,7 @@ index a15fcb3d..03a81d09 100644
  function list_update_unless_disabled() {
      if (list_cache.persist_enabled() && settings_update_interval(uci_settings()) == "") {
          list_update_missing();
-@@ -2731,6 +2719,22 @@ function list_update_if_due() {
+@@ -2732,6 +2720,22 @@ function list_update_if_due() {
      exit(1);
  }
  
@@ -186,7 +184,7 @@ index a15fcb3d..03a81d09 100644
  function stop_list_update() {
      let pid = trim(as_string(fs.readfile(LIST_UPDATE_PID_FILE) || ""));
      if (pid != "" && runtime_pid_running(pid)) {
-@@ -2819,10 +2823,6 @@ function write_current_reload_state_clean() {
+@@ -2820,10 +2824,6 @@ function write_current_reload_state_clean() {
      ]);
  }
  
@@ -258,10 +256,10 @@ index 6dfbce10..9f04f86d 100644
      let base_url = clash_api_url();
      let test_url = latency_test_url();
 diff --git a/forkop/files/usr/lib/nft/apply.uc b/forkop/files/usr/lib/nft/apply.uc
-index 1bce208d..80a5ac90 100644
+index 380f51e2..43acc7e3 100644
 --- a/forkop/files/usr/lib/nft/apply.uc
 +++ b/forkop/files/usr/lib/nft/apply.uc
-@@ -2368,11 +2368,6 @@ function apply_hostname_key(value) {
+@@ -2520,11 +2520,6 @@ function apply_hostname_key(value) {
      return value;
  }
  
@@ -273,7 +271,7 @@ index 1bce208d..80a5ac90 100644
  function apply_lease_paths() {
      return [
          "/tmp/dhcp.leases",
-@@ -2435,6 +2430,11 @@ function apply_ips_from_lease_name(name) {
+@@ -2587,6 +2582,11 @@ function apply_ips_from_lease_name(name) {
      return index.name_to_ips[wanted];
  }
  
@@ -482,7 +480,7 @@ index a52bcbf7..d994fe6e 100644
      let data = command_output_from_args([ BIN_PATH, "get_status" ]);
      try {
 diff --git a/forkop/files/usr/lib/service/state.uc b/forkop/files/usr/lib/service/state.uc
-index 81ffcb53..5652ae9a 100644
+index f1335678..6dc56bc0 100644
 --- a/forkop/files/usr/lib/service/state.uc
 +++ b/forkop/files/usr/lib/service/state.uc
 @@ -286,6 +286,15 @@ function lock_dir_write_owner(lock_dir, owner_pid) {

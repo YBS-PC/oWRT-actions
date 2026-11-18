@@ -23,9 +23,6 @@ flowtable с первого пакета.
 Проверено: tests/flow_offload.sh проходит (без патча новый случай
 падает); замена правила с условиями и счётчиком — на nft 1.0.9 (правило
 со счётчиком вместо flow add: flowtable в тестовом ядре нет).
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01Uo9XQuT7u6ShTYdi2S3Anq
 ---
  forkop/files/usr/lib/nft/flow_offload.uc | 11 ++++++-----
  tests/flow_offload.sh                    |  3 +++
