@@ -17,9 +17,6 @@ redirect (по умолчанию) он попадает в redirect, соеди
 соединение останется прямым до закрытия — как и без патча.
 
 Проверено в сетевых пространствах имён с conntrack-tools 1.4.8.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
 diff --git a/luci-app-passwall2/root/usr/share/passwall2/app.sh b/luci-app-passwall2/root/usr/share/passwall2/app.sh
 index 8bb931b..df3782c 100755
