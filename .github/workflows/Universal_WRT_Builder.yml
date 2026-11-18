@@ -89,7 +89,7 @@ on:
           - 'forkop-tiny'
 
       ytb:
-        description: 'youtubeUnblock * (default — у tachyon, rehomeproxy, forkop-mod вместо него Zapret2; false — ни того, ни другого)'
+        description: 'youtubeUnblock * (default — у rehomeproxy, forkop-mod вместо него Zapret2, у tachyon — ничего; false — ни того, ни другого)'
         required: true
         type: choice
         default: 'default'
@@ -180,7 +180,7 @@ env:
   FORKOP_FEED_MOD: "forkopmod https://github.com/Gavr1024/forkop-mod.git;main"
 
   # Фид tachyon, конфиг /etc/config/tachyon; версия — из тегов (TACHYON_VERSION).
-  # tachyon с sb=default — его ядро по умолчанию в образе (артефакт шифруется); с другим sb — выбранное ядро.
+  # tachyon с sb=default — его ядро по умолчанию в образе (артефакт шифруется); иначе ядра в образе нет (sb=no).
   TACHYON_FEED: "tachyon https://github.com/Dushnilin/tachyon.git;main"
 
   # Фид netshift (форк podkop), конфиг /etc/config/netshift; версия — из тегов (NETSHIFT_VERSION).
@@ -244,12 +244,14 @@ jobs:
               passwall|v2raya|xray)       sb=no ;;
             esac
             [ "$v" = "crystal_clear" ] && zz=false
-            # ytb=default — youtubeUnblock; у tachyon, rehomeproxy и forkop-mod (приложения с модулем Zapret2) — Zapret2.
+            # ytb=default — youtubeUnblock; у rehomeproxy и forkop-mod (приложения с модулем Zapret2) — Zapret2,
+            # у tachyon — ничего (только desync своего ядра, пакеты zapret* он удаляет).
             # ytb=true — youtubeUnblock у всех, ytb=false — ни youtubeUnblock, ни Zapret2.
             local dpi=no
             if [ "$ytb" = "default" ]; then
               case "$v/$fk" in
-                tachyon/*|rehomeproxy/*|forkop/forkopmod) ytb=false; dpi=zapret2 ;;
+                tachyon/*) ytb=false ;;
+                rehomeproxy/*|forkop/forkopmod) ytb=false; dpi=zapret2 ;;
                 *) ytb=true ;;
               esac
             fi
@@ -266,6 +268,8 @@ jobs:
             fi
             case "$v" in
               homeproxy|rehomeproxy|podkop|netshift) [ "$sb" = "no" ] && sb=feed ;;
+              # tachyon работает только со своим ядром (см. patches/README.md): sing-box в образе не нужен
+              tachyon) [ "$sb" = "default" ] || sb=no ;;
             esac
             # podkop-engine — только для podkop и netshift (netshift — всегда -full: выходы vmess/http).
             case "$sb" in
@@ -426,10 +430,10 @@ jobs:
             echo "::warning title=forkop без патчей::Фид ${FK_NAME} собирается без patches/feeds/${FK_NAME}. ${FK_WHY}. Включите apply_patches."
           done
 
-          # tachyon без патчей: prerm на ucode (001), keep.d сохраняет /usr/bin/sing-box (002).
+          # tachyon без патчей: prerm на ucode (001).
           echo "$json" | jq -r '.include[] | select(.variant == "tachyon" and .patches == false) | .target' |
           while read -r t; do
-            echo "::warning title=${t}: tachyon без патчей::Без патча 001 (patches/feeds/tachyon) «apk del tachyon» не выполнит очистку tachyon (prerm на ucode, а сборка OpenWrt запускает его как sh): служба не останавливается, dnsmasq не возвращается, остаётся запись таблицы маршрутизации; без патча 002 при sysupgrade с сохранением настроек sing-box прежней прошивки восстанавливается поверх нового из образа. Включите apply_patches."
+            echo "::warning title=${t}: tachyon без патчей::Без патча 001 (patches/feeds/tachyon) «apk del tachyon» не выполнит очистку tachyon (prerm на ucode, а сборка OpenWrt запускает его как sh): служба не останавливается, dnsmasq не возвращается, остаётся запись таблицы маршрутизации. Включите apply_patches."
           done
 
           # netshift без патчей: ошибки разбора ссылок и DNS (001, 002).
@@ -1652,7 +1656,7 @@ jobs:
             echo 'CONFIG_PACKAGE_luci-i18n-forkop-ru=y' >> ./.config
 
         elif [ "$VARIANT" == "tachyon" ]; then
-            # Зависимости tachyon уже в WRT.config, конфликтующих пакетов там нет; ядро — sing-box или своё по умолчанию.
+            # Зависимости tachyon уже в WRT.config, конфликтующих пакетов там нет; ядро — своё по умолчанию или никакого (sb=no).
             echo 'CONFIG_PACKAGE_tachyon=y' >> ./.config
             echo 'CONFIG_PACKAGE_luci-app-tachyon=y' >> ./.config
             echo 'CONFIG_PACKAGE_luci-i18n-tachyon-ru=y' >> ./.config
@@ -1761,7 +1765,7 @@ jobs:
             fi
         fi
 
-        # ytb=default у tachyon, rehomeproxy, forkop-mod: Zapret2 вместо youtubeUnblock.
+        # ytb=default у rehomeproxy, forkop-mod: Zapret2 вместо youtubeUnblock.
         if [ "$DPI_MODE" = "zapret2" ]; then
             Z2_BAD=""
             grep -q '^CONFIG_PACKAGE_zapret2=y' .config || Z2_BAD="$Z2_BAD zapret2 не включён;"
