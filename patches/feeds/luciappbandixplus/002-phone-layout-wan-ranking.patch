@@ -64,9 +64,6 @@ dialog read "Отдача". Upload and Download as traffic directions now
 have the context "traffic direction" (_('Upload', 'traffic
 direction') in index.js, msgctxt in the catalog); the other four are
 not in the catalog, the page uses the translation of luci-base.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01Uo9XQuT7u6ShTYdi2S3Anq
 ---
  .../luci-static/resources/bandix_plus/status.css   | 427 ++++++++++++
  .../resources/view/bandix_plus/index.js            | 229 +++++--

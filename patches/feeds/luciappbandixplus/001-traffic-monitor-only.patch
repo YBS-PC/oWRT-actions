@@ -33,9 +33,6 @@ checkUpdate.
 Traffic persistence is described and preselected on the settings page:
 without it the usage ranking and the traffic timeline are lost on every
 restart of the service.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01Uo9XQuT7u6ShTYdi2S3Anq
 ---
  .../resources/view/bandix_plus/index.js       | 129 ++----------------
  .../resources/view/bandix_plus/settings.js    | 106 +-------------
