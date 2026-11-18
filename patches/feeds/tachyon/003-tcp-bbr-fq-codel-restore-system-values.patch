@@ -25,10 +25,10 @@ an fq left by an older build, for the values from sysctl.d and
 sysctl.conf, and for no writes when the system values are in place.
 
 diff --git a/tachyon/files/usr/lib/nft/apply.uc b/tachyon/files/usr/lib/nft/apply.uc
-index 9b689861..af87a8a3 100644
+index 1b08cfc2..60f2cb75 100644
 --- a/tachyon/files/usr/lib/nft/apply.uc
 +++ b/tachyon/files/usr/lib/nft/apply.uc
-@@ -4442,21 +4442,83 @@ function tcp_avail_cc_has(path, algo) {
+@@ -4451,21 +4451,83 @@ function tcp_avail_cc_has(path, algo) {
      return false;
  }
  
@@ -116,7 +116,7 @@ index 9b689861..af87a8a3 100644
          return;
      }
  
-@@ -4472,14 +4534,13 @@ function apply_tcp_bbr_tuning(settings) {
+@@ -4481,14 +4543,13 @@ function apply_tcp_bbr_tuning(settings) {
          return;
      }
  
