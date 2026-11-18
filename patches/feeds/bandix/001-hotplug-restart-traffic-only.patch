@@ -25,9 +25,6 @@ a config written before these options existed printed
 The default config enables the traffic monitor, so the service works
 right after installation; before, it did not start until the option was
 turned on in LuCI.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01Uo9XQuT7u6ShTYdi2S3Anq
 ---
  openwrt-bandix/Makefile             |  2 ++
  openwrt-bandix/files/bandix.config  |  2 +-
