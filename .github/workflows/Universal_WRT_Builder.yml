@@ -245,7 +245,7 @@ jobs:
             esac
             [ "$v" = "crystal_clear" ] && zz=false
             # ytb=default — youtubeUnblock; у rehomeproxy и forkop-mod (приложения с модулем Zapret2) — Zapret2,
-            # у tachyon — ничего (только desync своего ядра, пакеты zapret* он удаляет).
+            # у tachyon — ничего (только desync своего ядра).
             # ytb=true — youtubeUnblock у всех, ytb=false — ни youtubeUnblock, ни Zapret2.
             local dpi=no
             if [ "$ytb" = "default" ]; then
