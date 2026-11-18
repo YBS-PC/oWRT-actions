@@ -36,8 +36,6 @@ gets all 6, every one after its fakes with a valid checksum (the
 the log has no errors. A GSO packet of three 1200-byte datagrams:
 before, none arrived; now all three. TLS over TCP with --fake-sni and
 --frag=tcp: 200 KB arrive intact, as before.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ---
  src/dpi.c            | 34 +++++++++++++++++++++++++++++++---
  src/youtubeUnblock.c | 24 +++++++++++++++++++++---
