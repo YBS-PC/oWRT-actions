@@ -29,9 +29,6 @@ it on every jq); link parsing in busybox ash with both jq versions and
 `sing-box check` 1.12.22 / 1.14.2; the subscription program gives
 byte-identical output on jq 1.7 and 1.8.1 (with and without
 reality_mlkem).
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
 diff --git a/netshift/files/usr/lib/sing_box_config_facade.sh b/netshift/files/usr/lib/sing_box_config_facade.sh
 index d238531e..641213ac 100644
