@@ -64,7 +64,7 @@ else
     echo ">>> [Zapret] Пакет 'zapret' не выбран в конфиге (или закомментирован). Скачивание пропущено."
 fi
 if [ "${DPI_MODE:-no}" = "zapret2" ]; then
-    # tachyon, rehomeproxy, forkop-mod с ytb=default: zapret2 — модуль варианта
+    # rehomeproxy, forkop-mod с ytb=default: zapret2 — модуль варианта
     echo ">>> [Zapret2] Модуль варианта (ytb=default): пакет zapret2 ставит блок «ВЫБОР КОМПОНЕНТОВ» ниже."
 elif [ -f ./.config ] && grep -Eq "^CONFIG_PACKAGE_(luci-app-)?zapret2=[ym]" ./.config; then
     echo ">>> [Zapret2] В конфиге включен 'zapret2'. Скачиваем исходники (ветка master)..."
@@ -703,7 +703,7 @@ if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "rehomeproxy" || "$VARIANT" == 
     drop_sqm_files
 fi
 
-# youtubeUnblock или Zapret2 у tachyon, rehomeproxy и forkop-mod решает поле ytb
+# youtubeUnblock или Zapret2 у rehomeproxy и forkop-mod решает поле ytb
 # (job setup): default — Zapret2 (DPI_MODE=zapret2, блок «ВЫБОР КОМПОНЕНТОВ»
 # ниже), true — youtubeUnblock, false — ни того, ни другого.
 
@@ -868,12 +868,12 @@ if [ "$YTB" != "true" ]; then
     drop_pkgs youtubeUnblock youtubeUnblock luci-app-youtubeUnblock luci-i18n-youtubeUnblock-ru
 fi
 
-# Zapret2 (DPI_MODE=zapret2: tachyon, rehomeproxy, forkop-mod при ytb=default) —
+# Zapret2 (DPI_MODE=zapret2: rehomeproxy, forkop-mod при ytb=default) —
 # пакет zapret2 (nfqws2 и Lua в /opt/zapret2), который эти приложения ищут как
 # свой модуль. Пакет — из 1andrevich/zapret2-openwrt (оттуда его ставит
-# Re:HomeProxy, tachyon — из его копии Dushnilin/zapret2-openwrt): bol-van/zapret2
-# с init-скриптом remittor. Служба пакета в образе не включается (run_on_boot=0
-# в его настройках): nfqws2 запускают сами приложения. LuCI пакета не ставится.
+# Re:HomeProxy): bol-van/zapret2 с init-скриптом remittor. Служба пакета
+# в образе не включается (run_on_boot=0 в его настройках): nfqws2
+# запускают сами приложения. LuCI пакета не ставится.
 # Клон remittor/zapret-openwrt из блока Zapret2 выше (если zapret2 включён в
 # WRT.config) убирается: два пакета zapret2 в дереве не нужны.
 if [ "${DPI_MODE:-no}" = "zapret2" ]; then
