@@ -16,10 +16,10 @@ from PKG_UPGRADE, set by opkg on an upgrade; apk runs pre-deinstall
 only on removal.
 
 diff --git a/tachyon/Makefile b/tachyon/Makefile
-index 39929249..8a7b0289 100644
+index 51347660..1ecbfe7f 100644
 --- a/tachyon/Makefile
 +++ b/tachyon/Makefile
-@@ -41,30 +41,25 @@ endef
+@@ -39,30 +39,25 @@ endef
  define Build/Compile
  endef
  
