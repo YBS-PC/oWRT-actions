@@ -26,17 +26,17 @@ on:
         options:
           - homeproxy
           - rehomeproxy
-          - clear
-          - switch
-          - crystal_clear
           - podkop
           - netshift
           - forkop
           - forkop-mod
           - tachyon
           - passwall
-          - v2raya
           - xray
+          - v2raya
+          - clear
+          - crystal_clear
+          - switch
 
       source:
         description: 'Исходники'
@@ -58,10 +58,10 @@ on:
           - openwrt-25.12
 
       agh:
-        description: 'AdGuard Home * (latest — свежий бинарник)'
+        description: 'AdGuard Home * (feed или latest — ставится везде, кроме crystal_clear и switch; latest — свежий бинарник)'
         required: true
         type: choice
-        default: 'latest'
+        default: 'no'
         options:
           - 'no'
           - 'feed'
@@ -89,7 +89,7 @@ on:
           - 'forkop-tiny'
 
       ytb:
-        description: 'youtubeUnblock * (default — у rehomeproxy, forkop-mod вместо него Zapret2, у tachyon — ничего; false — ни того, ни другого)'
+        description: 'youtubeUnblock / модуль * (default — у rehomeproxy Zapret2, у forkop-mod ByeDPI, у остальных ничего; true — youtubeUnblock везде, кроме crystal_clear и switch; false — ничего)'
         required: true
         type: choice
         default: 'default'
@@ -222,7 +222,7 @@ jobs:
 
           # Поля строки матрицы: agh (no|feed|latest), sb (no|feed|1.12.x..latest|extended|hiddify|podkop-engine[-full]|
           # forkop-base|-full|-tiny|tiny; default setup заменяет ядром варианта, остаётся только у tachyon), ytb (default|true|false),
-          # zz, patches, feeds (true — фиды репозитория пакетов), base (use_base_commit); dpi (zapret2|no) выводит setup из ytb.
+          # zz, patches, feeds (true — фиды репозитория пакетов), base (use_base_commit); dpi (zapret2|byedpi|no) выводит setup из ytb.
           # В combo значения — из config/combo.txt, поля формы не действуют.
           # slateax и ax59u — «тонкие»: sing-box-tiny из фида (у forkop — сборка tiny ядра).
           TINY_TARGETS="slateax ax59u"
@@ -240,19 +240,18 @@ jobs:
             esac
             orig="agh=$agh sb=$sb ytb=$ytb zz=$zz"
             case "$v" in
-              clear|crystal_clear|switch) agh=no; sb=no; ytb=false ;;
-              passwall|v2raya|xray)       sb=no ;;
+              crystal_clear|switch) agh=no; sb=no; ytb=false ;;
+              clear|passwall|v2raya|xray) sb=no ;;
             esac
             [ "$v" = "crystal_clear" ] && zz=false
-            # ytb=default — youtubeUnblock; у rehomeproxy и forkop-mod (приложения с модулем Zapret2) — Zapret2,
-            # у tachyon — ничего (только desync своего ядра).
-            # ytb=true — youtubeUnblock у всех, ytb=false — ни youtubeUnblock, ни Zapret2.
+            # ytb=default — модуль, который приложение находит само: у rehomeproxy — Zapret2, у forkop-mod —
+            # ByeDPI; у остальных ничего. ytb=true — youtubeUnblock, ytb=false — ничего.
             local dpi=no
             if [ "$ytb" = "default" ]; then
+              ytb=false
               case "$v/$fk" in
-                tachyon/*) ytb=false ;;
-                rehomeproxy/*|forkop/forkopmod) ytb=false; dpi=zapret2 ;;
-                *) ytb=true ;;
+                rehomeproxy/*)    dpi=zapret2 ;;
+                forkop/forkopmod) dpi=byedpi ;;
               esac
             fi
             # sb=default — рекомендуемое ядро варианта (на slateax/ax59u ниже станет tiny). У tachyon остаётся
@@ -311,7 +310,7 @@ jobs:
             # Сборки combo — строки config/combo.txt: устройство вариант agh sb ytb zz patches feeds.
             # Допустимые значения — те же, что в полях формы выше (при изменении формы поправить и здесь).
             COMBO_FILE="config/combo.txt"
-            V_VARIANT="homeproxy rehomeproxy clear switch crystal_clear podkop netshift forkop forkop-mod tachyon passwall v2raya xray"
+            V_VARIANT="homeproxy rehomeproxy podkop netshift forkop forkop-mod tachyon passwall xray v2raya clear crystal_clear switch"
             V_AGH="no feed latest"
             V_SB="default no feed 1.12.x 1.13.x 1.14.x latest extended hiddify podkop-engine podkop-engine-full forkop-base forkop-full forkop-tiny"
             V_YTB="default true false"
@@ -524,7 +523,7 @@ jobs:
         echo "=========================================="
 
     - name: Download AdGuardHome
-      # Только agh=latest. Для clear/crystal_clear/switch job setup уже
+      # Только agh=latest. Для crystal_clear/switch job setup уже
       # привёл agh к "no", поэтому отдельная проверка варианта не нужна.
       if: matrix.agh == 'latest'
       env:
@@ -1160,6 +1159,7 @@ jobs:
         esac
         [ "${{ matrix.ytb }}" = "true" ] && SUM_YTB="да" || SUM_YTB="нет"
         [ "${{ matrix.dpi }}" = "zapret2" ] && SUM_YTB="нет, вместо него Zapret2 (пакет zapret2)"
+        [ "${{ matrix.dpi }}" = "byedpi" ] && SUM_YTB="нет, вместо него ByeDPI (пакет byedpi)"
         [ "${{ matrix.zz }}" = "true" ] && SUM_ZZ="да" || SUM_ZZ="нет"
         SUM_AGH="$SUM_AGH$SUM_SRC_NOTE"
         SUM_SB="$SUM_SB$SUM_SRC_NOTE"
@@ -1765,14 +1765,14 @@ jobs:
             fi
         fi
 
-        # ytb=default у rehomeproxy, forkop-mod: Zapret2 вместо youtubeUnblock.
-        if [ "$DPI_MODE" = "zapret2" ]; then
+        # ytb=default: у rehomeproxy Zapret2, у forkop-mod ByeDPI вместо youtubeUnblock.
+        if [ "$DPI_MODE" = "zapret2" ] || [ "$DPI_MODE" = "byedpi" ]; then
             Z2_BAD=""
-            grep -q '^CONFIG_PACKAGE_zapret2=y' .config || Z2_BAD="$Z2_BAD zapret2 не включён;"
+            grep -q "^CONFIG_PACKAGE_${DPI_MODE}=y" .config || Z2_BAD="$Z2_BAD $DPI_MODE не включён;"
             grep -q '^CONFIG_PACKAGE_youtubeUnblock=y' .config && Z2_BAD="$Z2_BAD включён youtubeUnblock;"
             if [ -n "$Z2_BAD" ]; then
-                echo "::error title=Zapret2::После make defconfig:$Z2_BAD"
-                grep -E '^CONFIG_PACKAGE_(zapret2|luci-app-zapret2|youtubeUnblock)=' .config || true
+                echo "::error title=$DPI_MODE::После make defconfig:$Z2_BAD"
+                grep -E '^CONFIG_PACKAGE_(zapret2|luci-app-zapret2|byedpi|youtubeUnblock)=' .config || true
                 exit 1
             fi
         fi
@@ -2346,7 +2346,7 @@ jobs:
       uses: actions/upload-artifact@v7
       with:
         # Имя: все параметры сборки и дата (до минуты), чтобы имена в combo не совпадали.
-        name: ${{ matrix.target }}_${{ inputs.source }}_${{ inputs.branch }}_${{ matrix.vname }}_${{ matrix.patches && 'patches' || 'nopatches' }}_agh-${{ matrix.agh }}_sb-${{ matrix.sb }}_${{ matrix.ytb && 'ytb' || (matrix.dpi == 'zapret2' && 'zapret2' || 'noytb') }}_${{ matrix.zz && 'zz' || 'nozz' }}${{ matrix.feeds && '_feeds-repo' || '_feeds-tag' }}${{ matrix.base && '_app-base' || '' }}${{ matrix.sb == 'default' && '_7z-encrypted' || '' }}_${{ steps.get_date.outputs.date }}
+        name: ${{ matrix.target }}_${{ inputs.source }}_${{ inputs.branch }}_${{ matrix.vname }}_${{ matrix.patches && 'patches' || 'nopatches' }}_agh-${{ matrix.agh }}_sb-${{ matrix.sb }}_${{ matrix.ytb && 'ytb' || (matrix.dpi != 'no' && matrix.dpi || 'noytb') }}_${{ matrix.zz && 'zz' || 'nozz' }}${{ matrix.feeds && '_feeds-repo' || '_feeds-tag' }}${{ matrix.base && '_app-base' || '' }}${{ matrix.sb == 'default' && '_7z-encrypted' || '' }}_${{ steps.get_date.outputs.date }}
         # sb=default — только зашифрованный архив (шаг Encrypt)
         path: ${{ matrix.sb == 'default' && 'openwrt/bin-enc' || 'openwrt/bin' }}
         # На ранней ошибке (до создания bin/) не валим джоб красным "no files".
