@@ -41,8 +41,6 @@ written with an 8 KiB output limit, background children; the plugin in
 node with its ucode builtins and fs emulated,
 together with the real runner: start, poll, stop, jobs, cleanup, wrong
 ids, binary output, UTF-8 cut into 48 chunks of 1001 bytes.
-
-Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
  root/usr/libexec/luci-commands-job               |  75 ++++++
  root/usr/share/rpcd/acl.d/luci-app-commands.json |   6 +
