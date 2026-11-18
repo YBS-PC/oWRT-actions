@@ -338,8 +338,8 @@ apply_feed_patches
 
 # YTB — поле формы ytb (workflow экспортирует его; без него считаем «да»).
 # Варианты без youtubeUnblock job setup и так приводит к ytb=false (ytb=default
-# — у rehomeproxy Zapret2, у forkop-mod ByeDPI, у остальных ничего;
-# crystal_clear и switch — всегда без него).
+# — у rehomeproxy Zapret2, у forkop-mod ByeDPI, у остальных ничего; ytb=zapret2
+# или byedpi — этот пакет; crystal_clear и switch — всегда без него).
 if [[ "$VARIANT" == "crystal_clear" || "$VARIANT" == "switch" || "${YTB:-true}" != "true" ]]; then
     echo ">>> Variant '$VARIANT', ytb=${YTB:-true}. Skipping youtubeUnblock update."
 else

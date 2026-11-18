@@ -64,8 +64,8 @@ else
     echo ">>> [Zapret] Пакет 'zapret' не выбран в конфиге (или закомментирован). Скачивание пропущено."
 fi
 if [ "${DPI_MODE:-no}" = "zapret2" ]; then
-    # rehomeproxy с ytb=default: zapret2 — модуль варианта
-    echo ">>> [Zapret2] Модуль варианта (ytb=default): пакет zapret2 ставит блок «ВЫБОР КОМПОНЕНТОВ» ниже."
+    # ytb=default у rehomeproxy или ytb=zapret2: пакет ставит блок ниже
+    echo ">>> [Zapret2] Выбран полем ytb: пакет zapret2 ставит блок «ВЫБОР КОМПОНЕНТОВ» ниже."
 elif [ -f ./.config ] && grep -Eq "^CONFIG_PACKAGE_(luci-app-)?zapret2=[ym]" ./.config; then
     echo ">>> [Zapret2] В конфиге включен 'zapret2'. Скачиваем исходники (ветка master)..."
     git clone --depth=1 -b master "$ZAPRET_REPO" ./package/zapret2-openwrt/
@@ -703,8 +703,8 @@ fi
 
 # youtubeUnblock или модуль варианта решает поле ytb (job setup): default — у
 # rehomeproxy Zapret2 (DPI_MODE=zapret2), у forkop-mod ByeDPI (DPI_MODE=byedpi),
-# у остальных ничего (блок «ВЫБОР КОМПОНЕНТОВ» ниже); true — youtubeUnblock
-# (кроме crystal_clear и switch), false — ничего.
+# у остальных ничего (блок «ВЫБОР КОМПОНЕНТОВ» ниже); true — youtubeUnblock,
+# zapret2 / byedpi — этот пакет (кроме crystal_clear и switch), false — ничего.
 
 # --- ЛОГИКА ДЛЯ ВАРИАНТА 'clear' ---
 if [ "$VARIANT" == "clear" ]; then
@@ -865,12 +865,13 @@ if [ "$YTB" != "true" ]; then
     drop_pkgs youtubeUnblock youtubeUnblock luci-app-youtubeUnblock luci-i18n-youtubeUnblock-ru
 fi
 
-# Zapret2 (DPI_MODE=zapret2: rehomeproxy при ytb=default) —
-# пакет zapret2 (nfqws2 и Lua в /opt/zapret2), который эти приложения ищут как
-# свой модуль. Пакет — из 1andrevich/zapret2-openwrt (оттуда его ставит
-# Re:HomeProxy): bol-van/zapret2 с init-скриптом remittor. Служба пакета
-# в образе не включается (run_on_boot=0 в его настройках): nfqws2
-# запускают сами приложения. LuCI пакета не ставится.
+# Zapret2 (DPI_MODE=zapret2: rehomeproxy при ytb=default, любой вариант при
+# ytb=zapret2) — пакет zapret2 (nfqws2, Lua и blockcheck2.sh в /opt/zapret2).
+# Пакет — из 1andrevich/zapret2-openwrt (оттуда его ставит Re:HomeProxy; это
+# remittor/zapret-openwrt): bol-van/zapret2 с init-скриптом remittor. Служба
+# пакета в образе не включается (run_on_boot=0 в его настройках). У rehomeproxy
+# и forkop-mod nfqws2 запускает само приложение, LuCI пакета не ставится; в
+# остальных вариантах ставится luci-app-zapret2 — настройка и запуск из LuCI.
 # Клон remittor/zapret-openwrt из блока Zapret2 выше (если zapret2 включён в
 # WRT.config) убирается: два пакета zapret2 в дереве не нужны.
 if [ "${DPI_MODE:-no}" = "zapret2" ]; then
@@ -884,16 +885,24 @@ if [ "${DPI_MODE:-no}" = "zapret2" ]; then
     echo "   > Zapret2: пакет zapret2 $(sed -n 's/^PKG_VERSION:=//p' "$ZAPRET2_DIR/zapret2/Makefile" | head -n1) ($(git -C "$ZAPRET2_DIR" rev-parse --short HEAD))"
     sed -i '/CONFIG_PACKAGE_zapret2[=_ ]/d; /CONFIG_PACKAGE_luci-app-zapret2[=_ ]/d; /CONFIG_PACKAGE_luci-i18n-zapret2-/d' ./.config
     echo 'CONFIG_PACKAGE_zapret2=y' >> ./.config
-    echo '# CONFIG_PACKAGE_luci-app-zapret2 is not set' >> ./.config
+    if [ "$VARIANT" = "rehomeproxy" ] || [ "${M_FK:-}" = "forkopmod" ]; then
+        echo '# CONFIG_PACKAGE_luci-app-zapret2 is not set' >> ./.config
+    else
+        [ -f "$ZAPRET2_DIR/luci-app-zapret2/Makefile" ] || { echo "::error title=Zapret2::В 1andrevich/zapret2-openwrt нет luci-app-zapret2"; exit 1; }
+        echo 'CONFIG_PACKAGE_luci-app-zapret2=y' >> ./.config
+        echo "   > Zapret2: с luci-app-zapret2 (служба выключена, включается из LuCI)"
+    fi
 fi
 
-# ByeDPI (DPI_MODE=byedpi: forkop-mod при ytb=default) — пакет byedpi
-# (/usr/bin/ciadpi), который forkop-mod находит сам. Makefile — из
+# ByeDPI (DPI_MODE=byedpi: forkop-mod при ytb=default, любой вариант при
+# ytb=byedpi) — пакет byedpi (/usr/bin/ciadpi; его находят forkop-mod и
+# rehomeproxy, в остальных вариантах — служба пакета, LuCI у него нет). Makefile — из
 # DPITrickster/ByeDPI-OpenWrt (оттуда пакет ставит forkop-mod); это заготовка:
 # версию и исходники hufrea/byedpi подставляет CI автора, здесь — последний тег
 # vX.Y[.Z] hufrea/byedpi (хеш архива, как и у автора, не проверяется).
-# Служба пакета в образе выключена (enabled 0): ciadpi запускает forkop-mod,
-# автозапуск службы отключает zz1.
+# Служба пакета в образе выключена (enabled 0): ciadpi запускают сами
+# forkop-mod и rehomeproxy (у forkop-mod автозапуск службы снимает zz1), в
+# остальных вариантах службу включают в /etc/config/byedpi.
 if [ "${DPI_MODE:-no}" = "byedpi" ]; then
     BYEDPI_DIR="./package/byedpi-module"
     rm -rf "$BYEDPI_DIR"
