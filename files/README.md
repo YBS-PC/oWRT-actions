@@ -222,7 +222,7 @@ grep -n 'clash_api_ui\|fw4_forward.nft' /etc/init.d/homeproxy
 
 **Если НЕ установлен** — файл удаляется (очередь 537 никто не слушает).
 
-**ByeDPI** (forkop-mod, пакет `byedpi` при `ytb=default`): автозапуск службы
+**ByeDPI** (forkop-mod, пакет `byedpi` при `ytb=default` или `ytb=byedpi`): автозапуск службы
 `/etc/init.d/byedpi` выключается (в образе служба уже выключена: `enabled '0'`
 в `/etc/config/byedpi`). `ciadpi` запускает и останавливает сам forkop-mod;
 при включённом автозапуске службы он пишет предупреждение при каждом старте.
