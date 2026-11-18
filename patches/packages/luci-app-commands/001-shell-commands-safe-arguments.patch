@@ -35,9 +35,6 @@ backslashes, Cyrillic, empty arguments); 78 checks of the parser,
 positional detection, script building and binary test in node with the
 ucode builtins; the built scripts run by dash keep "$(reboot)", "|",
 ";reboot" and "`id`" as plain text.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
  ucode/commands.uc                 | 209 ++++++++++++++++++++++++++++++
  ucode/controller/commands.uc      | 146 +++------------------
