@@ -98,7 +98,7 @@
 | `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`0c8a895`](https://github.com/yandexru45/netshift/commit/0c8a89535a897b43b50b15c3f0c8991df242bb24) | 07.11.2026 |
 | `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`fbe2b6b`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/fbe2b6beac461bfaed6fd236ba2dde1230b94918) | 17.11.2026 |
 | `feeds/podkop/` | [itdoginfo/podkop](https://github.com/itdoginfo/podkop) | [`c654bf5`](https://github.com/itdoginfo/podkop/commit/c654bf5da75309754e3fb63b9441981db65fff68) | 24.10.2026 |
-| `feeds/tachyon/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) | [`9feca85`](https://github.com/Dushnilin/tachyon/commit/9feca85cf53277e4425aafecfe4e5ce95133ef60) | 17.11.2026 |
+| `feeds/tachyon/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) | [`b3e61fb`](https://github.com/Dushnilin/tachyon/commit/b3e61fb50ab6e2c0341579080d14d131bbae9d39) | 18.11.2026 |
 | `packages/luci-app-commands/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`75a306d`](https://github.com/openwrt/luci/commit/75a306df84a020c57a631ef5b4c02ace56d93387) | 15.10.2026 |
 | `packages/luci-app-filemanager/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`e969939`](https://github.com/openwrt/luci/commit/e969939b49167516e219d465df8030d98d443d67) | 31.10.2026 |
 | `packages/luci-theme-bootstrap/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`b2e0be4`](https://github.com/openwrt/luci/commit/b2e0be4b46ec0fd43394c081fa7c50657af14011) | 11.11.2026 |
@@ -547,18 +547,20 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
 
 ### tachyon — `feeds/tachyon/` (2)
 
-Вариант `tachyon`, фид [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) (1.8.0).
-С 1.8.0 tachyon работает только со своим ядром: sing-box он не запускает
-(конфиг `/etc/config/sing-box` переименовывает в конфиг своего ядра), а
-отдельные zapret, zapret2 и ByeDPI убраны — их настройки переводятся на
-desync ядра, их службы и файлы удаляются при установке пакета на
-роутере. Поэтому `sb=default` (по умолчанию) кладёт в образ ядро tachyon по умолчанию, и
+Вариант `tachyon`, фид [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) (1.8.1).
+С 1.8.0 tachyon работает только со своим ядром: sing-box он не запускает,
+а отдельные zapret, zapret2 и ByeDPI убраны — их настройки переводятся на
+desync ядра. С 1.8.1 при установке пакета на роутере он удаляет только
+то, что ставил сам (по метке «Tachyon managed» или своим папкам в
+`/etc/tachyon` и `/var/run/tachyon`); отдельно установленные sing-box,
+zapret, zapret2 и ByeDPI остаются, их настройки копируются в
+`/etc/tachyon/external-configs-backup`. Поэтому `sb=default` (по умолчанию) кладёт в образ ядро tachyon по умолчанию, и
 артефакт такой сборки шифруется паролем из секрета `ARTIFACT_PASSWORD`;
 любое другое значение `sb` job setup заменяет на `no` — ядра в образе
 нет, его ставит установщик tachyon. `ytb=default` у tachyon больше не
 ставит Zapret2.
 
-Патчи сняты с коммита [`9feca85`](https://github.com/Dushnilin/tachyon/commit/9feca85cf53277e4425aafecfe4e5ce95133ef60) от 17.11.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`b3e61fb`](https://github.com/Dushnilin/tachyon/commit/b3e61fb50ab6e2c0341579080d14d131bbae9d39) от 18.11.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Удаление пакета.** Скрипт удаления tachyon написан на ucode, а
   сборка OpenWrt выполняет его как shell (apk — в своём скрипте удаления,
