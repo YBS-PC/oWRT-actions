@@ -11,9 +11,6 @@ even with a larger idle timeout, and an interval above a smaller idle
 timeout was accepted, after which sing-box refuses to start:
 'start outbound/urltest[...]: interval must be less or equal than
 idle_timeout'.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01HEQfjBzS7Wos7AvTk18TDQ
 ---
 diff --git a/htdocs/luci-static/resources/view/homeproxy/client.js b/htdocs/luci-static/resources/view/homeproxy/client.js
 index 7d606a5..f4283b3 100644
