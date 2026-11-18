@@ -250,10 +250,9 @@ else
 fi
 
 # Ядро прошивки вместо ядра из резервной копии. tachyon перечисляет в
-# /lib/upgrade/keep.d свои ядра: /usr/bin/sing-box (у нас патч 002 его
-# убирает, но резервную копию делает ещё прежняя прошивка, а tachyon,
-# обновлённый на роутере из релиза автора, приносит прежний список),
-# собственное ядро tachyon и метки ядра в /etc/tachyon. sysupgrade кладёт такие
+# /lib/upgrade/keep.d свои ядра: собственное ядро tachyon и метки ядра в
+# /etc/tachyon, а прежние версии и /usr/bin/sing-box (резервную копию делает
+# прежняя прошивка, поэтому её список может быть старым). sysupgrade кладёт такие
 # файлы в копию, даже если они из прошивки, и после прошивки с сохранением
 # настроек старое ядро восстанавливалось в overlay поверх нового из образа.
 # Поэтому файл, который есть в образе (/rom), возвращается из образа.
@@ -1240,7 +1239,7 @@ done
 # ставит в sing-box правило reject для QUIC на входе tproxy: браузер сразу
 # переходит на TCP, который youtubeUnblock обрабатывает. HTTP/3 при этом не
 # используется и для остальных соединений через sing-box.
-# Без youtubeUnblock (forkop-mod и tachyon — у них свой Zapret; forkop 2.x —
+# Без youtubeUnblock (forkop-mod — у него свой Zapret, tachyon — desync ядра; forkop 2.x —
 # если youtubeUnblock не выбран) опцию не трогаем.
 if [ -x /usr/bin/youtubeUnblock ]; then
     for _pk in forkop tachyon podkop netshift; do
