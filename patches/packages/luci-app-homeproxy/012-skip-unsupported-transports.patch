@@ -22,9 +22,6 @@ parseShareLink of node.js on vless/trojan/vmess links with tcp, raw,
 ws, grpc, xhttp, splithttp and kcp: before, xhttp and splithttp nodes
 were created and raw became an unknown transport; after, they are
 skipped or read as TCP and the other links give the same nodes.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
 diff --git a/htdocs/luci-static/resources/view/homeproxy/node.js b/htdocs/luci-static/resources/view/homeproxy/node.js
 index 63e0074..de350bc 100644

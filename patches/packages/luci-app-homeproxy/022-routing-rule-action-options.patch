@@ -21,9 +21,6 @@ drop rule, a reject rule with no_drop, a resolve rule with all five
 options and a route rule with leftover reject and resolve values; on a
 real configuration only "method": "drop" of its drop rule is added.
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
-
 diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
 index a75fe68..ef5be18 100755
 --- a/root/etc/homeproxy/scripts/generate_client.uc

@@ -24,8 +24,6 @@ refused the unpatched one with a proxy list). The rules, run on 1.14.3
 with fake DNS servers: an answer of china-dns inside geoip-cn is returned,
 one outside goes to the main DNS server, geosite-cn goes to china-dns,
 geosite-noncn is not asked there, as with the legacy rules.
-
-Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
 diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
 index ce54caa..b695bc3 100755

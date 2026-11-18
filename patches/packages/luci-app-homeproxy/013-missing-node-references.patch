@@ -25,9 +25,6 @@ a dedicated UDP node, WireGuard, routing nodes with detour,
 domain_resolver and URLTest). Six configurations with removed nodes that
 crashed before now pass "sing-box check" on 1.12.22, 1.13.21, 1.14.2 and
 1.14.1-extended-2.7.2, as do all the others.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
 diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
 index f450bce..7ecd502 100755

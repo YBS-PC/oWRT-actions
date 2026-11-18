@@ -30,8 +30,6 @@ configuration file is byte-identical to the one before the update; and
 with the rc.common of OpenWrt 25.12: "check_config" is listed and returns
 the result of the check.
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-
 diff --git a/root/etc/homeproxy/scripts/update_subscriptions.uc b/root/etc/homeproxy/scripts/update_subscriptions.uc
 index d5b1a1e..848f980 100755
 --- a/root/etc/homeproxy/scripts/update_subscriptions.uc

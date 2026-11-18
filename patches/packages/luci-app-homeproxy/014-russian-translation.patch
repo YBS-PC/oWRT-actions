@@ -16,9 +16,6 @@ Resolve and others).
 The package luci-i18n-homeproxy-ru is built by luci.mk with
 CONFIG_LUCI_LANG_ru. Checked: msgfmt -c (647 translated, the %s and the
 HTML tags as in the original) and po2lmo of LuCI.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
 diff --git a/po/ru/homeproxy.po b/po/ru/homeproxy.po
 new file mode 100644

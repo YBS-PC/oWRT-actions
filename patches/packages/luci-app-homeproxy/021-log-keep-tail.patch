@@ -19,8 +19,6 @@ ending with the newest one, the inode is kept, a writer holding the file
 open with O_APPEND goes on at the new end with no NUL bytes, a small log
 is left alone and no temporary file remains.
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-
 diff --git a/root/etc/homeproxy/scripts/clean_log.sh b/root/etc/homeproxy/scripts/clean_log.sh
 index c0d8f10..f0cae46 100755
 --- a/root/etc/homeproxy/scripts/clean_log.sh

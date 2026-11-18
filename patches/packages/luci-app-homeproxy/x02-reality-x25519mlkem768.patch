@@ -42,9 +42,6 @@ REALITY node only when the core has it and follows the REALITY flag, no
 errors. The share link import and the subscription parser set it from
 support-x25519mlkem768=true and only for REALITY.
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
-
 diff --git a/htdocs/luci-static/resources/view/homeproxy/node.js b/htdocs/luci-static/resources/view/homeproxy/node.js
 index 3648b87..2ff98bf 100644
 --- a/htdocs/luci-static/resources/view/homeproxy/node.js

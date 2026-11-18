@@ -17,9 +17,6 @@ changes nothing. This also drops stale rules of a previous mode.
 Checked with the real rc.common of OpenWrt and stubs: after start in the
 redirect mode the three files exist and are empty, in the TUN mode the
 forward and input files get their rules, and stop leaves them empty.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
 diff --git a/root/etc/init.d/homeproxy b/root/etc/init.d/homeproxy
 index e25f10a..98c10fe 100755

@@ -34,9 +34,6 @@ unchanged, restore after a reboot, the database in RAM kept on a reload,
 save at shutdown, rule sets switched to local, the global mode and
 cache_persist=0. The generated configuration has "type": "remote" only
 for remote rule sets.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
 diff --git a/Makefile b/Makefile
 index 1416658..0958f64 100644

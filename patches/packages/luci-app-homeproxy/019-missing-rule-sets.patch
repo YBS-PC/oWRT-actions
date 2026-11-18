@@ -26,9 +26,6 @@ rule set off and one on keeps the one on, a DNS rule with only the
 rule set off is skipped, a routing rule naming a removed rule set keeps
 the rest; "sing-box check" passes on 1.14.3-extended-2.7.3, where the
 old generator gives the "rule-set not found" error above.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
 diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
 index 9591499..a75fe68 100755

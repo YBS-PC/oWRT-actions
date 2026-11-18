@@ -47,9 +47,6 @@ of an extended build that crashed generate_client.uc or failed sing-box
 check before now pass "sing-box check" on 1.12.22, 1.13.21, 1.14.2,
 1.14.3 and 1.14.1-extended-2.7.2; a server configuration with mtproxy and
 socks passes with socks only.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
 diff --git a/root/etc/homeproxy/scripts/firewall_post.ut b/root/etc/homeproxy/scripts/firewall_post.ut
 index 04a0f6d..9284b3d 100755

@@ -20,9 +20,6 @@ Checked with the real rc.common of OpenWrt and stubs: a reload without
 changes did not restart dnsmasq, a changed DNS port restarted it once,
 the gfwlist mode restarted it on every reload, and stop and start kept
 their restart.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
 diff --git a/root/etc/init.d/homeproxy b/root/etc/init.d/homeproxy
 index 4b7de2d..9e2faf4 100755

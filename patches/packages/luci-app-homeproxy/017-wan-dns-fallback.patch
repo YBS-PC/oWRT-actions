@@ -39,9 +39,6 @@ known, a DNS server only in resolv.conf.auto (loopback and IPv6 entries
 skipped), WAN up, WAN down after up (the last one is kept) and a new
 DNS server on WAN; the end of start_service with the old and new DNS of
 WAN equal, missing on either side and different.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
 diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
 index ecc370c..9591499 100755

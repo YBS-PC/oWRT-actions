@@ -54,9 +54,6 @@ a row). LuCI: rendered with luci-base in Chromium with a mocked ubus, no
 errors on any tab of the client page, the fields show only with their
 mode, an invalid address is refused while typing, the saved values are as
 entered, and saving without touching them writes the same as before.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
 diff --git a/htdocs/luci-static/resources/view/homeproxy/client.js b/htdocs/luci-static/resources/view/homeproxy/client.js
 index f4283b3..46aaac9 100644

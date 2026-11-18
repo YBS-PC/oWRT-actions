@@ -21,9 +21,6 @@ Checked with the generator run by ucode in a sandbox and "sing-box
 check" 1.14.2: without the options the output is unchanged; with them
 clash_api appears in the custom mode next to cache_file and in the
 global mode, where there was no experimental section.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
 diff --git a/root/etc/homeproxy/scripts/generate_client.uc b/root/etc/homeproxy/scripts/generate_client.uc
 index b695bc3..f450bce 100755

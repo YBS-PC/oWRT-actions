@@ -80,9 +80,6 @@ on 2.7.2 and 2.7.3 with hex/7 (refused by Xray), hex/8, hex/7-8, a
 custom table, a non-ASCII table, a table without a length, both xmux
 limits and a bad table inside downloadSettings.
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
-
 diff --git a/htdocs/luci-static/resources/view/homeproxy/node.js b/htdocs/luci-static/resources/view/homeproxy/node.js
 index de350bc..3648b87 100644
 --- a/htdocs/luci-static/resources/view/homeproxy/node.js

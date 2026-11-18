@@ -22,9 +22,6 @@ Checked in network namespaces with conntrack-tools 1.4.8: a connection
 opened before the redirect kept reaching the server, after the delete
 it was reset and the reconnect went to the redirect port; a direct, a
 redirected and a router-originated connection carried on.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
 diff --git a/root/etc/init.d/homeproxy b/root/etc/init.d/homeproxy
 index 3167775..44bf3f8 100755

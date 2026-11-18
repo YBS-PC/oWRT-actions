@@ -25,9 +25,6 @@ sing-box, the generators, fw4 and dnsmasq: a bad client or server
 configuration on reload and on restart left the service running with
 the old files; a good one was checked once and started; a plain start
 and a start after stop still ran the check.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
 diff --git a/root/etc/init.d/homeproxy b/root/etc/init.d/homeproxy
 index 44bf3f8..4b7de2d 100755

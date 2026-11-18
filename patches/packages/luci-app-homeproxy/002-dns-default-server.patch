@@ -12,9 +12,6 @@ start: 'default DNS server not found: cfg-local-dns-dns'. Ship
 
 The same section carried 'dns_strategy', which nothing reads; LuCI and
 the generator use 'default_strategy'.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01HEQfjBzS7Wos7AvTk18TDQ
 ---
 diff --git a/root/etc/config/homeproxy b/root/etc/config/homeproxy
 index f65df8d..a568eb7 100644
