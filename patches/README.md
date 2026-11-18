@@ -96,9 +96,9 @@
 | `feeds/luciappbandixplus/` | [timsaya/luci-app-bandix-plus](https://github.com/timsaya/luci-app-bandix-plus) | [`c4f002f`](https://github.com/timsaya/luci-app-bandix-plus/commit/c4f002f74f3a0f4aeb79fb5d35f5a7bbd3392a1f) | 21.10.2026 |
 | `feeds/luciappxray/` | [yichya/luci-app-xray](https://github.com/yichya/luci-app-xray) | [`4d5a6fd`](https://github.com/yichya/luci-app-xray/commit/4d5a6fd7fc4d2fbbcd7f70f1319da06b91ec1d56) | 22.09.2026 |
 | `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`0c8a895`](https://github.com/yandexru45/netshift/commit/0c8a89535a897b43b50b15c3f0c8991df242bb24) | 07.11.2026 |
-| `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`0c817f7`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/0c817f7dbfc10038510c4e6e9d13e54bd94f769d) | 16.11.2026 |
+| `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`fbe2b6b`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/fbe2b6beac461bfaed6fd236ba2dde1230b94918) | 17.11.2026 |
 | `feeds/podkop/` | [itdoginfo/podkop](https://github.com/itdoginfo/podkop) | [`c654bf5`](https://github.com/itdoginfo/podkop/commit/c654bf5da75309754e3fb63b9441981db65fff68) | 24.10.2026 |
-| `feeds/tachyon/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) | [`ae7210e`](https://github.com/Dushnilin/tachyon/commit/ae7210e5e6f6deaa3a59bac7e3385a40e8c45034) | 16.11.2026 |
+| `feeds/tachyon/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) | [`9feca85`](https://github.com/Dushnilin/tachyon/commit/9feca85cf53277e4425aafecfe4e5ce95133ef60) | 17.11.2026 |
 | `packages/luci-app-commands/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`75a306d`](https://github.com/openwrt/luci/commit/75a306df84a020c57a631ef5b4c02ace56d93387) | 15.10.2026 |
 | `packages/luci-app-filemanager/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`e969939`](https://github.com/openwrt/luci/commit/e969939b49167516e219d465df8030d98d443d67) | 31.10.2026 |
 | `packages/luci-theme-bootstrap/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`b2e0be4`](https://github.com/openwrt/luci/commit/b2e0be4b46ec0fd43394c081fa7c50657af14011) | 11.11.2026 |
@@ -130,7 +130,7 @@
 
 ## Патчи по пакетам
 
-Всего 71 патч для 18 пакетов. Номер — порядок применения. Ссылки
+Всего 70 патчей для 18 пакетов. Номер — порядок применения. Ссылки
 вида `#98` / `PR #103` — обсуждение и предложенное исправление в
 репозитории автора.
 
@@ -484,7 +484,7 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
 
 Вариант `passwall`, фид [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2).
 
-Патчи сняты с коммита [`0c817f7`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/0c817f7dbfc10038510c4e6e9d13e54bd94f769d) от 16.11.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`fbe2b6b`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/fbe2b6beac461bfaed6fd236ba2dde1230b94918) от 17.11.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Соединения после перезапуска.** Пока passwall2 перезапускается,
   правил нет, и новые соединения из сети уходят напрямую. После запуска
@@ -545,15 +545,20 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
   исключённых должен быть хотя бы один IP, иначе в журнале
   предупреждение.
 
-### tachyon — `feeds/tachyon/` (3)
+### tachyon — `feeds/tachyon/` (2)
 
-Вариант `tachyon`, фид [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) (1.7.33).
-С `sb=default` (по умолчанию) в образ идёт ядро tachyon по умолчанию, и
-артефакт такой сборки шифруется паролем из секрета `ARTIFACT_PASSWORD`.
-С другим значением `sb` в образ идёт выбранное ядро, артефакт не
-шифруется.
+Вариант `tachyon`, фид [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) (1.8.0).
+С 1.8.0 tachyon работает только со своим ядром: sing-box он не запускает
+(конфиг `/etc/config/sing-box` переименовывает в конфиг своего ядра), а
+отдельные zapret, zapret2 и ByeDPI убраны — их настройки переводятся на
+desync ядра, их службы и файлы удаляются при установке пакета на
+роутере. Поэтому `sb=default` (по умолчанию) кладёт в образ ядро tachyon по умолчанию, и
+артефакт такой сборки шифруется паролем из секрета `ARTIFACT_PASSWORD`;
+любое другое значение `sb` job setup заменяет на `no` — ядра в образе
+нет, его ставит установщик tachyon. `ytb=default` у tachyon больше не
+ставит Zapret2.
 
-Патчи сняты с коммита [`ae7210e`](https://github.com/Dushnilin/tachyon/commit/ae7210e5e6f6deaa3a59bac7e3385a40e8c45034) от 16.11.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`9feca85`](https://github.com/Dushnilin/tachyon/commit/9feca85cf53277e4425aafecfe4e5ce95133ef60) от 17.11.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Удаление пакета.** Скрипт удаления tachyon написан на ucode, а
   сборка OpenWrt выполняет его как shell (apk — в своём скрипте удаления,
@@ -561,16 +566,11 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
   не останавливал службу, не возвращал настройки dnsmasq и не убирал
   запись таблицы маршрутизации. Скрипт переписан на sh, с тем же
   ограничением времени (90 секунд). *Всегда.*
-- **002. sing-box прошивки после sysupgrade.** tachyon перечислял
-  `/usr/bin/sing-box` и `/usr/lib/libcronet.so` в
-  `/lib/upgrade/keep.d/tachyon`. sysupgrade кладёт такие файлы в
-  резервную копию, даже если они из прошивки, поэтому sing-box прежней
-  прошивки (десятки МиБ) попадал в каждую копию и после прошивки с
-  сохранением настроек восстанавливался в overlay поверх нового sing-box
-  из образа. Эти два пути больше не сохраняются; ядро, поставленное на
-  роутере, его init-скрипт и метки в `/etc/tachyon` сохраняются как
-  раньше. Копию, сделанную прежней
-  прошивкой, исправляет zz1 (см. `files/README.md`, раздел 14). *Всегда.*
+- **002 удалён.** Он убирал `/usr/bin/sing-box` из
+  `/lib/upgrade/keep.d/tachyon`; с 1.8.0 автор убрал его сам.
+  `/usr/lib/libcronet.so` в списке остался: теперь это файл ядра tachyon,
+  и в образе его нет. Копию, сделанную прежней прошивкой, исправляет zz1
+  (см. `files/README.md`, раздел 14).
 - **003. Настройка «TCP BBR».** Включённая, она ставила
   `net.core.default_qdisc=fq` (`fq_codel` — только если `fq` недоступен);
   теперь `fq_codel`, как по умолчанию в OpenWrt (у `fq` нет управления
@@ -934,8 +934,9 @@ ImmortalWrt. Пакет из фида выпуска: галочка `use_base_c
   (`/usr/libexec/luci-commands-job` через `start-stop-daemon`), а
   страница забирает вывод по мере появления. Команда продолжает работать,
   если закрыть окно или страницу; её можно остановить (вся группа
-  процессов). Вывод одной команды — до 8 МиБ, хранится в
-  `/tmp/luci-commands` до следующего запуска этой команды (не дольше
+  процессов). Вывод одной команды — до 8 МиБ (ограничен только вывод:
+  файлы, которые команда пишет сама, могут быть любого размера), хранится
+  в `/tmp/luci-commands` до следующего запуска этой команды (не дольше
   суток, не больше 16 заданий). *Всегда.*
 - **003. Новые страницы «Команды» и «Настройка».**
   - Карточки в сетке, на телефоне в одну колонку: имя, под ним мелким
