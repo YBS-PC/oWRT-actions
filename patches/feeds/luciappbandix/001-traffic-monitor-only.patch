@@ -29,9 +29,6 @@ data and writing only the settings, clear data and restart. Before, the
 read part of the ACL also held methods that change data and
 installUpdate, which downloaded any URL from the request and installed
 it with "apk add --allow-untrusted".
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01Uo9XQuT7u6ShTYdi2S3Anq
 ---
  .../resources/view/bandix/index.js            | 369 +-----------------
  .../resources/view/bandix/settings.js         | 365 -----------------

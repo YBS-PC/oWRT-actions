@@ -47,9 +47,6 @@ comes before base. The Russian catalog of the package translated
 Failure, minutes, Reset and Active differently from luci-base and
 changed them on every page of LuCI; these entries are removed, the
 pages of bandix use the translation of luci-base.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01Uo9XQuT7u6ShTYdi2S3Anq
 ---
  .../luci-static/resources/view/bandix/index.js     | 633 ++++++++++++++++++---
  luci-app-bandix/po/ru/bandix.po                    |  27 +-
