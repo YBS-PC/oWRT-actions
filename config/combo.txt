@@ -11,7 +11,7 @@
 #   sb          default | no | feed | 1.12.x | 1.13.x | 1.14.x | latest | extended |
 #               hiddify | podkop-engine | podkop-engine-full |
 #               forkop-base | forkop-full | forkop-tiny
-#   ytb         default | true | false
+#   ytb         default | true | false | zapret2 | byedpi
 #   zz          true | false    скрипт zz1 в образе
 #   patches     true | false    патчи из patches/
 #   feeds       true | false    true — фиды репозитория пакетов, false — фиды тега
