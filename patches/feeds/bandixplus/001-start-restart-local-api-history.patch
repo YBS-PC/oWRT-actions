@@ -31,9 +31,6 @@ lost on every restart, and the hotplug restart above would clear them.
 bandix-plus writes the hourly records and its state files to the data
 directory once an hour and on stop. The log level defaults to info when
 the option is missing (before, an empty --log-level was passed).
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01Uo9XQuT7u6ShTYdi2S3Anq
 ---
  openwrt-bandix-plus/Makefile                  |  4 +++
  .../files/99-bandix-plus-defaults             |  2 +-
