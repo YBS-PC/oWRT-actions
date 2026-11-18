@@ -118,7 +118,7 @@ option group 'root'
 - `/etc/init.d/adguardhome`: `--logfile syslog` (или `/var/AdGuardHome.log` прежних версий) → `--logfile /tmp/log/AdGuardHome.log` — журнал в файл, а не в syslog
 - `/etc/config/adguardhome`: `list jail_mount_rw '/tmp/log'` — каталог журнала доступен для записи из песочницы ujail
 - `/etc/adguardhome/adguardhome.yaml` — upstream DNS зависит от варианта (yaml правится, только если он есть: на чистой прошивке без сохранённых настроек он появляется после мастера AGH, и zz1 пишет в лог адрес, который нужно указать; настройки варианта ниже выставляются и без yaml):
-  - `forkop`, `tachyon`, `podkop`, `netshift` → `127.0.0.42:53` (DNS их sing-box), плюс `<вариант>.settings.dont_touch_dhcp='1'`
+  - `forkop`, `tachyon`, `podkop`, `netshift` → `127.0.0.42:53` (DNS-вход их ядра), плюс `<вариант>.settings.dont_touch_dhcp='1'`
   - tachyon сам перенаправляет DNS на свой вход только у устройств, для которых есть своя секция (фильтр устройств): их запросы AGH не видит, остальных клиентов видит
   - forkop 2.x вместо `dont_touch_dhcp` (опции нет: dnsmasq он не трогает) получает `forkop.settings.intercept_device_dns='0'` (наш патч 002) и `forkop.settings.unmatched_dns_mode='router'`. Без перехвата запросы клиентов идут в AGH, и он видит каждого; AGH пересылает их на `127.0.0.42:53`, где домены секций получают FakeIP, а остальные отвечают DNS-серверы forkop (правило «вне секций → роутер» на этом входе не действует, петли нет). Запросы на чужой DNS (8.8.8.8 и т.п.) патч тоже отправляет в AGH. Перехватываются только устройства из фильтров секций (им нужен ответ по адресу клиента) и сам роутер; их DNS вне секций с `router` уходит в AGH. FakeIP-соединения исключённых устройств патч 002 отправляет через sing-box напрямую. Без патча (сборка без `apply_patches`) опция ни на что не влияет, и клиенты в журнале AGH видны как `127.0.0.1`. forkop 2.x отличается от forkop-mod (ветка 1.x) по опции `unmatched_dns_mode` в `/usr/share/forkop/default-config`
   - `xray` → `127.0.0.1:5300` (DNS-вход Xray luci-app-xray)
@@ -352,15 +352,14 @@ cp /etc/apk/repositories.d/distfeeds.list.bak /etc/apk/repositories.d/distfeeds.
 
 ## 14. Локальные бинарники из `/root/apps/`
 **Ядро прошивки вместо ядра из резервной копии** (только firstboot). tachyon перечисляет свои ядра в
-`/lib/upgrade/keep.d/tachyon`: `/usr/bin/sing-box`, собственное ядро tachyon и метки ядра в `/etc/tachyon`. sysupgrade
+`/lib/upgrade/keep.d/tachyon`: собственное ядро tachyon и метки ядра в `/etc/tachyon` (прежние версии — ещё и `/usr/bin/sing-box`). sysupgrade
 кладёт такие файлы в резервную копию, даже если они из прошивки, и после прошивки с сохранением настроек старое ядро
 восстанавливалось в overlay поверх нового. Поэтому каждый из этих файлов (ядра и метки), который есть в образе (`/rom`) и
 восстановлен в overlay, заменяется файлом из образа (ссылка — ссылкой); совпадающий не трогается. Чего в образе нет
 (например ядро tachyon, поставленное на роутере), остаётся. В образе с ядром tachyon без sing-box (tachyon с `sb=default`)
-`/usr/bin/sing-box` из копии удаляется. Путь, указанный в `/etc/sysupgrade.conf`, не трогается. Патч 002
-(`patches/feeds/tachyon`) убирает `/usr/bin/sing-box` из списка tachyon, но копию делает ещё прежняя прошивка, а
-tachyon, обновлённый на роутере из релиза автора, приносит прежний список. sing-box из `/root/apps` (таблица ниже)
-ставится уже после этого шага.
+`/usr/bin/sing-box` из копии удаляется. Путь, указанный в `/etc/sysupgrade.conf`, не трогается. Копию делает ещё
+прежняя прошивка, поэтому в ней может быть и `/usr/bin/sing-box` из прежнего списка tachyon. sing-box из `/root/apps`
+(таблица ниже) ставится уже после этого шага.
 
 | Файл | Куда |
 |------|------|
