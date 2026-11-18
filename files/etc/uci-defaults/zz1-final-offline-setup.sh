@@ -962,6 +962,21 @@ else
     fi
 fi
 
+# ByeDPI (пакет byedpi, forkop-mod при ytb=default): ciadpi запускает и
+# останавливает forkop-mod сам, отдельная служба пакета ему мешает (при её
+# автозапуске forkop-mod пишет предупреждение при каждом старте). В образе
+# служба выключена (enabled 0 в /etc/config/byedpi), здесь снимается автозапуск.
+if [ "$CURRENT_VARIANT" = "forkop" ] && ! forkop_v2 && [ -x /etc/init.d/byedpi ]; then
+    if /etc/init.d/byedpi running >/dev/null 2>&1; then
+        run_cmd "Остановка службы byedpi" /etc/init.d/byedpi stop
+    fi
+    if /etc/init.d/byedpi enabled >/dev/null 2>&1; then
+        run_cmd "Автозапуск службы byedpi выключен (ciadpi запускает forkop-mod)" /etc/init.d/byedpi disable
+    else
+        log_info "Автозапуск службы byedpi уже выключен"
+    fi
+fi
+
 # Ненужные этой сборке наборы — после удаления 537-youtubeUnblock.nft выше:
 # пока файл есть, он ссылается на наборы
 FIREWALL_CONFIG_CHANGED=0
@@ -1047,8 +1062,34 @@ end
 EOF
     _RC=$?; [ $_RC -eq 0 ] && log_ok "Контроллер LuCI создан" || log_err "Ошибка создания контроллера (exit: $_RC)"
 
-    run_cmd "Смена порта dnsmasq" uci set dhcp.@dnsmasq[0].port="54"
-    run_cmd_ign "Удаление серверов dnsmasq" uci delete dhcp.@dnsmasq[0].server
+    if [ "$CURRENT_VARIANT" = "clear" ]; then
+        # clear — главный роутер: upstream DNS AGH задаётся в его настройках
+        # вручную, серверы dnsmasq остаются (на них может ссылаться AGH, через
+        # 127.0.0.1:54). Порт 53 AGH забирает, только когда он уже настроен:
+        # без yaml AGH слушает лишь мастер на :3000, и с dnsmasq на :54 DNS
+        # пропал бы у всей сети.
+        if [ -f /etc/adguardhome/adguardhome.yaml ]; then
+            run_cmd "Смена порта dnsmasq" uci set dhcp.@dnsmasq[0].port="54"
+        elif [ "$(uci -q get dhcp.@dnsmasq[0].port)" != "54" ]; then
+            log_info "clear: AGH ещё не настроен — dnsmasq остаётся на :53. Включить AGH: uci set dhcp.@dnsmasq[0].port='54'; uci commit dhcp; /etc/init.d/dnsmasq restart — и сразу пройти мастер AGH (порт 3000), DNS — порт 53"
+        fi
+        # dnsmasq не на :53 не сообщает клиентам DHCP свой адрес как DNS
+        # (опция 6). 0.0.0.0 dnsmasq заменяет адресом интерфейса, к которому
+        # подключён клиент: одна запись подходит для каждой сети. Секции, где
+        # опция 6 уже задана или DHCP выключен, не меняются.
+        for _sec in $(uci -q show dhcp | sed -n "s/^dhcp\.\([^.=]*\)=dhcp$/\1/p"); do
+            [ "$(uci -q get dhcp."$_sec".ignore)" = "1" ] && continue
+            _has6=0
+            for _o in $(uci -q get dhcp."$_sec".dhcp_option); do
+                case "$_o" in 6,*|option:dns-server,*) _has6=1 ;; esac
+            done
+            [ "$_has6" = 1 ] && continue
+            run_cmd "DHCP $_sec: DNS — адрес роутера (опция 6)" uci add_list dhcp."$_sec".dhcp_option='6,0.0.0.0'
+        done
+    else
+        run_cmd "Смена порта dnsmasq" uci set dhcp.@dnsmasq[0].port="54"
+        run_cmd_ign "Удаление серверов dnsmasq" uci delete dhcp.@dnsmasq[0].server
+    fi
     run_cmd "Сохранение dhcp" uci commit dhcp
 
     # Журнал AdGuard Home — в файл, а не в syslog (он забивает системный
@@ -1075,6 +1116,7 @@ EOF
     #                     при каждом запуске), адреса узлов — DNS провайдера.
     #                     v2rayA свой DNS на :53 при AGH не поднимает (порт
     #                     занят), а трафик всё равно разводит по сниффингу.
+    #   clear           → не меняется: upstream задаётся в настройках AGH вручную
     #   homeproxy и остальные → 127.0.0.1:5333 (DNS-порт sing-box homeproxy)
     # Любой из этих адресов, оставшийся от прошлого варианта, заменяется на
     # нужный. Правим yaml напрямую: AGH хранит upstream только там, не в UCI.
@@ -1087,9 +1129,12 @@ EOF
         forkop|tachyon|podkop|netshift) _AGH_EXPECTED='127.0.0.42:53' ;;
         xray)          _AGH_EXPECTED='127.0.0.1:5300' ;;
         passwall|v2raya) _AGH_EXPECTED='127.0.0.1:54' ;;
+        clear)         _AGH_EXPECTED='' ;;
         *)             _AGH_EXPECTED='127.0.0.1:5333' ;;
     esac
-    if [ -f "$AGH_YAML" ]; then
+    if [ -z "$_AGH_EXPECTED" ]; then
+        log_info "AGH upstream не меняем ($CURRENT_VARIANT): задаётся в настройках AGH"
+    elif [ -f "$AGH_YAML" ]; then
         # $1: файл; new — адрес для замены (пусто — только проверить наличие)
         agh_upstream() {
             awk -v new="$2" -v want="$_AGH_EXPECTED" -v q="'" '
