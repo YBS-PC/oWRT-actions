@@ -24,34 +24,39 @@ The new rpcd plugin luci.commands (ucode) runs a command as a job:
 
 The command runs in its own session (setsid): stop and the optional
 time limit (option timeout, seconds) reach its children. The output is
-limited to 8 MiB (ulimit -f), the job of a command is replaced by its
-next run, finished jobs are kept for a day, at most 16.
+limited to 8 MiB: it goes through a FIFO to "head -c", past the limit
+the command gets SIGPIPE. Files the command writes itself are not
+limited (with ulimit -f, sysupgrade -b of a backup larger than the limit
+got SIGXFSZ). The exit code is written after the rest of the output, at
+most 3 s after the command when a background child keeps the output
+open. The job of a command is replaced by its next run, finished jobs
+are kept for a day, at most 16.
 
 The ACL grants jobs and poll for reading, start and stop for writing.
 
-Checked: the runner under dash with exit code, arguments with spaces
+Checked: the runner under dash and busybox ash with exit code, arguments with spaces
 and quotes, stop of the process group, time limit with a command that
-ignores SIGTERM (SIGKILL after 3 s), the output limit, background
-children; the plugin in node with its ucode builtins and fs emulated,
+ignores SIGTERM (SIGKILL after 3 s), the output limit, a 20 MiB file
+written with an 8 KiB output limit, background children; the plugin in
+node with its ucode builtins and fs emulated,
 together with the real runner: start, poll, stop, jobs, cleanup, wrong
 ids, binary output, UTF-8 cut into 48 chunks of 1001 bytes.
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011cyCFAA9hPeqN8wsgkxbrJ
 ---
- root/usr/libexec/luci-commands-job            |  57 ++++
- .../share/rpcd/acl.d/luci-app-commands.json   |   6 +
- root/usr/share/rpcd/ucode/luci.commands       | 259 ++++++++++++++++++
- 3 files changed, 322 insertions(+)
+ root/usr/libexec/luci-commands-job               |  75 ++++++
+ root/usr/share/rpcd/acl.d/luci-app-commands.json |   6 +
+ root/usr/share/rpcd/ucode/luci.commands          | 259 +++++++++++++++++++
+ 3 files changed, 340 insertions(+)
  create mode 100755 root/usr/libexec/luci-commands-job
  create mode 100644 root/usr/share/rpcd/ucode/luci.commands
 
 diff --git a/root/usr/libexec/luci-commands-job b/root/usr/libexec/luci-commands-job
 new file mode 100755
-index 0000000..c913998
+index 0000000..e6a14db
 --- /dev/null
 +++ b/root/usr/libexec/luci-commands-job
-@@ -0,0 +1,57 @@
+@@ -0,0 +1,75 @@
 +#!/bin/sh
 +# Runs one job of luci-app-commands. The rpcd plugin luci.commands starts
 +# it with "start-stop-daemon -b", so it is detached from rpcd and holds
@@ -62,7 +67,7 @@ index 0000000..c913998
 +#   timeout   run time limit in seconds, 0 for none
 +#   limit     output size limit in KiB
 +# The job writes:
-+#   out       stdout and stderr of the command, as they come
++#   out       stdout and stderr of the command, as they come, up to limit
 +#   pid       PID of the command, the leader of its process group
 +#   timedout  present when the time limit stopped the command
 +#   rc        exit code, written last (128+N when killed by signal N)
@@ -77,13 +82,22 @@ index 0000000..c913998
 +
 +cd / || exit 1
 +
++# The output goes through a FIFO to "head -c": past the limit head exits
++# and the next write of the command gets SIGPIPE. Only the output is
++# limited, files the command writes itself are not (ulimit -f would limit
++# them too: sysupgrade -b of a large backup got SIGXFSZ).
++fifo="$dir/fifo"
++rm -f "$fifo"
++mkfifo "$fifo" || exit 1
++head -c $((limit * 1024)) <"$fifo" >"$dir/out" &
++reader=$!
++
 +# The command gets its own session and process group: "stop" and the time
 +# limit signal the whole group, this script stays alive to record the exit
-+# code. ulimit -f counts 512 byte blocks, a write past it gets SIGXFSZ.
++# code.
 +(
-+	ulimit -f $((limit * 2))
 +	exec setsid /bin/sh "$dir/script"
-+) </dev/null >"$dir/out" 2>&1 &
++) </dev/null >"$fifo" 2>&1 &
 +pid=$!
 +echo "$pid" >"$dir/pid"
 +
@@ -108,6 +122,15 @@ index 0000000..c913998
 +rc=$?
 +
 +[ -n "$watchdog" ] && kill "$watchdog" 2>/dev/null
++# The rest of the output is still in the FIFO: rc is written after it.
++# A child left in the background keeps the FIFO open, so the wait is at
++# most 3 s; head keeps writing its output after that.
++n=0
++while kill -0 "$reader" 2>/dev/null && [ "$n" -lt 3 ]; do
++	sleep 1
++	n=$((n + 1))
++done
++rm -f "$fifo"
 +echo "$rc" >"$dir/rc.tmp" && mv -f "$dir/rc.tmp" "$dir/rc"
 diff --git a/root/usr/share/rpcd/acl.d/luci-app-commands.json b/root/usr/share/rpcd/acl.d/luci-app-commands.json
 index 45facdf..3b30a33 100644
@@ -394,6 +417,3 @@ index 0000000..13893e9
 +};
 +
 +return { 'luci.commands': methods };
--- 
-2.43.0
-
