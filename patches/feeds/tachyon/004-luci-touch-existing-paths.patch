@@ -1,0 +1,61 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 18 Nov 2026 12:00:00 +0000
+Subject: [PATCH] Makefile: touch only existing LuCI paths in postinst and
+ postupgrade
+
+Package/tachyon/postinst and postupgrade refresh the LuCI cache with
+`touch luci.js view/tachyon resources`. touch on a missing path creates
+an empty file. When tachyon is installed or upgraded without
+luci-app-tachyon on the router (it comes later in the same apk
+transaction, or is installed later), /www/luci-static/resources/view/tachyon
+becomes a plain file, and luci-app-tachyon then fails to install with
+"Not a directory". The author fixed the same lines in build.sh (the
+release packages); the Makefile used by buildroot and SDK builds still
+had them.
+
+Each path is now touched only if it exists, as in build.sh. A plain
+file at view/tachyon, left by such an install, is removed, so
+luci-app-tachyon can be installed again. Image builds are not affected:
+both scripts exit early when IPKG_INSTROOT is set.
+
+diff --git a/tachyon/Makefile b/tachyon/Makefile
+index 1ecbfe7f..3def08be 100644
+--- a/tachyon/Makefile
++++ b/tachyon/Makefile
+@@ -174,9 +174,15 @@ for _comp in zapret zapret2 byedpi wdtt-client qwdtt olcrtc; do
+ 	fi
+ done
+ 
+-# LuCI cache touch invalidation
++# LuCI cache touch invalidation. Only paths that exist: touch on a missing one
++# creates an empty file, and a file in place of view/tachyon (this package can be
++# installed or upgraded before luci-app-tachyon) makes its install fail with
++# "Not a directory". Such a file left by an earlier build is removed.
++[ -f /www/luci-static/resources/view/tachyon ] && rm -f /www/luci-static/resources/view/tachyon 2>/dev/null || true
+ for _f in /www/luci-static/resources/view/tachyon/*.js; do [ -f "$$_f" ] && touch "$$_f" 2>/dev/null || true; done
+-touch /www/luci-static/resources/luci.js /www/luci-static/resources/view/tachyon /www/luci-static/resources 2>/dev/null || true
++for _p in /www/luci-static/resources/luci.js /www/luci-static/resources/view/tachyon /www/luci-static/resources; do
++	[ -e "$$_p" ] && touch "$$_p" 2>/dev/null || true
++done
+ 
+ # Start via tachyon binary (lifecycle.uc) which registers with procd directly,
+ # bypassing rc.common and its flock entirely.
+@@ -309,9 +315,15 @@ TACHYON_LIB=/usr/lib/tachyon ucode -L /usr/lib/tachyon /usr/lib/tachyon/config/m
+ 
+ /usr/bin/tachyon package_postinst
+ 
+-# LuCI cache touch invalidation
++# LuCI cache touch invalidation. Only paths that exist: touch on a missing one
++# creates an empty file, and a file in place of view/tachyon (this package can be
++# installed or upgraded before luci-app-tachyon) makes its install fail with
++# "Not a directory". Such a file left by an earlier build is removed.
++[ -f /www/luci-static/resources/view/tachyon ] && rm -f /www/luci-static/resources/view/tachyon 2>/dev/null || true
+ for _f in /www/luci-static/resources/view/tachyon/*.js; do [ -f "$$_f" ] && touch "$$_f" 2>/dev/null || true; done
+-touch /www/luci-static/resources/luci.js /www/luci-static/resources/view/tachyon /www/luci-static/resources 2>/dev/null || true
++for _p in /www/luci-static/resources/luci.js /www/luci-static/resources/view/tachyon /www/luci-static/resources; do
++	[ -e "$$_p" ] && touch "$$_p" 2>/dev/null || true
++done
+ 
+ # The rpcd ACL for this binary ships here rather than in luci-app-tachyon, so
+ # the policy and the executable it governs are installed in the same package and
