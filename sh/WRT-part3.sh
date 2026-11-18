@@ -64,7 +64,7 @@ else
     echo ">>> [Zapret] Пакет 'zapret' не выбран в конфиге (или закомментирован). Скачивание пропущено."
 fi
 if [ "${DPI_MODE:-no}" = "zapret2" ]; then
-    # rehomeproxy, forkop-mod с ytb=default: zapret2 — модуль варианта
+    # rehomeproxy с ytb=default: zapret2 — модуль варианта
     echo ">>> [Zapret2] Модуль варианта (ytb=default): пакет zapret2 ставит блок «ВЫБОР КОМПОНЕНТОВ» ниже."
 elif [ -f ./.config ] && grep -Eq "^CONFIG_PACKAGE_(luci-app-)?zapret2=[ym]" ./.config; then
     echo ">>> [Zapret2] В конфиге включен 'zapret2'. Скачиваем исходники (ветка master)..."
@@ -486,13 +486,11 @@ drop_sqm_files() {
     rmdir ./files/usr/lib/sqm 2>/dev/null || true
 }
 
+# AdGuard Home и youtubeUnblock в clear — по полям agh и ytb (блок «ВЫБОР КОМПОНЕНТОВ»).
 CLEAR_BLOAT=(
-"adguardhome"
 "sing-box"
 "homeproxy"
 "luci-app-homeproxy"
-"youtubeUnblock"
-"luci-app-youtubeUnblock"
 "avahi-nodbus-daemon"
 "libavahi-nodbus-support"
 )
@@ -703,18 +701,17 @@ if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "rehomeproxy" || "$VARIANT" == 
     drop_sqm_files
 fi
 
-# youtubeUnblock или Zapret2 у rehomeproxy и forkop-mod решает поле ytb
-# (job setup): default — Zapret2 (DPI_MODE=zapret2, блок «ВЫБОР КОМПОНЕНТОВ»
-# ниже), true — youtubeUnblock, false — ни того, ни другого.
+# youtubeUnblock или модуль варианта решает поле ytb (job setup): default — у
+# rehomeproxy Zapret2 (DPI_MODE=zapret2), у forkop-mod ByeDPI (DPI_MODE=byedpi),
+# у остальных ничего (блок «ВЫБОР КОМПОНЕНТОВ» ниже); true — youtubeUnblock
+# (кроме crystal_clear и switch), false — ничего.
 
 # --- ЛОГИКА ДЛЯ ВАРИАНТА 'clear' ---
 if [ "$VARIANT" == "clear" ]; then
     echo ">>> [Variant: $VARIANT] Performing aggressive cleanup..."
-    # Удаляем тяжелые бинарники, которые скачались в YML
-    # И добавляем индивидуальные
-    # Они вообще не скачиватся согласно условию в yml
+    # sing-box в clear не нужен (job setup ставит sb=no). Бинарник AdGuard Home
+    # (agh=latest) остаётся: AdGuard Home в clear решает поле agh.
     rm -f "./files/usr/bin/sing-box"
-    rm -f "./files/usr/bin/AdGuardHome"
     echo "   > Cleaned up binary files (if any were present)"
     # Вычищаем пакеты из конфига
     for PKG in "${CLEAR_BLOAT[@]}"; do
@@ -868,7 +865,7 @@ if [ "$YTB" != "true" ]; then
     drop_pkgs youtubeUnblock youtubeUnblock luci-app-youtubeUnblock luci-i18n-youtubeUnblock-ru
 fi
 
-# Zapret2 (DPI_MODE=zapret2: rehomeproxy, forkop-mod при ytb=default) —
+# Zapret2 (DPI_MODE=zapret2: rehomeproxy при ytb=default) —
 # пакет zapret2 (nfqws2 и Lua в /opt/zapret2), который эти приложения ищут как
 # свой модуль. Пакет — из 1andrevich/zapret2-openwrt (оттуда его ставит
 # Re:HomeProxy): bol-van/zapret2 с init-скриптом remittor. Служба пакета
@@ -888,6 +885,41 @@ if [ "${DPI_MODE:-no}" = "zapret2" ]; then
     sed -i '/CONFIG_PACKAGE_zapret2[=_ ]/d; /CONFIG_PACKAGE_luci-app-zapret2[=_ ]/d; /CONFIG_PACKAGE_luci-i18n-zapret2-/d' ./.config
     echo 'CONFIG_PACKAGE_zapret2=y' >> ./.config
     echo '# CONFIG_PACKAGE_luci-app-zapret2 is not set' >> ./.config
+fi
+
+# ByeDPI (DPI_MODE=byedpi: forkop-mod при ytb=default) — пакет byedpi
+# (/usr/bin/ciadpi), который forkop-mod находит сам. Makefile — из
+# DPITrickster/ByeDPI-OpenWrt (оттуда пакет ставит forkop-mod); это заготовка:
+# версию и исходники hufrea/byedpi подставляет CI автора, здесь — последний тег
+# vX.Y[.Z] hufrea/byedpi (хеш архива, как и у автора, не проверяется).
+# Служба пакета в образе выключена (enabled 0): ciadpi запускает forkop-mod,
+# автозапуск службы отключает zz1.
+if [ "${DPI_MODE:-no}" = "byedpi" ]; then
+    BYEDPI_DIR="./package/byedpi-module"
+    rm -rf "$BYEDPI_DIR"
+    if ! git clone --depth=1 https://github.com/DPITrickster/ByeDPI-OpenWrt.git "$BYEDPI_DIR" \
+            || [ ! -f "$BYEDPI_DIR/byedpi/Makefile" ] || [ ! -f "$BYEDPI_DIR/byedpi/files/byedpi.config" ]; then
+        echo "::error title=ByeDPI::Не удалось клонировать DPITrickster/ByeDPI-OpenWrt"
+        exit 1
+    fi
+    BYEDPI_TAG=$(git ls-remote --tags --refs https://github.com/hufrea/byedpi.git 2>/dev/null \
+        | sed -n 's|.*refs/tags/\(v[0-9][0-9]*\(\.[0-9][0-9]*\)\{1,2\}\)$|\1|p' | sort -V | tail -n1)
+    if [ -z "$BYEDPI_TAG" ]; then
+        echo "::error title=ByeDPI::Не удалось определить последний тег hufrea/byedpi"
+        exit 1
+    fi
+    sed -i -e "s|@VERSION@|${BYEDPI_TAG#v}|g" -e "s|@SOURCE_REF@|${BYEDPI_TAG}|g" \
+        -e "s|@SOURCE_DIR@|${BYEDPI_TAG#v}|g" "$BYEDPI_DIR/byedpi/Makefile"
+    sed -i -E "s/^([[:space:]]*option[[:space:]]+enabled[[:space:]]+)'?1'?[[:space:]]*$/\1'0'/" \
+        "$BYEDPI_DIR/byedpi/files/byedpi.config"
+    if grep -q '@[A-Z_]*@' "$BYEDPI_DIR/byedpi/Makefile" \
+            || ! grep -Eq "^[[:space:]]*option[[:space:]]+enabled[[:space:]]+'0'" "$BYEDPI_DIR/byedpi/files/byedpi.config"; then
+        echo "::error title=ByeDPI::Заготовка Makefile или настройки пакета у автора изменились"
+        exit 1
+    fi
+    echo "   > ByeDPI: пакет byedpi ${BYEDPI_TAG#v} ($(git -C "$BYEDPI_DIR" rev-parse --short HEAD)), служба выключена"
+    sed -i '/CONFIG_PACKAGE_byedpi[=_ ]/d' ./.config
+    echo 'CONFIG_PACKAGE_byedpi=y' >> ./.config
 fi
 
 if [ "$ZZ" != "true" ]; then
