@@ -902,7 +902,7 @@ fi
 # vX.Y[.Z] hufrea/byedpi (хеш архива, как и у автора, не проверяется).
 # Служба пакета в образе выключена (enabled 0): ciadpi запускают сами
 # forkop-mod и rehomeproxy (у forkop-mod автозапуск службы снимает zz1), в
-# остальных вариантах службу включают в /etc/config/byedpi.
+# остальных вариантах служба так и остаётся выключенной.
 if [ "${DPI_MODE:-no}" = "byedpi" ]; then
     BYEDPI_DIR="./package/byedpi-module"
     rm -rf "$BYEDPI_DIR"
