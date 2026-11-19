@@ -3,6 +3,7 @@ From: Claude <noreply@anthropic.com>
 Date: Thu, 19 Nov 2026 12:00:00 +0000
 Subject: [PATCH] fix(init): a failed generator does not pass the check with
  the old configuration
+Requires: 008-check-config-before-stop 019-missing-rule-sets
 
 check_new_config() (patch 008) ran the generator without looking at its
 exit code and kept the previous sing-box-c.json / sing-box-s.json in
