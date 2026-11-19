@@ -1,0 +1,46 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 19 Nov 2026 12:00:00 +0000
+Subject: [PATCH] fix(init): a failed generator does not pass the check with
+ the old configuration
+
+check_new_config() (patch 008) ran the generator without looking at its
+exit code and kept the previous sing-box-c.json / sing-box-s.json in
+place while it ran. A generator that stops before it writes the new file
+(die() for a node that is missing, exit(1) of generate_server.uc) left
+the old file, "sing-box check" passed on it, and reload or restart went
+on as if the new settings were applied: they were not, and the log said
+nothing.
+
+The previous file is now moved to .bak before the generator runs (it was
+copied there), and the check needs the generator to exit with 0 and the
+new file to exist. On a failure the old file comes back from .bak, as
+before, and the running service is kept.
+
+Checked: check_new_config() of the patched init script under busybox ash
+with a stub generator and sing-box: old file and a generator that dies -
+before: the check passed on the old file, now: it fails and the old file
+is restored; a new valid file, a new invalid file, no old file - as
+before.
+
+diff --git a/root/etc/init.d/homeproxy b/root/etc/init.d/homeproxy
+index a3a03a3..1988e1d 100755
+--- a/root/etc/init.d/homeproxy
++++ b/root/etc/init.d/homeproxy
+@@ -498,11 +498,13 @@ check_new_config() {
+ 		fi
+ 
+ 		rm -f "$RUN_DIR/sing-box-$name.json.bak"
++		# The previous file is moved away: a generator that fails before it
++		# writes the new one must not leave the old one to pass the check.
+ 		[ ! -e "$RUN_DIR/sing-box-$name.json" ] || \
+-			cp -p "$RUN_DIR/sing-box-$name.json" "$RUN_DIR/sing-box-$name.json.bak"
++			mv -f "$RUN_DIR/sing-box-$name.json" "$RUN_DIR/sing-box-$name.json.bak"
+ 		generated="$generated $name"
+-		ucode -S "$HP_DIR/scripts/$gen" 2>>"$LOG_PATH"
+-		if [ -e "$RUN_DIR/sing-box-$name.json" ] && \
++		if ucode -S "$HP_DIR/scripts/$gen" 2>>"$LOG_PATH" && \
++		   [ -e "$RUN_DIR/sing-box-$name.json" ] && \
+ 		   "$PROG" --disable-color check --config "$RUN_DIR/sing-box-$name.json" 2>>"$LOG_PATH"; then
+ 			cp -p "$RUN_DIR/sing-box-$name.json" "$RUN_DIR/sing-box-$name.json.checked"
+ 		else
