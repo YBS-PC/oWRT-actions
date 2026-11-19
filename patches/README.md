@@ -98,7 +98,7 @@
 | `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`0c8a895`](https://github.com/yandexru45/netshift/commit/0c8a89535a897b43b50b15c3f0c8991df242bb24) | 07.11.2026 |
 | `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`fbe2b6b`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/fbe2b6beac461bfaed6fd236ba2dde1230b94918) | 17.11.2026 |
 | `feeds/podkop/` | [itdoginfo/podkop](https://github.com/itdoginfo/podkop) | [`c654bf5`](https://github.com/itdoginfo/podkop/commit/c654bf5da75309754e3fb63b9441981db65fff68) | 24.10.2026 |
-| `feeds/tachyon/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) | [`2cd282e`](https://github.com/Dushnilin/tachyon/commit/2cd282e0711fc553d95d1c5a6af585021acc544a) | 19.11.2026 |
+| `feeds/tachyon/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) | [`ebe9ec8`](https://github.com/Dushnilin/tachyon/commit/ebe9ec8d083f359779ba19288672c9399ad692df) | 19.11.2026 |
 | `packages/luci-app-commands/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`75a306d`](https://github.com/openwrt/luci/commit/75a306df84a020c57a631ef5b4c02ace56d93387) | 15.10.2026 |
 | `packages/luci-app-filemanager/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`e969939`](https://github.com/openwrt/luci/commit/e969939b49167516e219d465df8030d98d443d67) | 31.10.2026 |
 | `packages/luci-theme-bootstrap/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`b2e0be4`](https://github.com/openwrt/luci/commit/b2e0be4b46ec0fd43394c081fa7c50657af14011) | 11.11.2026 |
@@ -560,7 +560,7 @@ zapret, zapret2 и ByeDPI остаются, их настройки копиру
 нет, его ставит установщик tachyon. `ytb=default` у tachyon больше не
 ставит Zapret2.
 
-Патчи сняты с коммита [`2cd282e`](https://github.com/Dushnilin/tachyon/commit/2cd282e0711fc553d95d1c5a6af585021acc544a) от 19.11.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`ebe9ec8`](https://github.com/Dushnilin/tachyon/commit/ebe9ec8d083f359779ba19288672c9399ad692df) от 19.11.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Удаление пакета.** Скрипт удаления tachyon написан на ucode, а
   сборка OpenWrt выполняет его как shell (apk — в своём скрипте удаления,
