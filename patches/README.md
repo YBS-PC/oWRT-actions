@@ -90,7 +90,7 @@
 | `feeds/bandix/` | [timsaya/openwrt-bandix](https://github.com/timsaya/openwrt-bandix) | [`0760d1f`](https://github.com/timsaya/openwrt-bandix/commit/0760d1f5b52d1a2317dfd171ab00fe6543a9a0c4) | 27.10.2026 |
 | `feeds/bandixplus/` | [timsaya/openwrt-bandix-plus](https://github.com/timsaya/openwrt-bandix-plus) | [`fba9704`](https://github.com/timsaya/openwrt-bandix-plus/commit/fba9704300f2900451e00a1645e11b1f179204b8) | 21.10.2026 |
 | `feeds/forkop/` | [ushan0v/forkop](https://github.com/ushan0v/forkop) | [`129d303`](https://github.com/ushan0v/forkop/commit/129d303e6cc879e9edc4e13c50b1f37637e69554) | 02.11.2026 |
-| `feeds/forkopmod/` | [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) | [`bcf6644`](https://github.com/Gavr1024/forkop-mod/commit/bcf6644ce0ce8ab50661493efa646009062dc4f0) | 18.11.2026 |
+| `feeds/forkopmod/` | [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) | [`99648c7`](https://github.com/Gavr1024/forkop-mod/commit/99648c7ebc392de4afa77c2754ce965f854834af) | 18.11.2026 |
 | `feeds/internetdetector/` | [gSpotx2f/luci-app-internet-detector](https://github.com/gSpotx2f/luci-app-internet-detector) | [`e265fcc`](https://github.com/gSpotx2f/luci-app-internet-detector/commit/e265fcc8a9d9fd359f29fd0188ab2da3ce1438fa) | 09.10.2026 |
 | `feeds/luciappbandix/` | [timsaya/luci-app-bandix](https://github.com/timsaya/luci-app-bandix) | [`108369b`](https://github.com/timsaya/luci-app-bandix/commit/108369b8da05f01296a3ed0210a2ab60809712e5) | 27.10.2026 |
 | `feeds/luciappbandixplus/` | [timsaya/luci-app-bandix-plus](https://github.com/timsaya/luci-app-bandix-plus) | [`c4f002f`](https://github.com/timsaya/luci-app-bandix-plus/commit/c4f002f74f3a0f4aeb79fb5d35f5a7bbd3392a1f) | 21.10.2026 |
@@ -130,7 +130,7 @@
 
 ## Патчи по пакетам
 
-Всего 71 патч для 18 пакетов. Номер — порядок применения. Ссылки
+Всего 72 патча для 18 пакетов. Номер — порядок применения. Ссылки
 вида `#98` / `PR #103` — обсуждение и предложенное исправление в
 репозитории автора.
 
@@ -241,7 +241,7 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
 
 Вариант `forkop-mod`, фид [Gavr1024/forkop-mod](https://github.com/Gavr1024/forkop-mod) (1.0.17).
 
-Патчи сняты с коммита [`bcf6644`](https://github.com/Gavr1024/forkop-mod/commit/bcf6644ce0ce8ab50661493efa646009062dc4f0) от 18.11.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`99648c7`](https://github.com/Gavr1024/forkop-mod/commit/99648c7ebc392de4afa77c2754ce965f854834af) от 18.11.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Ошибки «left-hand side is not a function» и удаление через
   apk.** В 13 местах функции перенесены выше места, где их вызывают
@@ -596,7 +596,7 @@ zapret, zapret2 и ByeDPI остаются, их настройки копиру
   месте папки удаляется. На сборку образа не влияет: при сборке эти
   скрипты сразу выходят. *Всегда.*
 
-### homeproxy — `packages/luci-app-homeproxy/` (23)
+### homeproxy — `packages/luci-app-homeproxy/` (24)
 
 Вариант `homeproxy`, пакет [immortalwrt/homeproxy](https://github.com/immortalwrt/homeproxy):
 на OpenWrt и на ImmortalWrt берётся master (на ImmortalWrt — вместо
@@ -824,6 +824,16 @@ zapret, zapret2 и ByeDPI остаются, их настройки копиру
   правил. Вход слушает только loopback; остальные входы и правила — как
   раньше. *Опция:* `homeproxy.infra.check_port` — порт (пусто — `5334`,
   `0` — без входа), задаётся командой `uci`.
+- **024. Ошибка генератора не проходит проверку на старом конфиге.**
+  Проверка нового конфига (008) не смотрела код завершения генератора, а
+  прежний `sing-box-c.json` (`sing-box-s.json`) оставался на месте, пока
+  генератор работал. Если генератор останавливался до записи нового
+  файла (`die()` для отсутствующего узла, `exit(1)` у
+  `generate_server.uc`), `sing-box check` проходил на старом файле, и
+  reload или restart шли дальше, будто новые настройки применены. Теперь
+  прежний файл перед запуском генератора переносится в `.bak`, а проверка
+  требует кода 0 и нового файла; при ошибке старый файл возвращается из
+  `.bak`, работающая служба остаётся, как и раньше. *Всегда.*
 - **x01. Транспорт XHTTP.** Узлы VLESS, Trojan и VMess с транспортом
   XHTTP (как в Xray). *Только в сборке* варианта `homeproxy` с полем
   `sb=extended` и включёнными патчами: XHTTP есть в sing-box-extended, в
@@ -946,7 +956,9 @@ ImmortalWrt. Пакет из фида выпуска: галочка `use_base_c
   (`/usr/libexec/luci-commands-job` через `start-stop-daemon`), а
   страница забирает вывод по мере появления. Команда продолжает работать,
   если закрыть окно или страницу; её можно остановить (вся группа
-  процессов). Вывод одной команды — до 8 МиБ (ограничен только вывод:
+  процессов). «Стоп» и ограничение времени действуют, пока работает сама
+  команда: процесс, который она оставила в фоне и завершилась, остаётся
+  работать, как и без патча. Вывод одной команды — до 8 МиБ (ограничен только вывод:
   файлы, которые команда пишет сама, могут быть любого размера), хранится
   в `/tmp/luci-commands` до следующего запуска этой команды (не дольше
   суток, не больше 16 заданий). *Всегда.*
@@ -1061,11 +1073,16 @@ ImmortalWrt. В OpenWrt 24.10 код другой, серия не ложитс�
   - Копирование, перемещение, удаление папок, архивы и изменения «для всего
     содержимого» идут фоновыми заданиями (`setsid`, каталог
     `/tmp/luci-filemanager`): страница опрашивает код завершения, задание
-    можно остановить, закрытая страница его не прерывает. Завершённые
-    задания удаляются через час.
+    можно остановить, закрытая страница его не прерывает. «Отмена»
+    посылает группе процессов задания SIGTERM (и тогда, когда задание ещё
+    запускается), а если оно работает и через ~4 с — SIGKILL; каталог
+    задания удаляется после этого. Завершённые задания удаляются через
+    час.
   - Редактор: ссылка правится и сохраняется через свою цель; права,
     владелец, концы строк и BOM не меняются; если файл изменили на роутере
-    после открытия, перед перезаписью — вопрос. Перенос строк (на узком
+    после открытия, перед перезаписью — вопрос. Если файл или папку над
+    ним переименовать или переместить, редактор сохраняет файл на новое
+    место. Перенос строк (на узком
     экране включён), номера строк, Tab вставляет табуляцию, Ctrl+S
     сохраняет; без автозамены и заглавных букв клавиатуры телефона, шрифт
     16 px на сенсорных экранах (браузер не увеличивает страницу). Редактор
