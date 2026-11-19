@@ -62,13 +62,17 @@ List:
 
 Copy, move, delete of folders, archives and recursive changes run as
 jobs detached from rpcd (setsid) in /tmp/luci-filemanager: the page
-polls for the exit code and can stop the job; finished jobs are removed
-after an hour.
+polls for the exit code and can stop the job (SIGTERM to its process
+group, also when Cancel comes before the job has started, and SIGKILL
+when it is still running about 4 s later; its directory is removed after
+that); finished jobs are removed after an hour.
 
 Editor:
 - a link is edited and saved through its target; permissions, owner,
   line ends and BOM stay as they were; a file changed on the router
-  after it was opened is not overwritten without a question;
+  after it was opened is not overwritten without a question; when the
+  file or a folder above it is renamed or moved, the editor follows it
+  and saves to the new place;
 - line wrapping (on by default on narrow screens), line numbers, Tab
   inserts a tab, Ctrl+S saves; no autocorrection and capitals of the
   phone keyboard, 16 px font on touch screens; the editor fits the
@@ -91,16 +95,19 @@ saving, hex editor, create, rename, duplicate, copy and move with
 conflicts and into itself, upload error, download of a file and of a
 folder archive, chmod, recursive chown, delete, settings, the old
 settings file, Back in the browser, the list not moving when items
-are selected, copied or cleared); no errors in the console.
+are selected, copied or cleared); no errors in the console. Cancel of
+a job (before and after it has started, a job that ignores SIGTERM) and
+the editor after a rename or move of a folder above the open file: in
+node with fs stubbed.
 ---
- .../resources/view/system/filemanager.js      | 5024 +++++++++--------
- 1 file changed, 2657 insertions(+), 2367 deletions(-)
+ .../resources/view/system/filemanager.js           | 5049 +++++++++++---------
+ 1 file changed, 2684 insertions(+), 2365 deletions(-)
 
 diff --git a/htdocs/luci-static/resources/view/system/filemanager.js b/htdocs/luci-static/resources/view/system/filemanager.js
-index b9e4d6f..71088c9 100644
+index b9e4d6f..27f09cb 100644
 --- a/htdocs/luci-static/resources/view/system/filemanager.js
 +++ b/htdocs/luci-static/resources/view/system/filemanager.js
-@@ -4,2691 +4,2981 @@
+@@ -4,2691 +4,3010 @@
  'require ui';
  'require dom';
  'require rpc';
@@ -2723,8 +2730,20 @@ index b9e4d6f..71088c9 100644
 +
 +		if (cb.offsetWidth > cb.offsetHeight * 1.4)
 +			d.root.classList.add('fm-plain-check');
-+	},
-+
+ 	},
+ 
+-	// Handler for dropping files into the drop zone
+-	handleDrop(event) {
+-		event.preventDefault();
+-		event.stopPropagation();
+-		dragCounter = 0; // Reset counter
+-		const self = this;
+-		const files = event.dataTransfer.files;
+-		const fileListContainer = document.getElementById('file-list-container');
+-		const dragOverlay = document.getElementById('drag-overlay');
+-		if (fileListContainer && dragOverlay) {
+-			fileListContainer.classList.remove('drag-over');
+-			dragOverlay.style.display = 'none';
 +	renderRow(e, cols) {
 +		const k = kind(e);
 +		const full = joinPath(this.path, e.name);
@@ -2814,20 +2833,8 @@ index b9e4d6f..71088c9 100644
 +			this.free = (f.length >= 6 && total > 0 && avail >= 0) ? { total: total, avail: avail } : null;
 +			this.renderActions();
 +		}).catch(() => {});
- 	},
- 
--	// Handler for dropping files into the drop zone
--	handleDrop(event) {
--		event.preventDefault();
--		event.stopPropagation();
--		dragCounter = 0; // Reset counter
--		const self = this;
--		const files = event.dataTransfer.files;
--		const fileListContainer = document.getElementById('file-list-container');
--		const dragOverlay = document.getElementById('drag-overlay');
--		if (fileListContainer && dragOverlay) {
--			fileListContainer.classList.remove('drag-over');
--			dragOverlay.style.display = 'none';
++	},
++
 +	/* the action bar: what is selected, else what is on the clipboard, else
 +	   what is in the folder; one line of text and one row of buttons in each
 +	   state, so its height does not change */
@@ -2853,9 +2860,7 @@ index b9e4d6f..71088c9 100644
 +				btn('trash', _('Delete'), () => this.deleteNames(names), 'cbi-button-negative'),
 +				btn('close', _('Clear selection'), () => this.setSelection([]), 'fm-icon-only')
 +			];
- 		}
--		if (files.length > 0) {
--			self.uploadFiles(files);
++		}
 +		else if (c) {
 +			const what = (c.names.length == 1) ? `"${c.names[0]}"` : N_(c.names.length, '%d item', '%d items').format(c.names.length);
 +			info = [ (c.op == 'move') ? _('To move: %s from %s').format(what, c.dir) : _('To copy: %s from %s').format(what, c.dir) ];
@@ -2864,6 +2869,8 @@ index b9e4d6f..71088c9 100644
 +				btn('close', _('Cancel'), () => this.setClipboard(null))
 +			];
  		}
+-		if (files.length > 0) {
+-			self.uploadFiles(files);
 +		else {
 +			list = list ?? this.visibleEntries();
 +			const dirs = list.filter(e => kind(e) == 'directory').length;
@@ -2878,7 +2885,7 @@ index b9e4d6f..71088c9 100644
 +				info.push(E('span', { 'class': 'fm-muted' }, txt(' · ' + _('free %s of %s').format(formatSize(this.free.avail), formatSize(this.free.total)))));
 +			acts = [ btn('selectall', _('Select all'), () => this.setSelection(list.map(e => e.name)), null, `${_('Select all')} (Ctrl+A)`) ];
 +			acts[0].disabled = !list.length;
-+		}
+ 		}
 +
 +		const text = E('span', { 'class': 'fm-info' }, info.map(x => (typeof x == 'string') ? document.createTextNode(x) : x));
 +		text.title = text.textContent;
@@ -2982,15 +2989,15 @@ index b9e4d6f..71088c9 100644
  				return;
  			}
 +		}
-+
-+		const taken = new Set(this.entries.map(e => e.name));
-+		const pairs = [];
-+		const conflicts = [];
  
 -			const file = files[index];
 -			const fullFilePath = joinPath(directoryPath, file.name);
 -			if (statusInfo) {
 -				statusInfo.textContent = _('Uploading: "%s"...').format(file.name);
++		const taken = new Set(this.entries.map(e => e.name));
++		const pairs = [];
++		const conflicts = [];
++
 +		for (const n of c.names) {
 +			let t = n;
 +			if (c.op == 'copy' && c.dir == dest) {
@@ -3016,10 +3023,12 @@ index b9e4d6f..71088c9 100644
 +				return;
 +
 +			const args = [];
++			const moved = [];
 +			for (const [ s, t, n ] of pairs) {
 +				if (conflicts.includes(n) && policy == 'skip')
 +					continue;
 +				args.push(conflicts.includes(n) ? '1' : '0', s, t);
++				moved.push([ s, t ]);
  			}
  
 -			uploadFile(fullFilePath, file, (percent) => {
@@ -3046,16 +3055,18 @@ index b9e4d6f..71088c9 100644
 -				}
 -				if (statusInfo) {
 -					statusInfo.textContent = _('Upload failed for file "%s": %s').format(file.name, err.message);
--				}
--				pop(null, E('p', _('Upload failed for file "%s": %s').format(file.name, err.message)), 'error');
--				uploadNextFile(index + 1);
 +			if (!args.length)
 +				return;
 +
 +			const label = (c.op == 'move') ? _('Moving…') : _('Copying…');
 +			return this.runJob(label, [ '/bin/sh', '-c', JOB_TRANSFER, 'sh', c.op, ...args ]).then((ok) => {
-+				if (ok && c.op == 'move')
++				if (ok && c.op == 'move') {
 +					this.setClipboard(null);
++					for (const [ s, t ] of moved)
++						this.editorMoved(s, t);
+ 				}
+-				pop(null, E('p', _('Upload failed for file "%s": %s').format(file.name, err.message)), 'error');
+-				uploadNextFile(index + 1);
 +				if (ok)
 +					notify(c.op == 'move' ? _('Moved.') : _('Copied.'));
 +				return this.refresh();
@@ -3287,20 +3298,34 @@ index b9e4d6f..71088c9 100644
 +	runJob(label, argv, keep) {
 +		let dir = null;
 +		let cancelled = false;
++		let stopPolls = 0;
++
++		/* the job is the leader of its own process group */
++		const signal = sig => L.resolveDefault(fs.exec('/bin/sh',
++			[ '-c', 'p=$(cat "$1/pid" 2>/dev/null) && kill -"$2" -"$p" 2>/dev/null', 'sh', dir, sig ]), null);
 +
 +		this.busy = label;
 +		this.setProgress(label, null, () => {
 +			cancelled = true;
 +			if (dir)
-+				fs.exec('/bin/sh', [ '-c', 'p=$(cat "$1/pid" 2>/dev/null) && kill -TERM -"$p"', 'sh', dir ]);
++				signal('TERM');
 +		});
 +
++		/* after "cancel" the job gets SIGTERM (again on the first poll: the
++		   cancel may come before the job has written its PID) and SIGKILL
++		   when it has not ended within about 4 s; the job directory is
++		   removed only after that */
 +		const poll = () => new Promise(r => window.setTimeout(r, 700))
 +			.then(() => L.resolveDefault(fs.read(`${dir}/rc`), null))
 +			.then((rc) => {
-+				if (rc == null && !cancelled)
-+					return poll();
-+				return rc;
++				if (rc != null || !cancelled)
++					return (rc != null) ? rc : poll();
++				stopPolls++;
++				if (stopPolls == 1)
++					return signal('TERM').then(poll);
++				if (stopPolls > 5)
++					return signal('KILL').then(() => null);
++				return poll();
  			});
 -			const createButton = E('button', {
 -				'class': 'btn',
@@ -3338,12 +3363,23 @@ index b9e4d6f..71088c9 100644
 +					notify(`${label.replace(/…$/, '')}: ${err.substring(0, 2000) || _('Command failed with code %d').format(code)}`, 'error');
 +					return false;
  				}
--			});
++
++				return keep ? dir : true;
+ 			});
 -			statusInfo.appendChild(E('span', {}, _('Create File: ')));
 -			statusInfo.appendChild(fileNameInput);
 -			statusProgress.appendChild(createButton);
 -		}
--	},
++		}).catch((err) => {
++			notify(`${label.replace(/…$/, '')}: ${errMsg(err)}`, 'error');
++			return false;
++		}).finally(() => {
++			if (dir && (!keep || cancelled))
++				L.resolveDefault(fs.remove(dir));
++			this.busy = null;
++			this.setProgress(null);
++		});
+ 	},
  
 -	// Function to create a file
 -	createFile(fileName) {
@@ -3358,28 +3394,6 @@ index b9e4d6f..71088c9 100644
 -			popTimeout(null, E('p', _('File "%s" created successfully.').format(trimmedFileName)), 5000, 'info');
 -			self.loadFileList(currentPath).then(() => {
 -				self.initResizeableColumns();
-+				return keep ? dir : true;
- 			});
--			const statusInfo = document.getElementById('status-info');
--			const statusProgress = document.getElementById('status-progress');
--			if (statusInfo) statusInfo.textContent = _('No file selected.');
--			if (statusProgress) statusProgress.innerHTML = '';
- 		}).catch((err) => {
--			pop(null, E('p', _('Failed to create file "%s": %s').format(trimmedFileName, err.message)), 'error');
-+			notify(`${label.replace(/…$/, '')}: ${errMsg(err)}`, 'error');
-+			return false;
-+		}).finally(() => {
-+			if (dir && (!keep || cancelled))
-+				L.resolveDefault(fs.remove(dir));
-+			this.busy = null;
-+			this.setProgress(null);
- 		});
- 	},
- 
--	// Handler for checkbox state change on a file
--	handleCheckboxChange(ev) {
--		const cb = ev.target;
--		const filePath = cb.dataset.filePath;
 +	/* --- create, rename, delete, duplicate ------------------------------ */
 +
 +	checkNewName(name, current) {
@@ -3396,16 +3410,11 @@ index b9e4d6f..71088c9 100644
 +			return;
 +
 +		const isDir = (type == 'directory');
- 
--		cb.checked
--			? selectedItems.add(filePath)
--			: selectedItems.delete(filePath);
++
 +		return promptName(isDir ? _('New folder') : _('New file'), _('Name'), '', n => this.checkNewName(n), _('Create')).then((name) => {
 +			if (name == null)
 +				return;
- 
--		this.updateDeleteSelectedButton();
--		this.updateSelectAllCheckbox();
++
 +			const path = joinPath(this.path, name);
 +
 +			return L.resolveDefault(fs.stat(path), null).then((st) => {
@@ -3418,8 +3427,38 @@ index b9e4d6f..71088c9 100644
 +				return this.openFile(path, 'text');
 +			}).catch((err) => {
 +				notify(_('Failed to create "%s": %s').format(name, errMsg(err)), 'error');
-+			});
-+		});
+ 			});
+-			const statusInfo = document.getElementById('status-info');
+-			const statusProgress = document.getElementById('status-progress');
+-			if (statusInfo) statusInfo.textContent = _('No file selected.');
+-			if (statusProgress) statusProgress.innerHTML = '';
+-		}).catch((err) => {
+-			pop(null, E('p', _('Failed to create file "%s": %s').format(trimmedFileName, err.message)), 'error');
+ 		});
+ 	},
+ 
+-	// Handler for checkbox state change on a file
+-	handleCheckboxChange(ev) {
+-		const cb = ev.target;
+-		const filePath = cb.dataset.filePath;
++	/* the open file, or a folder above it, was renamed or moved from "from"
++	   to "to": the editor follows it (its path and, when that is inside
++	   too, the real path behind a link), so that saving goes to the file */
++	editorMoved(from, to) {
++		const ed = this.ed;
++		const move = p => isInside(p, from) ? to + p.substring(from.length) : p;
+ 
+-		cb.checked
+-			? selectedItems.add(filePath)
+-			: selectedItems.delete(filePath);
++		if (!ed || !(isInside(ed.path, from) || isInside(ed.real, from)))
++			return;
+ 
+-		this.updateDeleteSelectedButton();
+-		this.updateSelectAllCheckbox();
++		ed.path = move(ed.path);
++		ed.real = move(ed.real);
++		this.renderEditorHead();
  	},
  
 -	// Update the "Delete Selected" button
@@ -3443,12 +3482,7 @@ index b9e4d6f..71088c9 100644
 +					throw new Error(_('An item with this name already exists.'));
 +				return this.exec('mv', [ '--', from, to ]);
 +			}).then(() => {
-+				if (this.ed && isInside(this.ed.path, from)) {
-+					this.ed.path = to + this.ed.path.substring(from.length);
-+					if (this.ed.real == from)
-+						this.ed.real = to;
-+					this.renderEditorHead();
-+				}
++				this.editorMoved(from, to);
 +				this.selected.delete(e.name);
 +				return this.refresh();
 +			}).catch((err) => {
@@ -5449,6 +5483,3 @@ index b9e4d6f..71088c9 100644
  	}
 -
  });
--- 
-2.43.0
-
