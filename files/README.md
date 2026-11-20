@@ -133,6 +133,7 @@ option group 'root'
 - `/etc/config/adguardhome`: `list jail_mount_rw '/tmp/log'` — каталог журнала доступен для записи из песочницы ujail
 - `/etc/adguardhome/adguardhome.yaml` — upstream DNS зависит от варианта (yaml правится, только если он есть: на чистой прошивке без сохранённых настроек он появляется после мастера AGH, и zz1 пишет в лог адрес, который нужно указать; настройки варианта ниже выставляются и без yaml):
   - `forkop`, `tachyon`, `podkop`, `netshift` → `127.0.0.42:53` (DNS-вход их ядра), плюс `<вариант>.settings.dont_touch_dhcp='1'`
+  - `tachyon2` → тоже `127.0.0.42:53`; `dont_touch_dhcp` ставится в его JSON (раздел 11)
   - tachyon сам перенаправляет DNS на свой вход только у устройств, для которых есть своя секция (фильтр устройств): их запросы AGH не видит, остальных клиентов видит
   - forkop 2.x вместо `dont_touch_dhcp` (опции нет: dnsmasq он не трогает) получает `forkop.settings.intercept_device_dns='0'` (наш патч 002) и `forkop.settings.unmatched_dns_mode='router'`. Без перехвата запросы клиентов идут в AGH, и он видит каждого; AGH пересылает их на `127.0.0.42:53`, где домены секций получают FakeIP, а остальные отвечают DNS-серверы forkop (правило «вне секций → роутер» на этом входе не действует, петли нет). Запросы на чужой DNS (8.8.8.8 и т.п.) патч тоже отправляет в AGH. Перехватываются только устройства из фильтров секций (им нужен ответ по адресу клиента) и сам роутер; их DNS вне секций с `router` уходит в AGH. FakeIP-соединения исключённых устройств патч 002 отправляет через sing-box напрямую. Без патча (сборка без `apply_patches`) опция ни на что не влияет, и клиенты в журнале AGH видны как `127.0.0.1`. forkop 2.x отличается от forkop-mod (ветка 1.x) по опции `unmatched_dns_mode` в `/usr/share/forkop/default-config`
   - `xray` → `127.0.0.1:5300` (DNS-вход Xray luci-app-xray)
@@ -250,6 +251,7 @@ sed -i 's/ct original packets ge 30 flow offload @ft/flow offload @ft/' /usr/sha
 - **Passwall2** (вариант `passwall`, firstboot): `dns_redirect='0'`, `enabled='1'`. В обоих режимах: `remote_dns='127.0.0.1:53'`, который ставили прежние версии zz1, меняется на `1.1.1.1` (удалённый DNS ходит через узел, адрес роутера там недоступен), опции passwall 1 `dns_shunt`, `china_dns`, `adblock` удаляются
 - **luci-app-xray** (вариант `xray`, firstboot, только если в `xray_core` остались значения пакета по умолчанию: GeoIP direct `cn`, bypassed `geosite:cn`, Fast DNS не задан): они заменяются на GeoIP direct `ru` (IPv4 и IPv6), `geosite:category-ru` и Fast DNS `77.88.8.8:53`; Forwarded/Blocked domain rules не трогаются. Если нет `/usr/share/xray/geoip.dat` или `geosite.dat`, в лог пишется ошибка
 - **forkop, tachyon, podkop, netshift** (если есть `/etc/config/forkop`, `/etc/config/tachyon`, `/etc/config/podkop` или `/etc/config/netshift`): `<пакет>.settings.exclude_ntp='1'` — NTP мимо прокси (кроме forkop 2.x: опции нет, NTP-серверы роутера он резолвит через bootstrap DNS, а трафик роутера в секции не берёт без пункта «Система»); если установлен youtubeUnblock — ещё `<пакет>.settings.disable_quic='1'`: QUIC клиента к адресам FakeIP (198.18.0.0/15) не попадает под правило `reject` youtubeUnblock и шёл бы через sing-box в очередь 537, а так sing-box его отклоняет и браузер идёт по TCP
+- **tachyon 2** (вариант `tachyon2`): UCI у него нет, настройки — в `/etc/tachyon/tachyon.json` (прежний `/etc/config/tachyon` он один раз переносит туда сам). Если файла ещё нет, его создаёт `tachyon config_plan` (читает настройки и выходит, службу не запускает). В раздел `settings` ставятся `exclude_ntp: true`, при AdGuard Home — `dont_touch_dhcp: true`, при youtubeUnblock — `disable_quic: true` (смысл — как у пунктов выше); остальное в файле не меняется. Правит ucode; служба, если работает (ручной запуск), останавливается на время записи и запускается снова — только когда файл меняется. Правило fw4 `firewall.tachyon_panel_wan` (первым из правил) отклоняет из зоны `wan` порт панели (`listen_port`, по умолчанию 1680): панель без пароля пускает клиентов с частных адресов, а за WAN роутера адреса тоже бывают частными. Панель открывается по адресу LAN (пункт LuCI «Службы → Tachyon» ведёт туда же)
 - **internet-detector**: сервис отключается, `START=99`; режим «Service» (`internet-detector.config.mode='1'`, так в конфиге пакета) меняется на «Web UI only» (`'2'`): без работающей службы в режиме Service индикатор в LuCI навсегда «Undefined», а в Web UI only детектор запускается, пока открыт LuCI. Выбранные вручную `0` и `2` не меняются
 - **phy-leds**: сервис отключается
 - **bandix-plus** (вариант `clear`, если в `bandix_plus.general.iface` всё ещё `br-lan` из пакета): список интерфейсов заменяется устройствами сетей из зон firewall — `device` у сетей `static` и `dhcp`, `pppoe-<сеть>` у PPPoE (сети `dhcpv6` и псевдонимы `@…` пропускаются). Так считаются все VLAN и мосты локальных сетей и WAN. Список, изменённый вручную, не трогается
@@ -324,8 +326,8 @@ net.ipv4.tcp_congestion_control = bbr
 ```sh
 sysctl -w net.ipv4.tcp_congestion_control=cubic
 ```
-В варианте `tachyon` ещё выключить его настройку «TCP BBR»: иначе tachyon
-включает BBR сам.
+В вариантах `tachyon` и `tachyon2` ещё выключить их настройку «TCP BBR»:
+иначе tachyon включает BBR сам.
 
 **Если в ядре есть MPTCP** (`/proc/sys/net/mptcp/enabled`) и в файле ещё нет
 строки `net.mptcp.enabled`, в конец добавляется:
@@ -372,11 +374,11 @@ cp /etc/apk/repositories.d/distfeeds.list.bak /etc/apk/repositories.d/distfeeds.
 
 ## 14. Локальные бинарники из `/root/apps/`
 **Ядро прошивки вместо ядра из резервной копии** (только firstboot). tachyon перечисляет свои ядра в
-`/lib/upgrade/keep.d/tachyon`: собственное ядро tachyon и метки ядра в `/etc/tachyon` (прежние версии — ещё и `/usr/bin/sing-box`). sysupgrade
+`/lib/upgrade/keep.d/tachyon`: собственное ядро tachyon и метки ядра в `/etc/tachyon` (прежние версии — ещё и `/usr/bin/sing-box`; tachyon 2 — весь каталог `/etc/tachyon`). sysupgrade
 кладёт такие файлы в резервную копию, даже если они из прошивки, и после прошивки с сохранением настроек старое ядро
 восстанавливалось в overlay поверх нового. Поэтому каждый из этих файлов (ядра и метки), который есть в образе (`/rom`) и
 восстановлен в overlay, заменяется файлом из образа (ссылка — ссылкой); совпадающий не трогается. Чего в образе нет
-(например ядро tachyon, поставленное на роутере), остаётся. В образе с ядром tachyon без sing-box (tachyon с `sb=default`)
+(например ядро tachyon, поставленное на роутере), остаётся. В образе с ядром tachyon без sing-box (tachyon или tachyon2 с `sb=default`)
 `/usr/bin/sing-box` из копии удаляется. Путь, указанный в `/etc/sysupgrade.conf`, не трогается. Копию делает ещё
 прежняя прошивка, поэтому в ней может быть и `/usr/bin/sing-box` из прежнего списка tachyon. sing-box из `/root/apps`
 (таблица ниже) ставится уже после этого шага.
