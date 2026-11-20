@@ -31,6 +31,7 @@ on:
           - forkop
           - forkop-mod
           - tachyon
+          - tachyon2
           - passwall
           - xray
           - v2raya
@@ -185,6 +186,10 @@ env:
   # tachyon с sb=default — его ядро по умолчанию в образе (артефакт шифруется); иначе ядра в образе нет (sb=no).
   TACHYON_FEED: "tachyon https://github.com/Dushnilin/tachyon.git;main"
 
+  # tachyon 2 (ветка 2.0): исходники на Rust без пакета OpenWrt — фид только для исходников и патчей
+  # (patches/feeds/tachyon2); бинарник и пакет tachyon собирает WRT-part3.sh. Ядро — как у tachyon.
+  TACHYON2_FEED: "tachyon2 https://github.com/Dushnilin/tachyon.git;2.0"
+
   # Фид netshift (форк podkop), конфиг /etc/config/netshift; версия — из тегов (NETSHIFT_VERSION).
   NETSHIFT_FEED: "netshift https://github.com/yandexru45/netshift.git;main"
 
@@ -223,7 +228,7 @@ jobs:
 
 
           # Поля строки матрицы: agh (no|feed|latest), sb (no|feed|1.12.x..latest|extended|hiddify|podkop-engine[-full]|
-          # forkop-base|-full|-tiny|tiny; default setup заменяет ядром варианта, остаётся только у tachyon), ytb (default|true|false|zapret2|byedpi),
+          # forkop-base|-full|-tiny|tiny; default setup заменяет ядром варианта, остаётся только у tachyon и tachyon2), ytb (default|true|false|zapret2|byedpi),
           # zz, patches, feeds (true — фиды репозитория пакетов), base (use_base_commit); dpi (zapret2|byedpi|no) выводит setup из ytb.
           # В combo значения — из config/combo.txt, поля формы не действуют.
           # slateax и ax59u — «тонкие»: sing-box-tiny из фида (у forkop — сборка tiny ядра).
@@ -261,13 +266,13 @@ jobs:
             # для заметки: ytb так, как его задают в форме (zapret2/byedpi — по dpi)
             local ytb_res=$ytb
             [ "$dpi" != "no" ] && ytb_res=$dpi
-            # sb=default — рекомендуемое ядро варианта (на slateax/ax59u ниже станет tiny). У tachyon остаётся
+            # sb=default — рекомендуемое ядро варианта (на slateax/ax59u ниже станет tiny). У tachyon и tachyon2 остаётся
             # default: его ядро по умолчанию, артефакт шифруется (шаг Encrypt).
             if [ "$sb" = "default" ]; then
               case "$v" in
                 homeproxy) sb=feed ;;
                 podkop)    sb=podkop-engine ;;
-                tachyon)   ;;
+                tachyon|tachyon2) ;;
                 forkop)    [ "$fk" = "forkop" ] && sb=forkop-base || sb=extended ;;
                 *)         sb=extended ;;
               esac
@@ -275,7 +280,7 @@ jobs:
             case "$v" in
               homeproxy|rehomeproxy|podkop|netshift) [ "$sb" = "no" ] && sb=feed ;;
               # tachyon работает только со своим ядром (см. patches/README.md): sing-box в образе не нужен
-              tachyon) [ "$sb" = "default" ] || sb=no ;;
+              tachyon|tachyon2) [ "$sb" = "default" ] || sb=no ;;
             esac
             # podkop-engine — только для podkop и netshift (netshift — всегда -full: выходы vmess/http).
             case "$sb" in
@@ -295,7 +300,7 @@ jobs:
               case "$sb" in forkop-base|forkop-full|forkop-tiny) sb=feed ;; esac
             fi
             case " $TINY_TARGETS " in
-              *" $t "*) case "$v" in homeproxy|rehomeproxy|podkop|netshift|forkop|tachyon)
+              *" $t "*) case "$v" in homeproxy|rehomeproxy|podkop|netshift|forkop|tachyon|tachyon2)
                 case "$sb" in no|default) ;; forkop-*) sb=forkop-tiny ;; *) sb=tiny ;; esac ;; esac ;;
             esac
             if [ "$orig" != "agh=$agh sb=$sb ytb=$ytb_res zz=$zz" ]; then
@@ -317,7 +322,7 @@ jobs:
             # Сборки combo — строки config/combo.txt: устройство вариант agh sb ytb zz patches feeds.
             # Допустимые значения — те же, что в полях формы выше (при изменении формы поправить и здесь).
             COMBO_FILE="config/combo.txt"
-            V_VARIANT="homeproxy rehomeproxy podkop netshift forkop forkop-mod tachyon passwall xray v2raya clear crystal_clear switch"
+            V_VARIANT="homeproxy rehomeproxy podkop netshift forkop forkop-mod tachyon tachyon2 passwall xray v2raya clear crystal_clear switch"
             V_AGH="no feed latest"
             V_SB="default no feed 1.12.x 1.13.x 1.14.x latest extended hiddify podkop-engine podkop-engine-full forkop-base forkop-full forkop-tiny"
             V_YTB="default true false zapret2 byedpi"
@@ -440,6 +445,12 @@ jobs:
           echo "$json" | jq -r '.include[] | select(.variant == "tachyon" and .patches == false) | .target' |
           while read -r t; do
             echo "::warning title=${t}: tachyon без патчей::Без патча 001 (patches/feeds/tachyon) «apk del tachyon» не выполнит очистку tachyon (prerm на ucode, а сборка OpenWrt запускает его как sh): служба не останавливается, dnsmasq не возвращается, остаётся запись таблицы маршрутизации. Включите apply_patches."
+          done
+
+          # tachyon2 без патчей: панель доверяет запросам страниц других сайтов (001).
+          echo "$json" | jq -r '.include[] | select(.variant == "tachyon2" and .patches == false) | .target' |
+          while read -r t; do
+            echo "::warning title=${t}: tachyon2 без патчей::Без патча 001 (patches/feeds/tachyon2) панель tachyon 2 выполняет без входа запросы, которые браузер клиента локальной сети отправляет со страницы другого сайта, в том числе запуск команд (file.exec). Включите apply_patches."
           done
 
           # netshift без патчей: ошибки разбора ссылок и DNS (001, 002).
@@ -890,9 +901,9 @@ jobs:
             echo "=========================================="
             exit 0
         elif [ "$SB_VERSION_CHOICE" == "default" ]; then
-            # sb=default (остаётся только у tachyon) — его ядро по умолчанию: статический бинарник из tar.gz релиза, сверка по SHA256SUMS,
+            # sb=default (остаётся только у tachyon и tachyon2) — его ядро по умолчанию: статический бинарник из tar.gz релиза, сверка по SHA256SUMS,
             # в files/ — бинарник и метки /etc/tachyon как после установки со страницы tachyon. Бинарник не печатается.
-            if [ "$M_VARIANT" != "tachyon" ]; then
+            if [ "$M_VARIANT" != "tachyon" ] && [ "$M_VARIANT" != "tachyon2" ]; then
                 echo "::error title=sb=default::У варианта $M_VARIANT значение default должен был заменить job setup"
                 exit 1
             fi
@@ -1431,7 +1442,7 @@ jobs:
             case "$VARIANT" in
                 homeproxy)   BASE_DIR=packages/luci-app-homeproxy ;;
                 rehomeproxy) BASE_DIR=packages/luci-app-re-homeproxy ;;
-                podkop|netshift|tachyon) BASE_DIR=feeds/$VARIANT ;;
+                podkop|netshift|tachyon|tachyon2) BASE_DIR=feeds/$VARIANT ;;
                 forkop)      BASE_DIR=feeds/$M_FK ;;
                 passwall)    BASE_DIR=feeds/passwall2 ;;
                 xray)        BASE_DIR=feeds/luciappxray ;;
@@ -1484,6 +1495,10 @@ jobs:
             # Адрес — TACHYON_FEED в env; патчи — patches/feeds/tachyon (part2).
             echo ">>> tachyon: фид $TACHYON_FEED"
             echo -e "\n$(feed_line "$TACHYON_FEED")" >> feeds.conf.default
+        elif [ "$VARIANT" == "tachyon2" ]; then
+            # Адрес — TACHYON2_FEED в env; патчи — patches/feeds/tachyon2 (part2), сборка пакета — part3.
+            echo ">>> tachyon 2: фид $TACHYON2_FEED"
+            echo -e "\n$(feed_line "$TACHYON2_FEED")" >> feeds.conf.default
         fi
 
         # --- ЗАМЕНА ЗЕРКАЛ (FIX 503 ERROR) Меняем git.openwrt.org на github.com---
@@ -1602,7 +1617,7 @@ jobs:
             sed -i '/sing-box/Id' ./.config
         fi
         
-        if [[ "$VARIANT" == "podkop" || "$VARIANT" == "netshift" || "$VARIANT" == "forkop" || "$VARIANT" == "tachyon" || "$VARIANT" == "rehomeproxy" ]]; then
+        if [[ "$VARIANT" == "podkop" || "$VARIANT" == "netshift" || "$VARIANT" == "forkop" || "$VARIANT" == "tachyon" || "$VARIANT" == "tachyon2" || "$VARIANT" == "rehomeproxy" ]]; then
             # rehomeproxy ставит файлы по путям luci-app-homeproxy: homeproxy убирается.
             echo ">>> Removing HomeProxy for $VARIANT compatibility..."
             sed -i '/homeproxy/d' ./.config
@@ -1672,6 +1687,10 @@ jobs:
             echo 'CONFIG_PACKAGE_tachyon=y' >> ./.config
             echo 'CONFIG_PACKAGE_luci-app-tachyon=y' >> ./.config
             echo 'CONFIG_PACKAGE_luci-i18n-tachyon-ru=y' >> ./.config
+
+        elif [ "$VARIANT" == "tachyon2" ]; then
+            # Пакет tachyon (служба, панель, пункт меню LuCI) собирает part3 в package/tachyon2; ядро — как у tachyon.
+            echo 'CONFIG_PACKAGE_tachyon=y' >> ./.config
 
         elif [ "$VARIANT" == "rehomeproxy" ]; then
             # Пакет клонирует part3; его зависимости уже в WRT.config.
@@ -1750,7 +1769,7 @@ jobs:
             exit 1
         fi
 
-        # sb=default (tachyon): sing-box в образе нет, ядро —
+        # sb=default (tachyon, tachyon2): sing-box в образе нет, ядро —
         # бинарник в files/ (шаг Download Sing-box), tachyon включён.
         if [ "$SB_MODE" = "default" ]; then
             TC_BAD=""
@@ -1812,7 +1831,7 @@ jobs:
         echo "Variant selected: $VARIANT"
         echo "Checking key packages in .config:"
         # Проверяем наличие ключевых пакетов для уверенности
-        grep -E "CONFIG_PACKAGE_(luci-app-homeproxy|sing-box|sing-box-forkop|luci-app-passwall2|luci-app-v2raya|luci-app-xray|xray-core|v2ray-geoip|v2ray-geosite|luci-app-podkop|luci-app-netshift|luci-app-forkop|luci-app-tachyon|luci-app-re-homeproxy|youtubeUnblock|zapret2)=" .config || echo "None found"
+        grep -E "CONFIG_PACKAGE_(luci-app-homeproxy|sing-box|sing-box-forkop|luci-app-passwall2|luci-app-v2raya|luci-app-xray|xray-core|v2ray-geoip|v2ray-geosite|luci-app-podkop|luci-app-netshift|luci-app-forkop|tachyon|luci-app-tachyon|luci-app-re-homeproxy|youtubeUnblock|zapret2)=" .config || echo "None found"
         # Ядро без пакета: hiddify-core кладёт в files/ шаг Download Sing-box (sb=hiddify)
         [ -x files/usr/bin/hiddify-core ] && echo "files/usr/bin/hiddify-core: $(du -h files/usr/bin/hiddify-core | cut -f1)"
         echo "=========================================="
