@@ -1106,8 +1106,8 @@ EOF
     run_cmd "Каталог журнала в песочнице adguardhome" uci commit adguardhome
     # --- Upstream DNS в AGH yaml ------------------------------------------
     # Зависит от варианта сборки:
-    #   forkop, tachyon, podkop, netshift → 127.0.0.42:53 (DNS inbound
-    #                     их sing-box)
+    #   forkop, tachyon, tachyon2, podkop, netshift → 127.0.0.42:53 (DNS
+    #                     inbound их sing-box или ядра tachyon)
     #   xray            → 127.0.0.1:5300 (DNS-вход Xray luci-app-xray: FakeDNS,
     #                     Fast/Secure DNS и правила доменов работают в нём)
     #   passwall, v2raya → 127.0.0.1:54 (dnsmasq). passwall2 при
@@ -1126,7 +1126,7 @@ EOF
     # их трогать нельзя. Повтор нужного адреса в списке не оставляется.
     AGH_YAML="/etc/adguardhome/adguardhome.yaml"
     case "$CURRENT_VARIANT" in
-        forkop|tachyon|podkop|netshift) _AGH_EXPECTED='127.0.0.42:53' ;;
+        forkop|tachyon|tachyon2|podkop|netshift) _AGH_EXPECTED='127.0.0.42:53' ;;
         xray)          _AGH_EXPECTED='127.0.0.1:5300' ;;
         passwall|v2raya) _AGH_EXPECTED='127.0.0.1:54' ;;
         clear)         _AGH_EXPECTED='' ;;
@@ -1189,8 +1189,9 @@ EOF
             && uci -q set forkop.settings.unmatched_dns_mode='router' 2>/dev/null \
             && uci commit forkop 2>/dev/null \
             && log_ok "forkop 2.x: intercept_device_dns=0 (AGH видит клиентов), unmatched_dns_mode=router"
-    elif [ "$_AGH_EXPECTED" = '127.0.0.42:53' ]; then
+    elif [ "$_AGH_EXPECTED" = '127.0.0.42:53' ] && [ "$CURRENT_VARIANT" != "tachyon2" ]; then
         # Сами они перенастраивают dnsmasq на 127.0.0.42 (dont_touch_dhcp=0), а хозяин :53 — AGH.
+        # У tachyon2 UCI нет — та же настройка в его JSON (блок tachyon 2 ниже).
         # tachyon перехватывает DNS только устройств со своей секцией.
         uci -q set "$CURRENT_VARIANT".settings.dont_touch_dhcp='1' 2>/dev/null \
             && uci commit "$CURRENT_VARIANT" 2>/dev/null \
@@ -1260,6 +1261,8 @@ fi
 # что была с ntpd на homeproxy.
 for _pk in forkop tachyon podkop netshift; do
     [ -f "/etc/config/$_pk" ] || continue
+    # tachyon2: /etc/config/tachyon — только от прежней версии, настройки — в JSON (ниже)
+    [ "$_pk" = "tachyon" ] && [ "$CURRENT_VARIANT" = "tachyon2" ] && continue
     # forkop 2.x: опции нет, NTP-серверы роутера он сам резолвит через
     # bootstrap DNS, а трафик роутера в секции не берёт без пункта «Система»
     if [ "$_pk" = "forkop" ] && forkop_v2; then
@@ -1289,6 +1292,7 @@ done
 if [ -x /usr/bin/youtubeUnblock ]; then
     for _pk in forkop tachyon podkop netshift; do
         [ -f "/etc/config/$_pk" ] || continue
+        [ "$_pk" = "tachyon" ] && [ "$CURRENT_VARIANT" = "tachyon2" ] && continue
         if [ "$(uci -q get "$_pk".settings.disable_quic)" = "1" ]; then
             log_ok "$_pk: disable_quic уже включён"
         elif uci -q set "$_pk".settings.disable_quic='1' && uci commit "$_pk"; then
@@ -1297,6 +1301,106 @@ if [ -x /usr/bin/youtubeUnblock ]; then
             log_err "$_pk: не удалось выставить disable_quic"
         fi
     done
+fi
+
+# tachyon 2 (вариант tachyon2): настройки — в /etc/tachyon/tachyon.json, UCI у
+# него нет (/etc/config/tachyon прежней версии он один раз переносит в этот
+# файл сам). Те же настройки, что у tachyon выше, ставятся в JSON:
+#   dont_touch_dhcp — при AdGuard Home: хозяин :53 — он, upstream
+#                     127.0.0.42:53 (блок AdGuardHome выше); без AGH tachyon
+#                     сам направляет dnsmasq на 127.0.0.42;
+#   exclude_ntp     — NTP мимо прокси;
+#   disable_quic    — при youtubeUnblock (почему — выше).
+# Файла ещё нет (первая загрузка без сохранённых настроек) — его создаёт сам
+# tachyon командой config_plan: она читает настройки (и переносит
+# /etc/config/tachyon, если он есть), печатает план и выходит, службу не
+# запускает. Правка — ucode (он есть в образе вместе с LuCI): меняются только
+# эти ключи раздела settings, остальное остаётся как есть. Служба держит
+# настройки в памяти и записала бы их поверх, поэтому при ручном запуске zz1
+# она останавливается на время записи (только если файл меняется); на первой
+# загрузке её ещё нет — tachyon стартует после uci-defaults.
+# Панель (порт listen_port, по умолчанию 1680) пускает без пароля клиентов с
+# частных адресов, а адреса за WAN этого роутера тоже бывают частными. Правило
+# fw4 tachyon_panel_wan отклоняет этот порт из зоны wan; оно стоит первым из
+# правил, чтобы его не перекрыло правило, разрешающее вход с wan. Панель
+# открывается по адресу LAN.
+# tachyon2_settings <файл> <ключ=JSON>... — печатает файл с этими значениями
+# в settings. Код: 0 — что-то меняется, 1 — всё уже так, 2 — файл не разобран.
+tachyon2_settings() {
+    ucode -e '
+        let fs = require("fs"), path = shift(ARGV), d;
+        try { d = json(fs.readfile(path)); } catch (e) { exit(2); }
+        if (type(d) != "object" || type(d.settings) != "object") exit(2);
+        let changed = false;
+        for (let kv in ARGV) {
+            let i = index(kv, "="), k = substr(kv, 0, i), v = json(substr(kv, i + 1));
+            if (d.settings[k] !== v) { d.settings[k] = v; changed = true; }
+        }
+        print(sprintf("%.J\n", d));
+        exit(changed ? 0 : 1);
+    ' "$@"
+}
+if [ "$CURRENT_VARIANT" = "tachyon2" ] && [ -x /usr/bin/tachyon ]; then
+    T2_JSON=/etc/tachyon/tachyon.json
+    if [ ! -s "$T2_JSON" ]; then
+        mkdir -p /etc/tachyon
+        TACHYON_DATA_DIR=/etc/tachyon /usr/bin/tachyon config_plan >/dev/null 2>&1
+        if [ -s "$T2_JSON" ]; then
+            log_ok "tachyon 2: создан $T2_JSON"
+        else
+            log_err "tachyon 2: не удалось создать $T2_JSON (tachyon config_plan)"
+        fi
+    fi
+    _t2_set="exclude_ntp=true"
+    [ -x /usr/bin/AdGuardHome ] && _t2_set="$_t2_set dont_touch_dhcp=true"
+    [ -x /usr/bin/youtubeUnblock ] && _t2_set="$_t2_set disable_quic=true"
+    if [ -s "$T2_JSON" ]; then
+        # shellcheck disable=SC2086  # пары ключ=значение — нарочно по словам
+        tachyon2_settings "$T2_JSON" $_t2_set >/dev/null 2>&1
+        _rc=$?
+        if [ "$_rc" = 1 ]; then
+            log_ok "tachyon 2: уже $_t2_set"
+        elif [ "$_rc" = 0 ]; then
+            _t2_run=0
+            /etc/init.d/tachyon running >/dev/null 2>&1 && _t2_run=1
+            [ "$_t2_run" = 1 ] && run_cmd "Остановка tachyon" /etc/init.d/tachyon stop
+            # shellcheck disable=SC2086
+            if tachyon2_settings "$T2_JSON" $_t2_set > "$T2_JSON.zz1" 2>/dev/null; [ -s "$T2_JSON.zz1" ] \
+               && cat "$T2_JSON.zz1" > "$T2_JSON"; then   # cat, а не mv: права файла остаются
+                log_ok "tachyon 2: $_t2_set"
+            else
+                log_err "tachyon 2: не удалось записать $T2_JSON"
+            fi
+            rm -f "$T2_JSON.zz1"
+            [ "$_t2_run" = 1 ] && run_cmd "Запуск tachyon" /etc/init.d/tachyon start
+        else
+            log_err "tachyon 2: $T2_JSON не разобран, настройки не изменены"
+        fi
+    fi
+    _t2_port=$(ucode -e 'let d; try { d = json(require("fs").readfile(ARGV[0])); } catch (e) {} print(d?.settings?.listen_port ?? 1680);' "$T2_JSON" 2>/dev/null)
+    case "$_t2_port" in ''|*[!0-9]*) _t2_port=1680 ;; esac
+    if uci -q show firewall | grep -q "^firewall\.[^.]*\.name='wan'$"; then
+        _t2_fw=""
+        [ "$(uci -q get firewall.tachyon_panel_wan)" = "rule" ] || { uci -q set firewall.tachyon_panel_wan=rule; _t2_fw=1; }
+        for _kv in "name=Reject-tachyon-panel-wan" "src=wan" "proto=tcp" "dest_port=$_t2_port" "target=REJECT"; do
+            [ "$(uci -q get "firewall.tachyon_panel_wan.${_kv%%=*}")" = "${_kv#*=}" ] && continue
+            uci -q set "firewall.tachyon_panel_wan.${_kv%%=*}=${_kv#*=}"; _t2_fw=1
+        done
+        # первым из правил: номер первой секции rule среди всех секций
+        _t2_first=$(uci -q show firewall | grep -E '^firewall\.[^.=]+=' | grep -n '=rule$' | head -n 1)
+        if [ "${_t2_first#*:}" != "firewall.tachyon_panel_wan=rule" ] && [ -n "$_t2_first" ]; then
+            uci -q reorder "firewall.tachyon_panel_wan=$(( ${_t2_first%%:*} - 1 ))"; _t2_fw=1
+        fi
+        if [ -z "$_t2_fw" ]; then
+            log_ok "tachyon 2: порт панели $_t2_port из wan уже отклоняется"
+        elif uci commit firewall; then
+            log_ok "tachyon 2: порт панели $_t2_port из wan отклоняется (firewall.tachyon_panel_wan)"
+        else
+            log_err "tachyon 2: не удалось записать правило firewall.tachyon_panel_wan"
+        fi
+    else
+        log_info "tachyon 2: зоны wan нет, правило для порта панели не нужно"
+    fi
 fi
 
 # bandix-plus (clear): какие интерфейсы считать. Пакет ставит list iface 'br-lan';
