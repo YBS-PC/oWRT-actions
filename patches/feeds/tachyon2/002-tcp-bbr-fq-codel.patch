@@ -1,0 +1,58 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 20 Nov 2026 12:00:00 +0000
+Subject: [PATCH] tcp_bbr: default qdisc fq_codel
+
+With tcp_bbr on, apply_tcp_tuning_with_paths() loaded sch_fq and set
+net.core.default_qdisc=fq (fq_codel only when fq was unavailable). A
+router mostly forwards traffic, and fq has no queue management (CoDel)
+for it; fq_codel is the OpenWrt default. BBR does not need fq for pacing
+since Linux 4.13: the TCP stack paces with any qdisc. The qdisc is now
+fq_codel, also in 99-tachyon-bbr.conf, and an fq set by an older build
+is replaced; sch_fq is no longer loaded, BBR is set as before. With
+tcp_bbr off nothing changes.
+
+test_apply_tcp_tuning_persists_and_cleans_bbr_conf also checks the qdisc
+in the file.
+
+diff --git a/src/net_stack.rs b/src/net_stack.rs
+index 2596e4d7..1a7accff 100644
+--- a/src/net_stack.rs
++++ b/src/net_stack.rs
+@@ -3738,22 +3738,19 @@ async fn apply_tcp_tuning_with_paths(
+                 let _ = std::fs::remove_file(conf_path);
+             }
+         } else {
+-            let mut chosen_qdisc = "fq_codel";
++            // fq_codel, the OpenWrt default: fq has no queue management (CoDel)
++            // for forwarded traffic, and BBR paces with any qdisc since Linux
++            // 4.13. An fq set by an older build is replaced.
+             if is_linux {
+-                try_modprobe_quiet("sch_fq").await;
+-                let cur_qdisc = read_sysctl_fast("net.core.default_qdisc").await;
+-                if cur_qdisc == "fq" || apply_sysctl_kv("net.core.default_qdisc", "fq").await {
+-                    chosen_qdisc = "fq";
+-                } else if cur_qdisc != "fq_codel" {
++                if read_sysctl_fast("net.core.default_qdisc").await != "fq_codel" {
+                     let _ = apply_sysctl_kv("net.core.default_qdisc", "fq_codel").await;
+                 }
+                 if read_sysctl_fast("net.ipv4.tcp_congestion_control").await != "bbr" {
+                     let _ = apply_sysctl_kv("net.ipv4.tcp_congestion_control", "bbr").await;
+                 }
+             }
+-            let conf_body = format!(
+-                "net.core.default_qdisc={chosen_qdisc}\nnet.ipv4.tcp_congestion_control=bbr\n"
+-            );
++            let conf_body =
++                "net.core.default_qdisc=fq_codel\nnet.ipv4.tcp_congestion_control=bbr\n";
+             if let Some(parent) = conf_path.parent()
+                 && !parent.as_os_str().is_empty()
+             {
+@@ -4635,6 +4632,7 @@ fd001122334455660000000000000001 05 40 00 80   br-lan
+         apply_tcp_tuning_with_paths(&on, &conf, &avail).await;
+         let written = std::fs::read_to_string(&conf).expect("bbr conf exists");
+         assert!(written.contains("net.ipv4.tcp_congestion_control=bbr"));
++        assert!(written.contains("net.core.default_qdisc=fq_codel"));
+ 
+         // Disable tcp_bbr -> conf removed
+         let off = GlobalSettings {
