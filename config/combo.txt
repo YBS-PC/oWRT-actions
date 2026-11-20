@@ -6,7 +6,7 @@
 #
 #   устройство  rb5009 | nanopi-r6s | nanopi-r5s | slateax | ax59u | brume2
 #   вариант     homeproxy | rehomeproxy | podkop | netshift | forkop | forkop-mod |
-#               tachyon | passwall | xray | v2raya | clear | crystal_clear | switch
+#               tachyon | tachyon2 | passwall | xray | v2raya | clear | crystal_clear | switch
 #   agh         no | feed | latest
 #   sb          default | no | feed | 1.12.x | 1.13.x | 1.14.x | latest | extended |
 #               hiddify | podkop-engine | podkop-engine-full |
@@ -48,3 +48,4 @@ rb5009        switch        no      no             false    true  true     true
 #nanopi-r6s   homeproxy     latest  latest              true   true  false  true   # без патчей
 #nanopi-r6s   podkop        latest  podkop-engine-full  true   true  true   true
 #nanopi-r6s   forkop-mod    latest  default             default true true   true
+#nanopi-r6s   tachyon2      latest  default             false  true  true   true   # tachyon 2 (beta)
