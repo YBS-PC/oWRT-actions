@@ -99,6 +99,7 @@
 | `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`fbe2b6b`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/fbe2b6beac461bfaed6fd236ba2dde1230b94918) | 17.11.2026 |
 | `feeds/podkop/` | [itdoginfo/podkop](https://github.com/itdoginfo/podkop) | [`c654bf5`](https://github.com/itdoginfo/podkop/commit/c654bf5da75309754e3fb63b9441981db65fff68) | 24.10.2026 |
 | `feeds/tachyon/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) | [`ebe9ec8`](https://github.com/Dushnilin/tachyon/commit/ebe9ec8d083f359779ba19288672c9399ad692df) | 19.11.2026 |
+| `feeds/tachyon2/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon), ветка `2.0` | [`df899df`](https://github.com/Dushnilin/tachyon/commit/df899df2b5ea7e1a83b18796fbc8002bc4bfae66) | 20.11.2026 |
 | `packages/luci-app-commands/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`75a306d`](https://github.com/openwrt/luci/commit/75a306df84a020c57a631ef5b4c02ace56d93387) | 15.10.2026 |
 | `packages/luci-app-filemanager/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`e969939`](https://github.com/openwrt/luci/commit/e969939b49167516e219d465df8030d98d443d67) | 31.10.2026 |
 | `packages/luci-theme-bootstrap/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`b2e0be4`](https://github.com/openwrt/luci/commit/b2e0be4b46ec0fd43394c081fa7c50657af14011) | 11.11.2026 |
@@ -130,7 +131,7 @@
 
 ## Патчи по пакетам
 
-Всего 72 патча для 18 пакетов. Номер — порядок применения. Ссылки
+Всего 74 патча для 19 пакетов. Номер — порядок применения. Ссылки
 вида `#98` / `PR #103` — обсуждение и предложенное исправление в
 репозитории автора.
 
@@ -595,6 +596,54 @@ zapret, zapret2 и ByeDPI остаются, их настройки копиру
   Теперь время обновляется только у существующих путей, а такой файл на
   месте папки удаляется. На сборку образа не влияет: при сборке эти
   скрипты сразу выходят. *Всегда.*
+
+### tachyon 2 — `feeds/tachyon2/` (2)
+
+Вариант `tachyon2`: ветка `2.0` [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon)
+(2.0.0-beta.5). Это программа на Rust: служба и веб-панель в одном
+бинарнике `/usr/bin/tachyon`, без ucode и UCI. Настройки лежат в
+`/etc/tachyon/tachyon.json` (прежний `/etc/config/tachyon` переносится туда
+один раз), панель работает на порту 1680, а в LuCI есть только пункт,
+который её открывает. Пакета OpenWrt в ветке нет, поэтому фид `tachyon2`
+даёт только исходники и место для патчей. Пакет `tachyon` собирает
+`sh/WRT-part3.sh`: cargo раннера и скрипт автора
+`tools/build_openwrt_pkg.py` (те же файлы и скрипт удаления, что в пакетах
+его релизов). Ядро — как у `tachyon`: `sb=default` кладёт в образ ядро по
+умолчанию (артефакт шифруется), любое другое значение job setup заменяет
+на `no`. Обновление tachyon со страницы обновлений панели ставит пакет
+автора — уже без этих патчей.
+
+Патчи сняты с коммита [`df899df`](https://github.com/Dushnilin/tachyon/commit/df899df2b5ea7e1a83b18796fbc8002bc4bfae66) от 20.11.2026 (файл `BASE`): на нём серия ложится точно.
+
+- **001. Доверие по адресу клиента.** Панель выполняет без входа любой
+  запрос с адреса loopback, частной сети, link-local или Tailscale. Но это
+  адрес клиента, а не страницы, которая отправила запрос. Страница другого
+  сайта, открытая в браузере клиента локальной сети, могла вызывать API
+  панели, в том числе `POST /ubus` с `file.exec` любой команды: ответ на
+  предварительный запрос CORS разрешает любой источник, так что ответ
+  тоже читался. Так же проходил запрос по имени такого сайта, которое
+  после загрузки страницы указывает на адрес роутера (DNS rebinding).
+  Теперь по адресу не доверяется запросу, если выполнено хотя бы одно:
+  - браузер пометил его как отправленный другим сайтом
+    (`Sec-Fetch-Site: cross-site`);
+  - `Origin` — `null` или другой узел и порт, чем в `Host`;
+  - `Host` — доменное имя вне локальных. Локальные — это IP-адрес,
+    `localhost`, имя без точки, `.lan`, `.local`, `.home.arpa`,
+    `.internal`, `.ts.net`.
+
+  Такому запросу нужен вход или токен агента, как запросу с публичного
+  адреса. Запросы без этих заголовков (команда `tachyon`, curl, скрипты) и
+  панель, открытая по адресу или локальному имени, работают как раньше.
+  Новый тест `test_foreign_browser_request`. *Всегда.*
+- **002. Настройка «TCP BBR».** Включённая (по умолчанию), она загружала
+  `sch_fq` и ставила `net.core.default_qdisc=fq` (`fq_codel` — только если
+  `fq` недоступен). Теперь очередь — `fq_codel`, как по умолчанию в OpenWrt,
+  и в `99-tachyon-bbr.conf` тоже; `fq`, поставленный прежней сборкой,
+  заменяется. BBR включается как раньше. Причина — та же, что у патча 003
+  tachyon: у `fq` нет управления очередью для пересылаемого трафика, а BBR с
+  ядра 4.13 работает с любой очередью. Выключенная настройка не
+  изменилась. Тест `test_apply_tcp_tuning_persists_and_cleans_bbr_conf`
+  проверяет и очередь в файле. *Всегда.*
 
 ### homeproxy — `packages/luci-app-homeproxy/` (24)
 
