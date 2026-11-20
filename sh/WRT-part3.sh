@@ -96,7 +96,7 @@ checkout_variant_commit() {
 # Поэтому master ставится и на ImmortalWrt вместо копии из фида: один код,
 # одна серия патчей, и сверка с исходниками работает на обеих платформах.
 # =========================================================
-if [[ "$VARIANT" != "clear" && "$VARIANT" != "crystal_clear" && "$VARIANT" != "switch" && "$VARIANT" != "passwall" && "$VARIANT" != "xray" && "$VARIANT" != "v2raya" && "$VARIANT" != "podkop" && "$VARIANT" != "netshift" && "$VARIANT" != "forkop" && "$VARIANT" != "tachyon" && "$VARIANT" != "rehomeproxy" ]]; then
+if [[ "$VARIANT" != "clear" && "$VARIANT" != "crystal_clear" && "$VARIANT" != "switch" && "$VARIANT" != "passwall" && "$VARIANT" != "xray" && "$VARIANT" != "v2raya" && "$VARIANT" != "podkop" && "$VARIANT" != "netshift" && "$VARIANT" != "forkop" && "$VARIANT" != "tachyon" && "$VARIANT" != "tachyon2" && "$VARIANT" != "rehomeproxy" ]]; then
     if ! grep -q "immortalwrt/luci" feeds.conf.default; then
         echo ">>> [HomeProxy] В фидах НЕ найден ImmortalWrt LuCI. Считаем, что это Official OpenWrt."
         echo ">>> [HomeProxy] Добавляем HomeProxy вручную..."
@@ -452,7 +452,7 @@ echo ">>> [Heavy packages] Тяжелые пакеты отключены."
         # (если sing-box не отключён полем sb; job setup тогда пишет sb=tiny).
         # forkop 2.x — на своём ядре (sb=forkop-tiny), tachyon с sb=default — на
         # своём ядре по умолчанию (sb=default); их ставит блок «ВЫБОР КОМПОНЕНТОВ» ниже.
-        if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "rehomeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "netshift" || "$VARIANT" == "forkop" || "$VARIANT" == "tachyon" ]] && [ "${SB_MODE:-feed}" != "no" ] && [[ "${SB_MODE:-feed}" != forkop-* ]] && [ "${SB_MODE:-feed}" != "default" ] && [ "${SB_MODE:-feed}" != "hiddify" ]; then
+        if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "rehomeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "netshift" || "$VARIANT" == "forkop" || "$VARIANT" == "tachyon" || "$VARIANT" == "tachyon2" ]] && [ "${SB_MODE:-feed}" != "no" ] && [[ "${SB_MODE:-feed}" != forkop-* ]] && [ "${SB_MODE:-feed}" != "default" ] && [ "${SB_MODE:-feed}" != "hiddify" ]; then
             echo ">>> [Heavy packages] Sing-box Tiny for $VARIANT compatibility..."
             sed -i '/sing-box/Id' ./.config
             echo '# CONFIG_PACKAGE_sing-box is not set' >> ./.config
@@ -471,7 +471,7 @@ fi
 # =========================================================
 
 # Пакеты SQM. Вырезаются во всех прокси-вариантах (homeproxy, rehomeproxy, podkop,
-# netshift, forkop, tachyon, xray, passwall, v2raya); SQM остаётся только в clear.
+# netshift, forkop, tachyon, tachyon2, xray, passwall, v2raya); SQM остаётся только в clear.
 SQM_BLOAT=(
 "sqm"
 "sqm-scripts"
@@ -690,7 +690,7 @@ SWITCH_BLOAT=(
 # --- ЛОГИКА ДЛЯ ПРОКСИ-ВАРИАНТОВ: без SQM ---
 # forkop-mod сюда приходит как VARIANT=forkop (setup в workflow), отдельно
 # его перечислять не нужно.
-if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "rehomeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "netshift" || "$VARIANT" == "forkop" || "$VARIANT" == "tachyon" || "$VARIANT" == "xray" || "$VARIANT" == "passwall" || "$VARIANT" == "v2raya" ]]; then
+if [[ "$VARIANT" == "homeproxy" || "$VARIANT" == "rehomeproxy" || "$VARIANT" == "podkop" || "$VARIANT" == "netshift" || "$VARIANT" == "forkop" || "$VARIANT" == "tachyon" || "$VARIANT" == "tachyon2" || "$VARIANT" == "xray" || "$VARIANT" == "passwall" || "$VARIANT" == "v2raya" ]]; then
     echo ">>> [Variant: $VARIANT] Performing cleanup..."
     # Вычищаем пакеты из конфига. В SQM_BLOAT уже перечислены полные имена
     # (luci-app-sqm, luci-i18n-sqm-ru), поэтому префиксы не добавляем.
@@ -929,6 +929,138 @@ if [ "${DPI_MODE:-no}" = "byedpi" ]; then
     echo "   > ByeDPI: пакет byedpi ${BYEDPI_TAG#v} ($(git -C "$BYEDPI_DIR" rev-parse --short HEAD)), служба выключена"
     sed -i '/CONFIG_PACKAGE_byedpi[=_ ]/d' ./.config
     echo 'CONFIG_PACKAGE_byedpi=y' >> ./.config
+fi
+
+# tachyon 2 (вариант tachyon2). У автора в ветке 2.0 нет пакета OpenWrt:
+# исходники на Rust и скрипт tools/build_openwrt_pkg.py, который собирает
+# пакеты .apk/.ipk его релизов. Исходники приходят фидом tachyon2 (workflow),
+# патчи patches/feeds/tachyon2 на них уже наложил part2. Здесь:
+#   1. cargo собирает бинарник под архитектуру устройства — Rust раннера
+#      (rustup), компоновщик rust-lld из toolchain, настройки из
+#      .cargo/config.toml автора, как в его CI;
+#   2. скрипт автора собирает из бинарника .ipk с теми же файлами, что в его
+#      релизах (служба, панель, пункт меню LuCI, /lib/upgrade/keep.d);
+#   3. файлы этого .ipk и его скрипт удаления (prerm) становятся пакетом
+#      tachyon в package/tachyon2: он ставится в образ как обычный пакет
+#      OpenWrt (виден в apk, удаляется «apk del tachyon»).
+# Скрипты установки автора не нужны: при сборке образа они сразу выходят,
+# службу включает сама сборка. Зависимости — команды, которые вызывает
+# tachyon, и модули ядра из его init-скрипта. Архитектуры mips не
+# поддерживаются: для них нужен свой musl и nightly-сборка std.
+# Если патчи серии устарели (patch_drift.txt), сборка остановится после
+# part3, и cargo не запускается.
+if [ "$VARIANT" = "tachyon2" ]; then
+    T2_SRC=./feeds/tachyon2
+    T2_PKG=./package/tachyon2
+    if [ ! -f "$T2_SRC/Cargo.toml" ] || [ ! -f "$T2_SRC/tools/build_openwrt_pkg.py" ] || [ ! -f "$T2_SRC/openwrt/tachyon.init" ]; then
+        echo "::error title=tachyon 2::Нет исходников tachyon 2 в $T2_SRC (Cargo.toml, tools/build_openwrt_pkg.py, openwrt/tachyon.init)"
+        exit 1
+    fi
+    if grep -qs '^фид tachyon2:' "$GITHUB_WORKSPACE/patch_drift.txt"; then
+        echo ">>> tachyon 2: патчи устарели (patch_drift.txt), пакет не собирается — сборка остановится"
+    else
+        T2_PKGARCH=$(sed -n 's/^CONFIG_TARGET_ARCH_PACKAGES="\(.*\)"$/\1/p' ./.config | tail -n 1)
+        case "$T2_PKGARCH" in
+            aarch64*)     T2_TRIPLE=aarch64-unknown-linux-musl;      T2_ARCH=aarch64 ;;
+            x86_64)       T2_TRIPLE=x86_64-unknown-linux-musl;       T2_ARCH=x86_64 ;;
+            arm_arm1176*) T2_TRIPLE=arm-unknown-linux-musleabi;      T2_ARCH=armv6 ;;
+            arm_*)        T2_TRIPLE=armv7-unknown-linux-musleabihf;  T2_ARCH=armv7 ;;
+            riscv64*)     T2_TRIPLE=riscv64gc-unknown-linux-musl;    T2_ARCH=riscv64 ;;
+            i386*)        T2_TRIPLE=i686-unknown-linux-musl;         T2_ARCH=i386_pentium4 ;;
+            *)
+                echo "::error title=tachyon 2::Архитектура пакетов '${T2_PKGARCH:-?}' не поддерживается"
+                exit 1 ;;
+        esac
+        # Версия — из Cargo.toml (x.y.z-beta.N); для apk и opkg — x.y.z_betaN, как в пакетах автора.
+        T2_VER=$(sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$T2_SRC/Cargo.toml" | head -n 1)
+        T2_PKGVER=${T2_VER%%+*}
+        if [[ "$T2_PKGVER" == *-* ]]; then
+            _t2_pre=${T2_PKGVER#*-}
+            _t2_pre=${_t2_pre,,}
+            if [[ "$_t2_pre" =~ ^(alpha|beta|pre|rc)[._-]?([0-9]*)$ ]]; then
+                T2_PKGVER="${T2_PKGVER%%-*}_${BASH_REMATCH[1]}${BASH_REMATCH[2]:-0}"
+            elif [[ "$_t2_pre" =~ ([0-9]+) ]]; then
+                T2_PKGVER="${T2_PKGVER%%-*}_pre${BASH_REMATCH[1]}"
+            else
+                T2_PKGVER="${T2_PKGVER%%-*}_pre0"
+            fi
+        fi
+        if ! [[ "$T2_PKGVER" =~ ^[0-9]+\.[0-9]+\.[0-9]+(_(alpha|beta|pre|rc)[0-9]+)?$ ]]; then
+            echo "::error title=tachyon 2::Версия '${T2_VER:-?}' в $T2_SRC/Cargo.toml не в формате x.y.z[-beta.N]"
+            exit 1
+        fi
+        if ! command -v rustup >/dev/null 2>&1; then
+            echo "::error title=tachyon 2::На раннере нет rustup (Rust нужен для сборки tachyon 2)"
+            exit 1
+        fi
+        if ! rustup toolchain install stable --profile minimal --no-self-update >/dev/null \
+                || ! rustup target add --toolchain stable "$T2_TRIPLE" >/dev/null; then
+            echo "::error title=tachyon 2::Не удалось установить Rust stable с целью $T2_TRIPLE"
+            exit 1
+        fi
+        echo ">>> tachyon 2: $T2_VER ($(git -C "$T2_SRC" rev-parse --short HEAD 2>/dev/null)), $(rustc +stable --version), цель $T2_TRIPLE"
+        if ! (cd "$T2_SRC" && TACHYON_BUILD_VERSION="$T2_VER" cargo +stable build --release --locked --target "$T2_TRIPLE"); then
+            echo "::error title=tachyon 2::cargo build не прошёл ($T2_TRIPLE)"
+            exit 1
+        fi
+        T2_BIN="$T2_SRC/target/$T2_TRIPLE/release/tachyon"
+        T2_TMP=$(mktemp -d)
+        # Время файлов в пакете — время коммита (так собирает и автор: SOURCE_DATE_EPOCH)
+        if ! SOURCE_DATE_EPOCH=$(git -C "$T2_SRC" log -1 --format=%ct 2>/dev/null || date +%s) \
+                python3 "$T2_SRC/tools/build_openwrt_pkg.py" --bin "$T2_BIN" --arch "$T2_ARCH" --version "$T2_VER" \
+                    --init "$T2_SRC/openwrt/tachyon.init" \
+                    --views-dir "$T2_SRC/luci-app-tachyon/htdocs/luci-static/resources/view/tachyon" \
+                    --launcher-js "$T2_SRC/openwrt/launcher.js" \
+                    --launcher-menu "$T2_SRC/openwrt/tachyon-launcher.menu.json" \
+                    --launcher-acl "$T2_SRC/openwrt/tachyon-launcher.acl.json" \
+                    --out-ipk "$T2_TMP/tachyon.ipk" --out-apk "$T2_TMP/tachyon.apk" >/dev/null; then
+            echo "::error title=tachyon 2::tools/build_openwrt_pkg.py не собрал пакет"
+            exit 1
+        fi
+        rm -rf "$T2_PKG"
+        mkdir -p "$T2_PKG/files/root" "$T2_TMP/ipk" "$T2_TMP/ctl"
+        if ! tar -xzf "$T2_TMP/tachyon.ipk" -C "$T2_TMP/ipk" \
+                || ! tar -xzf "$T2_TMP/ipk/data.tar.gz" -C "$T2_PKG/files/root" \
+                || ! tar -xzf "$T2_TMP/ipk/control.tar.gz" -C "$T2_TMP/ctl" \
+                || [ ! -x "$T2_PKG/files/root/usr/bin/tachyon" ] || [ ! -f "$T2_PKG/files/root/etc/init.d/tachyon" ] \
+                || [ ! -f "$T2_TMP/ctl/prerm" ]; then
+            echo "::error title=tachyon 2::В пакете автора нет /usr/bin/tachyon, /etc/init.d/tachyon или prerm"
+            exit 1
+        fi
+        # Makefile: файлы — как в .ipk автора, prerm — его скрипт ($ для make удваивается)
+        # shellcheck disable=SC2016  # $(...) — текст Makefile, не подстановка shell
+        {
+            printf '%s\n' 'include $(TOPDIR)/rules.mk' '' 'PKG_NAME:=tachyon' "PKG_VERSION:=$T2_PKGVER" \
+                'PKG_RELEASE:=1' 'PKG_LICENSE:=GPL-2.0-only' '' 'include $(INCLUDE_DIR)/package.mk' ''
+            cat <<'T2EOF'
+define Package/tachyon
+  SECTION:=net
+  CATEGORY:=Network
+  TITLE:=Tachyon 2 service and web panel
+  URL:=https://github.com/Dushnilin/tachyon
+  DEPENDS:=+ca-bundle +curl +openssl-util +nftables +ip-full +kmod-nft-tproxy +kmod-tun +kmod-inet-diag
+endef
+
+define Package/tachyon/description
+  Files of the tachyon 2 package built from the 2.0 branch sources.
+endef
+
+define Build/Compile
+endef
+
+define Package/tachyon/install
+	$(CP) ./files/root/. $(1)/
+endef
+
+define Package/tachyon/prerm
+T2EOF
+            sed 's/\$/$$/g' "$T2_TMP/ctl/prerm"
+            printf '%s\n' 'endef' '' '$(eval $(call BuildPackage,tachyon))'
+        } > "$T2_PKG/Makefile"
+        echo "   > tachyon 2: пакет tachyon $T2_PKGVER-r1 в $T2_PKG ($(du -k "$T2_BIN" | cut -f1) КБ бинарник, $(find "$T2_PKG/files/root" -type f | wc -l) файлов)"
+        # target/ cargo (сотни мегабайт) в сборке OpenWrt не нужен
+        rm -rf "$T2_SRC/target" "$T2_TMP"
+    fi
 fi
 
 if [ "$ZZ" != "true" ]; then
