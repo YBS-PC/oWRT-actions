@@ -26,10 +26,10 @@ affected.
 New test: test_foreign_browser_request.
 
 diff --git a/src/api.rs b/src/api.rs
-index b8429d8d..8c6aee88 100644
+index 3501a1df..f545d72e 100644
 --- a/src/api.rs
 +++ b/src/api.rs
-@@ -353,7 +353,8 @@ async fn handle_conn(
+@@ -396,7 +396,8 @@ async fn handle_conn(
  
      // Authenticate session token, Agent API Bearer token, or trusted LAN/Tailscale peer
      let token = extract_token(&head_str);
@@ -39,7 +39,7 @@ index b8429d8d..8c6aee88 100644
          return send_json(&mut stream, 401, &json!({"error": "unauthorized"})).await;
      }
  
-@@ -2523,11 +2524,71 @@ fn is_tailscale_peer_trusted(
+@@ -2796,11 +2797,71 @@ fn is_tailscale_peer_trusted(
      }
  }
  
@@ -111,7 +111,7 @@ index b8429d8d..8c6aee88 100644
  ) -> bool {
      let (ts_mode, active_ts_iface, ts_store_enabled, agent_tok) = {
          let d = state.data.read().await;
-@@ -2538,7 +2599,7 @@ async fn is_authenticated(
+@@ -2811,7 +2872,7 @@ async fn is_authenticated(
              d.settings.agent_api_token.clone(),
          )
      };
@@ -120,7 +120,7 @@ index b8429d8d..8c6aee88 100644
          if is_tailscale_ip_addr(peer_addr) {
              let ts_zone = has_tailscale_firewall_zone();
              if is_tailscale_peer_trusted(
-@@ -2554,7 +2615,7 @@ async fn is_authenticated(
+@@ -2827,7 +2888,7 @@ async fn is_authenticated(
          } else if is_trusted_lan_addr(peer_addr) {
              return true;
          }
@@ -129,7 +129,7 @@ index b8429d8d..8c6aee88 100644
          return true;
      }
      if token.is_empty() {
-@@ -3043,6 +3104,74 @@ fn validate_source_proxy_links(proxy_links: &[String]) -> Result<(), String> {
+@@ -3495,6 +3556,74 @@ fn rollback_config_history_boxed<'a>(
  mod tests {
      use super::*;
  
