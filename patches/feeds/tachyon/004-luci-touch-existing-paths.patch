@@ -20,7 +20,7 @@ luci-app-tachyon can be installed again. Image builds are not affected:
 both scripts exit early when IPKG_INSTROOT is set.
 
 diff --git a/tachyon/Makefile b/tachyon/Makefile
-index 1ecbfe7f..3def08be 100644
+index 74dd4c60..14ce3c5f 100644
 --- a/tachyon/Makefile
 +++ b/tachyon/Makefile
 @@ -174,9 +174,15 @@ for _comp in zapret zapret2 byedpi wdtt-client qwdtt olcrtc; do

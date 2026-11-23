@@ -16,7 +16,7 @@ from PKG_UPGRADE, set by opkg on an upgrade; apk runs pre-deinstall
 only on removal.
 
 diff --git a/tachyon/Makefile b/tachyon/Makefile
-index 51347660..1ecbfe7f 100644
+index c616bf8c..74dd4c60 100644
 --- a/tachyon/Makefile
 +++ b/tachyon/Makefile
 @@ -39,30 +39,25 @@ endef
@@ -48,12 +48,11 @@ index 51347660..1ecbfe7f 100644
 -
 -	system(prefix + "/usr/bin/tachyon package_prerm >/dev/null 2>&1");
 -}
--
++#!/bin/sh
+ 
 -// Whatever the cleanup managed to do, the removal itself must proceed: a failing
 -// prerm aborts the upgrade on both package managers.
 -exit(0);
-+#!/bin/sh
-+
 +[ -n "$${IPKG_INSTROOT}" ] && exit 0
 +action=remove
 +[ "$${PKG_UPGRADE}" = "1" ] && action=upgrade
