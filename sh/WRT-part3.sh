@@ -999,7 +999,9 @@ if [ "$VARIANT" = "tachyon2" ]; then
             exit 1
         fi
         echo ">>> tachyon 2: $T2_VER ($(git -C "$T2_SRC" rev-parse --short HEAD 2>/dev/null)), $(rustc +stable --version), цель $T2_TRIPLE"
-        if ! (cd "$T2_SRC" && TACHYON_BUILD_VERSION="$T2_VER" cargo +stable build --release --locked --target "$T2_TRIPLE"); then
+        # GIT_DIR=/nonexistent: build.rs автора не записывает в бинарник коммит фида —
+        # он не совпадает с коммитом релиза, и панель предлагала бы пакет автора той же версии.
+        if ! (cd "$T2_SRC" && GIT_DIR=/nonexistent TACHYON_BUILD_VERSION="$T2_VER" cargo +stable build --release --locked --target "$T2_TRIPLE"); then
             echo "::error title=tachyon 2::cargo build не прошёл ($T2_TRIPLE)"
             exit 1
         fi
