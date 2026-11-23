@@ -98,8 +98,8 @@
 | `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`0c8a895`](https://github.com/yandexru45/netshift/commit/0c8a89535a897b43b50b15c3f0c8991df242bb24) | 07.11.2026 |
 | `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`ccae1fd`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/ccae1fd66e0b6528150d80fe6834b20ed2030db6) | 23.11.2026 |
 | `feeds/podkop/` | [itdoginfo/podkop](https://github.com/itdoginfo/podkop) | [`c654bf5`](https://github.com/itdoginfo/podkop/commit/c654bf5da75309754e3fb63b9441981db65fff68) | 24.10.2026 |
-| `feeds/tachyon/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) | [`ea529ac`](https://github.com/Dushnilin/tachyon/commit/ea529ac7fb4a9119c666edde241a590c13a2631a) | 22.11.2026 |
-| `feeds/tachyon2/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon), ветка `2.0` | [`5b475c2`](https://github.com/Dushnilin/tachyon/commit/5b475c2c98fce2541bc4d368e91d01abace2fd29) | 23.11.2026 |
+| `feeds/tachyon/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) | [`ef7d0d9`](https://github.com/Dushnilin/tachyon/commit/ef7d0d9b9b802c7300ca9d6dc481028cd72f38d2) | 23.11.2026 |
+| `feeds/tachyon2/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon), ветка `2.0` | [`cc01ab8`](https://github.com/Dushnilin/tachyon/commit/cc01ab8c7ef33a84e92bd28c63968749c09238d2) | 23.11.2026 |
 | `packages/luci-app-commands/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`75a306d`](https://github.com/openwrt/luci/commit/75a306df84a020c57a631ef5b4c02ace56d93387) | 15.10.2026 |
 | `packages/luci-app-filemanager/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`e969939`](https://github.com/openwrt/luci/commit/e969939b49167516e219d465df8030d98d443d67) | 31.10.2026 |
 | `packages/luci-theme-bootstrap/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`b2e0be4`](https://github.com/openwrt/luci/commit/b2e0be4b46ec0fd43394c081fa7c50657af14011) | 11.11.2026 |
@@ -548,7 +548,7 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
 
 ### tachyon — `feeds/tachyon/` (3)
 
-Вариант `tachyon`, фид [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) (1.8.7).
+Вариант `tachyon`, фид [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) (1.8.8).
 С 1.8.0 tachyon работает только со своим ядром: sing-box он не запускает,
 а отдельные zapret, zapret2 и ByeDPI убраны — их настройки переводятся на
 desync ядра. С 1.8.1 при установке пакета на роутере он удаляет только
@@ -561,7 +561,7 @@ zapret, zapret2 и ByeDPI остаются, их настройки копиру
 нет, его ставит установщик tachyon. `ytb=default` у tachyon больше не
 ставит Zapret2.
 
-Патчи сняты с коммита [`ea529ac`](https://github.com/Dushnilin/tachyon/commit/ea529ac7fb4a9119c666edde241a590c13a2631a) от 22.11.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`ef7d0d9`](https://github.com/Dushnilin/tachyon/commit/ef7d0d9b9b802c7300ca9d6dc481028cd72f38d2) от 23.11.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Удаление пакета.** Скрипт удаления tachyon написан на ucode, а
   сборка OpenWrt выполняет его как shell (apk — в своём скрипте удаления,
@@ -613,7 +613,7 @@ zapret, zapret2 и ByeDPI остаются, их настройки копиру
 на `no`. Обновление tachyon со страницы обновлений панели ставит пакет
 автора — уже без этих патчей.
 
-Патчи сняты с коммита [`5b475c2`](https://github.com/Dushnilin/tachyon/commit/5b475c2c98fce2541bc4d368e91d01abace2fd29) от 23.11.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`cc01ab8`](https://github.com/Dushnilin/tachyon/commit/cc01ab8c7ef33a84e92bd28c63968749c09238d2) от 23.11.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Доверие по адресу клиента.** Панель выполняет без входа любой
   запрос с адреса loopback, частной сети, link-local или Tailscale. Но это
