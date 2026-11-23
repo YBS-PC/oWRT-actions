@@ -16,10 +16,10 @@ test_apply_tcp_tuning_persists_and_cleans_bbr_conf also checks the qdisc
 in the file.
 
 diff --git a/src/net_stack.rs b/src/net_stack.rs
-index f0f80e5d..048e86b3 100644
+index b9ac8de5..40f203e3 100644
 --- a/src/net_stack.rs
 +++ b/src/net_stack.rs
-@@ -4593,22 +4593,19 @@ async fn apply_tcp_tuning_with_paths(
+@@ -4647,22 +4647,19 @@ async fn apply_tcp_tuning_with_paths(
                  let _ = std::fs::remove_file(conf_path);
              }
          } else {
@@ -48,7 +48,7 @@ index f0f80e5d..048e86b3 100644
              if let Some(parent) = conf_path.parent()
                  && !parent.as_os_str().is_empty()
              {
-@@ -5520,6 +5517,7 @@ fd001122334455660000000000000001 05 40 00 80   br-lan
+@@ -5574,6 +5571,7 @@ fd001122334455660000000000000001 05 40 00 80   br-lan
          apply_tcp_tuning_with_paths(&on, &conf, &avail).await;
          let written = std::fs::read_to_string(&conf).expect("bbr conf exists");
          assert!(written.contains("net.ipv4.tcp_congestion_control=bbr"));
