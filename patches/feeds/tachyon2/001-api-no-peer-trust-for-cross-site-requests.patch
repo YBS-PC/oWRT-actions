@@ -6,12 +6,15 @@ Subject: [PATCH] api: no trust by the peer address for requests sent by pages
 
 is_authenticated() lets in every request from a loopback, private,
 link-local or Tailscale peer address without a session. The address is
-the one of the client, not of the page that made the request: a page of
-another site opened in a browser of a LAN client could call the panel
-API, including POST /ubus with file.exec of any command (the answer to
-the CORS preflight allows any origin, and the response could be read). A
-name of that site that resolves to the router address after the page has
-loaded (DNS rebinding) passed the same way.
+the one of the client, not of the page that made the request. The
+panel rejects a POST, PUT, PATCH or DELETE whose Origin (or Referer)
+names another host than Host, the CORS preflight allows only
+cors_origins and file.exec runs only allowed commands. A name of
+another site that resolves to the router address after the page has
+loaded (DNS rebinding) still has Origin equal to Host: such a page in a
+browser of a LAN client calls the panel API as same-origin, reads
+GET /api/backup (the whole configuration), saves settings and stops the
+core. A request without Origin and Referer is not checked there either.
 
 A request is now not trusted by the peer address when the browser marks
 it as sent by another site (Sec-Fetch-Site: cross-site), when its Origin
@@ -26,10 +29,10 @@ affected.
 New test: test_foreign_browser_request.
 
 diff --git a/src/api.rs b/src/api.rs
-index 3501a1df..f545d72e 100644
+index 7c82aa84..18b6a0bf 100644
 --- a/src/api.rs
 +++ b/src/api.rs
-@@ -396,7 +396,8 @@ async fn handle_conn(
+@@ -445,7 +445,8 @@ async fn handle_conn(
  
      // Authenticate session token, Agent API Bearer token, or trusted LAN/Tailscale peer
      let token = extract_token(&head_str);
@@ -39,7 +42,7 @@ index 3501a1df..f545d72e 100644
          return send_json(&mut stream, 401, &json!({"error": "unauthorized"})).await;
      }
  
-@@ -2796,11 +2797,71 @@ fn is_tailscale_peer_trusted(
+@@ -3069,11 +3070,71 @@ fn is_tailscale_peer_trusted(
      }
  }
  
@@ -111,7 +114,7 @@ index 3501a1df..f545d72e 100644
  ) -> bool {
      let (ts_mode, active_ts_iface, ts_store_enabled, agent_tok) = {
          let d = state.data.read().await;
-@@ -2811,7 +2872,7 @@ async fn is_authenticated(
+@@ -3084,7 +3145,7 @@ async fn is_authenticated(
              d.settings.agent_api_token.clone(),
          )
      };
@@ -120,7 +123,7 @@ index 3501a1df..f545d72e 100644
          if is_tailscale_ip_addr(peer_addr) {
              let ts_zone = has_tailscale_firewall_zone();
              if is_tailscale_peer_trusted(
-@@ -2827,7 +2888,7 @@ async fn is_authenticated(
+@@ -3100,7 +3161,7 @@ async fn is_authenticated(
          } else if is_trusted_lan_addr(peer_addr) {
              return true;
          }
@@ -129,7 +132,7 @@ index 3501a1df..f545d72e 100644
          return true;
      }
      if token.is_empty() {
-@@ -3495,6 +3556,74 @@ fn rollback_config_history_boxed<'a>(
+@@ -3784,6 +3845,74 @@ fn rollback_config_history_boxed<'a>(
  mod tests {
      use super::*;
  
