@@ -4,45 +4,100 @@ Date: Fri, 20 Nov 2026 12:00:00 +0000
 Subject: [PATCH] api: no trust by the peer address for requests sent by pages
  of other sites
 
-is_authenticated() lets in every request from a loopback, private,
-link-local or Tailscale peer address without a session. The address is
-the one of the client, not of the page that made the request. The
-panel rejects a POST, PUT, PATCH or DELETE whose Origin (or Referer)
-names another host than Host, the CORS preflight allows only
-cors_origins and file.exec runs only allowed commands. A name of
-another site that resolves to the router address after the page has
-loaded (DNS rebinding) still has Origin equal to Host: such a page in a
-browser of a LAN client calls the panel API as same-origin, reads
-GET /api/backup (the whole configuration), saves settings and stops the
-core. A request without Origin and Referer is not checked there either.
+With panel authentication off (panel_auth_enabled = false; it is on by
+default), is_authenticated() lets in every request from a loopback,
+private, link-local or Tailscale peer address without a session. The
+address is the one of the client, not of the page that made the
+request. The panel rejects a POST, PUT, PATCH or DELETE whose Origin
+(or Referer) names another host than Host, but a name of another site
+that resolves to the router address after the page has loaded (DNS
+rebinding) has Origin equal to Host: such a page in a browser of a LAN
+client calls the panel API as same-origin, reads GET /api/backup (the
+whole configuration), saves settings and stops the core.
 
 A request is now not trusted by the peer address when the browser marks
 it as sent by another site (Sec-Fetch-Site: cross-site), when its Origin
 is null or names another host and port than Host, or when Host is a
 domain name outside the local names (an IP literal, localhost, a single
 label, .lan, .local, .home.arpa, .internal, .ts.net). Such a request
-needs a session or the agent token, as one from a public address.
-Requests without these headers (the CLI forwarded over 127.0.0.1, curl,
-scripts) and the panel opened by an address or a local name are not
-affected.
+needs a session, the agent token or the local IPC token, as one from a
+public address. Requests without these headers (curl, scripts) and the
+panel opened by an address or a local name are not affected. With panel
+authentication on nothing changes.
 
 New test: test_foreign_browser_request.
 
 diff --git a/src/api.rs b/src/api.rs
-index 7c82aa84..18b6a0bf 100644
+index 4a064c7a..9d470440 100644
 --- a/src/api.rs
 +++ b/src/api.rs
-@@ -445,7 +445,8 @@ async fn handle_conn(
+@@ -291,6 +291,7 @@ async fn handle_conn(
  
-     // Authenticate session token, Agent API Bearer token, or trusted LAN/Tailscale peer
      let token = extract_token(&head_str);
--    if !is_authenticated(state, &token, peer_ip, local_ip).await {
+     let local_ipc_hdr = parse_header(&head_str, "x-tachyon-local-token").unwrap_or_default();
 +    let foreign = is_foreign_browser_request(&head_str, host_hdr.as_deref());
-+    if !is_authenticated(state, &token, peer_ip, local_ip, foreign).await {
+ 
+     // Serve 1:1 TypeScript LuCI SPA (`fe-app-tachyon`) or login page at `/` and `/cgi-bin/luci/admin/services/tachyon*`
+     if method == "GET" {
+@@ -304,7 +305,8 @@ async fn handle_conn(
+                 )
+             };
+             if auth_enabled
+-                && !is_authenticated(state, &token, &local_ipc_hdr, peer_ip, local_ip).await
++                && !is_authenticated(state, &token, &local_ipc_hdr, peer_ip, local_ip, foreign)
++                    .await
+             {
+                 let html = ubus_bridge::serve_login_page(&ui_lang, &auth_mode);
+                 return send_html(&mut stream, &html).await;
+@@ -326,7 +328,8 @@ async fn handle_conn(
+                 )
+             };
+             if auth_enabled
+-                && !is_authenticated(state, &token, &local_ipc_hdr, peer_ip, local_ip).await
++                && !is_authenticated(state, &token, &local_ipc_hdr, peer_ip, local_ip, foreign)
++                    .await
+             {
+                 let html = ubus_bridge::serve_login_page(&ui_lang, &auth_mode);
+                 return send_html(&mut stream, &html).await;
+@@ -400,7 +403,8 @@ async fn handle_conn(
+         if path == "/yacd" || path.starts_with("/yacd/") {
+             let auth_enabled = state.data.read().await.settings.panel_auth_enabled;
+             if auth_enabled
+-                && !is_authenticated(state, &token, &local_ipc_hdr, peer_ip, local_ip).await
++                && !is_authenticated(state, &token, &local_ipc_hdr, peer_ip, local_ip, foreign)
++                    .await
+             {
+                 return send_redirect(&mut stream, "/").await;
+             }
+@@ -536,6 +540,7 @@ async fn handle_conn(
+             &local_ipc_hdr,
+             peer_ip,
+             local_ip,
++            foreign,
+         )
+         .await;
+     }
+@@ -547,7 +552,7 @@ async fn handle_conn(
+     }
+ 
+     // Authenticate session token, local IPC token, Agent API Bearer token, or trusted LAN/Tailscale peer (when auth is disabled)
+-    if !is_authenticated(state, &token, &local_ipc_hdr, peer_ip, local_ip).await {
++    if !is_authenticated(state, &token, &local_ipc_hdr, peer_ip, local_ip, foreign).await {
          return send_json(&mut stream, 401, &json!({"error": "unauthorized"})).await;
      }
  
-@@ -3069,11 +3070,71 @@ fn is_tailscale_peer_trusted(
+@@ -2815,8 +2820,9 @@ async fn handle_auth_status(
+     local_ipc_hdr: &str,
+     peer_ip: &str,
+     local_ip: Option<std::net::IpAddr>,
++    foreign: bool,
+ ) -> anyhow::Result<()> {
+-    let authed = is_authenticated(state, token, local_ipc_hdr, peer_ip, local_ip).await;
++    let authed = is_authenticated(state, token, local_ipc_hdr, peer_ip, local_ip, foreign).await;
+     let (auth_enabled, auth_mode, stored_admin) = {
+         let d = state.data.read().await;
+         (
+@@ -3466,12 +3472,72 @@ fn is_tailscale_peer_trusted(
      }
  }
  
@@ -108,31 +163,23 @@ index 7c82aa84..18b6a0bf 100644
  async fn is_authenticated(
      state: &Arc<AppState>,
      token: &str,
+     local_ipc_hdr: &str,
      peer_ip: &str,
      local_ip: Option<std::net::IpAddr>,
 +    foreign: bool,
  ) -> bool {
-     let (ts_mode, active_ts_iface, ts_store_enabled, agent_tok) = {
-         let d = state.data.read().await;
-@@ -3084,7 +3145,7 @@ async fn is_authenticated(
-             d.settings.agent_api_token.clone(),
-         )
-     };
--    if let Some(peer_addr) = parse_peer_ip(peer_ip) {
-+    if !foreign && let Some(peer_addr) = parse_peer_ip(peer_ip) {
-         if is_tailscale_ip_addr(peer_addr) {
-             let ts_zone = has_tailscale_firewall_zone();
-             if is_tailscale_peer_trusted(
-@@ -3100,7 +3161,7 @@ async fn is_authenticated(
-         } else if is_trusted_lan_addr(peer_addr) {
+     if !local_ipc_hdr.is_empty()
+         && !state.local_ipc_token.is_empty()
+@@ -3502,7 +3568,7 @@ async fn is_authenticated(
              return true;
          }
--    } else if peer_ip.trim().eq_ignore_ascii_case("localhost") {
-+    } else if !foreign && peer_ip.trim().eq_ignore_ascii_case("localhost") {
-         return true;
      }
-     if token.is_empty() {
-@@ -3784,6 +3845,74 @@ fn rollback_config_history_boxed<'a>(
+-    if !panel_auth_enabled {
++    if !panel_auth_enabled && !foreign {
+         if let Some(peer_addr) = parse_peer_ip(peer_ip) {
+             if is_tailscale_ip_addr(peer_addr) {
+                 let ts_zone = has_tailscale_firewall_zone();
+@@ -4202,6 +4268,74 @@ fn rollback_config_history_boxed<'a>(
  mod tests {
      use super::*;
  
