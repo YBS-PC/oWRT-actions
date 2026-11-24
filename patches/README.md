@@ -96,10 +96,10 @@
 | `feeds/luciappbandixplus/` | [timsaya/luci-app-bandix-plus](https://github.com/timsaya/luci-app-bandix-plus) | [`c4f002f`](https://github.com/timsaya/luci-app-bandix-plus/commit/c4f002f74f3a0f4aeb79fb5d35f5a7bbd3392a1f) | 21.10.2026 |
 | `feeds/luciappxray/` | [yichya/luci-app-xray](https://github.com/yichya/luci-app-xray) | [`4d5a6fd`](https://github.com/yichya/luci-app-xray/commit/4d5a6fd7fc4d2fbbcd7f70f1319da06b91ec1d56) | 22.09.2026 |
 | `feeds/netshift/` | [yandexru45/netshift](https://github.com/yandexru45/netshift) | [`0c8a895`](https://github.com/yandexru45/netshift/commit/0c8a89535a897b43b50b15c3f0c8991df242bb24) | 07.11.2026 |
-| `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`d9ba18d`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/d9ba18d0443e6c66fc254beacf63367ca4a4c85d) | 23.11.2026 |
+| `feeds/passwall2/` | [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2) | [`8900ebc`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/8900ebcb1daeffce1aabe069b6b5af96901e5ffc) | 24.11.2026 |
 | `feeds/podkop/` | [itdoginfo/podkop](https://github.com/itdoginfo/podkop) | [`c654bf5`](https://github.com/itdoginfo/podkop/commit/c654bf5da75309754e3fb63b9441981db65fff68) | 24.10.2026 |
 | `feeds/tachyon/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon) | [`cb98640`](https://github.com/Dushnilin/tachyon/commit/cb98640f416d0631a1a81a4f6ce4a56334e27429) | 23.11.2026 |
-| `feeds/tachyon2/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon), ветка `2.0` | [`7f3557c`](https://github.com/Dushnilin/tachyon/commit/7f3557c8231edfa0d83bb59ff77e30f371d14c62) | 23.11.2026 |
+| `feeds/tachyon2/` | [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon), ветка `2.0` | [`b9f9e9c`](https://github.com/Dushnilin/tachyon/commit/b9f9e9ceb559cd85a80c4f0024c778db8ebe5bf1) | 24.11.2026 |
 | `packages/luci-app-commands/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`75a306d`](https://github.com/openwrt/luci/commit/75a306df84a020c57a631ef5b4c02ace56d93387) | 15.10.2026 |
 | `packages/luci-app-filemanager/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`e969939`](https://github.com/openwrt/luci/commit/e969939b49167516e219d465df8030d98d443d67) | 31.10.2026 |
 | `packages/luci-theme-bootstrap/` | [openwrt/luci](https://github.com/openwrt/luci), ветка `openwrt-25.12` | [`b2e0be4`](https://github.com/openwrt/luci/commit/b2e0be4b46ec0fd43394c081fa7c50657af14011) | 11.11.2026 |
@@ -485,7 +485,7 @@ forkop 2.0 переписан почти целиком. 001 автор внёс
 
 Вариант `passwall`, фид [Openwrt-Passwall/openwrt-passwall2](https://github.com/Openwrt-Passwall/openwrt-passwall2).
 
-Патчи сняты с коммита [`d9ba18d`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/d9ba18d0443e6c66fc254beacf63367ca4a4c85d) от 23.11.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`8900ebc`](https://github.com/Openwrt-Passwall/openwrt-passwall2/commit/8900ebcb1daeffce1aabe069b6b5af96901e5ffc) от 24.11.2026 (файл `BASE`): на нём серия ложится точно.
 
 - **001. Соединения после перезапуска.** Пока passwall2 перезапускается,
   правил нет, и новые соединения из сети уходят напрямую. После запуска
@@ -600,7 +600,7 @@ zapret, zapret2 и ByeDPI остаются, их настройки копиру
 ### tachyon 2 — `feeds/tachyon2/` (2)
 
 Вариант `tachyon2`: ветка `2.0` [Dushnilin/tachyon](https://github.com/Dushnilin/tachyon)
-(2.0.0-rc.1). Это программа на Rust: служба и веб-панель в одном
+(2.0.0-rc.2). Это программа на Rust: служба и веб-панель в одном
 бинарнике `/usr/bin/tachyon`, без ucode и UCI. Настройки лежат в
 `/etc/tachyon/tachyon.json` (прежний `/etc/config/tachyon` переносится туда
 один раз), панель работает на порту 1680, а в LuCI есть только пункт,
@@ -613,20 +613,21 @@ zapret, zapret2 и ByeDPI остаются, их настройки копиру
 на `no`. Обновление tachyon со страницы обновлений панели ставит пакет
 автора — уже без этих патчей.
 
-Патчи сняты с коммита [`7f3557c`](https://github.com/Dushnilin/tachyon/commit/7f3557c8231edfa0d83bb59ff77e30f371d14c62) от 23.11.2026 (файл `BASE`): на нём серия ложится точно.
+Патчи сняты с коммита [`b9f9e9c`](https://github.com/Dushnilin/tachyon/commit/b9f9e9ceb559cd85a80c4f0024c778db8ebe5bf1) от 24.11.2026 (файл `BASE`): на нём серия ложится точно.
 
-- **001. Доверие по адресу клиента.** Панель выполняет без входа любой
-  запрос с адреса loopback, частной сети, link-local или Tailscale. Но это
-  адрес клиента, а не страницы, которая отправила запрос. С 2.0.0-rc.1
-  панель сама отклоняет `POST`, `PUT`, `PATCH` и `DELETE`, у которых
-  `Origin` (или `Referer`) указывает на другой узел, чем `Host`, ответ на
-  предварительный запрос CORS разрешает только `cors_origins`, а
-  `file.exec` запускает только разрешённые команды. Но у запроса по имени
-  другого сайта, которое после загрузки страницы указывает на адрес
-  роутера (DNS rebinding), `Origin` совпадает с `Host`. Такая страница в
-  браузере клиента локальной сети работает с API панели как своя: читает
-  `GET /api/backup` (все настройки), сохраняет настройки и останавливает
-  ядро. Запрос без `Origin` и `Referer` там тоже не проверяется.
+- **001. Доверие по адресу клиента.** Вход в панель по умолчанию включён
+  (логин и пароль LuCI). Если его выключить (`panel_auth_enabled`), панель
+  выполняет без входа любой запрос с адреса loopback, частной сети,
+  link-local или Tailscale. Но это адрес клиента, а не страницы, которая
+  отправила запрос. Панель сама отклоняет `POST`, `PUT`, `PATCH` и
+  `DELETE`, у которых `Origin` (или `Referer`) указывает на другой узел,
+  чем `Host`, ответ на предварительный запрос CORS разрешает только
+  `cors_origins`, а `file.exec` запускает только разрешённые команды. Но
+  у запроса по имени другого сайта, которое после загрузки страницы
+  указывает на адрес роутера (DNS rebinding), `Origin` совпадает с `Host`.
+  Такая страница в браузере клиента локальной сети работает с API панели
+  как своя: читает `GET /api/backup` (все настройки), сохраняет настройки
+  и останавливает ядро. Запрос без `Origin` и `Referer` там тоже не проверяется.
   Теперь по адресу не доверяется запросу, если выполнено хотя бы одно:
   - браузер пометил его как отправленный другим сайтом
     (`Sec-Fetch-Site: cross-site`);
@@ -638,7 +639,8 @@ zapret, zapret2 и ByeDPI остаются, их настройки копиру
   Такому запросу нужен вход или токен агента, как запросу с публичного
   адреса. Запросы без этих заголовков (команда `tachyon`, curl, скрипты) и
   панель, открытая по адресу или локальному имени, работают как раньше.
-  Новый тест `test_foreign_browser_request`. *Всегда.*
+  При включённом входе ничего не меняется. Новый тест
+  `test_foreign_browser_request`. *Всегда.*
 - **002. Настройка «TCP BBR».** Включённая (по умолчанию), она загружала
   `sch_fq` и ставила `net.core.default_qdisc=fq` (`fq_codel` — только если
   `fq` недоступен). Теперь очередь — `fq_codel`, как по умолчанию в OpenWrt,
