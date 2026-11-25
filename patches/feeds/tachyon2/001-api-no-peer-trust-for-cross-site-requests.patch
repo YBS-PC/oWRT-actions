@@ -28,18 +28,18 @@ authentication on nothing changes.
 New test: test_foreign_browser_request.
 
 diff --git a/src/api.rs b/src/api.rs
-index 4a064c7a..9d470440 100644
+index f49430ec..b7aa9971 100644
 --- a/src/api.rs
 +++ b/src/api.rs
-@@ -291,6 +291,7 @@ async fn handle_conn(
+@@ -381,6 +381,7 @@ async fn handle_conn(
  
      let token = extract_token(&head_str);
      let local_ipc_hdr = parse_header(&head_str, "x-tachyon-local-token").unwrap_or_default();
 +    let foreign = is_foreign_browser_request(&head_str, host_hdr.as_deref());
  
-     // Serve 1:1 TypeScript LuCI SPA (`fe-app-tachyon`) or login page at `/` and `/cgi-bin/luci/admin/services/tachyon*`
+     // Serve 1:1 TypeScript LuCI SPA (`fe-app-tachyon`) or login page at `/`, `/tachyon*`, and `/cgi-bin/luci/admin/services/tachyon*`
      if method == "GET" {
-@@ -304,7 +305,8 @@ async fn handle_conn(
+@@ -394,7 +395,8 @@ async fn handle_conn(
                  )
              };
              if auth_enabled
@@ -49,17 +49,7 @@ index 4a064c7a..9d470440 100644
              {
                  let html = ubus_bridge::serve_login_page(&ui_lang, &auth_mode);
                  return send_html(&mut stream, &html).await;
-@@ -326,7 +328,8 @@ async fn handle_conn(
-                 )
-             };
-             if auth_enabled
--                && !is_authenticated(state, &token, &local_ipc_hdr, peer_ip, local_ip).await
-+                && !is_authenticated(state, &token, &local_ipc_hdr, peer_ip, local_ip, foreign)
-+                    .await
-             {
-                 let html = ubus_bridge::serve_login_page(&ui_lang, &auth_mode);
-                 return send_html(&mut stream, &html).await;
-@@ -400,7 +403,8 @@ async fn handle_conn(
+@@ -465,7 +467,8 @@ async fn handle_conn(
          if path == "/yacd" || path.starts_with("/yacd/") {
              let auth_enabled = state.data.read().await.settings.panel_auth_enabled;
              if auth_enabled
@@ -69,7 +59,7 @@ index 4a064c7a..9d470440 100644
              {
                  return send_redirect(&mut stream, "/").await;
              }
-@@ -536,6 +540,7 @@ async fn handle_conn(
+@@ -606,6 +609,7 @@ async fn handle_conn(
              &local_ipc_hdr,
              peer_ip,
              local_ip,
@@ -77,7 +67,7 @@ index 4a064c7a..9d470440 100644
          )
          .await;
      }
-@@ -547,7 +552,7 @@ async fn handle_conn(
+@@ -617,7 +621,7 @@ async fn handle_conn(
      }
  
      // Authenticate session token, local IPC token, Agent API Bearer token, or trusted LAN/Tailscale peer (when auth is disabled)
@@ -86,7 +76,7 @@ index 4a064c7a..9d470440 100644
          return send_json(&mut stream, 401, &json!({"error": "unauthorized"})).await;
      }
  
-@@ -2815,8 +2820,9 @@ async fn handle_auth_status(
+@@ -2911,8 +2915,9 @@ async fn handle_auth_status(
      local_ipc_hdr: &str,
      peer_ip: &str,
      local_ip: Option<std::net::IpAddr>,
@@ -97,7 +87,7 @@ index 4a064c7a..9d470440 100644
      let (auth_enabled, auth_mode, stored_admin) = {
          let d = state.data.read().await;
          (
-@@ -3466,12 +3472,72 @@ fn is_tailscale_peer_trusted(
+@@ -3565,12 +3570,72 @@ fn is_tailscale_peer_trusted(
      }
  }
  
@@ -170,7 +160,7 @@ index 4a064c7a..9d470440 100644
  ) -> bool {
      if !local_ipc_hdr.is_empty()
          && !state.local_ipc_token.is_empty()
-@@ -3502,7 +3568,7 @@ async fn is_authenticated(
+@@ -3601,7 +3666,7 @@ async fn is_authenticated(
              return true;
          }
      }
@@ -179,7 +169,7 @@ index 4a064c7a..9d470440 100644
          if let Some(peer_addr) = parse_peer_ip(peer_ip) {
              if is_tailscale_ip_addr(peer_addr) {
                  let ts_zone = has_tailscale_firewall_zone();
-@@ -4202,6 +4268,74 @@ fn rollback_config_history_boxed<'a>(
+@@ -4343,6 +4408,74 @@ fn rollback_config_history_boxed<'a>(
  mod tests {
      use super::*;
  
