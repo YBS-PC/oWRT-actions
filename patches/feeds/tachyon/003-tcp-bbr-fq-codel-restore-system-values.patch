@@ -25,7 +25,7 @@ an fq left by an older build, for the values from sysctl.d and
 sysctl.conf, and for no writes when the system values are in place.
 
 diff --git a/tachyon/files/usr/lib/nft/apply.uc b/tachyon/files/usr/lib/nft/apply.uc
-index 933499a9..8fa2a7fc 100644
+index bb91e6b4..81f2da53 100644
 --- a/tachyon/files/usr/lib/nft/apply.uc
 +++ b/tachyon/files/usr/lib/nft/apply.uc
 @@ -4451,21 +4451,83 @@ function tcp_avail_cc_has(path, algo) {
