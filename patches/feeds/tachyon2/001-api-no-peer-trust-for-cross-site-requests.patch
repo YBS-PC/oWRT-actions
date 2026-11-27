@@ -28,7 +28,7 @@ authentication on nothing changes.
 New test: test_foreign_browser_request.
 
 diff --git a/src/api.rs b/src/api.rs
-index f49430ec..b7aa9971 100644
+index 8e4fe34f..a87e9f16 100644
 --- a/src/api.rs
 +++ b/src/api.rs
 @@ -381,6 +381,7 @@ async fn handle_conn(
